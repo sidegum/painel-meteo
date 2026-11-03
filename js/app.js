@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.1.0';
+const VERSAO = '1.1.1';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -56,9 +56,11 @@ async function iniciar() {
   } else {
     mostrarCarregando();
   }
-  // 2. localização: GPS ao abrir, salvo se a pessoa escolheu uma cidade
-  if (!estado.local || estado.local.origem !== 'cidade') await localizarGps(true);
-  else atualizarCabecalho();
+  // 2. localização: sempre a posição atual ao abrir o app. Uma cidade escolhida vale só até fechar o app.
+  let escolhaDaSessao = false;
+  try { escolhaDaSessao = sessionStorage.getItem('localEscolhido') === '1'; } catch {}
+  if (escolhaDaSessao && estado.local?.origem === 'cidade') atualizarCabecalho();
+  else await localizarGps(true);
   // 3. dados novos
   await atualizar({ forcar: true });
   agendar();
@@ -78,6 +80,11 @@ function mostrarCarregando() {
 function localizarGps(silencioso) {
   return new Promise((ok) => {
     const usarPadrao = (motivo) => {
+      // sem GPS: o último local salvo (já arredondado); se não houver, o centro de Campo Bom
+      if (estado.local && estado.local.origem !== 'padrao') {
+        estado.avisoGps = `${motivo} Mostrando o último local usado (${estado.local.nome}); toque no nome do local para trocar.`;
+        atualizarCabecalho(); ok(); return;
+      }
       definirLocal({ ...CONFIG.padrao, origem: 'padrao' });
       estado.avisoGps = `${motivo} Usando o centro de Campo Bom; toque no nome do local para buscar outra cidade.`;
       atualizarCabecalho();
@@ -88,11 +95,10 @@ function localizarGps(silencioso) {
       // A coordenada exata fica só em memória, para distâncias no aparelho.
       estado.localExato = { lat: pos.coords.latitude, lon: pos.coords.longitude, precisao: pos.coords.accuracy };
       estado.avisoGps = null;
-      definirLocal({ nome: 'Aqui (GPS)', regiao: `GPS, precisão de ${Math.round(pos.coords.accuracy)} m`, lat: pos.coords.latitude, lon: pos.coords.longitude, origem: 'gps' });
+      definirLocal({ nome: 'Sua localização', regiao: `GPS, precisão de ${Math.round(pos.coords.accuracy)} m`, lat: pos.coords.latitude, lon: pos.coords.longitude, origem: 'gps' });
       ok();
     }, (err) => {
       const m = { 1: 'Permissão de localização negada.', 2: 'GPS sem sinal.', 3: 'GPS demorou demais.' }[err.code] || 'GPS falhou.';
-      if (estado.local && estado.local.origem === 'gps' && silencioso) { estado.avisoGps = `${m} Usando a última posição aproximada salva.`; atualizarCabecalho(); ok(); return; }
       usarPadrao(m);
     }, { enableHighAccuracy: false, timeout: 9000, maximumAge: 10 * 60000 });
   });
@@ -110,11 +116,14 @@ function definirLocal(l) {
 
 const pontoExato = () => estado.localExato || estado.local;
 
+// Cidade escolhida à mão vale só nesta sessão; ao abrir o app de novo, volta para a posição atual.
+function marcarEscolha(sim) { try { if (sim) sessionStorage.setItem('localEscolhido', '1'); else sessionStorage.removeItem('localEscolhido'); } catch {} }
+
 function configurarLocal() {
   const dlg = $('#dlg-local');
   $('#btn-local').addEventListener('click', () => { dlg.showModal(); $('#busca').focus(); });
-  $('#btn-gps').addEventListener('click', async () => { dlg.close(); await localizarGps(false); atualizar({ forcar: true, local: true }); });
-  $('#btn-padrao').addEventListener('click', () => { dlg.close(); definirLocal({ ...CONFIG.padrao, origem: 'cidade' }); atualizar({ forcar: true, local: true }); });
+  $('#btn-gps').addEventListener('click', async () => { dlg.close(); marcarEscolha(false); await localizarGps(false); atualizar({ forcar: true, local: true }); });
+  $('#btn-padrao').addEventListener('click', () => { dlg.close(); marcarEscolha(true); definirLocal({ ...CONFIG.padrao, origem: 'cidade' }); atualizar({ forcar: true, local: true }); });
   let t = null;
   $('#busca').addEventListener('input', (e) => {
     clearTimeout(t);
@@ -125,7 +134,7 @@ function configurarLocal() {
       try {
         const r = await buscarCidades(q);
         lista.replaceChildren(...(r.length ? r.map((c) => el('li', {}, el('button', { type: 'button', onclick: () => {
-          dlg.close(); definirLocal({ nome: c.nome, regiao: c.regiao, lat: c.lat, lon: c.lon, origem: 'cidade' }); atualizar({ forcar: true, local: true });
+          dlg.close(); marcarEscolha(true); definirLocal({ nome: c.nome, regiao: c.regiao, lat: c.lat, lon: c.lon, origem: 'cidade' }); atualizar({ forcar: true, local: true });
         } }, c.nome, el('small', { text: c.regiao })))) : [el('li', { class: 'nota', text: 'Nenhuma cidade encontrada.' })]));
       } catch (err) { lista.replaceChildren(el('li', { class: 'nota', text: 'Busca indisponível: ' + err.message })); }
     }, 450); // espera a pessoa parar de digitar: uma chamada por busca, não por tecla
