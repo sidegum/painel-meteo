@@ -20,7 +20,7 @@
   --chuva: #3DB5AE; --chuva-txt: #5CC9C2; --rajada: #E3B23C; --rajada-txt: #EBC15A;
   --fria: #6F9BE0; --quente: #E0676A; --alerta-fundo: #5A1E22;
   --noite: rgba(0, 0, 0, .28); --nuvem: 220, 229, 230;
-  --m-ecmwf: #6F9BE0; --m-aifs: #B7A3E8; --m-gfs: #E0676A; --m-icon: #E3B23C;
+  --m-ecmwf: #6F9BE0; --m-aifs: #B7A3E8; --m-gfs: #E0676A; --m-icon: #E3B23C; --m-ukmo: #8FD18A;
   --foco: #F2D16B;
   --nav-h: 64px;
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -34,7 +34,7 @@
     --chuva: #1E8F8A; --chuva-txt: #136B67; --rajada: #D9A21B; --rajada-txt: #7A5A00;
     --fria: #2457A6; --quente: #C8373A; --alerta-fundo: #F6D9DA;
     --noite: rgba(23, 48, 59, .10); --nuvem: 64, 96, 107;
-    --m-ecmwf: #2457A6; --m-aifs: #6A4FB3; --m-gfs: #C8373A; --m-icon: #9A7100;
+    --m-ecmwf: #2457A6; --m-aifs: #6A4FB3; --m-gfs: #C8373A; --m-icon: #9A7100; --m-ukmo: #2E7D32;
     --foco: #2457A6;
     color-scheme: light;
   }
@@ -45,7 +45,7 @@
   --chuva: #1E8F8A; --chuva-txt: #136B67; --rajada: #D9A21B; --rajada-txt: #7A5A00;
   --fria: #2457A6; --quente: #C8373A; --alerta-fundo: #F6D9DA;
   --noite: rgba(23, 48, 59, .10); --nuvem: 64, 96, 107;
-  --m-ecmwf: #2457A6; --m-aifs: #6A4FB3; --m-gfs: #C8373A; --m-icon: #9A7100;
+  --m-ecmwf: #2457A6; --m-aifs: #6A4FB3; --m-gfs: #C8373A; --m-icon: #9A7100; --m-ukmo: #2E7D32;
   --foco: #2457A6;
   color-scheme: light;
 }
@@ -128,6 +128,82 @@ button { cursor: pointer; }
 .marca.previsao { color: var(--fraco); }
 .marca.radar { color: var(--chuva-txt); }
 .marca.oficial { color: var(--quente); }
+
+
+/* ---------- resumo do dia (primeira coisa da tela) ---------- */
+.resumo { padding: 6px 0 10px; }
+.resumo-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 4px; }
+.resumo-quando { margin: 0; font-size: 14px; color: var(--fraco); min-width: 0; }
+.resumo-topo .confianca { min-height: 36px; font-size: 13px; padding: 0 10px; gap: 6px; white-space: nowrap; flex: none; border-width: 1px; }
+.resumo-ceu { display: flex; align-items: center; gap: 10px; }
+.icone-ceu { width: 44px; height: 44px; flex: none; }
+.icone-ceu .tr { fill: none; stroke: var(--texto); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.icone-ceu .nuvem { fill: var(--fundo); }
+.icone-ceu .gota { stroke: var(--chuva); stroke-width: 2.6; stroke-linecap: round; }
+.resumo-ceu .cond { font-size: 22px; font-weight: 680; font-stretch: 104%; line-height: 1.15; }
+.resumo-temp { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 10px 0 8px; }
+.bloco-t { display: flex; flex-direction: column; }
+.bloco-t small { font-size: 13px; color: var(--fraco); font-weight: 560; }
+.bloco-t b { font-size: 34px; line-height: 1.05; font-weight: 640; letter-spacing: -.02em; }
+.bloco-t.chuva b { color: var(--chuva-txt); }
+.resumo-chuva { display: grid; grid-template-columns: 1fr; gap: 2px; }
+.resumo-chuva strong { font-size: 18px; font-weight: 680; }
+.resumo-chuva .det { font-size: 15px; color: var(--fraco); }
+.medidor { display: block; height: 4px; border-radius: 2px; background: var(--sup2); overflow: hidden; margin: 0 0 6px; }
+.medidor i { display: block; height: 100%; background: var(--chuva); border-radius: 2px; }
+.linha-rajada { display: flex; align-items: center; gap: 8px; padding: 8px 0 4px; border-top: 1px solid var(--linha); }
+.linha-rajada .raj { font-size: 15px; }
+.linha-rajada .rot { color: var(--fraco); }
+.linha-rajada strong { color: var(--rajada-txt); font-weight: 680; font-size: 16px; }
+.linha-rajada .raj-det { color: var(--fraco); }
+.linha-rajada .raj { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* navegação discreta: sem barra colorida, ponto pequeno no item ativo */
+:root[data-visual] .nav { --nav-h: 56px; background: var(--fundo); border-top: 1px solid var(--linha); }
+:root[data-visual] .nav button { font-size: 13px; font-weight: 500; font-stretch: 95%; letter-spacing: .01em; }
+:root[data-visual] .nav button[aria-current="page"] { color: var(--texto); font-weight: 650; }
+:root[data-visual] .nav button[aria-current="page"]::before { top: auto; bottom: 9px; left: calc(50% - 2px); right: auto; width: 4px; height: 4px; border-radius: 50%; background: var(--ponto); }
+:root[data-visual] { --nav-h: 56px; }
+:root[data-visual] .atualizar { background: none; font-weight: 560; font-size: 15px; }
+:root[data-visual] .alerta { border-left-width: 3px; font-weight: 600; font-size: 14px; border-radius: 0 6px 6px 0; }
+
+/* A: Grafite. Neutro, sem cartão, números em três colunas. */
+:root[data-visual="a"] .resumo-temp { border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); padding: 8px 0; }
+:root[data-visual="a"] .bloco-t + .bloco-t { padding-left: 12px; border-left: 1px solid var(--linha); }
+:root[data-visual="a"] .bloco-t.min b { color: var(--fria); }
+:root[data-visual="a"] .bloco-t.max b { color: var(--quente); }
+
+/* B: Céu claro. Resumo num cartão branco, ícone grande à direita. */
+:root[data-visual="b"] .resumo { background: var(--sup); border-radius: 18px; padding: 12px 16px 14px; margin: 4px 0 8px; border: 1px solid var(--linha); }
+:root[data-visual="b"] .resumo-ceu { flex-direction: row-reverse; justify-content: space-between; }
+:root[data-visual="b"] .icone-ceu { width: 56px; height: 56px; }
+:root[data-visual="b"] .icone-ceu .nuvem { fill: var(--sup); }
+:root[data-visual="b"] .resumo-ceu .cond { font-size: 24px; }
+:root[data-visual="b"] .bloco-t b { font-size: 36px; }
+:root[data-visual="b"] .bloco-t.min b { color: var(--fria); }
+:root[data-visual="b"] .bloco-t.max b { color: var(--quente); }
+:root[data-visual="b"] .linha-rajada { border-top: 0; }
+
+/* C: Mar suave. Máxima em destaque, mínima menor, tudo à esquerda. */
+:root[data-visual="c"] .resumo-temp { grid-template-columns: auto auto 1fr; gap: 0 18px; align-items: end; }
+:root[data-visual="c"] .bloco-t.max { order: -1; }
+:root[data-visual="c"] .bloco-t.max b { font-size: 52px; color: var(--texto); }
+:root[data-visual="c"] .bloco-t.min b { font-size: 30px; color: var(--fria); }
+:root[data-visual="c"] .bloco-t.chuva { text-align: right; align-items: flex-end; }
+:root[data-visual="c"] .bloco-t.chuva b { font-size: 30px; }
+:root[data-visual="c"] .bloco-t.max small { color: var(--quente); }
+:root[data-visual="c"] .resumo-ceu .cond { font-size: 20px; font-weight: 620; }
+
+/* ========== Direções visuais (prévia: ?visual=a|b|c) ========== */
+:root[data-visual="a"] { --fundo: #111315; --sup: #1A1D20; --sup2: #23272B; --linha: #2C3136; --texto: #ECEEF0; --fraco: #9BA4AC; --chuva: #4DA8DA; --chuva-txt: #6BB8E3; --rajada: #D9B45A; --rajada-txt: #E2C474; --fria: #7FA8E8; --quente: #EE8A6A; --alerta-fundo: #3A2420; --noite: rgba(0,0,0,.3); --nuvem: 225, 229, 233; --foco: #ECEEF0; --ponto: #ECEEF0; color-scheme: dark; }
+@media (prefers-color-scheme: light) { :root[data-visual="a"]:not([data-tema="escuro"]) { --fundo: #F4F5F6; --sup: #FFFFFF; --sup2: #ECEEF0; --linha: #DDE1E4; --texto: #15181B; --fraco: #5D666E; --chuva: #1F7FC0; --chuva-txt: #155F91; --rajada: #B98A1C; --rajada-txt: #7A5A00; --fria: #2B5FB3; --quente: #C4492B; --alerta-fundo: #FBE3DC; --noite: rgba(20,24,28,.06); --nuvem: 70, 78, 86; --foco: #15181B; --ponto: #15181B; color-scheme: light; } }
+:root[data-visual="a"][data-tema="claro"] { --fundo: #F4F5F6; --sup: #FFFFFF; --sup2: #ECEEF0; --linha: #DDE1E4; --texto: #15181B; --fraco: #5D666E; --chuva: #1F7FC0; --chuva-txt: #155F91; --rajada: #B98A1C; --rajada-txt: #7A5A00; --fria: #2B5FB3; --quente: #C4492B; --alerta-fundo: #FBE3DC; --noite: rgba(20,24,28,.06); --nuvem: 70, 78, 86; --foco: #15181B; --ponto: #15181B; color-scheme: light; }
+:root[data-visual="b"] { --fundo: #0F1A26; --sup: #172636; --sup2: #1F3245; --linha: #263B50; --texto: #EAF1F8; --fraco: #9FB2C5; --chuva: #5AA9F0; --chuva-txt: #7DBBF3; --rajada: #E3BC63; --rajada-txt: #EBC97E; --fria: #8AB4F8; --quente: #F28B74; --alerta-fundo: #3D2226; --noite: rgba(0,0,0,.28); --nuvem: 225, 233, 242; --foco: #FFFFFF; --ponto: #5AA9F0; color-scheme: dark; }
+@media (prefers-color-scheme: light) { :root[data-visual="b"]:not([data-tema="escuro"]) { --fundo: #EEF3F8; --sup: #FFFFFF; --sup2: #E4ECF4; --linha: #D5E0EB; --texto: #13202D; --fraco: #566778; --chuva: #1E6FD9; --chuva-txt: #1859B0; --rajada: #C08A12; --rajada-txt: #7A5A00; --fria: #2F5FB8; --quente: #D2472F; --alerta-fundo: #FDE6E1; --noite: rgba(19,32,45,.06); --nuvem: 86, 106, 128; --foco: #1E6FD9; --ponto: #1E6FD9; color-scheme: light; } }
+:root[data-visual="b"][data-tema="claro"] { --fundo: #EEF3F8; --sup: #FFFFFF; --sup2: #E4ECF4; --linha: #D5E0EB; --texto: #13202D; --fraco: #566778; --chuva: #1E6FD9; --chuva-txt: #1859B0; --rajada: #C08A12; --rajada-txt: #7A5A00; --fria: #2F5FB8; --quente: #D2472F; --alerta-fundo: #FDE6E1; --noite: rgba(19,32,45,.06); --nuvem: 86, 106, 128; --foco: #1E6FD9; --ponto: #1E6FD9; color-scheme: light; }
+:root[data-visual="c"] { --fundo: #132630; --sup: #19313D; --sup2: #203B48; --linha: #274453; --texto: #E3EBEC; --fraco: #A0B5BA; --chuva: #4FB0A9; --chuva-txt: #6EC2BC; --rajada: #D6B060; --rajada-txt: #E0C27C; --fria: #86A9DE; --quente: #E38A84; --alerta-fundo: #4A2226; --noite: rgba(0,0,0,.25); --nuvem: 222, 231, 232; --foco: #E3EBEC; --ponto: #E3EBEC; color-scheme: dark; }
+@media (prefers-color-scheme: light) { :root[data-visual="c"]:not([data-tema="escuro"]) { --fundo: #E9EFEF; --sup: #F7FAFA; --sup2: #DFE8E9; --linha: #C7D4D6; --texto: #17303B; --fraco: #4A6670; --chuva: #1E8F8A; --chuva-txt: #136B67; --rajada: #C9971E; --rajada-txt: #7A5A00; --fria: #2E5FA8; --quente: #C24A45; --alerta-fundo: #F6DEDC; --noite: rgba(23,48,59,.07); --nuvem: 64, 96, 107; --foco: #17303B; --ponto: #17303B; color-scheme: light; } }
+:root[data-visual="c"][data-tema="claro"] { --fundo: #E9EFEF; --sup: #F7FAFA; --sup2: #DFE8E9; --linha: #C7D4D6; --texto: #17303B; --fraco: #4A6670; --chuva: #1E8F8A; --chuva-txt: #136B67; --rajada: #C9971E; --rajada-txt: #7A5A00; --fria: #2E5FA8; --quente: #C24A45; --alerta-fundo: #F6DEDC; --noite: rgba(23,48,59,.07); --nuvem: 64, 96, 107; --foco: #17303B; --ponto: #17303B; color-scheme: light; }
 
 /* ---------- Faixa do Céu ---------- */
 .ceu { margin: 4px -16px 0; position: relative; }

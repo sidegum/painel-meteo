@@ -1,7 +1,7 @@
 // Testes das regras de análise. Rodar: node --test test/analise.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { avaliarDia, mediana, escolherFonte, leituraValida, fraseDoDia, pesosModelos, probLimites, isoLocalParaMs, partesLocais, direcaoTexto, arredondaCoord } from '../js/analise.js';
+import { avaliarDia, mediana, escolherFonte, leituraValida, fraseDoDia, pesosModelos, probLimites, isoLocalParaMs, partesLocais, direcaoTexto, arredondaCoord, condicaoCeu, respostaChuva } from '../js/analise.js';
 
 const r = (modelo, chuva, rajada) => ({ modelo, chuva, probMax: null, rajada: rajada === null ? null : { valor: rajada }, tmin: 15, tmax: 25 });
 
@@ -77,4 +77,35 @@ test('tempo local e utilidades', () => {
   assert.equal(partesLocais(ms, -10800).hora, 0);
   assert.equal(direcaoTexto(135), 'SE');
   assert.equal(arredondaCoord(-29.678912), -29.68);
+});
+
+test('condição do céu a partir da cobertura de nuvens', () => {
+  assert.equal(condicaoCeu([10, 15, 5], [1, 1, 1], 0.05).texto, 'Ensolarado');
+  assert.equal(condicaoCeu([10, 15, 5], [0, 0, 0], 0.05).texto, 'Céu limpo');
+  assert.equal(condicaoCeu([30, 40, 35], [1, 1, 1], 0.1).texto, 'Sol entre nuvens');
+  assert.equal(condicaoCeu([60, 70], [1, 1], null).texto, 'Parcialmente nublado');
+  assert.equal(condicaoCeu([90, 95], [1, 1], 0.8).texto, 'Nublado com chuva');
+  assert.equal(condicaoCeu([90, 95], [1, 1], 0.5).texto, 'Nublado, pode chover');
+  // só as horas de dia contam quando existem
+  assert.equal(condicaoCeu([100, 100, 5, 5], [0, 0, 1, 1], 0).nivel, 'limpo');
+  // sem dado não vira zero
+  assert.equal(condicaoCeu([null, null], [1, 1], 0.2), null);
+  assert.equal(condicaoCeu([], [], 0.2), null);
+});
+
+test('resposta curta de chuva', () => {
+  assert.equal(respostaChuva(0.8), 'Vai chover');
+  assert.equal(respostaChuva(0.5), 'Pode chover');
+  assert.equal(respostaChuva(0.2), 'Chuva pouco provável');
+  assert.equal(respostaChuva(0.05), 'Não deve chover');
+  assert.equal(respostaChuva(null), null);
+});
+
+test('pesos iniciais favorecem ECMWF e UKMO sem dados locais', () => {
+  const p = pesosModelos(null, ['ecmwf_ifs', 'ukmo_global_deterministic_10km', 'ncep_gfs_seamless']);
+  assert.equal(p.ajustado, false);
+  assert.ok(p.pesos.ecmwf_ifs > p.pesos.ukmo_global_deterministic_10km && p.pesos.ukmo_global_deterministic_10km > p.pesos.ncep_gfs_seamless);
+  // acerto local ruim do ECMWF reduz o peso, sem passar do limite
+  const q = pesosModelos({ ecmwf_ifs: { dias: 40, maeChuva: 9 }, ncep_gfs_seamless: { dias: 40, maeChuva: 1 } }, ['ecmwf_ifs', 'ncep_gfs_seamless']);
+  assert.ok(q.ajustado && q.pesos.ecmwf_ifs >= 0.7 && q.pesos.ncep_gfs_seamless <= 1.3);
 });
