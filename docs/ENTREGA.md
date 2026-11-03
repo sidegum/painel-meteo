@@ -10,7 +10,7 @@
 
 ## Decisões tomadas sem consulta (o Gustavo autorizou)
 
-1. **Modelos**: `ecmwf_ifs`, `ecmwf_aifs025_single`, `ncep_gfs_seamless`, `dwd_icon_global`, todos numa chamada. Ensemble: `ecmwf_ifs025`, `gfs025`, `icon_seamless`, uma chamada por modelo, 10 dias.
+1. **Modelos** (revisado em 2026-11-03): `ecmwf_ifs`, `ecmwf_aifs025_single` e `ukmo_global_deterministic_10km`, os globais de melhor desempenho nas verificações publicadas; `ncep_gfs_seamless` só para o índice UV diário. Ensemble: `ecmwf_ifs025`, `ecmwf_aifs025_ensemble` e `ukmo_global_ensemble_20km`, uma chamada por modelo, 10 dias. Os identificadores dos ensembles AIFS e UKMO vêm da documentação da Open-Meteo e não foram testados a partir da nuvem, que bateu o limite diário.
 2. **Chance de chuva** = fração dos cenários do ensemble com mais de 1 mm no dia. Sem ensemble, vira concordância entre modelos, e o app diz isso.
 3. **Volume** = mediana dos cenários ou modelos em que chove, com faixa p10 a p90 (ou menor e maior modelo). Nunca a média.
 4. **Confiança**: começa alta e perde um nível por motivo (discordância, cenários divididos, volume ou rajada diferentes, mais de 4 dias, acerto local baixo, medição contraditória). Limites em `REGRAS`, em `js/analise.js`.

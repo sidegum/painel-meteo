@@ -219,17 +219,17 @@ test('El Niño completo a partir das fontes', async () => {
 test('acerto: previsões antigas x observação', () => {
   const j = { utc_offset_seconds: -10800, hourly: { time: Array.from({ length: 24 }, (_, h) => `2026-11-02T${String(h).padStart(2, '0')}:00`) } };
   for (let d = 1; d <= 5; d++) {
-    j.hourly[`precipitation_previous_day${d}_ncep_gfs_seamless`] = Array(24).fill(0.5);
+    j.hourly[`precipitation_previous_day${d}_ukmo_global_deterministic_10km`] = Array(24).fill(0.5);
     j.hourly[`wind_gusts_10m_previous_day${d}_ecmwf_ifs`] = Array(24).fill(null); // ECMWF não guarda rajada anterior
-    j.hourly[`temperature_2m_previous_day${d}_ncep_gfs_seamless`] = Array(24).fill(20);
+    j.hourly[`temperature_2m_previous_day${d}_ukmo_global_deterministic_10km`] = Array(24).fill(20);
   }
   const prev = prevDoDia(j, '2026-11-02');
-  assert.equal(prev.ncep_gfs_seamless[1].chuva, 12);
+  assert.equal(prev.ukmo_global_deterministic_10km[1].chuva, 12);
   assert.equal(prev.ecmwf_ifs[1].rajada, null);
   const serie = Array.from({ length: 24 }, (_, h) => ({ ms: Date.UTC(2026, 10, 2, h + 3), temperatura: 18 + h / 4, chuva: 0.5, rajada: null, vento: 10 }));
   const obs = obsDoDia(serie, '2026-11-02');
   assert.equal(obs.chuva, 12);
   const res = resumirAcerto([{ data: '2026-11-02', obs, prev }]);
-  assert.equal(res.ncep_gfs_seamless[1].taxaChuva, 1);
+  assert.equal(res.ukmo_global_deterministic_10km[1].taxaChuva, 1);
   assert.equal(res.ecmwf_ifs[1].amostrasRajada, 0);
 });

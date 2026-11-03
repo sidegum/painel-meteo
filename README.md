@@ -1,6 +1,6 @@
 # Painel Meteorológico Pessoal
 
-Painel de chuva e vento para celular, com Campo Bom (RS) como local padrão. Compara os modelos ECMWF IFS, ECMWF AIFS, GFS e ICON e usa a diferença entre eles para dizer quanto dá para confiar na previsão. Não é fonte oficial: em situação de risco, siga a Defesa Civil RS (199) e o INMET.
+Painel de chuva e vento para celular, com Campo Bom (RS) como local padrão. Compara os três modelos globais mais precisos nas verificações publicadas (ECMWF IFS, ECMWF AIFS e UKMO, do Met Office) e usa a diferença entre eles para dizer quanto dá para confiar na previsão. Não é fonte oficial: em situação de risco, siga a Defesa Civil RS (199) e o INMET.
 
 ## Como está organizado
 

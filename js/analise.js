@@ -19,8 +19,14 @@ export const REGRAS = {
   ],
   divisaoCenarios: [0.3, 0.7], // probabilidade nesse intervalo = cenários divididos
   horizonteLongoDias: 4,       // a partir do 5º dia, perde um nível de confiança
+  // Só os modelos globais de melhor desempenho nas verificações publicadas (centro líder da OMM para
+  // verificação, sediado no ECMWF): ECMWF IFS, ECMWF AIFS e UKMO. GFS e ICON saíram da previsão.
+  // Peso inicial maior para o ECMWF IFS; depois de 30 dias de dados locais, o acerto medido aqui ajusta.
+  pesoInicial: {
+    ecmwf_ifs: 1.3, ecmwf_aifs025_single: 1.15, ukmo_global_deterministic_10km: 1.15,
+  },
   acerto: {
-    diasMinimos: 30,           // pesos iguais até ter 30 dias de dados locais
+    diasMinimos: 30,           // pesos iniciais até ter 30 dias de dados locais
     pesoMin: 0.7, pesoMax: 1.3, // ajuste moderado depois disso
     taxaAcertoBaixa: 0.6,      // acerto de chuva abaixo disso reduz a confiança
     distanciaMaxKm: 50,        // estação de verificação mais longe que isso é ignorada
@@ -29,13 +35,15 @@ export const REGRAS = {
     chuvaMm: 5, chuvaRazao: 0.6, rajadaKmh: 25,
   },
   limitesSemana: { chuva: [1, 10, 30], rajada: [40, 60, 80] },
+  ceu: {                       // cobertura média de nuvens (%) -> condição do céu
+    limpo: 20, poucasNuvens: 45, parcial: 75,
+  },
 };
 
 export const MODELOS = {
   ecmwf_ifs: { nome: 'ECMWF IFS', curto: 'ECMWF', cor: 'var(--m-ecmwf)' },
   ecmwf_aifs025_single: { nome: 'ECMWF AIFS', curto: 'AIFS', cor: 'var(--m-aifs)' },
-  ncep_gfs_seamless: { nome: 'GFS', curto: 'GFS', cor: 'var(--m-gfs)' },
-  dwd_icon_global: { nome: 'ICON', curto: 'ICON', cor: 'var(--m-icon)' },
+  ukmo_global_deterministic_10km: { nome: 'UKMO (Met Office)', curto: 'UKMO', cor: 'var(--m-ukmo)' },
 };
 
 // ---------- utilidades numéricas ----------
@@ -423,16 +431,18 @@ export function horizonteDivergencia(prev, modelos) {
   return null;
 }
 
-// acertoPorModelo: { modelo: { dias, maeChuva } }. Pesos iguais até 30 dias; depois inverso do erro, limitado.
+// acertoPorModelo: { modelo: { dias, maeChuva } }. Pesos iniciais (verificação global) até 30 dias de dados
+// locais; depois, peso inicial vezes o acerto local relativo (inverso do erro), limitado.
 export function pesosModelos(acertoPorModelo, modelos) {
   const A = REGRAS.acerto;
-  const pesos = Object.fromEntries(modelos.map((m) => [m, 1]));
+  const base = (m) => REGRAS.pesoInicial[m] ?? 1;
+  const pesos = Object.fromEntries(modelos.map((m) => [m, base(m)]));
   if (!acertoPorModelo) return { pesos, ajustado: false };
   const ok = modelos.filter((m) => acertoPorModelo[m]?.dias >= A.diasMinimos && valido(acertoPorModelo[m].maeChuva));
   if (ok.length < 2) return { pesos, ajustado: false };
   const inv = ok.map((m) => 1 / Math.max(acertoPorModelo[m].maeChuva, 0.5));
   const media = inv.reduce((s, x) => s + x, 0) / inv.length;
-  ok.forEach((m, k) => { pesos[m] = Math.min(A.pesoMax, Math.max(A.pesoMin, inv[k] / media)); });
+  ok.forEach((m, k) => { pesos[m] = Math.min(A.pesoMax, Math.max(A.pesoMin, base(m) * (inv[k] / media))); });
   return { pesos, ajustado: true };
 }
 
@@ -444,4 +454,36 @@ export function consensoHorario(prev, variavel, modelos) {
     med.push(mediana(vs)); lo.push(minimo(vs)); hi.push(maximo(vs));
   }
   return { med, lo, hi };
+}
+
+// ---------- condição do céu ----------
+// cobertura: valores horários de cloud_cover (%) já em consenso entre modelos; dia: valores de is_day (0/1).
+// Usa as horas de dia quando houver; senão, todas as horas. Devolve null sem dado (nunca inventa).
+export function condicaoCeu(cobertura, dia, probChuva) {
+  const C = REGRAS.ceu;
+  const pares = (cobertura || []).map((c, i) => [c, dia?.[i]]).filter(([c]) => valido(c));
+  if (!pares.length) return null;
+  const deDia = pares.filter(([, d]) => d === 1 || d === true);
+  const usar = deDia.length ? deDia : pares;
+  const noite = !deDia.length && pares.some(([, d]) => d === 0 || d === false);
+  const media = usar.reduce((s, [c]) => s + c, 0) / usar.length;
+  let nivel, texto;
+  if (media <= C.limpo) { nivel = 'limpo'; texto = noite ? 'Céu limpo' : 'Ensolarado'; }
+  else if (media <= C.poucasNuvens) { nivel = 'poucas'; texto = noite ? 'Poucas nuvens' : 'Sol entre nuvens'; }
+  else if (media <= C.parcial) { nivel = 'parcial'; texto = 'Parcialmente nublado'; }
+  else { nivel = 'nublado'; texto = 'Nublado'; }
+  const o = REGRAS.ocorrencia;
+  let chuva = null;
+  if (valido(probChuva) && probChuva >= o.provavel) chuva = 'provavel';
+  else if (valido(probChuva) && probChuva >= o.possivel) chuva = 'possivel';
+  if (chuva === 'provavel') texto = nivel === 'nublado' || nivel === 'parcial' ? 'Nublado com chuva' : (noite ? 'Pancadas de chuva' : 'Sol e pancadas de chuva');
+  else if (chuva === 'possivel') texto = `${texto}, pode chover`;
+  return { nivel, texto, noite, chuva, cobertura: media };
+}
+
+// Resposta curta para "vai chover?".
+export function respostaChuva(prob) {
+  if (!valido(prob)) return null;
+  const p = palavraOcorrencia(prob);
+  return { 'provável': 'Vai chover', 'possível': 'Pode chover', 'pouco provável': 'Chuva pouco provável', 'improvável': 'Não deve chover' }[p];
 }

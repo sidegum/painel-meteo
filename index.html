@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-visual="a">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://tile.openstreetmap.org https://tilecache.rainviewer.com; font-src 'self'; connect-src 'self' https://api.open-meteo.com https://ensemble-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.rainviewer.com https://apiprevmet3.inmet.gov.br; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#17303B">
+<meta name="theme-color" content="#111315">
 <meta name="description" content="Painel pessoal de chuva e vento com comparação de modelos.">
 <title>Tempo Campo Bom</title>
 <link rel="manifest" href="manifest.json">
@@ -26,7 +26,8 @@
     <span class="local-nome" id="local-nome">Localizando…</span>
     <span class="local-hora" id="local-hora">aguardando dados</span>
   </button>
-  <button class="atualizar" id="btn-atualizar" type="button">Atualizar</button>
+  <div class="agora" id="agora" aria-live="polite"></div>
+  <button class="atualizar" id="btn-atualizar" type="button" aria-label="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg></button>
 </header>
 
 <div class="puxar" id="puxar" aria-hidden="true">Solte para atualizar</div>
