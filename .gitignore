@@ -1,0 +1,15 @@
+# Segredos e ambiente local: nunca versionar
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+worker/.dev.vars
+worker/.wrangler/
+.wrangler/
+*.pem
+*.key
+
+# Dependências e saídas
+node_modules/
+test/capturas/
+.DS_Store

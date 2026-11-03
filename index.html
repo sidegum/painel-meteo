@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://tile.openstreetmap.org https://tilecache.rainviewer.com; font-src 'self'; connect-src 'self' https://api.open-meteo.com https://ensemble-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.rainviewer.com https://apiprevmet3.inmet.gov.br; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#17303B">
+<meta name="description" content="Painel pessoal de chuva e vento com comparação de modelos.">
+<title>Tempo Campo Bom</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icones/icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icones/icone-180.png">
+<link rel="preload" href="vendor/fontes/archivo-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="vendor/uplot/uPlot.min.css">
+<script src="vendor/uplot/uPlot.iife.min.js" defer></script>
+<script src="js/app.js" type="module"></script>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<header class="topo">
+  <button class="local" id="btn-local" type="button" aria-haspopup="dialog">
+    <span class="local-nome" id="local-nome">Localizando…</span>
+    <span class="local-hora" id="local-hora">aguardando dados</span>
+  </button>
+  <button class="atualizar" id="btn-atualizar" type="button">Atualizar</button>
+</header>
+
+<div class="puxar" id="puxar" aria-hidden="true">Solte para atualizar</div>
+<div class="faixa-aviso" id="estado" role="status" aria-live="polite"></div>
+
+<main id="conteudo" tabindex="-1">
+  <section class="aba" id="aba-hoje" data-aba="hoje" aria-labelledby="t-hoje">
+    <h1 class="sr" id="t-hoje">Hoje</h1>
+    <div class="primeira" id="hoje-primeira"></div>
+    <div class="detalhes" id="hoje-detalhes"></div>
+  </section>
+  <section class="aba" id="aba-amanha" data-aba="amanha" aria-labelledby="t-amanha" hidden>
+    <h1 class="sr" id="t-amanha">Amanhã</h1>
+    <div class="primeira" id="amanha-primeira"></div>
+    <div class="detalhes" id="amanha-detalhes"></div>
+  </section>
+  <section class="aba" id="aba-semana" data-aba="semana" aria-labelledby="t-semana" hidden>
+    <h1 class="titulo-aba" id="t-semana">Próximos 7 dias</h1>
+    <div id="semana-conteudo"></div>
+  </section>
+  <section class="aba" id="aba-modelos" data-aba="modelos" aria-labelledby="t-modelos" hidden>
+    <h1 class="titulo-aba" id="t-modelos">Modelos</h1>
+    <div id="modelos-conteudo"></div>
+  </section>
+  <section class="aba" id="aba-elnino" data-aba="elnino" aria-labelledby="t-elnino" hidden>
+    <h1 class="titulo-aba" id="t-elnino">El Niño</h1>
+    <div id="elnino-conteudo"></div>
+  </section>
+
+  <footer class="rodape">
+    <p class="oficial">Este painel é pessoal e não é fonte oficial. Em situação de risco, siga a <a href="https://www.defesacivil.rs.gov.br/" target="_blank" rel="noopener noreferrer">Defesa Civil RS</a> (telefone 199) e os avisos do <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener noreferrer">INMET</a>.</p>
+    <p class="atribuicao">Previsões: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>, licença <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, com dados de ECMWF, NOAA NCEP e DWD. Busca de cidades com dados de GeoNames. Radar: RainViewer. Mapa: © colaboradores do OpenStreetMap. Medições: INMET e METAR via AviationWeather (NOAA). El Niño: NOAA CPC e IRI.</p>
+    <div class="acoes-rodape">
+      <button type="button" id="btn-tema">Tema: automático</button>
+      <a href="privacidade.html">Privacidade e dados</a>
+      <button type="button" id="btn-apagar" class="perigo">Apagar dados deste aparelho</button>
+    </div>
+    <p class="versao" id="versao"></p>
+  </footer>
+</main>
+
+<nav class="nav" aria-label="Seções">
+  <button type="button" data-ir="hoje" aria-current="page">Hoje</button>
+  <button type="button" data-ir="amanha">Amanhã</button>
+  <button type="button" data-ir="semana">Semana</button>
+  <button type="button" data-ir="modelos">Modelos</button>
+  <button type="button" data-ir="elnino">El Niño</button>
+</nav>
+
+<dialog id="dlg-local" aria-labelledby="dlg-local-t">
+  <form method="dialog" class="dlg">
+    <h2 id="dlg-local-t">Local</h2>
+    <button type="button" id="btn-gps" class="largo">Usar minha localização atual</button>
+    <button type="button" id="btn-padrao" class="largo">Centro de Campo Bom (padrão)</button>
+    <label for="busca">Buscar cidade</label>
+    <input id="busca" type="search" autocomplete="off" inputmode="search" maxlength="60" placeholder="Ex.: Novo Hamburgo">
+    <ul id="resultados" class="resultados" aria-live="polite"></ul>
+    <p class="nota">A localização exata fica só neste aparelho. Às APIs vão coordenadas arredondadas para 2 casas (cerca de 1 km).</p>
+    <button value="fechar" class="largo secundario">Fechar</button>
+  </form>
+</dialog>
+
+<dialog id="dlg-info" aria-labelledby="dlg-info-t">
+  <form method="dialog" class="dlg">
+    <h2 id="dlg-info-t">Informação</h2>
+    <div id="dlg-info-corpo"></div>
+    <button value="fechar" class="largo secundario">Fechar</button>
+  </form>
+</dialog>
+</body>
+</html>

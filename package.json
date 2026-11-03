@@ -1,0 +1,17 @@
+{
+  "name": "painel-meteo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Painel meteorológico pessoal: frontend estático (GitHub Pages) e Cloudflare Worker.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/analise.test.mjs worker/test/worker.test.mjs",
+    "worker:deploy": "cd worker && wrangler deploy",
+    "worker:dev": "cd worker && wrangler dev",
+    "configurar": "node scripts/configurar.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.155.0"
+  },
+  "engines": { "node": ">=20" }
+}

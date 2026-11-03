@@ -1,0 +1,25 @@
+name = "painel-meteo"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# Só leitura de dados públicos. Nenhuma outra permissão (sem D1, R2, filas, etc.).
+[vars]
+ALLOWED_ORIGIN = "https://sidegum.github.io"
+LIMITE_POR_MINUTO = "30"
+
+
+# Crie com: npx wrangler kv namespace create PAINEL_KV  e cole o id abaixo.
+[[kv_namespaces]]
+binding = "KV"
+id = "COLE_AQUI_O_ID_DO_KV"
+
+[triggers]
+# Séries horárias das estações de verificação, El Niño a cada 6 h e acerto diário às 06:15 de Brasília.
+crons = ["5 * * * *", "0 */6 * * *", "15 9 * * *"]
+
+[observability]
+enabled = false   # sem logs persistentes: evita guardar IPs e parâmetros
+
+# INMET_TOKEN é segredo: npx wrangler secret put INMET_TOKEN
+# Nunca coloque o token neste arquivo.
