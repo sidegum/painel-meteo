@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; font-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Privacidade do painel</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main class="detalhes" style="max-width:680px;margin:0 auto;padding-bottom:40px">
+  <h1 class="titulo-aba" style="margin-left:0">Quais dados saem do aparelho</h1>
+  <p>Não há login, perfil, banco de dados pessoal, anúncios, cookies, pixels nem ferramentas de estatística.</p>
+  <h2>Localização</h2>
+  <p>A posição exata do GPS fica só neste aparelho e só na memória enquanto o app está aberto. Ela é usada para escolher a estação mais próxima e para saber se você está dentro da área de um aviso.</p>
+  <p>Para os serviços abaixo vão apenas coordenadas arredondadas para 2 casas decimais, o que representa uma área de cerca de 1 km. O app guarda neste aparelho a última escolha de local, também arredondada.</p>
+  <h2>Para quem vai o quê</h2>
+  <table>
+    <thead><tr><th>Serviço</th><th>O que recebe</th></tr></thead>
+    <tbody>
+      <tr><td>Open-Meteo (previsão, cenários, busca de cidades)</td><td>Coordenada arredondada ou o nome digitado na busca</td></tr>
+      <tr><td>Worker do painel (Cloudflare)</td><td>Coordenada arredondada. Não grava localização nem IP; o limite de uso usa um código embaralhado que muda todo dia e fica só na memória</td></tr>
+      <tr><td>INMET, AviationWeather (via Worker), NOAA e IRI (via Worker)</td><td>Nada sobre você; o Worker pede dados de uma região ou de estações públicas</td></tr>
+      <tr><td>INMET direto (sem Worker)</td><td>Só o código público do município de Campo Bom</td></tr>
+      <tr><td>OpenStreetMap e RainViewer (mapa)</td><td>Os quadrados de mapa da região exibida, como em qualquer mapa na web</td></tr>
+    </tbody>
+  </table>
+  <p>Todos esses serviços veem o endereço IP da sua conexão, como qualquer site. O painel não envia referer.</p>
+  <h2>No aparelho</h2>
+  <p>Ficam salvos: a última escolha de local (arredondada), as preferências (tema, painéis abertos) e a última resposta válida de cada fonte, para abrir sem internet.</p>
+  <p>Para apagar tudo, use o botão "Apagar dados deste aparelho" no fim da página principal.</p>
+  <p><a href="index.html">Voltar ao painel</a></p>
+</main>
+</body>
+</html>

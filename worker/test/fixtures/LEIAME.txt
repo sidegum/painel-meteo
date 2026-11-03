@@ -1,0 +1,1 @@
+Fixtures: respostas reais baixadas em 2026-11-03 (~20:00 UTC) das fontes oficiais, recortadas para tamanho. Usadas só em testes.

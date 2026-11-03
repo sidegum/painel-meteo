@@ -1,0 +1,18 @@
+{
+  "name": "Painel Meteorológico",
+  "short_name": "Tempo",
+  "description": "Chuva e vento com comparação de modelos, para uso pessoal.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#17303B",
+  "theme_color": "#17303B",
+  "icons": [
+    { "src": "icones/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icones/icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icones/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icones/icone.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
