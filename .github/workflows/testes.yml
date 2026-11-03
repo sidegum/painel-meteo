@@ -1,0 +1,21 @@
+name: Testes
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Testes de regras e do Worker (com respostas reais gravadas)
+        run: npm test
+      - name: Auditoria de dependências
+        run: npm audit --audit-level=moderate
+      - name: Procura segredos óbvios
+        run: |
+          ! grep -rInE "INMET_TOKEN\s*=\s*['\"][^'\"]+" --exclude-dir=.git --exclude-dir=node_modules .
