@@ -19,12 +19,11 @@ export const REGRAS = {
   ],
   divisaoCenarios: [0.3, 0.7], // probabilidade nesse intervalo = cenários divididos
   horizonteLongoDias: 4,       // a partir do 5º dia, perde um nível de confiança
-  // Peso inicial de cada modelo, pela verificação global publicada (ECMWF e UKMO lideram há anos os
-  // índices da OMM/WMO e do próprio ECMWF; GFS e ICON vêm atrás). Depois de 30 dias de dados locais,
-  // o acerto medido aqui ajusta esses pesos.
+  // Só os modelos globais de melhor desempenho nas verificações publicadas (centro líder da OMM para
+  // verificação, sediado no ECMWF): ECMWF IFS, ECMWF AIFS e UKMO. GFS e ICON saíram da previsão.
+  // Peso inicial maior para o ECMWF IFS; depois de 30 dias de dados locais, o acerto medido aqui ajusta.
   pesoInicial: {
-    ecmwf_ifs: 1.3, ukmo_global_deterministic_10km: 1.15, ecmwf_aifs025_single: 1.15,
-    dwd_icon_global: 0.85, ncep_gfs_seamless: 0.8,
+    ecmwf_ifs: 1.3, ecmwf_aifs025_single: 1.15, ukmo_global_deterministic_10km: 1.15,
   },
   acerto: {
     diasMinimos: 30,           // pesos iniciais até ter 30 dias de dados locais
@@ -45,8 +44,6 @@ export const MODELOS = {
   ecmwf_ifs: { nome: 'ECMWF IFS', curto: 'ECMWF', cor: 'var(--m-ecmwf)' },
   ecmwf_aifs025_single: { nome: 'ECMWF AIFS', curto: 'AIFS', cor: 'var(--m-aifs)' },
   ukmo_global_deterministic_10km: { nome: 'UKMO (Met Office)', curto: 'UKMO', cor: 'var(--m-ukmo)' },
-  ncep_gfs_seamless: { nome: 'GFS', curto: 'GFS', cor: 'var(--m-gfs)' },
-  dwd_icon_global: { nome: 'ICON', curto: 'ICON', cor: 'var(--m-icon)' },
 };
 
 // ---------- utilidades numéricas ----------

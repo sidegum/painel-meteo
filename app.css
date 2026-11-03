@@ -85,6 +85,14 @@ button { cursor: pointer; }
   border: 1.5px solid var(--linha); background: var(--sup); font-weight: 600; font-stretch: 90%;
 }
 .atualizar[aria-busy="true"] { opacity: .6; }
+.atualizar { padding: 0; width: 44px; display: inline-flex; align-items: center; justify-content: center; align-self: center; }
+.atualizar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.atualizar[aria-busy="true"] svg { animation: girar 1s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+.agora { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; line-height: 1; flex: none; }
+.agora b { font-size: 30px; font-weight: 650; letter-spacing: -.02em; }
+.agora small { font-size: 12px; color: var(--fraco); margin-top: 3px; white-space: nowrap; }
+.topo { position: sticky; top: 0; z-index: 15; background: var(--fundo); }
 
 .puxar { height: 0; overflow: hidden; text-align: center; color: var(--fraco); font-size: 14px; transition: height .15s; }
 .faixa-aviso:empty { display: none; }

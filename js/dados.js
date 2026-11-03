@@ -81,7 +81,7 @@ const VARS_DIA = ['sunrise', 'sunset', 'uv_index_max'];
 export function urlPrevisao(lat, lon) {
   const p = new URLSearchParams({
     latitude: arredondaCoord(lat).toFixed(2), longitude: arredondaCoord(lon).toFixed(2),
-    timezone: 'auto', models: Object.keys(MODELOS).join(','),
+    timezone: 'auto', models: [...Object.keys(MODELOS), ...MODELOS_AUXILIARES].join(','),
     hourly: VARS_HORA.join(','), daily: VARS_DIA.join(','),
     current: 'weather_code,temperature_2m,wind_gusts_10m',
     wind_speed_unit: 'kmh', precipitation_unit: 'mm', temperature_unit: 'celsius',
@@ -89,6 +89,9 @@ export function urlPrevisao(lat, lon) {
   });
   return 'https://api.open-meteo.com/v1/forecast?' + p;
 }
+
+// GFS só para dados diários que os outros não têm (índice UV); não entra na previsão.
+export const MODELOS_AUXILIARES = ['ncep_gfs_seamless'];
 
 // Com vários modelos, cada chave vem com sufixo do modelo (testado em 2026-11-03).
 // Séries totalmente nulas significam variável ausente naquele modelo.
@@ -142,8 +145,8 @@ export async function buscarPrevisao(lat, lon) {
 // para que as chaves venham sem sufixo de modelo.
 export const MODELOS_ENSEMBLE = {
   ecmwf_ifs025: { nome: 'ECMWF ENS', membros: 51 },
-  gfs025: { nome: 'GEFS', membros: 31 },
-  icon_seamless: { nome: 'ICON EPS', membros: 40 },
+  ecmwf_aifs025_ensemble: { nome: 'ECMWF AIFS ENS', membros: 51 },
+  ukmo_global_ensemble_20km: { nome: 'UKMO MOGREPS-G', membros: 18 },
 };
 
 export function urlEnsemble(lat, lon, modelo) {

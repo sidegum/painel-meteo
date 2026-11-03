@@ -31,7 +31,7 @@ export const ESTACOES_VERIFICACAO = [
   { id: 'SBCO', tipo: 'metar', nome: 'Canoas (METAR)', lat: -29.945, lon: -51.144 },
   { id: 'SBPA', tipo: 'metar', nome: 'Porto Alegre aeroporto (METAR)', lat: -29.994, lon: -51.171 },
 ];
-const MODELOS = ['ecmwf_ifs', 'ecmwf_aifs025_single', 'ukmo_global_deterministic_10km', 'ncep_gfs_seamless', 'dwd_icon_global'];
+const MODELOS = ['ecmwf_ifs', 'ecmwf_aifs025_single', 'ukmo_global_deterministic_10km'];
 
 // ---------------------------------------------------------------- utilidades
 

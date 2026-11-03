@@ -102,9 +102,9 @@ test('resposta curta de chuva', () => {
 });
 
 test('pesos iniciais favorecem ECMWF e UKMO sem dados locais', () => {
-  const p = pesosModelos(null, ['ecmwf_ifs', 'ukmo_global_deterministic_10km', 'ncep_gfs_seamless']);
+  const p = pesosModelos(null, ['ecmwf_ifs', 'ukmo_global_deterministic_10km', 'outro']);
   assert.equal(p.ajustado, false);
-  assert.ok(p.pesos.ecmwf_ifs > p.pesos.ukmo_global_deterministic_10km && p.pesos.ukmo_global_deterministic_10km > p.pesos.ncep_gfs_seamless);
+  assert.ok(p.pesos.ecmwf_ifs > p.pesos.ukmo_global_deterministic_10km && p.pesos.ukmo_global_deterministic_10km > p.pesos.outro);
   // acerto local ruim do ECMWF reduz o peso, sem passar do limite
   const q = pesosModelos({ ecmwf_ifs: { dias: 40, maeChuva: 9 }, ncep_gfs_seamless: { dias: 40, maeChuva: 1 } }, ['ecmwf_ifs', 'ncep_gfs_seamless']);
   assert.ok(q.ajustado && q.pesos.ecmwf_ifs >= 0.7 && q.pesos.ncep_gfs_seamless <= 1.3);

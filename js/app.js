@@ -88,7 +88,7 @@ function localizarGps(silencioso) {
       // A coordenada exata fica só em memória, para distâncias no aparelho.
       estado.localExato = { lat: pos.coords.latitude, lon: pos.coords.longitude, precisao: pos.coords.accuracy };
       estado.avisoGps = null;
-      definirLocal({ nome: 'Minha localização', regiao: `GPS, precisão de ${Math.round(pos.coords.accuracy)} m`, lat: pos.coords.latitude, lon: pos.coords.longitude, origem: 'gps' });
+      definirLocal({ nome: 'Aqui (GPS)', regiao: `GPS, precisão de ${Math.round(pos.coords.accuracy)} m`, lat: pos.coords.latitude, lon: pos.coords.longitude, origem: 'gps' });
       ok();
     }, (err) => {
       const m = { 1: 'Permissão de localização negada.', 2: 'GPS sem sinal.', 3: 'GPS demorou demais.' }[err.code] || 'GPS falhou.';
@@ -139,7 +139,7 @@ async function atualizar({ forcar = false, local = false } = {}) {
   if (atualizando || !estado.local || estado.apagado) return;
   atualizando = true;
   $('#btn-atualizar').setAttribute('aria-busy', 'true');
-  $('#btn-atualizar').textContent = 'Atualizando';
+  $('#btn-atualizar').setAttribute('aria-label', 'Atualizando');
   const venceu = (em, min) => forcar || local || !em || Date.now() - em > min * 60000;
   const I = CONFIG.intervalos;
   const { lat, lon } = estado.local;
@@ -174,7 +174,7 @@ async function atualizar({ forcar = false, local = false } = {}) {
   } finally {
     atualizando = false;
     $('#btn-atualizar').removeAttribute('aria-busy');
-    $('#btn-atualizar').textContent = 'Atualizar';
+    $('#btn-atualizar').setAttribute('aria-label', 'Atualizar');
     atualizarCabecalho();
   }
 }
@@ -197,6 +197,7 @@ function atualizarCabecalho() {
   const atraso = Date.now() - estado.prevEm > 45 * 60000;
   h.textContent = `Previsão de ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)} (${fmt.idade(estado.prevEm)})${atraso ? ', desatualizada' : ''}`;
   h.classList.toggle('atrasado', atraso);
+  renderAgora();
   const msgs = [];
   if (!navigator.onLine) msgs.push('Sem conexão: dados salvos podem estar desatualizados.');
   else if (estado.cacheAntigo) msgs.push('Mostrando dados salvos enquanto atualiza.');
@@ -204,6 +205,27 @@ function atualizarCabecalho() {
   if (estado.avisoGps && estado.local?.origem !== 'cidade') msgs.push(estado.avisoGps);
   if (msgs.length) avisar(msgs.join(' '), Boolean(estado.erros.previsao) || !navigator.onLine);
   else avisar('', false);
+}
+
+// Temperatura agora: medição da estação mais próxima (até 25 km e 2 h); sem ela, a previsão para esta hora.
+function renderAgora() {
+  const alvo = $('#agora');
+  const p = estado.prev;
+  const pt = pontoExato();
+  const med = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, Date.now(), 120).escolhida;
+  if (med && med.distancia <= 25) {
+    alvo.replaceChildren(el('b', { text: fmt.c(med.valor) }), el('small', { text: `medido ${fmt.idade(med.ms)}` }));
+    alvo.title = `${med.fonte.nome}, ${fmt.n(med.distancia, 0)} km`;
+    return;
+  }
+  if (!p) { alvo.replaceChildren(); return; }
+  let i = -1;
+  for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= Date.now()) i = k;
+  const { pesos } = pesosAtuais();
+  const mods = modelosAtivos();
+  const v = i < 0 ? null : mediana(mods.map((m) => p.modelos[m].vars.temperature_2m?.[i]), mods.map((m) => pesos[m] ?? 1));
+  alvo.replaceChildren(el('b', { text: fmt.c(v) ?? '–' }), el('small', { text: valido(v) ? 'previsto agora' : 'sem dado' }));
+  alvo.title = 'Sem medição recente perto daqui; valor previsto pelos modelos para esta hora.';
 }
 
 function avisar(texto, erro) {
@@ -481,7 +503,7 @@ function explicarConfianca(a) {
     el('p', {}, `Chuva: ${c.chuva}. Rajadas: ${c.rajada}. A confiança geral é a menor das duas.`),
     el('p', {}, a.av.fonteProb ? `Chance de chuva calculada por ${a.av.fonteProb}.` : 'Sem dados para calcular a chance de chuva.'),
     c.motivos.length ? el('ul', {}, ...c.motivos.map((m) => el('li', { text: m }))) : el('p', { text: 'Modelos e cenários concordam.' }),
-    a.pesosAjustados ? el('p', { class: 'nota', text: 'Pesos dos modelos ajustados pelo acerto local dos últimos 30 dias ou mais.' }) : el('p', { class: 'nota', text: 'Pesos iniciais pela verificação global: ECMWF IFS 1,3; UKMO e AIFS 1,15; ICON 0,85; GFS 0,8. Depois de 30 dias de dados locais, o acerto medido aqui ajusta esses pesos.' }),
+    a.pesosAjustados ? el('p', { class: 'nota', text: 'Pesos dos modelos ajustados pelo acerto local dos últimos 30 dias ou mais.' }) : el('p', { class: 'nota', text: 'Pesos iniciais pela verificação global: ECMWF IFS 1,3; ECMWF AIFS e UKMO 1,15. Depois de 30 dias de dados locais, o acerto medido aqui ajusta esses pesos.' }),
     regraConfianca());
 }
 
@@ -497,7 +519,7 @@ function regraConfianca() {
       el('li', { text: `previsão para mais de ${R.horizonteLongoDias} dias;` }),
       el('li', { text: `acerto local de chuva abaixo de ${R.acerto.taxaAcertoBaixa * 100}% nos últimos ${R.acerto.diasMinimos}+ dias, se a estação de verificação estiver a até ${R.acerto.distanciaMaxKm} km;` }),
       el('li', { text: 'hoje: estação próxima medindo chuva que a previsão não esperava.' })),
-    el('p', {}, 'Exemplo: ECMWF 18 mm, ICON 15 mm e GFS 3 mm. Os três passam de 1 mm, então chover é provável. Mas a diferença (15 mm) é igual à mediana (15 mm), então o volume é incerto. A mensagem é "chuva provável, volume incerto", não "12 mm".'),
+    el('p', {}, 'Exemplo: ECMWF 18 mm, AIFS 15 mm e UKMO 3 mm. Os três passam de 1 mm, então chover é provável. Mas a diferença (15 mm) é igual à mediana (15 mm), então o volume é incerto. A mensagem é "chuva provável, volume incerto", não "12 mm".'),
     el('p', { class: 'nota', text: 'Os limites ficam no objeto REGRAS, em js/analise.js, e podem ser ajustados.' }));
 }
 
@@ -644,7 +666,7 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
   const x = idx.map((i) => p.horas[i]);
   const C = (v) => { const c = consensoHorario(p, v, mods); return { med: idx.map((i) => c.med[i]), lo: idx.map((i) => c.lo[i]), hi: idx.map((i) => c.hi[i]) }; };
   const disponivel = (v) => mods.some((m) => p.modelos[m].vars[v]);
-  let abertos = prefs.ler('paineis', ['chuva', 'vento']);
+  let abertos = prefs.ler('paineis-v2', ['chuva']);
   const chips = el('div', { class: 'paineis', role: 'group', 'aria-label': 'Painéis do meteograma' });
   const area = el('div');
   container.append(chips, area);
@@ -656,7 +678,7 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
     area.replaceChildren();
     chips.replaceChildren(...Object.entries(PAINEIS).map(([k, nome]) => el('button', { type: 'button', class: 'chip', 'aria-pressed': String(abertos.includes(k)), onclick: () => {
       abertos = abertos.includes(k) ? abertos.filter((a) => a !== k) : [...abertos, k];
-      prefs.gravar('paineis', abertos); desenhar();
+      prefs.gravar('paineis-v2', abertos); desenhar();
     } }, nome)));
     const fonte = `Previsão Open-Meteo (${mods.map((m) => MODELOS[m].curto).join(', ')}), ${fmt.horaMin(estado.prevEm, p.offset)}.`;
     if (abertos.includes('chuva')) {
