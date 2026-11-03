@@ -23,7 +23,18 @@ export class ErroFonte extends Error {
   constructor(fonte, tipo, detalhe) { super(detalhe || tipo); this.fonte = fonte; this.tipo = tipo; }
 }
 
-async function buscarJson(fonte, url, { timeout = 15000, maxBytes = 6e6 } = {}) {
+// Uma nova tentativa em falha de rede ou tempo esgotado (comum no celular trocando de rede).
+// Limite de uso (429) e erro do servidor não são repetidos: respeitam a espera.
+async function buscarJson(fonte, url, opcoes = {}) {
+  try { return await buscarJsonUmaVez(fonte, url, opcoes); }
+  catch (e) {
+    if (!(e instanceof ErroFonte) || !['rede', 'tempo'].includes(e.tipo)) throw e;
+    await new Promise((r) => setTimeout(r, 1500));
+    return buscarJsonUmaVez(fonte, url, opcoes);
+  }
+}
+
+async function buscarJsonUmaVez(fonte, url, { timeout = 15000, maxBytes = 6e6 } = {}) {
   const ate = emEspera(fonte);
   if (ate) throw new ErroFonte(fonte, 'limite', `aguardando até ${new Date(ate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} após limite ou falha`);
   if (!navigator.onLine) throw new ErroFonte(fonte, 'offline', 'sem conexão');
@@ -83,7 +94,7 @@ export function urlPrevisao(lat, lon) {
     latitude: arredondaCoord(lat).toFixed(2), longitude: arredondaCoord(lon).toFixed(2),
     timezone: 'auto', models: [...Object.keys(MODELOS), ...MODELOS_AUXILIARES].join(','),
     hourly: VARS_HORA.join(','), daily: VARS_DIA.join(','),
-    current: 'weather_code,temperature_2m,wind_gusts_10m',
+    current: 'temperature_2m',
     wind_speed_unit: 'kmh', precipitation_unit: 'mm', temperature_unit: 'celsius',
     past_days: '1', forecast_days: '16',
   });
@@ -130,7 +141,7 @@ export function normalizarPrevisao(j) {
   return {
     lat: Number(j.latitude), lon: Number(j.longitude), elevacao: Number(j.elevation),
     fuso: String(j.timezone || ''), offset: off, horas, modelos, diario,
-    atual: { ms: c.time ? isoLocalParaMs(String(c.time), off) : null, codigo: valido(c.weather_code) ? c.weather_code : null },
+    atual: { ms: c.time ? isoLocalParaMs(String(c.time), off) : null, temp: Object.fromEntries(Object.keys(MODELOS).map((m) => [m, valido(c[`temperature_2m_${m}`]) ? c[`temperature_2m_${m}`] : null])), geral: valido(c.temperature_2m) ? c.temperature_2m : null },
   };
 }
 
@@ -176,7 +187,7 @@ export async function buscarEnsemble(lat, lon) {
   const saida = {}, erros = [];
   await Promise.all(Object.keys(MODELOS_ENSEMBLE).map(async (m) => {
     try {
-      const e = normalizarEnsemble(await buscarJson('ensemble', urlEnsemble(lat, lon, m), { timeout: 25000 }));
+      const e = normalizarEnsemble(await buscarJson('ensemble-' + m, urlEnsemble(lat, lon, m), { timeout: 25000 }));
       if (e) saida[m] = e; else erros.push(`${MODELOS_ENSEMBLE[m].nome}: sem membros`);
     } catch (e) { erros.push(`${MODELOS_ENSEMBLE[m].nome}: ${e.message}`); }
   }));

@@ -90,6 +90,7 @@ button { cursor: pointer; }
 .atualizar[aria-busy="true"] svg { animation: girar 1s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
 .agora { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; line-height: 1; flex: none; }
+.agora .rot-agora { font-size: 12px; font-weight: 600; color: var(--fraco); margin-bottom: 2px; }
 .agora b { font-size: 30px; font-weight: 650; letter-spacing: -.02em; }
 .agora small { font-size: 12px; color: var(--fraco); margin-top: 3px; white-space: nowrap; }
 .topo { position: sticky; top: 0; z-index: 15; background: var(--fundo); }
@@ -181,37 +182,11 @@ button { cursor: pointer; }
 :root[data-visual="a"] .bloco-t.min b { color: var(--fria); }
 :root[data-visual="a"] .bloco-t.max b { color: var(--quente); }
 
-/* B: Céu claro. Resumo num cartão branco, ícone grande à direita. */
-:root[data-visual="b"] .resumo { background: var(--sup); border-radius: 18px; padding: 12px 16px 14px; margin: 4px 0 8px; border: 1px solid var(--linha); }
-:root[data-visual="b"] .resumo-ceu { flex-direction: row-reverse; justify-content: space-between; }
-:root[data-visual="b"] .icone-ceu { width: 56px; height: 56px; }
-:root[data-visual="b"] .icone-ceu .nuvem { fill: var(--sup); }
-:root[data-visual="b"] .resumo-ceu .cond { font-size: 24px; }
-:root[data-visual="b"] .bloco-t b { font-size: 36px; }
-:root[data-visual="b"] .bloco-t.min b { color: var(--fria); }
-:root[data-visual="b"] .bloco-t.max b { color: var(--quente); }
-:root[data-visual="b"] .linha-rajada { border-top: 0; }
 
-/* C: Mar suave. Máxima em destaque, mínima menor, tudo à esquerda. */
-:root[data-visual="c"] .resumo-temp { grid-template-columns: auto auto 1fr; gap: 0 18px; align-items: end; }
-:root[data-visual="c"] .bloco-t.max { order: -1; }
-:root[data-visual="c"] .bloco-t.max b { font-size: 52px; color: var(--texto); }
-:root[data-visual="c"] .bloco-t.min b { font-size: 30px; color: var(--fria); }
-:root[data-visual="c"] .bloco-t.chuva { text-align: right; align-items: flex-end; }
-:root[data-visual="c"] .bloco-t.chuva b { font-size: 30px; }
-:root[data-visual="c"] .bloco-t.max small { color: var(--quente); }
-:root[data-visual="c"] .resumo-ceu .cond { font-size: 20px; font-weight: 620; }
-
-/* ========== Direções visuais (prévia: ?visual=a|b|c) ========== */
+/* ========== Visual Grafite (escolhido em 2026-11-03) ========== */
 :root[data-visual="a"] { --fundo: #111315; --sup: #1A1D20; --sup2: #23272B; --linha: #2C3136; --texto: #ECEEF0; --fraco: #9BA4AC; --chuva: #4DA8DA; --chuva-txt: #6BB8E3; --rajada: #D9B45A; --rajada-txt: #E2C474; --fria: #7FA8E8; --quente: #EE8A6A; --alerta-fundo: #3A2420; --noite: rgba(0,0,0,.3); --nuvem: 225, 229, 233; --foco: #ECEEF0; --ponto: #ECEEF0; color-scheme: dark; }
 @media (prefers-color-scheme: light) { :root[data-visual="a"]:not([data-tema="escuro"]) { --fundo: #F4F5F6; --sup: #FFFFFF; --sup2: #ECEEF0; --linha: #DDE1E4; --texto: #15181B; --fraco: #5D666E; --chuva: #1F7FC0; --chuva-txt: #155F91; --rajada: #B98A1C; --rajada-txt: #7A5A00; --fria: #2B5FB3; --quente: #C4492B; --alerta-fundo: #FBE3DC; --noite: rgba(20,24,28,.06); --nuvem: 70, 78, 86; --foco: #15181B; --ponto: #15181B; color-scheme: light; } }
 :root[data-visual="a"][data-tema="claro"] { --fundo: #F4F5F6; --sup: #FFFFFF; --sup2: #ECEEF0; --linha: #DDE1E4; --texto: #15181B; --fraco: #5D666E; --chuva: #1F7FC0; --chuva-txt: #155F91; --rajada: #B98A1C; --rajada-txt: #7A5A00; --fria: #2B5FB3; --quente: #C4492B; --alerta-fundo: #FBE3DC; --noite: rgba(20,24,28,.06); --nuvem: 70, 78, 86; --foco: #15181B; --ponto: #15181B; color-scheme: light; }
-:root[data-visual="b"] { --fundo: #0F1A26; --sup: #172636; --sup2: #1F3245; --linha: #263B50; --texto: #EAF1F8; --fraco: #9FB2C5; --chuva: #5AA9F0; --chuva-txt: #7DBBF3; --rajada: #E3BC63; --rajada-txt: #EBC97E; --fria: #8AB4F8; --quente: #F28B74; --alerta-fundo: #3D2226; --noite: rgba(0,0,0,.28); --nuvem: 225, 233, 242; --foco: #FFFFFF; --ponto: #5AA9F0; color-scheme: dark; }
-@media (prefers-color-scheme: light) { :root[data-visual="b"]:not([data-tema="escuro"]) { --fundo: #EEF3F8; --sup: #FFFFFF; --sup2: #E4ECF4; --linha: #D5E0EB; --texto: #13202D; --fraco: #566778; --chuva: #1E6FD9; --chuva-txt: #1859B0; --rajada: #C08A12; --rajada-txt: #7A5A00; --fria: #2F5FB8; --quente: #D2472F; --alerta-fundo: #FDE6E1; --noite: rgba(19,32,45,.06); --nuvem: 86, 106, 128; --foco: #1E6FD9; --ponto: #1E6FD9; color-scheme: light; } }
-:root[data-visual="b"][data-tema="claro"] { --fundo: #EEF3F8; --sup: #FFFFFF; --sup2: #E4ECF4; --linha: #D5E0EB; --texto: #13202D; --fraco: #566778; --chuva: #1E6FD9; --chuva-txt: #1859B0; --rajada: #C08A12; --rajada-txt: #7A5A00; --fria: #2F5FB8; --quente: #D2472F; --alerta-fundo: #FDE6E1; --noite: rgba(19,32,45,.06); --nuvem: 86, 106, 128; --foco: #1E6FD9; --ponto: #1E6FD9; color-scheme: light; }
-:root[data-visual="c"] { --fundo: #132630; --sup: #19313D; --sup2: #203B48; --linha: #274453; --texto: #E3EBEC; --fraco: #A0B5BA; --chuva: #4FB0A9; --chuva-txt: #6EC2BC; --rajada: #D6B060; --rajada-txt: #E0C27C; --fria: #86A9DE; --quente: #E38A84; --alerta-fundo: #4A2226; --noite: rgba(0,0,0,.25); --nuvem: 222, 231, 232; --foco: #E3EBEC; --ponto: #E3EBEC; color-scheme: dark; }
-@media (prefers-color-scheme: light) { :root[data-visual="c"]:not([data-tema="escuro"]) { --fundo: #E9EFEF; --sup: #F7FAFA; --sup2: #DFE8E9; --linha: #C7D4D6; --texto: #17303B; --fraco: #4A6670; --chuva: #1E8F8A; --chuva-txt: #136B67; --rajada: #C9971E; --rajada-txt: #7A5A00; --fria: #2E5FA8; --quente: #C24A45; --alerta-fundo: #F6DEDC; --noite: rgba(23,48,59,.07); --nuvem: 64, 96, 107; --foco: #17303B; --ponto: #17303B; color-scheme: light; } }
-:root[data-visual="c"][data-tema="claro"] { --fundo: #E9EFEF; --sup: #F7FAFA; --sup2: #DFE8E9; --linha: #C7D4D6; --texto: #17303B; --fraco: #4A6670; --chuva: #1E8F8A; --chuva-txt: #136B67; --rajada: #C9971E; --rajada-txt: #7A5A00; --fria: #2E5FA8; --quente: #C24A45; --alerta-fundo: #F6DEDC; --noite: rgba(23,48,59,.07); --nuvem: 64, 96, 107; --foco: #17303B; --ponto: #17303B; color-scheme: light; }
 
 /* ---------- Faixa do Céu ---------- */
 .ceu { margin: 4px -16px 0; position: relative; }
@@ -376,3 +351,22 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
   body > .topo, main { max-width: 1180px; margin: 0 auto; }
   .nav { order: -1; }
 }
+
+/* ---------- chance de chuva por hora (gráfico padrão da primeira tela) ---------- */
+.troca { display: flex; gap: 6px; margin: 10px 0 6px; }
+.troca button { min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--linha); background: none; font-size: 13px; color: var(--fraco); }
+.troca button[aria-pressed="true"] { color: var(--texto); border-color: var(--texto); font-weight: 600; }
+.chance-barras { position: relative; display: flex; align-items: flex-end; height: 96px; gap: 2px; padding-top: 14px; border-bottom: 1px solid var(--linha); }
+.chance-barras .guia { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--linha); pointer-events: none; }
+.chance-barras .g50 { bottom: 41px; }
+.chance-barras .g100 { bottom: 82px; }
+.barra-c { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: none; border: 0; padding: 0; position: relative; min-width: 0; }
+.barra-c i { display: block; width: 100%; max-width: 12px; background: var(--chuva); border-radius: 2px 2px 0 0; }
+.barra-c i.sem { background: repeating-linear-gradient(135deg, var(--linha) 0 2px, transparent 2px 5px); opacity: .6; }
+.barra-c span { order: -1; font-size: 10px; font-weight: 650; color: var(--chuva-txt); white-space: nowrap; line-height: 1.2; flex: none; }
+.barra-c i { flex: none; }
+.barra-c.agora::after { content: ''; position: absolute; bottom: -5px; width: 4px; height: 4px; border-radius: 50%; background: var(--texto); }
+.chance-eixo { display: flex; gap: 2px; margin-top: 6px; }
+.chance-eixo span { flex: 1; min-width: 0; font-size: 11px; color: var(--fraco); white-space: nowrap; overflow: visible; }
+.chance-info { margin: 6px 0 0; font-size: 14px; min-height: 20px; }
+.chance-fonte { margin: 2px 0 0; font-size: 12px; color: var(--fraco); }

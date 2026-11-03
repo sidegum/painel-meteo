@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.0.0';
+const VERSAO = '1.1.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -144,16 +144,13 @@ async function atualizar({ forcar = false, local = false } = {}) {
   const I = CONFIG.intervalos;
   const { lat, lon } = estado.local;
   try {
-    if (venceu(estado.prevEm, I.previsao)) {
-      try {
-        estado.prev = await buscarPrevisao(lat, lon); estado.prevEm = Date.now(); estado.cacheAntigo = false;
-        delete estado.erros.previsao;
-        salvarCache('previsao', estado.prev);
-        if (local) { estado.ens = null; estado.obs = null; estado.alertas = null; }
-      } catch (e) { estado.erros.previsao = e.message; }
-      renderTudo(); // primeira tela antes de cenários, medições e mapa
-    }
+    // Todas as fontes saem ao mesmo tempo; a primeira tela é desenhada assim que a previsão chega.
+    if (local) { estado.ens = null; estado.obs = null; estado.alertas = null; }
     const tarefas = [];
+    if (venceu(estado.prevEm, I.previsao)) tarefas.push(buscarPrevisao(lat, lon)
+      .then((pv) => { estado.prev = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao; salvarCache('previsao', pv); })
+      .catch((e) => { estado.erros.previsao = e.message; })
+      .then(() => renderTudo()));
     if (venceu(estado.ensEm, I.cenarios)) tarefas.push(buscarEnsemble(lat, lon).then(({ ens, erros }) => {
       estado.ensErros = erros;
       if (ens) { estado.ens = ens; estado.ensEm = Date.now(); salvarCache('ensemble', ens); delete estado.erros.ensemble; }
@@ -170,7 +167,7 @@ async function atualizar({ forcar = false, local = false } = {}) {
       .catch((e) => { estado.alertas = null; estado.erros.alertas = e.message; }));
     if (w && venceu(estado.acertoEm, I.acerto) && !local) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); }));
     await Promise.all(tarefas);
-    if (tarefas.length) renderTudo();
+    if (tarefas.length && estado.prev) renderTudo();
   } finally {
     atualizando = false;
     $('#btn-atualizar').removeAttribute('aria-busy');
@@ -214,17 +211,22 @@ function renderAgora() {
   const pt = pontoExato();
   const med = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, Date.now(), 120).escolhida;
   if (med && med.distancia <= 25) {
-    alvo.replaceChildren(el('b', { text: fmt.c(med.valor) }), el('small', { text: `medido ${fmt.idade(med.ms)}` }));
+    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(med.valor) }), el('small', { text: `medido ${fmt.idade(med.ms)}` }));
     alvo.title = `${med.fonte.nome}, ${fmt.n(med.distancia, 0)} km`;
     return;
   }
   if (!p) { alvo.replaceChildren(); return; }
-  let i = -1;
-  for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= Date.now()) i = k;
   const { pesos } = pesosAtuais();
   const mods = modelosAtivos();
-  const v = i < 0 ? null : mediana(mods.map((m) => p.modelos[m].vars.temperature_2m?.[i]), mods.map((m) => pesos[m] ?? 1));
-  alvo.replaceChildren(el('b', { text: fmt.c(v) ?? '–' }), el('small', { text: valido(v) ? 'previsto agora' : 'sem dado' }));
+  // valor "current" dos modelos (intervalo de 15 min); se faltar, a hora cheia mais recente
+  let v = mediana(mods.map((m) => p.atual?.temp?.[m]), mods.map((m) => pesos[m] ?? 1));
+  if (!valido(v)) v = p.atual?.geral ?? null;
+  if (!valido(v)) {
+    let i = -1;
+    for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= Date.now()) i = k;
+    v = i < 0 ? null : mediana(mods.map((m) => p.modelos[m].vars.temperature_2m?.[i]), mods.map((m) => pesos[m] ?? 1));
+  }
+  alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(v) ?? '–' }), el('small', { text: valido(v) ? 'previsto' : 'sem dado' }));
   alvo.title = 'Sem medição recente perto daqui; valor previsto pelos modelos para esta hora.';
 }
 
@@ -421,13 +423,63 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       rp ? el('strong', { text: `${Math.round(av.rajada?.mediana ?? rp.valor)} km/h` }) : ausente('sem dado'),
       rp ? el('span', { class: 'raj-det' }, ` de ${direcaoTexto(rp.dir) || '?'} `, setaVento(rp.dir), ` às ${fmt.hora(rp.ms, p.offset)}`) : '')));
 
-  // Faixa do Céu
+  // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
   const ini = desdeAgora ? Date.now() - 3600000 : p.horas[a.idxTodo[0]];
   const fim = desdeAgora ? ini + 25 * 3600000 : p.horas[a.idxTodo[a.idxTodo.length - 1]] + 3600000;
-  const caixaCeu = el('div');
-  filhos.push(caixaCeu);
+  const caixa = el('div', { class: 'grafico-primeira' });
+  let modo = 'chance';
+  const botoes = el('div', { class: 'troca', role: 'group', 'aria-label': 'Gráfico' });
+  const desenharModo = () => {
+    botoes.replaceChildren(...[['chance', 'Chance de chuva'], ['ceu', 'Faixa do Céu']].map(([k, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome)));
+    caixa.replaceChildren();
+    if (modo === 'chance') caixa.append(graficoChance(ini, fim));
+    else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: ini, fimMs: fim, id: 'faixa-' + diaIndice }));
+  };
+  filhos.push(botoes, caixa);
   alvo.replaceChildren(...filhos);
-  estado.faixas.push(criarFaixa(caixaCeu, { prev: p, modelos: mods, iniMs: ini, fimMs: fim, id: 'faixa-' + diaIndice }));
+  desenharModo();
+}
+
+// Chance de chuva por hora: fração dos cenários do ensemble com pelo menos REGRAS.chuvaHoraMm (0,2 mm) na hora.
+// Sem ensemble, mediana da probabilidade dos modelos que a publicam. Sem dado, a barra fica vazia.
+function chanceHoraria(ms) {
+  const fontes = Object.values(estado.ens || {});
+  let total = 0, comChuva = 0;
+  for (const e of fontes) {
+    const i = e.horas.indexOf(ms);
+    if (i < 0) continue;
+    for (const m of e.membros.precipitation || []) { if (valido(m[i])) { total++; if (m[i] >= REGRAS.chuvaHoraMm) comChuva++; } }
+  }
+  if (total >= 10) return { p: comChuva / total, origem: 'cenários' };
+  const p = estado.prev, i = p.horas.indexOf(ms);
+  const v = i < 0 ? null : mediana(modelosAtivos().map((m) => p.modelos[m].vars.precipitation_probability?.[i]));
+  return valido(v) ? { p: v / 100, origem: 'modelos' } : { p: null, origem: null };
+}
+
+function graficoChance(iniMs, fimMs) {
+  const p = estado.prev, mods = modelosAtivos();
+  const mm = consensoHorario(p, 'precipitation', mods).med;
+  const pontos = [];
+  p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, mm: mm[i], ...chanceHoraria(ms) }); });
+  const info = el('p', { class: 'chance-info', 'aria-live': 'polite' });
+  const validos = pontos.filter((x) => valido(x.p));
+  const maior = validos.reduce((b, x) => (!b || x.p > b.p ? x : b), null);
+  const resumo = () => (maior ? `Maior chance: ${fmt.pct(maior.p)} às ${fmt.hora(maior.ms, p.offset)}. Toque numa barra.` : 'Chance de chuva por hora sem dado.');
+  info.textContent = resumo();
+  const origem = validos.some((x) => x.origem === 'cenários') ? 'cenários do ensemble' : 'probabilidade dos modelos';
+  const barras = el('div', { class: 'chance-barras', role: 'img', 'aria-label': `Chance de chuva por hora. ${resumo()}` },
+    el('i', { class: 'guia g50', 'aria-hidden': 'true' }), el('i', { class: 'guia g100', 'aria-hidden': 'true' }),
+    ...pontos.map((x, k) => {
+      const agora = Date.now() >= x.ms && Date.now() < x.ms + 3600000;
+      return el('button', { type: 'button', class: 'barra-c' + (agora ? ' agora' : ''), 'aria-label': `${fmt.hora(x.ms, p.offset)}: ${valido(x.p) ? fmt.pct(x.p) : 'sem dado'}`,
+        onclick: () => { info.textContent = `${fmt.hora(x.ms, p.offset)}: ${valido(x.p) ? fmt.pct(x.p) + ' de chance' : 'sem dado'}${valido(x.mm) ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`; } },
+        el('i', { class: valido(x.p) ? '' : 'sem', style: { height: valido(x.p) ? `${Math.max(2, x.p * 100)}%` : '100%' } }),
+        valido(x.p) && x.p >= 0.3 && (k === 0 || !valido(pontos[k - 1].p) || Math.abs(x.p - pontos[k - 1].p) >= 0.1 || x === maior) ? el('span', { text: Math.round(x.p * 100) }) : null);
+    }));
+  const eixo = el('div', { class: 'chance-eixo', 'aria-hidden': 'true' },
+    ...pontos.map((x) => { const h = partesLocais(x.ms, p.offset).hora; return el('span', { text: h % 3 === 0 ? (h === 0 ? fmt.diaSemana(x.ms, p.offset) : `${h}h`) : '' }); }));
+  return el('div', { class: 'chance' }, barras, eixo, info, el('p', { class: 'chance-fonte', text: `Previsão: ${origem}. 50% e 100% marcados.` }));
 }
 
 // Ícone de linha (SVG, sem emoji): sol ou lua, nuvem e gotas conforme o céu previsto.
@@ -1227,9 +1279,6 @@ function configurarPuxar() {
 function aplicarTema() {
   const t = prefs.ler('tema', 'auto');
   if (t === 'auto') document.documentElement.removeAttribute('data-tema'); else document.documentElement.setAttribute('data-tema', t);
-  // prévia das direções visuais: ?visual=a, b ou c (lista fechada)
-  const v = new URLSearchParams(location.search).get('visual');
-  if (['a', 'b', 'c'].includes(v)) document.documentElement.setAttribute('data-visual', v);
   const fundo = getComputedStyle(document.documentElement).getPropertyValue('--fundo').trim();
   document.querySelector('meta[name="theme-color"]').setAttribute('content', fundo || '#17303B');
   const b = $('#btn-tema'); if (b) b.textContent = `Tema: ${{ auto: 'automático', claro: 'claro', escuro: 'escuro' }[t]}`;
