@@ -11,7 +11,7 @@
     "configurar": "node scripts/configurar.mjs"
   },
   "devDependencies": {
-    "wrangler": "4.155.0"
+    "wrangler": "4.156.0"
   },
   "engines": { "node": ">=20" }
 }
