@@ -43,13 +43,14 @@ export function secaoMapa(container, estado) {
       caixa.addEventListener('touchend', () => mapa.dragging.disable(), { passive: true });
     }
     mapa.setView([estado.local.lat, estado.local.lon], 8);
-    // Mapa base da CARTO (dados do OpenStreetMap), no tom do tema. Os servidores do OpenStreetMap bloqueiam
-    // pedidos sem a origem do site, e o app não envia referência em nenhum pedido.
+    // Mapa base do OpenStreetMap. A política dos servidores dele exige saber de qual site vem o pedido,
+    // então só os quadros do mapa enviam a origem (https://sidegum.github.io), nunca o caminho da página.
+    // O endereço do quadro já indica a região; nada além disso é enviado. No tema escuro, um filtro escurece o mapa.
     const tema = document.documentElement.getAttribute('data-tema');
     const escuro = tema ? tema === 'escuro' : !matchMedia('(prefers-color-scheme: light)').matches;
-    L.tileLayer(`https://{s}.basemaps.cartocdn.com/${escuro ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {
-      maxZoom: 12, subdomains: 'abcd', referrerPolicy: 'no-referrer',
-      attribution: '© <a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer" target="_blank">OpenStreetMap</a> © <a href="https://carto.com/attributions" rel="noopener noreferrer" target="_blank">CARTO</a>',
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 12, referrerPolicy: 'origin', className: escuro ? 'mapa-escuro' : '',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer" target="_blank">colaboradores do OpenStreetMap</a>',
     }).addTo(mapa);
     L.circleMarker([estado.local.lat, estado.local.lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#2457A6', fillOpacity: 1 }).addTo(mapa).bindTooltip('Você');
     for (const f of estado.obs?.fontes || []) {

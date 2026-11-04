@@ -416,3 +416,4 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 @media (min-width: 720px) {
   .detalhes .horas, .detalhes .rolar, .detalhes .tabela-rolar { margin: 0; padding: 0 0 6px; }
 }
+.mapa-escuro { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
