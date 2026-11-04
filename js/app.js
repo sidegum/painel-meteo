@@ -157,7 +157,11 @@ function configurarLocal() {
 
 let atualizando = false;
 async function atualizar({ forcar = false, local = false, agora = false } = {}) {
-  if (atualizando || !estado.local || estado.apagado) return;
+  if (!estado.local || estado.apagado) return;
+  if (atualizando) {
+    if (!forcar && !agora) return;
+    while (atualizando) await new Promise((r) => setTimeout(r, 150)); // espera a busca em andamento e refaz tudo
+  }
   atualizando = true;
   $('#btn-atualizar').setAttribute('aria-busy', 'true');
   $('#btn-atualizar').setAttribute('aria-label', 'Atualizando');
@@ -199,8 +203,7 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     if (tarefas.length && estado.prev) renderTudo();
   } finally {
     atualizando = false;
-    $('#btn-atualizar').removeAttribute('aria-busy');
-    $('#btn-atualizar').setAttribute('aria-label', 'Atualizar');
+    if (!tudoRodando) { $('#btn-atualizar').removeAttribute('aria-busy'); $('#btn-atualizar').setAttribute('aria-label', 'Atualizar'); }
     atualizarCabecalho();
   }
 }
@@ -220,15 +223,29 @@ function agendar() {
 
 // Atualiza tudo, sem exceção: posição atual (salvo cidade escolhida nesta sessão), previsão, cenários,
 // medições, radar, alertas, El Niño, acerto dos modelos, mapa e a própria versão do app.
+let tudoRodando = false, ultimaCompleta = 0;
 async function atualizarTudo() {
-  if (atualizando) return;
-  let escolha = false;
-  try { escolha = sessionStorage.getItem('localEscolhido') === '1'; } catch {}
-  const antes = estado.local ? `${arredondaCoord(estado.local.lat)},${arredondaCoord(estado.local.lon)}` : null;
-  if (!(escolha && estado.local?.origem === 'cidade')) await localizarGps(true, true);
-  const depois = estado.local ? `${arredondaCoord(estado.local.lat)},${arredondaCoord(estado.local.lon)}` : null;
-  await atualizar({ forcar: true, local: antes !== depois });
-  navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {});
+  if (tudoRodando) return; // já está atualizando tudo; o giro do botão mostra isso
+  tudoRodando = true;
+  const btn = $('#btn-atualizar');
+  btn.setAttribute('aria-busy', 'true'); btn.setAttribute('aria-label', 'Atualizando');
+  try {
+    let escolha = false;
+    try { escolha = sessionStorage.getItem('localEscolhido') === '1'; } catch {}
+    const chave = () => (estado.local ? `${arredondaCoord(estado.local.lat)},${arredondaCoord(estado.local.lon)}` : null);
+    const antes = chave();
+    // GPS e busca começam juntos: os dados chegam sem esperar o GPS; se a posição mudou, busca de novo.
+    const gps = escolha && estado.local?.origem === 'cidade' ? Promise.resolve() : localizarGps(true, true);
+    await atualizar({ forcar: true });
+    await gps;
+    if (chave() !== antes) await atualizar({ forcar: true, local: true });
+    ultimaCompleta = Date.now();
+  } finally {
+    tudoRodando = false;
+    btn.removeAttribute('aria-busy'); btn.setAttribute('aria-label', 'Atualizar');
+    atualizarCabecalho();
+    navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {});
+  }
 }
 
 function atualizarCabecalho() {
@@ -239,7 +256,8 @@ function atualizarCabecalho() {
   const h = $('#local-hora');
   if (!estado.prevEm) { h.textContent = 'sem dados ainda'; return; }
   const atraso = Date.now() - estado.prevEm > 45 * 60000;
-  h.textContent = `Atualizado ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)}${atraso ? ", desatualizado" : ""}`;
+  const recente = Date.now() - Math.max(estado.prevEm, ultimaCompleta) < 60000;
+  h.textContent = recente ? 'Atualizado agora' : `Atualizado ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)}${atraso ? ', desatualizado' : ''}`;
   h.classList.toggle('atrasado', atraso);
   renderAgora();
   const msgs = [];
