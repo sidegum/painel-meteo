@@ -171,6 +171,16 @@ export function itensRss(xml) {
 
 // ------------------------------------------------------------- observações
 
+// Cobertura de nuvens do METAR em %, escolhida para cair na faixa certa de REGRAS.ceu do app:
+// FEW (1-2/8) = poucas nuvens, SCT (3-4/8) = parcialmente nublado, BKN (5-7/8) e OVC (8/8) = nublado.
+// Vale a camada mais coberta. Sem grupo de nuvens e sem código de céu limpo, null (ausente não é limpo).
+const COBERTURA_METAR = { SKC: 0, CLR: 0, NSC: 0, NCD: 0, CAVOK: 0, FEW: 25, SCT: 50, BKN: 85, OVC: 100, VV: 100 };
+export function coberturaMetar(o) {
+  const codigos = [...(Array.isArray(o?.clouds) ? o.clouds.map((c) => c?.cover) : []), o?.cover]
+    .map((c) => texto(String(c ?? ''), 6).toUpperCase()).filter((c) => c in COBERTURA_METAR);
+  return codigos.length ? Math.max(...codigos.map((c) => COBERTURA_METAR[c])) : null;
+}
+
 export function normalizarMetar(lista) {
   if (!Array.isArray(lista)) return [];
   const kt = 1.852;
@@ -189,7 +199,7 @@ export function normalizarMetar(lista) {
       umidade: temp !== null && dew !== null ? Math.round(100 * Math.exp((17.625 * dew) / (243.04 + dew)) / Math.exp((17.625 * temp) / (243.04 + temp))) : null,
       vento: wspd !== null ? Math.round(wspd * kt) : null,
       rajada: wgst !== null ? Math.round(wgst * kt) : null,
-      direcao: wdir, pressao: slp,
+      direcao: wdir, pressao: slp, nuvens: coberturaMetar(o),
     };
     if (!porEstacao.has(id)) porEstacao.set(id, { id, tipo: 'metar', nome: texto(o.name, 80) || id, lat, lon, serie: [] });
     porEstacao.get(id).serie.push(leitura);

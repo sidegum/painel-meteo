@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.21';
+const VERSAO = '1.2.22';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -487,6 +487,36 @@ function direcaoMedia(graus) {
   return n ? (Math.atan2(x, y) * 180 / Math.PI + 360) % 360 : null;
 }
 
+/**
+ * Céu do dia pelos modelos: cobertura média das horas (de dia, se houver) e chance de chuva do veredito.
+ * @returns {ReturnType<typeof condicaoCeu>}
+ */
+function ceuDoDia(a) {
+  const p = estado.prev, mods = modelosAtivos();
+  const nuv = consensoHorario(p, 'cloud_cover', mods).med, dia = consensoHorario(p, 'is_day', mods).med;
+  return condicaoCeu(a.idx.map((i) => nuv[i]), a.idx.map((i) => (valido(dia[i]) ? Math.round(dia[i]) : null)), a.av.prob);
+}
+
+/**
+ * Céu de agora, com medição real quando houver: cobertura de nuvens do METAR mais recente (até
+ * REGRAS.ceuMedido.distanciaKm e REGRAS.ceuMedido.idadeMin); sem METAR, a cobertura dos modelos na hora atual.
+ * A chuva vem só do que se mede agora (radar ou estação): previsão de chuva fica na linha "Vai chover", não no céu.
+ * @returns {(ReturnType<typeof condicaoCeu> & {origem:string})|null}
+ */
+function ceuAgora() {
+  const p = estado.prev, mods = modelosAtivos(), agora = Date.now(), pt = pontoExato();
+  const i = p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000);
+  const dia = i < 0 ? null : consensoHorario(p, 'is_day', mods).med[i];
+  // entre os METAR válidos dentro da distância, o boletim mais recente (o céu muda mais rápido que a distância pesa)
+  const { escolhida, outras } = escolherFonte(fontesNormalizadas(), 'nuvens', pt.lat, pt.lon, agora, REGRAS.ceuMedido.idadeMin);
+  const medido = [escolhida, ...outras].filter((c) => c?.ok && c.distancia <= REGRAS.ceuMedido.distanciaKm).sort((x, y) => y.ms - x.ms)[0] || null;
+  const cobertura = medido ? medido.valor : (i < 0 ? null : consensoHorario(p, 'cloud_cover', mods).med[i]);
+  const ceu = condicaoCeu([cobertura], [valido(dia) ? Math.round(dia) : null], null);
+  if (!ceu) return null;
+  const origem = medido ? `nuvens medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}` : 'nuvens pela previsão para esta hora';
+  return { ...ceu, origem };
+}
+
 // ------------------------------------------------------------------ medições
 
 function fontesNormalizadas() {
@@ -494,7 +524,7 @@ function fontesNormalizadas() {
   const out = [];
   for (const f of estado.obs?.fontes || []) {
     const leituras = {};
-    const vars = ['temperatura', 'umidade', 'orvalho', 'pressao', 'vento', 'rajada', 'direcao', 'chuva', 'sensacao'];
+    const vars = ['temperatura', 'umidade', 'orvalho', 'pressao', 'vento', 'rajada', 'direcao', 'chuva', 'sensacao', 'nuvens'];
     for (const v of vars) {
       for (let k = f.serie.length - 1; k >= 0; k--) {
         const ponto = f.serie[k];
@@ -594,11 +624,9 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     ? `Amanhã, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}`
     : `Hoje, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}`;
 
-  // céu: consenso horário entre modelos; hoje só as horas que faltam
+  // céu: hoje é o céu de agora (ao lado da temperatura de agora); amanhã, o resumo do dia pelos modelos
+  const ceu = diaIndice === 0 ? ceuAgora() : ceuDoDia(a);
   const mods = modelosAtivos();
-  const nuv = consensoHorario(p, 'cloud_cover', mods).med;
-  const dia = consensoHorario(p, 'is_day', mods).med;
-  const ceu = condicaoCeu(a.idx.map((i) => nuv[i]), a.idx.map((i) => (valido(dia[i]) ? Math.round(dia[i]) : null)), av.prob);
 
   // chuva: resposta curta, chance, volume e horário
   const agoraChuva = diaIndice === 0 ? medicaoChuvaAgora() : null;
@@ -625,7 +653,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     diaIndice === 0 ? el('div', { class: 'resumo-agora', id: 'agora-hoje', 'aria-hidden': 'true' }) : null,
     el('div', { class: 'resumo-ceu' },
       iconeCeu(ceu),
-      el('span', { class: 'cond' }, ceu ? ceu.texto : ausente('céu sem dado'))),
+      el('span', { class: 'cond', title: ceu?.origem || null }, ceu ? ceu.texto : ausente('céu sem dado'))),
     el('div', { class: 'resumo-temp' },
       el('span', { class: 'bloco-t min' }, el('small', { text: 'mínima' }), el('b', { class: 'tmin', text: fmt.c(a.tmin) ?? '–' })),
       el('span', { class: 'bloco-t max' }, el('small', { text: 'máxima' }), el('b', { class: 'tmax', text: fmt.c(a.tmax) ?? '–' })),

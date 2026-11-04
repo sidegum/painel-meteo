@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import w, {
-  parseOni, parseSemanal, parseMensal, parseDiscussao, parseProbabilidades, parseIri, normalizarMetar,
+  parseOni, parseSemanal, parseMensal, parseDiscussao, parseProbabilidades, parseIri, normalizarMetar, coberturaMetar,
   normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia, calibracao, probDiariaCenarios,
 } from '../src/index.js';
 
@@ -92,6 +92,14 @@ test('METAR: nós para km/h, estações da região', () => {
   assert.equal(ult.vento, Math.round(17 * 1.852));
   assert.equal(ult.rajada, null); // sem wgst: ausente, não zero
   assert.equal(ult.pressao, 1009);
+  assert.equal(ult.nuvens, 25); // FEW
+});
+
+test('METAR: cobertura de nuvens pela camada mais coberta', () => {
+  assert.equal(coberturaMetar({ clouds: [{ cover: 'FEW' }, { cover: 'BKN' }] }), 85);
+  assert.equal(coberturaMetar({ clouds: [], cover: 'CAVOK' }), 0);
+  assert.equal(coberturaMetar({ clouds: [{ cover: 'SCT', base: 4000 }], cover: 'SCT' }), 50);
+  assert.equal(coberturaMetar({}), null);
 });
 
 test('INMET última leitura: m/s para km/h, UTC', () => {
