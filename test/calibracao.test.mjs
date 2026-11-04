@@ -216,3 +216,68 @@ test('METAR da IEM: °F → °C, nós → km/h, rajada só quando informada', as
   assert.equal(d.tmax, 28.5);
   assert.equal(d.chuva, null);
 });
+
+// ------------------------------------------------------------------ temperatura hora a hora
+
+import { seriesPorHora, obsPorHora, diasHorarios, ajustarHorario, validarHorario, ajusteFinal } from '../scripts/lib/temperatura-horaria.mjs';
+import { temperaturaHoraria, prepararCorrecaoDia } from '../js/analise.js';
+
+// Viés sintético do modelo por hora do dia: frio demais à tarde (−3 °C às 15 h), quente de madrugada (+1 °C).
+const viesSint = (h) => -3 * Math.max(0, Math.sin((h - 9) / 12 * Math.PI)) + (h < 6 ? 1 : 0);
+function horarioSintetico(dias, comLeads) {
+  const t = { dias: {} }, diario = { dias: {} };
+  for (let k = 0; k < dias; k++) {
+    const d = new Date(Date.UTC(2024, 0, 1) + k * 86400000).toISOString().slice(0, 10);
+    const ruido = (h) => ((k * 7 + h * 13) % 11 - 5) / 10; // determinístico, média ~0
+    const o = Array.from({ length: 24 }, (_, h) => 18 + 8 * Math.max(0, Math.sin((h - 7) / 14 * Math.PI)) + ruido(h));
+    const prev = o.map((v, h) => Math.round((v + viesSint(h) + ruido(23 - h)) * 10) / 10);
+    t.dias[d] = { o, ecmwf_ifs: { h0: prev, ...(comLeads ? { p1: prev } : {}) } };
+    diario.dias[d] = { obs: { tmax: Math.max(...o) + 0.4, tmin: Math.min(...o) - 0.3 } };
+  }
+  return { t, diario };
+}
+
+test('hora a hora: resposta da Open-Meteo e medições viram 24 valores por dia local', () => {
+  const j = { hourly: { time: ['2026-01-10T00:00', '2026-01-10T15:00'], temperature_2m_previous_day1: [20.04, 28.96] } };
+  const s = seriesPorHora(j, { p1: 'temperature_2m_previous_day1' });
+  assert.equal(s['2026-01-10'].p1[15], 29);
+  assert.equal(s['2026-01-10'].p1[3], null);
+  const o = obsPorHora([{ ms: Date.UTC(2026, 0, 10, 18), temp: 27.5 }, { ms: Date.UTC(2026, 0, 11, 2), temp: 21 }]);
+  assert.equal(o['2026-01-10'][15], 27.5); // 18 UTC = 15 h local
+  assert.equal(o['2026-01-10'][23], 21);   // 02 UTC do dia seguinte = 23 h local
+});
+
+test('hora a hora: recupera o viés de cada hora e vence o método diário fora da amostra', () => {
+  const { t, diario } = horarioSintetico(400, true);
+  const d0 = diasHorarios(t, 'ecmwf_ifs', 'h0', diario), d1 = diasHorarios(t, 'ecmwf_ifs', 'p1', diario);
+  assert.equal(d1.length, 400);
+  const aj = ajustarHorario(d1, ajustarHorario(d0));
+  assert.ok(Math.abs(aj.porEstacao.verao[15] - viesSint(15)) < 0.2);
+  assert.ok(Math.abs(aj.porEstacao.inverno[3] - 1) < 0.2);
+  // método diário de comparação: corrige a máxima pelo viés médio da máxima (sem saber a hora)
+  const v = validarHorario(d1, d0, () => () => ({ tmax: -2.6, tmin: 0.9 }));
+  assert.ok(v.horaria.horaria.mae < v.horaria.diaria.mae && v.horaria.diaria.mae < v.horaria.bruta.mae);
+  assert.ok(v.tmax.horaria.mae < 0.3); // o ajuste residual da máxima pega o pico entre duas horas
+  assert.equal(v.usar, true);
+  const fim = ajusteFinal(d1, d0);
+  assert.equal(fim.vies.verao.length, 24);
+  assert.ok(fim.pico.tmax.verao < 0); // máxima medida (hora anterior) acima da leitura da hora cheia
+});
+
+test('hora a hora no app: mesma conta do script, máxima do gráfico = máxima do dia', () => {
+  const vh = Array.from({ length: 24 }, (_, h) => Math.round(viesSint(h) * 100) / 100);
+  const calib = { ...CALIB, temperaturaHoraria: { modelos: { ecmwf_ifs: { leads: { 1: { usar: true, vies: { verao: vh, outono: vh, inverno: vh, primavera: vh }, pico: { tmax: { verao: -0.4 }, tmin: { verao: 0.3 } } }, 2: { usar: false, vies: { verao: vh } } } } } } };
+  assert.ok(temperaturaHoraria(calib, 'ecmwf_ifs', 1, 1));
+  assert.equal(temperaturaHoraria(calib, 'ecmwf_ifs', 2, 1), null);          // reprovado
+  assert.equal(temperaturaHoraria(calib, 'ukmo_global_deterministic_10km', 1, 1), null);
+  const p = previsaoTeste();
+  const c = calibrarPrevisao(p, { calib, aprendizado: null, refMs: p.horas[0] });
+  const bruta = p.modelos.ecmwf_ifs.vars.temperature_2m, nova = c.modelos.ecmwf_ifs.vars.temperature_2m;
+  const f = prepararCorrecaoDia(bruta, bruta.map((_, h) => h), vh, { tmax: -0.4, tmin: 0.3 });
+  assert.deepEqual(nova, bruta.map((v, h) => f(v, h)));
+  assert.ok(nova[15] - bruta[15] > 2.5);                                    // tarde sobe ~3 °C
+  assert.deepEqual(c.calibracao.temperaturaHoraria, ['ecmwf_ifs']);
+  const r = resumoModeloDia(c, 'ecmwf_ifs', indicesDoDia(c.horas, '2026-01-10', c.offset));
+  assert.equal(r.tmax, Math.max(...nova));
+  assert.equal(c.atual.temp.ecmwf_ifs, nova[15]);                           // "agora" com a mesma correção
+});

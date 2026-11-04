@@ -32,6 +32,7 @@ const VERIFICACAO = [
   { id: 'A884', nome: 'Campo Bom (INMET)', lat: -29.674, lon: -51.064, chuva: true },
   { id: 'A801', nome: 'Porto Alegre Jardim Botânico (INMET)', lat: -30.054, lon: -51.175, chuva: true },
   { id: 'SBCO', nome: 'Canoas (METAR)', lat: -29.945, lon: -51.144, chuva: false },
+  { id: 'SBPA', nome: 'Porto Alegre aeroporto (METAR)', lat: -29.994, lon: -51.171, chuva: false },
 ];
 
 // ------------------------------------------------------------------ início

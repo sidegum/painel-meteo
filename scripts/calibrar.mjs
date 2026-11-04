@@ -11,8 +11,10 @@ import {
   MODELOS_CALIBRACAO, LEADS, PARAM, ESTACOES, pares, ajustarVies, corrigirVies, ajustarFator, corrigirFator,
   validar, metricas, contingenciaChuva, pesosRelativos, foraDaAmostra, coerenciaFator, arredondar as r,
 } from './lib/calibracao.mjs';
+import { MODELOS_HORARIO, LEADS_HORARIO, PARAM_HORARIO, diasHorarios, validarHorario, ajusteFinal } from './lib/temperatura-horaria.mjs';
 
 const ARQ_HIST = new URL('../dados/historico/A884-diario.json', import.meta.url);
+const ARQ_HORARIO = new URL('../dados/historico/A884-horario.json', import.meta.url);
 const ARQ_CALIB = new URL('../dados/calibracao.json', import.meta.url);
 const ARQ_RELAT = new URL('../docs/calibracao-resultado.md', import.meta.url);
 
@@ -217,6 +219,43 @@ function placar() {
   };
 }
 
+// ------------------------------------------------------------------ temperatura hora a hora (modelos do painel)
+
+/**
+ * Correção hora a hora da temperatura de cada modelo do painel, por antecedência
+ * (scripts/lib/temperatura-horaria.mjs), com a validação fora da amostra contra a previsão bruta e contra o
+ * método diário (só máxima e mínima). null quando ainda não há a tabela horária.
+ */
+async function temperaturaHoraria() {
+  let horario;
+  try { horario = JSON.parse(await readFile(ARQ_HORARIO, 'utf8')); } catch { return null; }
+  const res = { fontes: horario.fontes, metodo: { ...PARAM_HORARIO, documento: 'docs/CALIBRACAO.md' }, modelos: {} };
+  const resumo = (v) => v && Object.fromEntries(['horaria', 'tarde', 'tmax', 'tmin'].map((k) => [k,
+    Object.fromEntries(Object.entries(v[k]).map(([nome, x]) => [nome, { n: x.n, mae: r(x.mae), vies: r(x.vies) }]))]));
+  for (const m of MODELOS_HORARIO) {
+    // método diário em uso (só máxima e mínima), ajustado sem o mês de teste
+    const metodoDiario = (L) => (treino) => {
+      const ajuste = (campo) => (modelos[m]?.[campo]?.[L]?.usar
+        ? ajustarVies(pares(tabela, m, L, campo).filter((p) => treino(p.mes))) : null);
+      const a = ajuste('tmax'), b = ajuste('tmin');
+      return (est) => ({ tmax: a ? a.porEstacao[est].vies : 0, tmin: b ? b.porEstacao[est].vies : 0 });
+    };
+    const dias0 = diasHorarios(horario, m, 'h0', tabela);
+    const v0 = validarHorario(dias0, [], () => null);
+    const out = { nome: MODELOS_CALIBRACAO[m].nome, curtoPrazo: { dias: dias0.length, ini: dias0[0]?.data ?? null, fim: dias0.at(-1)?.data ?? null, validacao: resumo(v0) }, leads: {} };
+    for (const L of LEADS_HORARIO) {
+      const dias = diasHorarios(horario, m, `p${L}`, tabela);
+      const v = validarHorario(dias, dias0, metodoDiario(L));
+      const fim = ajusteFinal(dias, dias0);
+      if (!v || !fim) { out.leads[L] = { usar: false, dias: dias.length }; continue; }
+      out.leads[L] = { usar: v.usar, ...fim, ini: dias[0].data, fim: dias.at(-1).data, validacao: resumo(v) };
+      console.log(`Hora a hora ${m}, ${L} dia(s): ${dias.length} dias, erro por hora ${r(v.horaria.bruta.mae)} → diário ${r(v.horaria.diaria.mae)} → horário ${r(v.horaria.horaria.mae)} °C; ${v.usar ? 'em uso' : 'não usado'}`);
+    }
+    res.modelos[m] = out;
+  }
+  return res;
+}
+
 const calib = {
   versao: 1,
   geradoEm: new Date().toISOString(),
@@ -234,6 +273,7 @@ const calib = {
   resumo: { temperaturaEcmwf: resumoTemperatura(), rajadaMediana: resumoRajada() },
   placar: placar(),
   outras: await outrasEstacoes(),
+  temperaturaHoraria: await temperaturaHoraria(),
   modelos,
 };
 
@@ -244,12 +284,12 @@ console.log(`Calibração gravada: ${datasObs.length} dias com medição, ${comu
 // ------------------------------------------------------------------ outras estações (só acerto)
 
 /**
- * Acerto dos modelos do painel nas outras estações de verificação (Porto Alegre, Canoas), sem correção:
+ * Acerto dos modelos do painel nas outras estações de verificação (Porto Alegre e Canoas), sem correção:
  * a calibração vem só de Campo Bom. Serve à tabela "Acerto de cada modelo" do app.
  */
 async function outrasEstacoes() {
   const out = {};
-  for (const id of ['A801', 'SBCO']) {
+  for (const id of ['A801', 'SBCO', 'SBPA']) {
     let t;
     try { t = JSON.parse(await readFile(new URL(`../dados/historico/${id}-diario.json`, import.meta.url), 'utf8')); } catch { continue; }
     const datas = Object.keys(t.dias).filter((d) => t.dias[d].obs).sort();
@@ -291,6 +331,25 @@ function relatorio(c) {
   for (const l of LEADS) {
     const a = c.resumo.temperaturaEcmwf.tmax[l], b = c.resumo.temperaturaEcmwf.tmin[l];
     L.push(`| ${l} dia(s) | ${f(a?.maeAntes)} | ${f(a?.maeDepois)} | ${f(b?.maeAntes)} | ${f(b?.maeDepois)} | ${a?.n ?? '–'} |`);
+  }
+  for (const [m, th] of Object.entries(c.temperaturaHoraria?.modelos || {})) {
+    const met = c.temperaturaHoraria.metodo;
+    L.push('', `## Temperatura hora a hora (${th.nome}): erro médio em °C`, '',
+      `Fora da amostra. "Bruta": como o modelo previu. "Diária": correção só da máxima e da mínima (método anterior). "Horária": viés de cada hora do dia por estação do ano, com base no curto prazo desde ${th.curtoPrazo.ini ?? '–'} (${th.curtoPrazo.dias} dias), mais o ajuste da máxima e da mínima. Tarde: ${met.tarde[0]} h a ${met.tarde[1]} h.`, '');
+    L.push('| Antecedência | Dias | Por hora: bruta / diária / horária | Tarde: bruta / diária / horária | Máxima: bruta / diária / horária | Mínima: bruta / diária / horária | Em uso |', '|---|---|---|---|---|---|---|');
+    const tri = (x) => (x ? `${f(x.bruta?.mae)} / ${f(x.diaria?.mae)} / ${f(x.horaria?.mae)}` : '–');
+    const v0 = th.curtoPrazo.validacao;
+    if (v0) L.push(`| curto prazo | ${th.curtoPrazo.dias} | ${f(v0.horaria.bruta.mae)} / – / ${f(v0.horaria.horaria.mae)} | ${f(v0.tarde.bruta.mae)} / – / ${f(v0.tarde.horaria.mae)} | ${f(v0.tmax.bruta.mae)} / – / ${f(v0.tmax.horaria.mae)} | ${f(v0.tmin.bruta.mae)} / – / ${f(v0.tmin.horaria.mae)} | base |`);
+    for (const l of LEADS_HORARIO) {
+      const x = th.leads[l], v = x?.validacao;
+      L.push(`| ${l} dia(s) | ${x?.dias ?? 0} | ${tri(v?.horaria)} | ${tri(v?.tarde)} | ${tri(v?.tmax)} | ${tri(v?.tmin)} | ${x?.usar ? 'sim' : 'não'} |`);
+    }
+    const x1 = th.leads[1], hs = [0, 3, 6, 9, 12, 14, 15, 16, 18, 21];
+    if (x1?.vies) {
+      L.push('', `Viés por hora na véspera (previsto − medido, °C; negativo = o modelo prevê frio demais):`, '');
+      L.push(`| Estação | ${hs.map((h) => `${h} h`).join(' | ')} |`, `|---|${'---|'.repeat(hs.length)}`);
+      for (const e of ESTACOES) L.push(`| ${e} | ${hs.map((h) => f(x1.vies[e][h])).join(' | ')} |`);
+    }
   }
   L.push('', '## Rajada exibida (mediana dos modelos): erro médio em km/h', '', '| Antecedência | Antes | Depois | Viés antes | Viés depois | Dias |', '|---|---|---|---|---|---|');
   for (const l of LEADS) {
