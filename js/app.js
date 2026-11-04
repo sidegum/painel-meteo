@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.2.7';
+const VERSAO = '1.2.8';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -209,14 +209,14 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
 }
 
 function agendar() {
-  setInterval(() => { if (!document.hidden) atualizar(); atualizarCabecalho(); }, 60000);
-  // ao voltar para o app: temperatura e chuva agora medidas de novo (estação e radar)
-  // Toda vez que o app volta para a tela (inclusive pelo atalho na tela inicial, com o app ainda na memória),
-  // refaz tudo como o botão atualizar: posição, previsão, cenários, medições, radar, alertas e El Niño.
+  // Os dados só são buscados em três momentos, a pedido do Gustavo: ao abrir o app, ao voltar para ele
+  // (inclusive pelo atalho na tela inicial) e no botão atualizar. Não há atualização periódica nem
+  // automática ao reconectar. O relógio abaixo só reescreve o texto "Atualizado há..." do topo.
+  setInterval(() => atualizarCabecalho(), 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarTudo(); });
   // página restaurada do cache de navegação (voltar/avançar ou reabrir a aba)
   window.addEventListener('pageshow', (e) => { if (e.persisted) atualizarTudo(); });
-  window.addEventListener('online', () => atualizar());
+  window.addEventListener('online', () => avisar('Conexão de volta. Toque em atualizar para buscar os dados novos.'));
   window.addEventListener('offline', () => avisar('Sem conexão. Mostrando os últimos dados salvos, que podem estar desatualizados.', true));
   $('#btn-atualizar').addEventListener('click', () => atualizarTudo());
 }
@@ -736,14 +736,14 @@ function renderHojeDetalhes() {
   const filhos = [];
   filhos.push(proximasHoras());
   filhos.push(instrumentos());
+  const pm = secao('Previsto x medido', null);
+  filhos.push(pm);
+  const mapa = secao('Mapa', null);
+  mapa.classList.add('largura-total');
+  filhos.push(mapa);
   const met = secao('Meteograma', 'Previsão das próximas 48 horas. Arraste para os lados.');
   met.classList.add('largura-total');
   filhos.push(met);
-  const pm = secao('Previsto x medido', null);
-  filhos.push(pm);
-  const mapa = secao('Mapa e radar', null);
-  mapa.classList.add('largura-total');
-  filhos.push(mapa);
   filhos.push(estadoFontes());
   alvo.replaceChildren(...filhos);
   meteograma(met, Date.now() - 2 * 3600000, Date.now() + 48 * 3600000, 24, 'hoje');
