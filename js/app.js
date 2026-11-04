@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.2.5';
+const VERSAO = '1.2.6';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -650,7 +650,7 @@ function linhaAlerta() {
   if (!meus.length) return el('p', { class: 'nota', style: { margin: '2px 0' } }, `Nenhum aviso do INMET encontrado para este local (consulta ${fmt.idade(estado.alertasEm)}).`);
   const a = meus[0];
   return el('button', { type: 'button', class: 'alerta', onclick: () => detalheAlertas(meus) },
-    `INMET: ${a.titulo}${a.severidade ? `, ${a.severidade.toLowerCase()}` : ''}${meus.length > 1 ? ` (+${meus.length - 1})` : ''}`);
+    `Aviso do INMET: ${a.titulo.toLowerCase()}${a.severidade ? ` (${a.severidade.toLowerCase()})` : ''}${meus.length > 1 ? ` e mais ${meus.length - 1}` : ''}`);
 }
 
 const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
