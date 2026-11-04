@@ -1084,39 +1084,44 @@ function painelPressao(pr) {
   const av = avaliarPressao({ atual, d3: v3?.delta, d24: v24?.delta, prev: varPrev });
   const caixa = el('div', { class: 'pressao' });
   const sinal = (d) => `${d > 0 ? '+' : ''}${fmt.n(d, 1)} hPa`;
+  // Cabeçalho objetivo: valor, tendência de 3 h e a conclusão em uma linha. O restante fica em "Ver detalhes".
   caixa.append(el('div', { class: 'pr-topo' },
     el('span', { class: 'med-nome', text: 'Pressão atmosférica' }),
     el('b', { class: 'pr-v', text: valido(atual) ? fmt.hpa(atual) : '–' }),
-    cls ? el('span', { class: `pr-tend ${cls.sentido}`, text: `${cls.sentido === 'caindo' ? '▼' : cls.sentido === 'subindo' ? '▲' : '●'} ${cls.texto}` }) : null));
-  const linhas = [
-    ['Últimas 3 h', v3 ? sinal(v3.delta) : 'sem dado'],
-    ['Últimas 24 h', v24 ? sinal(v24.delta) : 'sem dado'],
-    [`Próximas ${R.previsaoHoras} h (previsão)`, valido(varPrev) ? sinal(varPrev) : 'sem dado'],
-    ['Menor nas próximas 24 h', minimo24 ? `${fmt.hpa(minimo24.valor)} às ${fmt.hora(minimo24.ms, p.offset)}` : 'sem dado'],
-  ];
-  caixa.append(el('dl', { class: 'pr-lista' }, ...linhas.flatMap(([a, b]) => [el('dt', { text: a }), el('dd', { text: b })])));
+    cls ? el('span', { class: `pr-tend ${cls.sentido}`, text: `${cls.sentido === 'caindo' ? '▼' : cls.sentido === 'subindo' ? '▲' : '●'} ${cls.texto}${v3 ? ` (${sinal(v3.delta)} em 3 h)` : ''}` }) : null));
   // A leitura parte da chance de chuva principal de hoje (a mesma da primeira tela), para nunca contradizê-la.
   const hoje = datas()[0];
   const lp = leituraPressao(av, p && hoje ? analisarDia(hoje, 0, true).av.prob : null);
   if (lp) {
     caixa.classList.add(`sinal-${lp.classe}`);
     caixa.append(el('p', { class: 'pr-sinal' }, el('b', { text: lp.titulo + '. ' }), lp.texto));
-    if (av.motivos.length) caixa.append(el('p', { class: 'nota', text: `Pela pressão: ${av.motivos.join('; ')}.` }));
   }
-  // gráfico: últimas 24 h medidas e próximas 24 h previstas
-  if (p && i0 >= 0) {
+  const det = el('details', { class: 'med-det' }, el('summary', { text: 'Ver detalhes' }));
+  const linhas = [
+    ['Últimas 24 h', v24 ? sinal(v24.delta) : 'sem dado'],
+    [`Próximas ${R.previsaoHoras} h (previsão)`, valido(varPrev) ? sinal(varPrev) : 'sem dado'],
+    ['Menor nas próximas 24 h', minimo24 ? `${fmt.hpa(minimo24.valor)} às ${fmt.hora(minimo24.ms, p.offset)}` : 'sem dado'],
+  ];
+  det.append(el('dl', { class: 'pr-lista' }, ...linhas.flatMap(([a, b]) => [el('dt', { text: a }), el('dd', { text: b })])));
+  if (av?.motivos.length) det.append(el('p', { class: 'nota', text: `Pela pressão: ${av.motivos.join('; ')}.` }));
+  caixa.append(det);
+  // gráfico: últimas 24 h medidas e próximas 24 h previstas (desenhado ao abrir, quando o contêiner tem largura)
+  let desenhado = false;
+  det.addEventListener('toggle', () => {
+    if (!det.open || desenhado || !p || i0 < 0) return;
+    desenhado = true;
     const ini = Math.max(0, i0 - 24), fim = Math.min(p.horas.length - 1, i0 + 24);
     const x = p.horas.slice(ini, fim + 1);
     const med = x.map((ms) => { if (ms > agora) return null; const o = serieMed.find((q) => Math.abs(q.ms - ms) <= 30 * 60000); return o ? o.valor : null; });
     const prv = x.map((_, k) => seriePrev[ini + k].valor);
-    criarGrafico(caixa, { x, noites: noitesDe(p.diario, x[0], x[x.length - 1]), fuso: p.fuso, emitirHora: false, titulo: 'Pressão: 24 h medidas e 24 h previstas', altura: 140,
-      fonte: `${pr ? `Medida: ${pr.fonte.nome} (${fmt.n(pr.distancia, 0)} km).` : 'Sem medição de pressão perto.'} Prevista: ECMWF (modelo europeu)${ancora ? ', ajustada à medição de agora' : ''}.${origemTend === 'prevista' ? ' Tendências calculadas pela previsão, sem série medida.' : ''}`,
+    criarGrafico(det, { x, noites: noitesDe(p.diario, x[0], x[x.length - 1]), fuso: p.fuso, emitirHora: false, titulo: 'Pressão: 24 h medidas e 24 h previstas', altura: 140,
+      fonte: `${pr ? `Medida: ${pr.fonte.nome} (${fmt.n(pr.distancia, 0)} km).` : 'Sem medição de pressão perto.'} Prevista: ECMWF${ancora ? ', ajustada à medição de agora' : ''}.${origemTend === 'prevista' ? ' Tendências pela previsão, sem série medida.' : ''}`,
       series: [
         { rotulo: 'previsto', valores: prv, corCss: '--texto', dash: [6, 4], largura: 1.5, formato: (v) => fmt.hpa(v) },
         { rotulo: 'medido', valores: med, corCss: '--chuva', pontos: true, largura: 2.5, formato: (v) => fmt.hpa(v) },
       ], eixos: [{ formato: (v) => `${v}`, tamanho: 48, rotulo: 'hPa' }] });
-  }
-  caixa.append(el('details', { class: 'med-det' }, el('summary', { text: 'Como é calculado' }), el('p', { class: 'nota', text: `A tendência de 3 h segue os termos do Met Office e da OMM (estável abaixo de 0,1 hPa; devagar até 1,5; normal até 3,5; rápido até 6; muito rápido acima). O sinal de chuva soma pontos: queda em 3 h (+1, ou +2 se rápida), queda de ${R.queda24hForte} hPa em 24 h (+1), queda prevista de ${R.variacaoPrevForte} hPa em ${R.previsaoHoras} h (+1) e pressão abaixo de ${R.baixa} hPa (+1). Subidas e pressão acima de ${R.alta} hPa tiram pontos. A conclusão parte sempre da chance de chuva dos modelos, mostrada no topo: a pressão confirma ou explica essa previsão, nunca a contradiz.` })));
+    det.append(el('p', { class: 'nota', text: `Como é calculado: queda em 3 h soma 1 ponto (2 se rápida); queda de ${R.queda24hForte} hPa em 24 h, queda prevista de ${R.variacaoPrevForte} hPa em ${R.previsaoHoras} h e pressão abaixo de ${R.baixa} hPa somam 1 cada; subidas e pressão acima de ${R.alta} hPa tiram pontos. A conclusão sempre parte da chance de chuva do topo da tela.` }));
+  });
   return caixa;
 }
 
