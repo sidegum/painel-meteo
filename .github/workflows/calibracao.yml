@@ -42,7 +42,7 @@ jobs:
         run: if [ -f scripts/calibrar.mjs ]; then node scripts/calibrar.mjs; fi
       - name: Publicar se mudou
         run: |
-          git add dados/historico dados/calibracao.json docs/calibracao-resultado.md 2>/dev/null || true
+          for f in dados/historico dados/calibracao.json docs/calibracao-resultado.md; do [ -e "$f" ] && git add "$f"; done
           if git diff --cached --quiet; then echo "Sem mudança."; exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
