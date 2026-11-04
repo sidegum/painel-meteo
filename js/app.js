@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.16';
+const VERSAO = '1.2.17';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -595,11 +595,14 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   // risco de temporal: só aparece quando é moderado ou alto
   const risco = avaliarRisco(a, chovendo, !!chegando);
   if (risco && risco.nivel !== 'baixo') {
+    const periodo = risco.aviso ? periodoAviso(risco.aviso) : null;
+    const motivos = risco.motivos.filter((m) => !/aviso de tempestade do INMET/.test(m));
     filhos.push(el('button', { type: 'button', class: `linha-temporal ${risco.nivel}`, onclick: () => mostrarInfo(`Risco ${risco.nivel} de temporal`,
-      el('p', { text: `Por quê: ${risco.motivos.join('; ')}.` }),
-      el('p', { text: 'Temporal é chuva forte em pouco tempo, com raios e às vezes granizo e rajadas fortes. Evite áreas abertas e árvores durante a chuva e acompanhe os avisos da Defesa Civil (199).' }),
-      el('p', { class: 'nota', text: 'Como é calculado: energia para tempestades (CAPE) acima de 1000 J/kg soma 1 ponto e acima de 2500 soma 2; chuva acima de 10 mm/h soma 1 e acima de 25 soma 2; rajadas acima de 60 km/h somam 1 e acima de 80 somam 2; pressão caindo rápido soma 1. Com 2 pontos o risco é moderado e com 4, alto. Com aviso de tempestade do INMET em vigor, vale o nível do aviso: perigo potencial é moderado; perigo e grande perigo são alto. Só é avaliado quando há chuva prevista, chegando ou ocorrendo, ou aviso do INMET.' })) },
-      svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })), `Risco ${risco.nivel} de temporal`));
+      risco.aviso ? el('p', {}, el('b', { text: `Aviso do INMET${periodo ? ` ${periodo}` : ''}.` }), ` ${risco.aviso.titulo} (${String(risco.aviso.severidade || '').toLowerCase()}).`) : null,
+      motivos.length ? el('p', { text: `Pela previsão: ${motivos.join('; ')}.` }) : null,
+      el('p', { text: 'Durante o temporal, fique longe de árvores e áreas abertas. Emergência: Defesa Civil, 199.' })) },
+      svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })),
+      el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal`, periodo ? el('small', { text: `Aviso do INMET ${periodo}` }) : null)));
   }
 
   // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
@@ -1039,14 +1042,30 @@ function avaliarRisco(a, chovendo, chegando) {
   const avisos = alertasDoLocal().filter((x) => /tempestade|granizo|vendaval/i.test(x.titulo || '')
     && (!x.inicio || x.inicio.slice(0, 10) <= a.data) && (!x.fim || x.fim.slice(0, 10) >= a.data));
   const ordem = ['perigo potencial', 'perigo', 'grande perigo'];
-  const aviso = avisos.map((x) => String(x.severidade || '').trim().toLowerCase()).sort((x, y) => ordem.indexOf(y) - ordem.indexOf(x))[0] || null;
-  return riscoTemporal({
+  const grau = (x) => ordem.indexOf(String(x.severidade || '').trim().toLowerCase());
+  const maisGrave = avisos.sort((x, y) => grau(y) - grau(x))[0] || null;
+  const aviso = maisGrave ? String(maisGrave.severidade || '').trim().toLowerCase() : null;
+  const r = riscoTemporal({
     prob: a.av.prob, chovendo, chegando,
     cape: maxNoDia('cape'), chuvaHora: maxNoDia('precipitation'),
     rajada: a.av.rajada?.mediana ?? a.rajadaPico?.valor ?? null,
     d3Pressao: a.diaIndice === 0 ? dadosPressao().v3?.delta ?? null : null,
     aviso,
   });
+  return r && { ...r, aviso: maisGrave };
+}
+
+/**
+ * Período de um aviso do INMET ("AAAA-MM-DD HH:MM", horário de Brasília) em texto curto:
+ * "das 10:00 às 23:59" no mesmo dia de hoje; com as datas quando o aviso passa de um dia ou não é de hoje.
+ */
+function periodoAviso(av) {
+  const ok = (s) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(s || ''));
+  if (!ok(av?.inicio) || !ok(av?.fim)) return null;
+  const hoje = partesLocais(Date.now(), -10800).data;
+  const d = (s) => s.slice(0, 10), h = (s) => s.slice(11, 16), dm = (s) => `${s.slice(8, 10)}/${s.slice(5, 7)}`;
+  if (d(av.inicio) === d(av.fim) && d(av.inicio) === hoje) return `das ${h(av.inicio)} às ${h(av.fim)}`;
+  return `das ${h(av.inicio)} de ${dm(av.inicio)} às ${h(av.fim)} de ${dm(av.fim)}`;
 }
 
 /**

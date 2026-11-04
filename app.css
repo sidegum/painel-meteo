@@ -500,3 +500,6 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .linha-temporal.alto { border-left-color: var(--quente); background: var(--alerta-fundo); }
 .linha-temporal .raio { width: 16px; height: 16px; flex: none; fill: var(--rajada); }
 .linha-temporal.alto .raio { fill: var(--quente); }
+
+.linha-temporal .lt-txt { display: flex; flex-direction: column; gap: 1px; }
+.linha-temporal .lt-txt small { font-size: 13px; font-weight: 500; color: var(--fraco); }
