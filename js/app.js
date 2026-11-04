@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.9';
+const VERSAO = '1.2.10';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -550,12 +550,13 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     // hoje: escolher entre as horas que faltam e o dia todo (a escolha fica salva no aparelho)
     const todas = desdeAgora && prefs.ler('horasTodas', false);
     const iniUsado = todas ? iniDia : ini;
-    botoes.replaceChildren(...[['chance', 'Chance de chuva'], ['ceu', 'Céu']].map(([k, nome]) =>
+    botoes.replaceChildren(...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
       el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome)),
     desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
       el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : '');
     caixa.replaceChildren();
     if (modo === 'chance') caixa.append(graficoChance(iniUsado, fim));
+    else if (modo === 'temp') caixa.append(graficoTemperatura(iniUsado, fim));
     else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: iniUsado, fimMs: fim, id: 'faixa-' + diaIndice }));
   };
   filhos.push(botoes, caixa);
@@ -633,6 +634,36 @@ function graficoChance(iniMs, fimMs) {
   const eixo = el('div', { class: 'chance-eixo', 'aria-hidden': 'true' },
     ...pontos.map((x) => { const h = partesLocais(x.ms, p.offset).hora; return el('span', { text: h % 3 === 0 ? (h === 0 ? fmt.diaSemana(x.ms, p.offset) : `${h}h`) : '' }); }));
   return el('div', { class: 'chance', title: `Previsão: ${origem}` }, barras, eixo, info);
+}
+
+// Temperatura por hora: mediana ponderada dos modelos, no mesmo formato das barras de chance.
+// A altura vai da menor à maior temperatura do período, para a variação ao longo do dia ficar visível.
+function graficoTemperatura(iniMs, fimMs) {
+  const p = estado.prev, mods = modelosAtivos();
+  const t = consensoHorario(p, 'temperature_2m', mods).med;
+  const st = consensoHorario(p, 'apparent_temperature', mods).med;
+  const pontos = [];
+  p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, t: t[i], st: st[i] }); });
+  const validos = pontos.filter((x) => valido(x.t));
+  const info = el('p', { class: 'chance-info', 'aria-live': 'polite' });
+  if (!validos.length) { info.textContent = 'Temperatura por hora sem dado.'; return el('div', { class: 'chance' }, info); }
+  const max = validos.reduce((b, x) => (x.t > b.t ? x : b)), min = validos.reduce((b, x) => (x.t < b.t ? x : b));
+  const base = Math.floor(min.t) - 2, topo = Math.max(Math.ceil(max.t), base + 4);
+  const resumo = `Máxima de ${fmt.n(max.t, 0)}° às ${fmt.hora(max.ms, p.offset)}, mínima de ${fmt.n(min.t, 0)}° às ${fmt.hora(min.ms, p.offset)}. Toque numa barra.`;
+  info.textContent = resumo;
+  const barras = el('div', { class: 'chance-barras temp', role: 'img', 'aria-label': `Temperatura por hora. ${resumo}` },
+    ...pontos.map((x) => {
+      const agora = Date.now() >= x.ms && Date.now() < x.ms + 3600000;
+      const h = partesLocais(x.ms, p.offset).hora;
+      const rotulo = valido(x.t) && (x === max || x === min || h % 3 === 0);
+      return el('button', { type: 'button', class: 'barra-c' + (agora ? ' agora' : ''), 'aria-label': `${fmt.hora(x.ms, p.offset)}: ${valido(x.t) ? fmt.n(x.t, 0) + ' graus' : 'sem dado'}`,
+        onclick: () => { info.textContent = `${fmt.hora(x.ms, p.offset)}: ${valido(x.t) ? `${fmt.n(x.t, 1)} °C` : 'sem dado'}${valido(x.st) ? `, sensação de ${fmt.n(x.st, 0)} °C` : ''}`; } },
+        el('i', { class: valido(x.t) ? '' : 'sem', style: { height: valido(x.t) ? `${Math.max(4, ((x.t - base) / (topo - base)) * 100)}%` : '100%' } }),
+        rotulo ? el('span', { text: `${Math.round(x.t)}°` }) : null);
+    }));
+  const eixo = el('div', { class: 'chance-eixo', 'aria-hidden': 'true' },
+    ...pontos.map((x) => { const h = partesLocais(x.ms, p.offset).hora; return el('span', { text: h % 3 === 0 ? (h === 0 ? fmt.diaSemana(x.ms, p.offset) : `${h}h`) : '' }); }));
+  return el('div', { class: 'chance', title: 'Previsão: mediana dos modelos' }, barras, eixo, info);
 }
 
 // Ícone de linha (SVG, sem emoji): sol ou lua, nuvem e gotas conforme o céu previsto.
