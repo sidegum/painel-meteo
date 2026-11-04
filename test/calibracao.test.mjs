@@ -117,3 +117,83 @@ test('fator de rajada e contingência de chuva', () => {
   const p = pesosRelativos({ a: { chuva: 2, tmax: 1 }, b: { chuva: 4, tmax: 1 } });
   assert.ok(p.a > 1 && p.b < 1);
 });
+
+// ------------------------------------------------------------------ uso no app (js/analise.js)
+import { calibrarPrevisao, calibrarEnsemble, correcaoTemperatura, viesHistorico, fatorHistorico, pesosModelos, calibracaoAplicavel, consensoHorario, resumoModeloDia, indicesDoDia } from '../js/analise.js';
+
+const CALIB = {
+  versao: 1, estacao: { id: 'A884', lat: -29.674, lon: -51.064 }, diasComuns: 300,
+  pesos: { ecmwf_ifs: 1.1, ecmwf_aifs025_single: 0.9, ukmo_global_deterministic_10km: 1 },
+  modelos: {
+    ecmwf_ifs: {
+      tmax: { 1: { usar: true, vies: { verao: -1.5, outono: -1, inverno: -0.5, primavera: -1 } }, 2: { usar: false, vies: { verao: -9 } } },
+      tmin: { 1: { usar: true, vies: { verao: 0.5, outono: 0.5, inverno: 0.5, primavera: 0.5 } } },
+      rajada: { 1: { usar: true, fator: { verao: 0.8, outono: 0.8, inverno: 0.8, primavera: 0.8 } } },
+      vento: { 1: { usar: false, fator: { verao: 0.5 } } },
+    },
+    ecmwf_ifs025: { rajada: { 1: { usar: true, fator: { verao: 0.7, outono: 0.7, inverno: 0.7, primavera: 0.7 } } } },
+  },
+};
+
+// Previsão de um dia de janeiro (verão), hora a hora, no fuso -3.
+function previsaoTeste() {
+  const off = -10800, ini = Date.UTC(2026, 0, 10, 3); // 00:00 local de 10/01
+  const horas = Array.from({ length: 24 }, (_, h) => ini + h * 3600000);
+  const temp = horas.map((_, h) => 20 + 10 * Math.max(0, Math.sin((h - 6) / 12 * Math.PI))); // 20 a 30 °C
+  return { lat: -29.67, lon: -51.06, offset: off, horas, atual: { ms: horas[15], temp: { ecmwf_ifs: temp[15] } },
+    modelos: { ecmwf_ifs: { vars: { temperature_2m: temp, wind_gusts_10m: horas.map(() => 50), wind_speed_10m: horas.map(() => 20) } } } };
+}
+
+test('calibração só vale perto da estação', () => {
+  assert.equal(calibracaoAplicavel(CALIB, -29.68, -51.05), true);
+  assert.equal(calibracaoAplicavel(CALIB, -23.55, -46.63), false);
+});
+
+test('viés e fator históricos respeitam "usar", antecedência e estação do ano', () => {
+  assert.deepEqual(viesHistorico(CALIB, 'ecmwf_ifs', 1, 1), { tmax: -1.5, tmin: 0.5 });
+  assert.deepEqual(viesHistorico(CALIB, 'ecmwf_ifs', 2, 1), { tmax: null, tmin: null }); // reprovado fora da amostra
+  assert.equal(fatorHistorico(CALIB, 'ecmwf_ifs', 'rajada', 1, 7), 0.8);
+  assert.equal(fatorHistorico(CALIB, 'ecmwf_ifs', 'vento', 1, 1), 1);
+  assert.equal(fatorHistorico(CALIB, 'ukmo_global_deterministic_10km', 'rajada', 1, 1), 1);
+});
+
+test('correção de temperatura: histórico como ponto de partida, aprendizado recente refina', () => {
+  assert.deepEqual(correcaoTemperatura(null, { tmax: -1.5, tmin: 0.5 }), { tmax: -1.5, tmin: 0.5 });
+  // 20 dias recentes com viés +0.5 e histórico −1.5, peso 20: média = −0.5
+  const c = correcaoTemperatura({ viesTmax: 0.5, amostrasTmax: 20 }, { tmax: -1.5, tmin: null });
+  assert.ok(Math.abs(c.tmax + 0.5) < 1e-9);
+  // sem histórico: comportamento original (encolhe em direção a zero)
+  assert.ok(Math.abs(correcaoTemperatura({ viesTmax: 2, amostrasTmax: 10 }).tmax - 1) < 1e-9);
+});
+
+test('série horária corrigida: máxima e mínima do dia batem exatamente com a correção diária', () => {
+  const p = previsaoTeste();
+  const c = calibrarPrevisao(p, { calib: CALIB, aprendizado: null, refMs: p.horas[0] });
+  const idx = indicesDoDia(c.horas, '2026-01-10', c.offset);
+  const r = resumoModeloDia(c, 'ecmwf_ifs', idx);
+  assert.equal(r.tmax, 31.5); // 30 − (−1,5)
+  assert.equal(r.tmin, 19.5); // 20 − 0,5
+  assert.equal(c.modelos.ecmwf_ifs.vars.wind_gusts_10m[5], 40);  // 50 × 0,8
+  assert.equal(c.modelos.ecmwf_ifs.vars.wind_speed_10m[5], 20);  // vento reprovado: sem mudança
+  assert.ok(c.atual.temp.ecmwf_ifs > p.atual.temp.ecmwf_ifs);    // "agora" previsto acompanha a correção
+  assert.equal(p.modelos.ecmwf_ifs.vars.wind_gusts_10m[5], 50);  // original intacto
+  // gráfico (consenso horário) e resumo do dia leem a mesma série: nenhuma tela diverge
+  assert.equal(Math.max(...consensoHorario(c, 'wind_gusts_10m', ['ecmwf_ifs']).med), r.rajada.valor);
+});
+
+test('cenários: rajada dos membros recebe o fator do modelo de mesma origem', () => {
+  const p = previsaoTeste();
+  const ens = { ecmwf_ifs025: { horas: p.horas, membros: { precipitation: [], wind_gusts_10m: [p.horas.map(() => 60)] } },
+    ecmwf_aifs025_ensemble: { horas: p.horas, membros: { precipitation: [], wind_gusts_10m: [] } } };
+  const c = calibrarEnsemble(ens, CALIB, p.horas[0], p.offset);
+  assert.equal(c.ecmwf_ifs025.membros.wind_gusts_10m[0][3], 42);
+  assert.equal(c.ecmwf_aifs025_ensemble, ens.ecmwf_aifs025_ensemble);
+});
+
+test('pesos: histórico ajusta o ponto de partida dentro dos limites', () => {
+  const mods = ['ecmwf_ifs', 'ecmwf_aifs025_single', 'ukmo_global_deterministic_10km'];
+  const sem = pesosModelos(null, mods).pesos, com = pesosModelos(null, mods, { pesos: CALIB.pesos, dias: 300 });
+  assert.ok(com.pesos.ecmwf_ifs >= sem.ecmwf_ifs && com.pesos.ecmwf_aifs025_single < sem.ecmwf_aifs025_single);
+  assert.equal(com.historico, true);
+  assert.ok(Object.values(com.pesos).every((w) => w >= 0.7 && w <= 1.3));
+});

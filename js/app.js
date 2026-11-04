@@ -5,9 +5,10 @@ import {
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
+  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos,
 } from './analise.js';
 import {
-  buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto,
+  buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
   salvarCache, lerCache, workerConfigurado, MODELOS_ENSEMBLE, buscarAlertasDireto, buscarObservacoesDireto, buscarChuvaRadar, buscarChegadaChuva,
 } from './dados.js';
 import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno } from './ui.js';
@@ -21,6 +22,8 @@ const estado = {
   local: null, aba: 'hoje',
   prev: null, prevEm: null, ens: null, ensEm: null, ensErros: [],
   obs: null, obsEm: null, alertas: null, alertasEm: null, enso: null, ensoEm: null, acerto: {}, acertoEm: null,
+  // séries como vieram da Open-Meteo; estado.prev e estado.ens são as versões calibradas (recalibrar)
+  prevBruta: null, ensBruto: null, calib: null, calibEm: null,
   erros: {}, cacheAntigo: false, faixas: [],
 };
 
@@ -49,8 +52,10 @@ async function iniciar() {
   // 1. mostra o que houver em cache imediatamente
   const c = await lerCache('previsao');
   if (c?.dados && estado.local) {
-    estado.prev = reidratar(c.dados); estado.prevEm = c.salvoEm; estado.cacheAntigo = true;
-    const e = await lerCache('ensemble'); if (e?.dados) { estado.ens = e.dados; estado.ensEm = e.salvoEm; }
+    estado.prevBruta = reidratar(c.dados); estado.prevEm = c.salvoEm; estado.cacheAntigo = true;
+    const e = await lerCache('ensemble'); if (e?.dados) { estado.ensBruto = e.dados; estado.ensEm = e.salvoEm; }
+    const k = await lerCache('calibracao'); if (k?.dados) { estado.calib = k.dados; estado.calibEm = k.salvoEm; }
+    recalibrar();
     const o = await lerCache('observacoes'); if (o?.dados) { estado.obs = o.dados; estado.obsEm = o.salvoEm; }
     renderTudo();
   } else {
@@ -182,16 +187,16 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
   const { lat, lon } = estado.local;
   try {
     // Todas as fontes saem ao mesmo tempo; a primeira tela é desenhada assim que a previsão chega.
-    if (local) { estado.ens = null; estado.obs = null; estado.alertas = null; }
+    if (local) { estado.ens = null; estado.ensBruto = null; estado.obs = null; estado.alertas = null; }
     const tarefas = [];
     let principal = Promise.resolve();
     if (venceu(estado.prevEm, I.previsao)) tarefas.push(principal = buscarPrevisao(lat, lon)
-      .then((pv) => { estado.prev = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao; salvarCache('previsao', pv); })
+      .then((pv) => { estado.prevBruta = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao; salvarCache('previsao', pv); recalibrar(); })
       .catch((e) => { estado.erros.previsao = e.message; })
       .then(() => renderTudo()));
     if (venceu(estado.ensEm, I.cenarios)) tarefas.push(buscarEnsemble(lat, lon).then(({ ens, erros }) => {
       estado.ensErros = erros;
-      if (ens) { estado.ens = ens; estado.ensEm = Date.now(); salvarCache('ensemble', ens); delete estado.erros.ensemble; }
+      if (ens) { estado.ensBruto = ens; estado.ensEm = Date.now(); salvarCache('ensemble', ens); delete estado.erros.ensemble; recalibrar(); }
       else estado.erros.ensemble = erros.join('; ') || 'sem dados';
     }));
     const w = workerConfigurado();
@@ -215,7 +220,11 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     if (venceu(estado.ensoEm, I.enso)) tarefas.push(buscarEnso()
       .then((e) => { estado.enso = e; estado.ensoEm = Date.now(); salvarCache('enso', e); delete estado.erros.enso; })
       .catch((e) => { estado.erros.enso = e.message; }));
-    if (w && venceu(estado.acertoEm, I.acerto)) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); }));
+    if (w && venceu(estado.acertoEm, I.acerto)) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); recalibrar(); }));
+    // Calibração com o histórico: arquivo mensal do robô do GitHub; sem ele, o painel segue sem correção histórica.
+    if (venceu(estado.calibEm, I.acerto)) tarefas.push(buscarCalibracao()
+      .then((k) => { estado.calib = k; estado.calibEm = Date.now(); salvarCache('calibracao', k); delete estado.erros.calibracao; recalibrar(); })
+      .catch((e) => { estado.erros.calibracao = e.message; }));
     // O botão para de girar quando a previsão chega. As outras fontes (medições, alertas, radar, El Niño)
     // continuam chegando e redesenham a tela sozinhas, com teto de 30 s: uma fonte lenta não segura o botão.
     const resto = Promise.race([Promise.all(tarefas), new Promise((r) => setTimeout(r, 30000))])
@@ -378,7 +387,29 @@ function pesosAtuais() {
     const l1 = a[m]?.[1] || {};
     mapa[m] = { dias: Math.max(l1.amostrasChuva ?? 0, l1.amostrasTmax ?? 0), maeChuva: l1.maeChuva, maeTmax: l1.maeTmax };
   }
-  return pesosModelos(a ? mapa : null, modelosAtivos());
+  return pesosModelos(a ? mapa : null, modelosAtivos(), calibracaoLocal() ? pesosHistoricos(estado.calib) : null);
+}
+
+// Calibração com o histórico: só vale perto da estação onde foi medida (até 50 km).
+function calibracaoLocal() {
+  const p = estado.prevBruta || estado.prev;
+  return estado.calib && p && calibracaoAplicavel(estado.calib, p.lat, p.lon) ? estado.calib : null;
+}
+
+/**
+ * Fonte única dos valores exibidos: recalcula estado.prev e estado.ens a partir das séries brutas sempre que
+ * chega previsão, cenários, calibração ou aprendizado novo. Todas as telas leem estado.prev/estado.ens, então
+ * herdam a mesma correção (temperatura, rajada e vento), sem ajustes separados por tela.
+ */
+function recalibrar() {
+  const bruta = estado.prevBruta;
+  if (!bruta) return;
+  const calib = calibracaoLocal();
+  const apr = aprendizadoLocal()?.porModelo || null;
+  const ref = estado.prevEm || Date.now();
+  estado.prev = calibrarPrevisao(bruta, { calib, aprendizado: apr, refMs: ref });
+  estado.ens = estado.ensBruto ? calibrarEnsemble(estado.ensBruto, calib, ref, bruta.offset) : null;
+  cacheDias.clear();
 }
 
 function acertoCtx(diaIndice) {
@@ -407,7 +438,7 @@ const cacheDias = new Map();
  * @param {boolean} desdeAgora considerar só as horas restantes
  */
 function analisarDia(data, diaIndice, desdeAgora) {
-  const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}|${estado.chegadaEm}|${estado.radarAgoraEm}`;
+  const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}|${estado.chegadaEm}|${estado.radarAgoraEm}|${estado.calibEm}`;
   if (cacheDias.has(chave)) return cacheDias.get(chave);
   const p = estado.prev, mods = modelosAtivos();
   const inicio = desdeAgora ? Date.now() : -Infinity;
@@ -416,14 +447,9 @@ function analisarDia(data, diaIndice, desdeAgora) {
   const usar = idx.length ? idx : idxTodo;
   const { pesos, ajustado } = pesosAtuais();
   const resumos = mods.map((m) => resumoModeloDia(p, m, usar));
-  // temperatura corrigida pelo viés que cada modelo mostrou nas medições locais
+  // A temperatura já vem corrigida nas séries horárias (recalibrar: histórico + aprendizado recente).
   const apr = aprendizadoLocal();
-  const lead = Math.min(5, Math.max(1, diaIndice));
-  const resumosTodo = mods.map((m) => {
-    const r = resumoModeloDia(p, m, idxTodo);
-    const c = correcaoTemperatura(apr?.porModelo?.[m]?.[lead]);
-    return { ...r, tmax: valido(r.tmax) ? r.tmax - c.tmax : r.tmax, tmin: valido(r.tmin) ? r.tmin - c.tmin : r.tmin, correcao: c };
-  });
+  const resumosTodo = mods.map((m) => resumoModeloDia(p, m, idxTodo));
   const membros = membrosDia(estado.ens, data, p.offset, inicio);
   const medAgora = diaIndice === 0 ? medicaoChuvaAgora() : null;
   const av = avaliarDia(resumos, membros, { diaIndice, acerto: acertoCtx(diaIndice), pesos, medicaoAgora: medAgora, calibracao: apr?.calibracao, chegando: diaIndice === 0 && !!chegandoAgora() });
