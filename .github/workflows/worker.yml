@@ -48,9 +48,9 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Testar o Worker
+      - name: Rodar os testes
         if: steps.seg.outputs.ok == 'true'
-        run: node --test worker/test/
+        run: npm test
 
       - name: Preparar KV e subdomínio workers.dev
         if: steps.seg.outputs.ok == 'true'
