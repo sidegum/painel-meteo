@@ -104,6 +104,46 @@ const rotulosEscala = (c) => c.escala.map(([v], k) => (c.id === 'nuvens' ? ['cé
 // Aviso perto do local: algum vértice a menos de 4° (cerca de 400 km).
 const perto = (a, lat, lon) => a.poligonos.some((anel) => anel.some(([la, lo]) => Math.abs(la - lat) < 4 && Math.abs(lo - lon) < 4));
 
+// Dois dedos: arrastar move o mapa e afastar ou juntar dá zoom em volta do ponto entre os dedos.
+// Um dedo é ignorado pelo mapa e rola a página; aparece uma dica curta de usar dois dedos.
+function gestosDoisDedos(L, mapa, caixa) {
+  const dica = el('div', { class: 'mapa-dica', 'aria-hidden': 'true', text: 'Use dois dedos para mover o mapa' });
+  caixa.append(dica);
+  let ini = null, timerDica = null;
+  const meio = (t) => L.point((t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2);
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const rel = (pt) => { const r = caixa.getBoundingClientRect(); return pt.subtract(L.point(r.left, r.top)); };
+  caixa.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      dica.classList.remove('ver');
+      const m = rel(meio(e.touches));
+      ini = { d: dist(e.touches), zoom: mapa.getZoom(), ll: mapa.containerPointToLatLng(m) };
+    }
+  }, { passive: true });
+  caixa.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 1 && !ini) {
+      clearTimeout(timerDica); dica.classList.add('ver'); timerDica = setTimeout(() => dica.classList.remove('ver'), 1200);
+      return;
+    }
+    if (e.touches.length !== 2 || !ini) return;
+    e.preventDefault(); // dois dedos são do mapa: a página não rola nem dá zoom
+    const m = rel(meio(e.touches));
+    const z = Math.max(mapa.getMinZoom(), Math.min(mapa.getMaxZoom(), ini.zoom + Math.log2(dist(e.touches) / ini.d)));
+    // mantém sob os dedos o mesmo ponto do mapa que estava lá no início do gesto
+    mapa.setZoom(z, { animate: false });
+    const agora = mapa.latLngToContainerPoint(ini.ll);
+    mapa.panBy(agora.subtract(m), { animate: false });
+  }, { passive: false });
+  const fim = (e) => {
+    if (!ini || e.touches.length >= 2) return;
+    ini = null;
+    const z = Math.round(mapa.getZoom() * 2) / 2; // assenta em meio nível para os quadros do mapa ficarem nítidos
+    mapa.setZoomAround(mapa.getSize().divideBy(2), z, { animate: false });
+  };
+  caixa.addEventListener('touchend', fim, { passive: true });
+  caixa.addEventListener('touchcancel', fim, { passive: true });
+}
+
 export function secaoMapa(container, estado) {
   const caixa = el('div', { class: 'mapa', role: 'region', 'aria-label': 'Mapa do tempo' }, el('p', { class: 'nota', style: { padding: '16px' }, text: 'O mapa carrega quando esta parte aparece na tela.' }));
   const escolha = el('div', { class: 'camadas', role: 'radiogroup', 'aria-label': 'Camada do mapa', 'data-hscroll': '' });
@@ -133,10 +173,13 @@ export function secaoMapa(container, estado) {
   async function montar() {
     const L = await carregarLeaflet();
     caixa.replaceChildren();
-    // Mapa como nos aplicativos de mapa: um dedo arrasta, dois dedos aproximam ou afastam,
-    // e no computador a rodinha do mouse dá zoom. Para rolar a página, toque fora do mapa.
+    // No computador: arrastar com o mouse e zoom pela rodinha. No celular: um dedo rola a página normalmente
+    // (o mapa não prende a rolagem) e dois dedos movem e aproximam o mapa, como nos mapas embutidos em sites.
+    const deToque = matchMedia('(pointer: coarse)').matches;
     const mapa = L.map(caixa, { zoomControl: true, attributionControl: true, maxZoom: 12, minZoom: 4, tap: false,
-      dragging: true, touchZoom: true, scrollWheelZoom: true, doubleClickZoom: true, wheelPxPerZoomLevel: 90, bounceAtZoomLimits: false });
+      dragging: !deToque, touchZoom: false, scrollWheelZoom: !deToque, doubleClickZoom: true, wheelPxPerZoomLevel: 90,
+      bounceAtZoomLimits: false, zoomSnap: deToque ? 0 : 1 });
+    if (deToque) gestosDoisDedos(L, mapa, caixa);
     const lat = estado.local.lat, lon = estado.local.lon;
     mapa.setView([lat, lon], 8);
     // Mapa base do OpenStreetMap. A política dos servidores dele exige saber de qual site vem o pedido,

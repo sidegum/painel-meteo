@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.11';
+const VERSAO = '1.2.12';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -308,12 +308,12 @@ function renderAgora() {
   const { pesos } = pesosAtuais();
   const mods = modelosAtivos();
   // valor "current" dos modelos (intervalo de 15 min); se faltar, a hora cheia mais recente
-  let v = mediana(mods.map((m) => p.atual?.temp?.[m]), mods.map((m) => pesos[m] ?? 1));
+  let v = valido(p.atual?.temp?.[MODELO_TEMP]) ? p.atual.temp[MODELO_TEMP] : mediana(mods.map((m) => p.atual?.temp?.[m]), mods.map((m) => pesos[m] ?? 1));
   if (!valido(v)) v = p.atual?.geral ?? null;
   if (!valido(v)) {
     let i = -1;
     for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= Date.now()) i = k;
-    v = i < 0 ? null : mediana(mods.map((m) => p.modelos[m].vars.temperature_2m?.[i]), mods.map((m) => pesos[m] ?? 1));
+    v = i < 0 ? null : tempHora(p, 'temperature_2m', i, mods);
   }
   alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(v) ?? '–' }));
   alvo.title = 'Sem medição recente perto daqui; valor previsto pelos modelos para esta hora.';
@@ -413,7 +413,9 @@ function analisarDia(data, diaIndice, desdeAgora) {
   const r = {
     data, diaIndice, idx: usar, idxTodo, resumos, membros, av, horasChuva, pesosAjustados: ajustado,
     frase: fraseDoDia(av, horasChuva.janela, p.offset),
-    tmin: mediana(resumosTodo.map((x) => x.tmin), resumosTodo.map((x) => pesos[x.modelo] ?? 1)), tmax: mediana(resumosTodo.map((x) => x.tmax), resumosTodo.map((x) => pesos[x.modelo] ?? 1)),
+    // mínima e máxima: ECMWF (padrão europeu), corrigido pelo aprendizado; sem ECMWF, mediana ponderada
+    tmin: valido(resumosTodo.find((x) => x.modelo === MODELO_TEMP)?.tmin) ? resumosTodo.find((x) => x.modelo === MODELO_TEMP).tmin : mediana(resumosTodo.map((x) => x.tmin), resumosTodo.map((x) => pesos[x.modelo] ?? 1)),
+    tmax: valido(resumosTodo.find((x) => x.modelo === MODELO_TEMP)?.tmax) ? resumosTodo.find((x) => x.modelo === MODELO_TEMP).tmax : mediana(resumosTodo.map((x) => x.tmax), resumosTodo.map((x) => pesos[x.modelo] ?? 1)),
     tminFaixa: [minimo(resumosTodo.map((x) => x.tmin)), maximo(resumosTodo.map((x) => x.tmin))],
     tmaxFaixa: [minimo(resumosTodo.map((x) => x.tmax)), maximo(resumosTodo.map((x) => x.tmax))],
     rajadaPico: pico === null ? null : { ms: p.horas[pico], valor: cons.med[pico], dir: dirPico },
@@ -635,56 +637,67 @@ function graficoChance(iniMs, fimMs) {
   const temAgora = pontos.some((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
   const agoraM = temAgora ? medicaoChuvaAgora() : null;
   for (const x of pontos) if (agoraM?.chovendo && Date.now() >= x.ms && Date.now() < x.ms + 3600000) { x.p = 1; x.origem = 'medido'; x.medido = true; }
-  const info = el('p', { class: 'chance-info', 'aria-live': 'polite' });
   const validos = pontos.filter((x) => valido(x.p));
-  const maior = validos.reduce((b, x) => (!b || x.p > b.p ? x : b), null);
-  const futuro = validos.filter((x) => !x.medido);
-  const maiorF = futuro.reduce((b, x) => (!b || x.p > b.p ? x : b), null);
-  const resumo = () => (agoraM?.chovendo ? `Chovendo agora.${maiorF ? ` Depois, maior chance: ${fmt.pct(maiorF.p)} às ${fmt.hora(maiorF.ms, p.offset)}.` : ''}` : maior ? `Maior chance no dia: ${fmt.pct(maior.p)} às ${fmt.hora(maior.ms, p.offset)}. Toque numa barra.` : 'Chance de chuva por hora sem dado.');
-  info.textContent = resumo();
   const origem = validos.some((x) => x.origem === 'cenários') ? 'cenários do ensemble' : 'probabilidade dos modelos';
-  const barras = el('div', { class: 'chance-barras', role: 'img', 'aria-label': `Chance de chuva por hora. ${resumo()}` },
-    el('i', { class: 'guia g50', 'aria-hidden': 'true' }), el('i', { class: 'guia g100', 'aria-hidden': 'true' }),
-    ...pontos.map((x, k) => {
-      const agora = Date.now() >= x.ms && Date.now() < x.ms + 3600000;
-      return el('button', { type: 'button', class: 'barra-c' + (agora ? ' agora' : ''), 'aria-label': `${fmt.hora(x.ms, p.offset)}: ${valido(x.p) ? fmt.pct(x.p) : 'sem dado'}`,
-        onclick: () => { info.textContent = `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' : 'sem dado'}${valido(x.mm) ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`; } },
-        el('i', { class: valido(x.p) ? (x.medido ? 'medido' : '') : 'sem', style: { height: valido(x.p) ? `${Math.max(2, x.p * 100)}%` : '100%' } }),
-        valido(x.p) && x.p >= 0.3 && (k === 0 || !valido(pontos[k - 1].p) || Math.abs(x.p - pontos[k - 1].p) >= 0.1 || x === maior) ? el('span', { text: Math.round(x.p * 100) }) : null);
-    }));
-  const eixo = el('div', { class: 'chance-eixo', 'aria-hidden': 'true' },
-    ...pontos.map((x) => { const h = partesLocais(x.ms, p.offset).hora; return el('span', { text: h % 3 === 0 ? (h === 0 ? fmt.diaSemana(x.ms, p.offset) : `${h}h`) : '' }); }));
-  return el('div', { class: 'chance', title: `Previsão: ${origem}` }, barras, eixo, info);
+  const atual = pontos.find((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
+  return barrasComEixo({
+    pontos, classe: 'chuva', titulo: `Previsão: ${origem}`, nome: 'Chance de chuva por hora',
+    pct: (x) => (valido(x.p) ? x.p * 100 : null), medido: (x) => x.medido,
+    ticks: [[0, '0%'], [50, '50%'], [100, '100%']],
+    agoraPct: atual && valido(atual.p) ? atual.p * 100 : null,
+    inicial: agoraM?.chovendo ? 'Chovendo agora. Toque num horário para ver a chance de chuva.' : 'Toque num horário para ver a chance de chuva.',
+    detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' : 'sem dado'}${valido(x.mm) ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
+  });
 }
 
-// Temperatura por hora: mediana ponderada dos modelos, no mesmo formato das barras de chance.
-// A altura vai da menor à maior temperatura do período, para a variação ao longo do dia ficar visível.
-function graficoTemperatura(iniMs, fimMs) {
-  const p = estado.prev, mods = modelosAtivos();
-  const t = consensoHorario(p, 'temperature_2m', mods).med;
-  const st = consensoHorario(p, 'apparent_temperature', mods).med;
-  const pontos = [];
-  p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, t: t[i], st: st[i] }); });
-  const validos = pontos.filter((x) => valido(x.t));
-  const info = el('p', { class: 'chance-info', 'aria-live': 'polite' });
-  if (!validos.length) { info.textContent = 'Temperatura por hora sem dado.'; return el('div', { class: 'chance' }, info); }
-  const max = validos.reduce((b, x) => (x.t > b.t ? x : b)), min = validos.reduce((b, x) => (x.t < b.t ? x : b));
-  const base = Math.floor(min.t) - 2, topo = Math.max(Math.ceil(max.t), base + 4);
-  const resumo = `Máxima de ${fmt.n(max.t, 0)}° às ${fmt.hora(max.ms, p.offset)}, mínima de ${fmt.n(min.t, 0)}° às ${fmt.hora(min.ms, p.offset)}. Toque numa barra.`;
-  info.textContent = resumo;
-  const barras = el('div', { class: 'chance-barras temp', role: 'img', 'aria-label': `Temperatura por hora. ${resumo}` },
+// Barras por hora com eixo vertical à esquerda e linha pontilhada na altura do valor da hora atual.
+// Nada de números sobre as barras: o valor exato aparece embaixo ao tocar num horário.
+function barrasComEixo({ pontos, classe, titulo, nome, pct, medido = () => false, ticks, agoraPct, inicial, detalhe }) {
+  const p = estado.prev;
+  const info = el('p', { class: 'chance-info', 'aria-live': 'polite', text: inicial });
+  let sel = null;
+  const area = el('div', { class: 'gb-area' },
+    ...ticks.map(([v]) => el('i', { class: 'gb-guia', 'aria-hidden': 'true', style: { bottom: `${v}%` } })),
+    valido(agoraPct) ? el('i', { class: 'gb-agora', 'aria-hidden': 'true', style: { bottom: `${Math.min(100, Math.max(0, agoraPct))}%` } }) : null,
     ...pontos.map((x) => {
       const agora = Date.now() >= x.ms && Date.now() < x.ms + 3600000;
-      const h = partesLocais(x.ms, p.offset).hora;
-      const rotulo = valido(x.t) && (x === max || x === min || h % 3 === 0);
-      return el('button', { type: 'button', class: 'barra-c' + (agora ? ' agora' : ''), 'aria-label': `${fmt.hora(x.ms, p.offset)}: ${valido(x.t) ? fmt.n(x.t, 0) + ' graus' : 'sem dado'}`,
-        onclick: () => { info.textContent = `${fmt.hora(x.ms, p.offset)}: ${valido(x.t) ? `${fmt.n(x.t, 1)} °C` : 'sem dado'}${valido(x.st) ? `, sensação de ${fmt.n(x.st, 0)} °C` : ''}`; } },
-        el('i', { class: valido(x.t) ? '' : 'sem', style: { height: valido(x.t) ? `${Math.max(4, ((x.t - base) / (topo - base)) * 100)}%` : '100%' } }),
-        rotulo ? el('span', { text: `${Math.round(x.t)}°` }) : null);
+      const v = pct(x);
+      const b = el('button', { type: 'button', class: 'gb-barra' + (agora ? ' gb-atual' : ''), 'aria-label': detalhe(x) },
+        el('i', { class: valido(v) ? (medido(x) ? 'medido' : '') : 'sem', style: { height: valido(v) ? `${Math.max(2, Math.min(100, v))}%` : '100%' } }));
+      b.onclick = () => { sel?.classList.remove('sel'); sel = b; b.classList.add('sel'); info.textContent = detalhe(x); };
+      return b;
     }));
-  const eixo = el('div', { class: 'chance-eixo', 'aria-hidden': 'true' },
+  const eixoY = el('div', { class: 'gb-y', 'aria-hidden': 'true' }, ...ticks.map(([v, t]) => el('span', { text: t, style: { bottom: `${v}%` } })));
+  const eixoX = el('div', { class: 'gb-x', 'aria-hidden': 'true' },
     ...pontos.map((x) => { const h = partesLocais(x.ms, p.offset).hora; return el('span', { text: h % 3 === 0 ? (h === 0 ? fmt.diaSemana(x.ms, p.offset) : `${h}h`) : '' }); }));
-  return el('div', { class: 'chance', title: 'Previsão: mediana dos modelos' }, barras, eixo, info);
+  return el('div', { class: `grafbarras ${classe}`, title: titulo, role: 'group', 'aria-label': `${nome}. ${inicial}` },
+    el('div', { class: 'gb-corpo' }, eixoY, area), el('div', { class: 'gb-rodape' }, el('span'), eixoX), info);
+}
+
+// Temperatura por hora: ECMWF (modelo europeu), com o mesmo formato do gráfico de chuva.
+// O eixo vai de pouco abaixo da mínima a pouco acima da máxima do período, em passos redondos.
+function graficoTemperatura(iniMs, fimMs) {
+  const p = estado.prev, mods = modelosAtivos();
+  const t = serieTemp(p, 'temperature_2m', mods);
+  const st = serieTemp(p, 'apparent_temperature', mods);
+  const pontos = [];
+  p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, t: t[i], st: st[i] }); });
+  const vals = pontos.map((x) => x.t).filter(valido);
+  if (!vals.length) return el('p', { class: 'chance-info', text: 'Temperatura por hora sem dado.' });
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const passo = hi - lo > 12 ? 5 : hi - lo > 6 ? 3 : 2;
+  const base = Math.floor((lo - 1) / passo) * passo, topo = Math.max(Math.ceil((hi + 0.5) / passo) * passo, base + 2 * passo);
+  const pct = (v) => ((v - base) / (topo - base)) * 100;
+  const ticks = [];
+  for (let v = base; v <= topo + 1e-9; v += passo) ticks.push([pct(v), `${v}°`]);
+  const atual = pontos.find((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
+  return barrasComEixo({
+    pontos, classe: 'temp', titulo: 'Previsão: ECMWF (modelo europeu)', nome: 'Temperatura por hora',
+    pct: (x) => (valido(x.t) ? pct(x.t) : null), ticks,
+    agoraPct: atual && valido(atual.t) ? pct(atual.t) : null,
+    inicial: 'Toque num horário para ver a temperatura.',
+    detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${valido(x.t) ? `${fmt.n(x.t, 1)} °C` : 'sem dado'}${valido(x.st) ? `, sensação de ${fmt.n(x.st, 0)} °C` : ''}`,
+  });
 }
 
 // Ícone de linha (SVG, sem emoji): sol ou lua, nuvem e gotas conforme o céu previsto.
@@ -779,6 +792,18 @@ function regraConfianca() {
     el('p', {}, 'Volume diferente entre modelos não rebaixa a confiança: o painel mostra a melhor estimativa (mediana dos cenários com chuva, ou mediana ponderada dos modelos) e a faixa provável.'),
     el('p', { class: 'nota', text: 'Os limites ficam no objeto REGRAS, em js/analise.js.' }));
 }
+
+// Temperatura no padrão europeu: o ECMWF IFS (Centro Europeu) é a fonte principal da temperatura e da
+// mínima e máxima, com a correção de viés aprendida pelo painel. Se o ECMWF faltar numa hora, entra a
+// mediana ponderada dos outros modelos. Chuva e vento continuam pela combinação dos modelos.
+const MODELO_TEMP = 'ecmwf_ifs';
+function tempHora(p, variavel, i, mods) {
+  const v = p.modelos[MODELO_TEMP]?.vars[variavel]?.[i];
+  if (valido(v)) return v;
+  const { pesos } = pesosAtuais();
+  return mediana(mods.map((m) => p.modelos[m].vars[variavel]?.[i]), mods.map((m) => pesos[m] ?? 1));
+}
+const serieTemp = (p, variavel, mods) => p.horas.map((_, i) => tempHora(p, variavel, i, mods));
 
 // ------------------------------------------------------------------ Hoje: detalhes
 
@@ -969,8 +994,8 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
     if (abertos.includes('temperatura')) {
       criarGrafico(area, { ...base, titulo: 'Temperatura, sensação térmica e ponto de orvalho', fonte,
         series: [
-          { rotulo: 'temperatura', valores: C('temperature_2m').med, corCss: '--quente', largura: 2.5, formato: (v) => fmt.c1(v) },
-          { rotulo: 'sensação', valores: C('apparent_temperature').med, corCss: '--quente', dash: [5, 4], largura: 1.5, formato: (v) => fmt.c1(v) },
+          { rotulo: 'temperatura', valores: idx.map((i) => tempHora(p, 'temperature_2m', i, mods)), corCss: '--quente', largura: 2.5, formato: (v) => fmt.c1(v) },
+          { rotulo: 'sensação', valores: idx.map((i) => tempHora(p, 'apparent_temperature', i, mods)), corCss: '--quente', dash: [5, 4], largura: 1.5, formato: (v) => fmt.c1(v) },
           { rotulo: 'orvalho', valores: C('dew_point_2m').med, corCss: '--fria', largura: 1.5, formato: (v) => fmt.c1(v) },
         ], eixos: [{ formato: (v) => `${v}°` }] });
     }
@@ -1029,10 +1054,10 @@ function previstoMedido(s) {
     const serie = estado.obs.fontes.find((f) => f.id === fonte.fonte.id)?.serie || [];
     return x.map((ms) => { const o = serie.find((q) => Math.abs(q.ms - ms) <= 30 * 60000); return o && valido(o[v]) ? o[v] : null; });
   };
-  const prevT = idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.temperature_2m?.[i])));
+  const prevT = idx.map((i) => tempHora(p, 'temperature_2m', i, mods));
   const medT = medidoEm(fT, 'temperatura');
   criarGrafico(s, { x, noites: noitesDe(p.diario, x[0], x[x.length - 1]), fuso: p.fuso, sync: 'pm', emitirHora: false, titulo: 'Temperatura hoje', altura: 150,
-    fonte: fT ? `Medido: ${fT.fonte.nome} (${fmt.n(fT.distancia, 0)} km). Previsto: mediana dos modelos.` : 'Sem medição de temperatura.',
+    fonte: fT ? `Medido: ${fT.fonte.nome} (${fmt.n(fT.distancia, 0)} km). Previsto: ECMWF (modelo europeu).` : 'Sem medição de temperatura.',
     series: [
       { rotulo: 'previsto', valores: prevT, corCss: '--quente', dash: [6, 4], largura: 1.5, formato: (v) => fmt.c1(v) },
       { rotulo: 'medido', valores: medT, corCss: '--texto', pontos: true, largura: 2.5, formato: (v) => fmt.c1(v) },
@@ -1059,21 +1084,24 @@ function previstoMedido(s) {
   s.append(el('p', { class: 'nota', text: 'Linha tracejada é previsão; linha cheia com pontos é medição.' }));
 }
 
+// Fontes de dados, de forma enxuta: de onde vem cada dado e como é calculado, mais uma linha de situação.
 function estadoFontes() {
-  const linhas = [];
-  const add = (nome, ok, quando, erro) => linhas.push(el('tr', {}, el('td', { text: nome }), el('td', { text: ok ? 'ok' : (erro || 'indisponível') }), el('td', { class: 'n', text: quando ? fmt.idade(quando) : '–' })));
-  add('Previsão (Open-Meteo)', !estado.erros.previsao && estado.prev, estado.prevEm, estado.erros.previsao);
-  add('Cenários (Ensemble API)', !!estado.ens, estado.ensEm, estado.erros.ensemble);
   const w = workerConfigurado();
-  add(w ? 'Medições (INMET, METAR)' : 'Medições (INMET Campo Bom, direto)', estado.obs && !estado.erros.medicoes, estado.obsEm, estado.erros.medicoes);
-  add('Alertas INMET', estado.alertas && !estado.alertas.indisponivel, estado.alertasEm, estado.erros.alertas || 'indisponíveis');
-  add('Servidor do painel (Worker)', w, null, 'não configurado');
-  add('Acerto local dos modelos', w && Object.keys(estado.acerto).length, estado.acertoEm, w ? 'juntando 30 dias' : 'Worker não configurado');
-  add('El Niño (NOAA, IRI)', !!estado.enso && !estado.erros.enso, estado.ensoEm, estado.erros.enso);
-  const falhas = linhas.length - linhas.filter((l) => l.children[1]?.textContent === 'ok').length;
-  return secao('Fontes', falhas ? `${falhas} fonte${falhas > 1 ? 's' : ''} com problema; as outras continuam funcionando.` : 'Todas as fontes respondendo.',
-    el('details', { class: 'med-det' }, el('summary', { text: 'Ver cada fonte' }),
-      el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Fonte' }), el('th', { text: 'Situação' }), el('th', { class: 'n', text: 'Atualizada' }))), el('tbody', {}, ...linhas))));
+  const falhas = [
+    ['previsão', !estado.erros.previsao && estado.prev],
+    ['cenários', !!estado.ens],
+    ['medições', estado.obs && !estado.erros.medicoes],
+    ['alertas', estado.alertas && !estado.alertas.indisponivel],
+  ].filter(([, ok]) => !ok).map(([n]) => n);
+  const itens = [
+    ['Temperatura', 'ECMWF, o modelo europeu, corrigido pelo que o painel aprende comparando com as estações.'],
+    ['Chuva e vento', 'Combinação do ECMWF, do AIFS e do Met Office, com mais peso para o que vem acertando mais.'],
+    ['Chance de chuva', 'Fração dos cenários dos modelos (ensemble) que mostram chuva em cada hora.'],
+    ['Medições', w ? 'Estações do INMET e dos aeroportos (METAR) mais próximas.' : 'Estação do INMET em Campo Bom.'],
+    ['Radar e alertas', 'RainViewer e avisos oficiais do INMET.'],
+  ];
+  return secao('Fontes de dados', falhas.length ? `Sem resposta agora: ${falhas.join(', ')}. O restante está atualizado.` : 'Todas as fontes responderam.',
+    el('ul', { class: 'fontes-lista' }, ...itens.map(([t, d]) => el('li', {}, el('b', { text: t + ': ' }), d))));
 }
 
 // ------------------------------------------------------------------ Amanhã: detalhes
@@ -1090,14 +1118,14 @@ function renderAmanhaDetalhes(data) {
     const prob = maximo(idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.precipitation_probability?.[i]))));
     const mm = idx.reduce((s, i) => { const v = mediana(mods.map((m) => p.modelos[m].vars.precipitation?.[i])); return valido(v) ? s + v : s; }, 0);
     const g = maximo(idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.wind_gusts_10m?.[i]))));
-    const t = idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.temperature_2m?.[i])));
+    const t = idx.map((i) => tempHora(p, 'temperature_2m', i, mods));
     return el('div', { class: 'periodo' }, el('h3', { text: nome[0].toUpperCase() + nome.slice(1) }),
       el('div', { class: 'p', text: valido(prob) ? `${Math.round(prob)}% de chance` : 'chance sem dado' }),
       el('div', { text: `${fmt.n(mm, 1)} mm` }),
       el('div', { class: 'g', text: valido(g) ? `rajada ${Math.round(g)} km/h` : 'rajada sem dado' }),
       el('div', {}, el('span', { class: 'tmin', text: fmt.c(minimo(t)) || '–' }), ' a ', el('span', { class: 'tmax', text: fmt.c(maximo(t)) || '–' })));
   });
-  filhos.push(secao('Períodos', 'Previsão, mediana dos modelos. Chance é a maior chance horária do período.', el('div', { class: 'periodos' }, ...caixas)));
+  filhos.push(secao('Períodos', 'Temperatura: ECMWF (modelo europeu). Chuva e rajada: mediana dos modelos; chance é a maior chance horária do período.', el('div', { class: 'periodos' }, ...caixas)));
   const met = secao('Meteograma de amanhã', 'Previsão de 0h a 24h.');
   met.classList.add('largura-total');
   filhos.push(met);
@@ -1174,7 +1202,7 @@ function renderSemana() {
   const x = dias.map((a) => p.horas[a.idxTodo[0]] + 12 * 3600000);
   const fmtDia = (u, vals) => vals.map((v) => { const d = dataNoFuso(v, p.fuso); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()]; });
   const gChuva = secao('Chuva diária e acumulada', 'Previsão: mediana dos modelos se chover; acumulada soma as medianas.');
-  const gTemp = secao('Temperatura mínima e máxima', 'Linhas: mediana dos modelos. Faixas: menor e maior valor entre modelos.');
+  const gTemp = secao('Temperatura mínima e máxima', 'Linhas: ECMWF (modelo europeu), corrigido pelo aprendizado. Faixas: menor e maior valor entre modelos.');
   const gRaj = secao('Rajada máxima', 'Linha: valor mais provável; faixa: do menor ao maior provável.');
   const faixas = secao('Faixa provável', 'Do menor ao maior valor provável: cenários p10 a p90 quando há ensemble; senão, menor e maior modelo.', tabelaFaixas(dias));
   const probs = secao('Probabilidade por dia', dias[0]?.limites.origem === 'cenários do ensemble' ? 'Fração dos cenários do ensemble acima de cada limite.' : 'Sem ensemble: concordância entre modelos, não é probabilidade.', tabelaLimites(dias));
