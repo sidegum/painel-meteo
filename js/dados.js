@@ -1,7 +1,7 @@
 // Busca e normalização de dados. Toda resposta externa é tratada como não confiável:
 // só números e textos esperados são copiados, nada vai para innerHTML.
 import { CONFIG } from './config.js';
-import { arredondaCoord, isoLocalParaMs, valido, MODELOS, REGRAS, deslocamentoRadar, chegadaChuva, direcaoTexto } from './analise.js';
+import { arredondaCoord, isoLocalParaMs, valido, MODELOS, REGRAS, deslocamentoRadar, chegadaChuva, secoPeloRadar, direcaoTexto } from './analise.js';
 
 const CACHE = 'painel-dados-v1';
 
@@ -458,8 +458,9 @@ async function gradeRadar(host, path, lat, lon) {
  * Chuva chegando: mede o movimento dos ecos entre o quadro mais recente e os de 30 e 60 min antes
  * (deslocamentoRadar sobre a intensidade). As duas velocidades precisam concordar dentro de
  * REGRAS.radar.concordanciaKmh; a de 60 min é extrapolada até o local (chegadaChuva). Coordenada arredondada.
- * @returns {Promise<{ms:number, minutos:number|null, chegaMs:number|null, kmh:number, vemDe:string|null}|null>}
- *   null quando o movimento não pode ser medido com segurança
+ * secoMin: minutos garantidos sem chuva no local (secoPeloRadar), mesmo quando o movimento não pode ser medido.
+ * @returns {Promise<{ms:number, minutos:number|null, chegaMs:number|null, kmh:number|null, vemDe:string|null, secoMin:number|null}|null>}
+ *   minutos/chegaMs/kmh/vemDe nulos quando o movimento não pode ser medido com segurança
  */
 export async function buscarChegadaChuva(lat, lon) {
   const R = REGRAS.radar;
@@ -467,9 +468,11 @@ export async function buscarChegadaChuva(lat, lon) {
   const ult = r.quadros[r.quadros.length - 1];
   const antes = (min) => r.quadros.find((q) => Math.abs(ult.ms - q.ms - min * 60000) <= 5 * 60000);
   const q30 = antes(30), q60 = antes(R.intervaloMin);
-  if (!q30 || !q60) return null;
   const la = arredondaCoord(lat), lo = arredondaCoord(lon);
-  const [g60, g30, g] = await Promise.all([q60, q30, ult].map((q) => gradeRadar(r.host, q.path, la, lo)));
+  const g = await gradeRadar(r.host, ult.path, la, lo);
+  const semMovimento = { ms: ult.ms, minutos: null, chegaMs: null, kmh: null, vemDe: null, secoMin: secoPeloRadar(g.eco, g.n, g.px, g.py, null, g.kmCelula) };
+  if (!q30 || !q60) return semMovimento;
+  const [g60, g30] = await Promise.all([q60, q30].map((q) => gradeRadar(r.host, q.path, la, lo)));
   // velocidade em células por REGRAS.radar.intervaloMin, normalizada pelo intervalo real entre os quadros
   const vel = (ga, q) => {
     const d = deslocamentoRadar(ga.intensidade, g.intensidade, g.n);
@@ -478,11 +481,12 @@ export async function buscarChegadaChuva(lat, lon) {
     return { dx: d.dx * f, dy: d.dy * f };
   };
   const v60 = vel(g60, q60), v30 = vel(g30, q30);
-  if (!v60 || !v30) return null;
+  if (!v60 || !v30) return semMovimento;
   const kmh = (v) => Math.hypot(v.dx, v.dy) * g.kmCelula * (60 / R.intervaloMin);
-  if (Math.hypot(v60.dx - v30.dx, v60.dy - v30.dy) * g.kmCelula * (60 / R.intervaloMin) > R.concordanciaKmh) return null;
+  if (Math.hypot(v60.dx - v30.dx, v60.dy - v30.dy) * g.kmCelula * (60 / R.intervaloMin) > R.concordanciaKmh) return semMovimento;
   const minutos = chegadaChuva(g.eco, g.n, g.px, g.py, v60);
   // direção de onde a chuva vem (meteorológica): oposta ao movimento; o eixo y da imagem aponta para o sul
   const vemDe = kmh(v60) >= 5 ? direcaoTexto((Math.atan2(-v60.dx, v60.dy) * 180 / Math.PI + 360) % 360) : null;
-  return { ms: ult.ms, minutos, chegaMs: minutos === null ? null : ult.ms + minutos * 60000, kmh: kmh(v60), vemDe };
+  return { ms: ult.ms, minutos, chegaMs: minutos === null ? null : ult.ms + minutos * 60000, kmh: kmh(v60), vemDe,
+    secoMin: secoPeloRadar(g.eco, g.n, g.px, g.py, v60, g.kmCelula) };
 }

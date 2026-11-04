@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.20';
+const VERSAO = '1.2.21';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -441,9 +441,14 @@ function analisarDia(data, diaIndice, desdeAgora) {
   const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}|${estado.chegadaEm}|${estado.radarAgoraEm}|${estado.calibEm}`;
   if (cacheDias.has(chave)) return cacheDias.get(chave);
   const p = estado.prev, mods = modelosAtivos();
-  const inicio = desdeAgora ? Date.now() : -Infinity;
+  // Hoje, com o radar seco e nada chegando, as horas cobertas pelo radar saem da conta do dia:
+  // o veredito passa a valer para o que resta depois delas (os modelos ainda não viram a chuva parar).
+  const seco = desdeAgora && diaIndice === 0 ? secoAgora() : null;
+  let inicio = desdeAgora ? Date.now() : -Infinity;
   const idxTodo = indicesDoDia(p.horas, data, p.offset);
+  if (seco && indicesDoDia(p.horas, data, p.offset, seco.ateMs).length) inicio = seco.ateMs;
   const idx = indicesDoDia(p.horas, data, p.offset, inicio);
+  const idxAgora = desdeAgora ? indicesDoDia(p.horas, data, p.offset, Date.now()) : idxTodo; // gráficos: sempre da hora atual
   const usar = idx.length ? idx : idxTodo;
   const { pesos, ajustado } = pesosAtuais();
   const resumos = mods.map((m) => resumoModeloDia(p, m, usar));
@@ -460,7 +465,7 @@ function analisarDia(data, diaIndice, desdeAgora) {
   for (const i of usar) if (valido(cons.med[i]) && (!pico || cons.med[i] > cons.med[pico])) pico = i;
   const dirPico = pico === null ? null : direcaoMedia(mods.map((m) => p.modelos[m].vars.wind_direction_10m?.[pico]));
   const r = {
-    data, diaIndice, idx: usar, idxTodo, resumos, membros, av, horasChuva, pesosAjustados: ajustado,
+    data, diaIndice, idx: usar, idxAgora, idxTodo, resumos, membros, av, horasChuva, pesosAjustados: ajustado,
     frase: fraseDoDia(av, horasChuva.janela, p.offset),
     // mínima e máxima: ECMWF (padrão europeu), corrigido pelo aprendizado; sem ECMWF, mediana ponderada
     tmin: valido(resumosTodo.find((x) => x.modelo === MODELO_TEMP)?.tmin) ? resumosTodo.find((x) => x.modelo === MODELO_TEMP).tmin : mediana(resumosTodo.map((x) => x.tmin), resumosTodo.map((x) => pesos[x.modelo] ?? 1)),
@@ -505,24 +510,40 @@ function fontesNormalizadas() {
   return out;
 }
 
-// Chuva agora, só com dado real: estação a até 25 km com leitura de até 90 min
-// (acumulado da última hora) ou eco de radar sobre o ponto em quadro de até 20 min.
+// Chuva agora, só com dado real. O radar (quadro de até 20 min) diz o que acontece agora; a estação
+// (a até 25 km) mede o acumulado da hora que já passou e chega com atraso de 1 h ou mais. Por isso a
+// estação só conta sozinha quando não há radar recente, ou quando a leitura dela tem até 20 min.
+// Assim, quando a chuva para, o radar seco tira o "Chovendo agora" sem esperar a estação.
 function medicaoChuvaAgora() {
-  const p = pontoExato();
+  const p = pontoExato(), agora = Date.now();
   const fontes = fontesNormalizadas();
-  const e = escolherFonte(fontes, 'chuva_h1', p.lat, p.lon, Date.now(), 90).escolhida || escolherFonte(fontes, 'chuva', p.lat, p.lon, Date.now(), 90).escolhida;
+  const e = escolherFonte(fontes, 'chuva_h1', p.lat, p.lon, agora, 90).escolhida || escolherFonte(fontes, 'chuva', p.lat, p.lon, agora, 90).escolhida;
   const est = e && e.distancia <= 25 ? e : null;
-  const r = estado.radarAgora && Date.now() - estado.radarAgora.ms <= 20 * 60000 ? estado.radarAgora : null;
+  const r = estado.radarAgora && agora - estado.radarAgora.ms <= 20 * 60000 ? estado.radarAgora : null;
   if (!est && !r) return null;
-  const chovendoEst = est ? est.valor >= REGRAS.chuvaHoraMm : false;
+  const estacaoValida = est && (!r || agora - est.ms <= 20 * 60000);
+  const chovendoEst = estacaoValida ? est.valor >= REGRAS.chuvaHoraMm : false;
   const chovendoRadar = r ? r.chuva : false;
-  return { chovendo: chovendoEst || chovendoRadar, estacao: est, radar: r };
+  return { chovendo: chovendoEst || chovendoRadar, estacao: estacaoValida ? est : null, radar: r };
+}
+
+/**
+ * Janela sem chuva garantida pelo radar: sem eco sobre o local agora e nada chegando por pelo menos
+ * REGRAS.radar.secoMinimoMin (secoPeloRadar). Nessas horas o radar manda; depois delas, os modelos.
+ * @returns {{ateMs:number}|null}
+ */
+function secoAgora() {
+  const c = estado.chegada, agora = Date.now();
+  if (!c || !valido(c.secoMin) || agora - c.ms > 30 * 60000) return null;
+  if (c.secoMin < REGRAS.radar.secoMinimoMin || medicaoChuvaAgora()?.chovendo !== false) return null;
+  const ateMs = c.ms + c.secoMin * 60000;
+  return ateMs > agora ? { ateMs } : null;
 }
 
 /**
  * Chuva chegando pelo radar, válida agora: quadro de até 30 min, chegada ainda por vir (ou há menos de 10 min)
  * e sem chuva medida no local (chovendo, a tela já diz "Chovendo agora").
- * @returns {{minutos:number, chegaMs:number, kmh:number, vemDe:string|null}|null}
+ * @returns {{minutos:number, chegaMs:number, kmh:number|null, vemDe:string|null}|null}
  */
 function chegandoAgora() {
   const c = estado.chegada, agora = Date.now();
@@ -631,7 +652,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
 
   // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
   // só as horas deste dia: hoje, da hora atual até 23h; amanhã, de 0h a 23h
-  const ini = p.horas[(desdeAgora && a.idx.length ? a.idx : a.idxTodo)[0]];
+  const ini = p.horas[(desdeAgora && a.idxAgora.length ? a.idxAgora : a.idxTodo)[0]];
   const fim = p.horas[a.idxTodo[a.idxTodo.length - 1]] + 3600000;
   const caixa = el('div', { class: 'grafico-primeira' });
   let modo = 'chance';
@@ -696,19 +717,38 @@ function chanceHoraria(ms) {
   return valido(v) ? { p: v / 100, origem: 'modelos' } : { p: null, origem: null };
 }
 
+/**
+ * O que se mede agora e vale para as próximas horas: chovendo (estação ou radar), chuva chegando pelo radar
+ * ou janela seca garantida pelo radar. Calculado uma vez e passado a chanceHora.
+ */
+function situacaoAgora() {
+  const m = medicaoChuvaAgora();
+  const chovendo = !!m?.chovendo;
+  return { chovendo, chegando: chovendo ? null : chegandoAgora(), seco: chovendo ? null : secoAgora() };
+}
+
+/**
+ * Chance de chuva de uma hora como todas as telas mostram: a dos modelos (chanceHoraria), corrigida pelo
+ * que se mede agora, nesta ordem: chovendo agora (hora atual vira 100%, medido); chuva chegando pelo radar
+ * (a hora da chegada e a seguinte ficam com no mínimo REGRAS.radar.probChegando); radar seco (horas inteiras
+ * dentro da janela seca ficam com no máximo REGRAS.radar.probSeco). É o mesmo critério do veredito do dia.
+ * @returns {{p:number|null, origem:string|null, medido?:boolean}}
+ */
+function chanceHora(ms, sit = situacaoAgora()) {
+  const c = chanceHoraria(ms), agora = Date.now(), R = REGRAS.radar;
+  if (sit.chovendo && agora >= ms && agora < ms + 3600000) return { p: 1, origem: 'medido', medido: true };
+  if (sit.chegando && ms + 3600000 > sit.chegando.chegaMs && ms < sit.chegando.chegaMs + 2 * 3600000 && !(c.p >= R.probChegando)) return { p: R.probChegando, origem: 'radar' };
+  if (sit.seco && ms + 3600000 <= sit.seco.ateMs && ms + 3600000 > agora && !(c.p <= R.probSeco)) return { p: R.probSeco, origem: 'radar seco' };
+  return c;
+}
+
 const TETO_CHANCE = 115; // topo do eixo da chance de chuva, em %
 function graficoChance(iniMs, fimMs) {
   const p = estado.prev, mods = modelosAtivos();
   const mm = consensoHorario(p, 'precipitation', mods).med;
   const pontos = [];
-  p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, mm: mm[i], ...chanceHoraria(ms) }); });
-  // hora atual: se está chovendo (estação ou radar), a barra vira 100% medido
-  const temAgora = pontos.some((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
-  const agoraM = temAgora ? medicaoChuvaAgora() : null;
-  for (const x of pontos) if (agoraM?.chovendo && Date.now() >= x.ms && Date.now() < x.ms + 3600000) { x.p = 1; x.origem = 'medido'; x.medido = true; }
-  // chuva chegando pelo radar: a hora da chegada e a seguinte ficam no mínimo "prováveis", como no resumo do dia
-  const ch = agoraM?.chovendo ? null : chegandoAgora();
-  if (ch) for (const x of pontos) if (x.ms + 3600000 > ch.chegaMs && x.ms < ch.chegaMs + 2 * 3600000 && !(x.p >= REGRAS.radar.probChegando)) { x.p = REGRAS.radar.probChegando; x.origem = 'radar'; }
+  const sit = situacaoAgora();
+  p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, mm: mm[i], ...chanceHora(ms, sit) }); });
   const validos = pontos.filter((x) => valido(x.p));
   const origem = validos.some((x) => x.origem === 'cenários') ? 'cenários do ensemble' : 'probabilidade dos modelos';
   const atual = pontos.find((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
@@ -720,8 +760,8 @@ function graficoChance(iniMs, fimMs) {
     pct: (x) => (valido(x.p) ? pos(x.p) : null), medido: (x) => x.medido,
     ticks: [0, 20, 40, 60, 80, 100].map((v) => [pos(v / 100), `${v}%`]),
     agoraPct: atual && valido(atual.p) ? pos(atual.p) : null,
-    inicial: agoraM?.chovendo ? 'Chovendo agora. Toque num horário para ver a chance de chuva.' : 'Toque num horário para ver a chance de chuva.',
-    detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' + (x.origem === 'radar' ? ' (chuva chegando pelo radar)' : '') : 'sem dado'}${valido(x.mm) ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
+    inicial: sit.chovendo ? 'Chovendo agora. Toque num horário para ver a chance de chuva.' : 'Toque num horário para ver a chance de chuva.',
+    detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' + ({ radar: ' (chuva chegando pelo radar)', 'radar seco': ' (radar sem chuva por perto)' }[x.origem] || '') : 'sem dado'}${valido(x.mm) && x.origem !== 'radar seco' ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
   });
 }
 
@@ -947,17 +987,20 @@ function proximasHoras() {
   const agora = Date.now();
   const lista = el('div', { class: 'horas', 'data-hscroll': '', role: 'list' });
   const cons = (v) => consensoHorario(p, v, mods).med;
-  const prob = cons('precipitation_probability'), mm = cons('precipitation'), vento = cons('wind_speed_10m'), raj = cons('wind_gusts_10m'), dia = cons('is_day');
+  const sit = situacaoAgora();
+  const mm = cons('precipitation'), vento = cons('wind_speed_10m'), raj = cons('wind_gusts_10m'), dia = cons('is_day');
   let n = 0;
   for (let i = 0; i < p.horas.length && n < 24; i++) {
     if (p.horas[i] + 3600000 <= agora) continue;
     n++;
-    const altura = valido(mm[i]) ? Math.max(1, Math.sqrt(Math.min(mm[i], 10) / 10) * 34) : 0;
+    const ch = chanceHora(p.horas[i], sit);
+    const mmHora = ch.origem === 'radar seco' ? 0 : mm[i]; // radar sem chuva por perto: o volume dos modelos não vale
+    const altura = valido(mmHora) ? Math.max(1, Math.sqrt(Math.min(mmHora, 10) / 10) * 34) : 0;
     lista.append(el('div', { class: 'hora' + (dia[i] === 0 ? ' noite' : ''), role: 'listitem' },
       el('div', { class: 'h', text: fmt.hora(p.horas[i], p.offset) }),
-      el('div', { class: 'barra', 'aria-hidden': 'true' }, valido(mm[i]) ? el('i', { style: { height: altura + 'px' } }) : ''),
-      el('div', { class: 'p', text: valido(prob[i]) ? `${Math.round(prob[i])}%` : '–' }),
-      el('div', { class: 'mm', text: valido(mm[i]) ? `${fmt.n(mm[i], 1)} mm` : 'sem dado' }),
+      el('div', { class: 'barra', 'aria-hidden': 'true' }, valido(mmHora) ? el('i', { style: { height: altura + 'px' } }) : ''),
+      el('div', { class: 'p', text: valido(ch.p) ? `${Math.round(ch.p * 100)}%` : '–' }),
+      el('div', { class: 'mm', text: valido(mmHora) ? `${fmt.n(mmHora, 1)} mm` : 'sem dado' }),
       el('div', { class: 'v', text: valido(vento[i]) ? `${Math.round(vento[i])}` : '–' }),
       el('div', { class: 'g', text: valido(raj[i]) ? `${Math.round(raj[i])}` : '–' })));
   }
