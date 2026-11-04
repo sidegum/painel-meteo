@@ -246,3 +246,21 @@ test('risco de temporal: só com chuva prevista ou aviso, por pontos', async () 
   assert.equal(riscoTemporal({ prob: 0.1, aviso: 'Perigo' }).nivel, 'alto');
   assert.equal(riscoTemporal({ prob: 0.9, cape: 3000, rajada: 90, aviso: 'Perigo Potencial' }).nivel, 'moderado');
 });
+
+test('ancoragem: a diferença medida some em 6 h e não mexe no passado', async () => {
+  const { ancorarTemperatura } = await import('../js/analise.js');
+  const h = 3600000, t0 = Date.UTC(2026, 10, 4, 18);
+  const horas = Array.from({ length: 10 }, (_, i) => t0 + (i - 2) * h);
+  const prev = { horas, modelos: { ecmwf_ifs: { vars: { temperature_2m: horas.map(() => 22), apparent_temperature: horas.map(() => 23) } } } };
+  const agora = t0 + 60 * 60000; // leitura das 18h, uma hora depois
+  const { prev: p, delta } = ancorarTemperatura(prev, { valor: 26.5, ms: t0 }, 'ecmwf_ifs', agora);
+  assert.equal(delta, 4.5);
+  const t = p.modelos.ecmwf_ifs.vars.temperature_2m;
+  assert.equal(t[2], 22);   // 18h: já passou, fica como previsto
+  assert.equal(t[3], 25.8); // 19h: hora atual, 1 h depois da leitura: 4,5 x 5/6 = 3,75
+  assert.equal(t[4], 25);   // 20h: 2 h depois da leitura, 4,5 x 4/6 = 3
+  assert.equal(t[8], 22);   // 24h: 6 h depois, sem correção
+  assert.equal(p.modelos.ecmwf_ifs.vars.apparent_temperature[4], 26);
+  // diferença absurda: leitura ignorada
+  assert.equal(ancorarTemperatura(prev, { valor: 40, ms: t0 }, 'ecmwf_ifs', agora).delta, null);
+});

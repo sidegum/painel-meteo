@@ -58,6 +58,14 @@ export const REGRAS = {
   ceuMedido: {                 // céu de agora pelo METAR: aeroporto até 50 km, boletim de até 90 min
     distanciaKm: 50, idadeMin: 90,
   },
+  // Temperatura das próximas horas ancorada na medição: a diferença entre o medido e o previsto para a hora
+  // da leitura vai sendo somada à previsão e some aos poucos em `horas` (persistência do erro, padrão de nowcasting).
+  ancoragem: {
+    horas: 6,                  // a correção cai linearmente até zero em 6 h a partir da leitura
+    idadeMaxMin: 120,          // leitura de até 2 h
+    distanciaKm: 25,           // estação a até 25 km
+    deltaMax: 8,               // diferença acima de 8 °C é tratada como erro de leitura e ignorada
+  },
   // Pressão ao nível do mar (hPa). Tendência de 3 h pelos termos do Met Office e da OMM:
   // estável < 0,1; devagar 0,1 a 1,5; normal 1,6 a 3,5; rápido 3,6 a 6,0; muito rápido acima de 6,0.
   pressao: {
@@ -726,6 +734,41 @@ export function pesosHistoricos(calib) {
  *   verificada com calibracaoAplicavel); aprendizado: porModelo do Worker (modelo → lead → viés), ou null
  * @returns {object} nova previsão, com `calibracao` descrevendo o que foi aplicado
  */
+/**
+ * Ancora a temperatura prevista das próximas horas na última medição (REGRAS.ancoragem).
+ * delta = medido − previsto na hora da leitura (série de referência, normalmente o ECMWF). Cada hora futura
+ * recebe delta × (1 − horas desde a leitura / REGRAS.ancoragem.horas), em todos os modelos, na temperatura e
+ * na sensação térmica, a partir da hora atual. Horas encerradas não mudam (a comparação previsto x medido usa só elas).
+ * @param {object} prev previsão (horas, modelos[m].vars)
+ * @param {{valor:number, ms:number}} medida última leitura válida
+ * @param {string} modeloRef modelo usado para medir a diferença (com fallback para a mediana dos outros)
+ * @param {number} agoraMs
+ * @returns {{prev:object, delta:number|null}}
+ */
+export function ancorarTemperatura(prev, medida, modeloRef, agoraMs) {
+  const R = REGRAS.ancoragem;
+  if (!prev?.horas || !medida || !valido(medida.valor) || !valido(medida.ms)) return { prev, delta: null };
+  // hora da previsão mais próxima da leitura
+  let k = -1;
+  prev.horas.forEach((ms, i) => { if (k < 0 || Math.abs(ms - medida.ms) < Math.abs(prev.horas[k] - medida.ms)) k = i; });
+  if (k < 0 || Math.abs(prev.horas[k] - medida.ms) > 3600000) return { prev, delta: null };
+  const ref = prev.modelos[modeloRef]?.vars.temperature_2m?.[k];
+  const base = valido(ref) ? ref : mediana(Object.values(prev.modelos).map((d) => d.vars.temperature_2m?.[k]));
+  if (!valido(base)) return { prev, delta: null };
+  const delta = medida.valor - base;
+  if (Math.abs(delta) > R.deltaMax || Math.abs(delta) < 0.1) return { prev, delta: Math.abs(delta) > R.deltaMax ? null : 0 };
+  const peso = prev.horas.map((ms) => (ms + 3600000 <= agoraMs || ms < medida.ms ? 0 : Math.max(0, 1 - (ms - medida.ms) / (R.horas * 3600000))));
+  const modelos = {};
+  for (const [m, dados] of Object.entries(prev.modelos)) {
+    const vars = { ...dados.vars };
+    for (const v of ['temperature_2m', 'apparent_temperature']) {
+      if (vars[v]) vars[v] = vars[v].map((x, i) => (valido(x) && peso[i] > 0 ? Math.round((x + delta * peso[i]) * 10) / 10 : x));
+    }
+    modelos[m] = { ...dados, vars };
+  }
+  return { prev: { ...prev, modelos }, delta };
+}
+
 export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs }) {
   if (!prev?.horas || (!calib && !aprendizado)) return prev;
   const hoje = partesLocais(refMs, prev.offset).data;

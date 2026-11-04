@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
-  horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, periodoDoDia, classeRajada,
+  horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, ancorarTemperatura, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
   calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico,
 } from './analise.js';
@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.22';
+const VERSAO = '1.2.23';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -55,8 +55,8 @@ async function iniciar() {
     estado.prevBruta = reidratar(c.dados); estado.prevEm = c.salvoEm; estado.cacheAntigo = true;
     const e = await lerCache('ensemble'); if (e?.dados) { estado.ensBruto = e.dados; estado.ensEm = e.salvoEm; }
     const k = await lerCache('calibracao'); if (k?.dados) { estado.calib = k.dados; estado.calibEm = k.salvoEm; }
-    recalibrar();
     const o = await lerCache('observacoes'); if (o?.dados) { estado.obs = o.dados; estado.obsEm = o.salvoEm; }
+    recalibrar();
     renderTudo();
   } else {
     mostrarCarregando();
@@ -202,7 +202,7 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     const w = workerConfigurado();
     // Medições: Worker (INMET + METAR); sem ele, só a última leitura do INMET de Campo Bom direto.
     if (agora || venceu(estado.obsEm, I.medicoes)) tarefas.push((w ? buscarObservacoes(lat, lon).catch(() => buscarObservacoesDireto()) : buscarObservacoesDireto())
-      .then((o) => { estado.obs = o; estado.obsEm = Date.now(); salvarCache('observacoes', o); delete estado.erros.medicoes; })
+      .then((o) => { estado.obs = o; estado.obsEm = Date.now(); salvarCache('observacoes', o); delete estado.erros.medicoes; recalibrar(); })
       .catch((e) => { estado.erros.medicoes = e.message; }));
     // Alertas: Worker (resposta enxuta) ou INMET direto. Falha vira "Alertas indisponíveis".
     if (venceu(estado.alertasEm, I.alertas)) tarefas.push((w ? buscarAlertas().catch(() => buscarAlertasDireto()) : buscarAlertasDireto())
@@ -397,10 +397,18 @@ function calibracaoLocal() {
 }
 
 /**
- * Fonte única dos valores exibidos: recalcula estado.prev e estado.ens a partir das séries brutas sempre que
+ * Fonte única dos valores exibidos (inclui a ancoragem da temperatura na medição de agora): recalcula estado.prev e estado.ens a partir das séries brutas sempre que
  * chega previsão, cenários, calibração ou aprendizado novo. Todas as telas leem estado.prev/estado.ens, então
  * herdam a mesma correção (temperatura, rajada e vento), sem ajustes separados por tela.
  */
+// Última temperatura medida perto do ponto (estação mais próxima com leitura válida), ou null.
+function temperaturaMedida(idadeMaxMin, distanciaMaxKm) {
+  const pt = pontoExato();
+  if (!estado.obs || !pt) return null;
+  const c = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, Date.now(), idadeMaxMin).escolhida;
+  return c && c.distancia <= distanciaMaxKm ? { valor: c.valor, ms: c.ms, fonte: c.fonte.nome } : null;
+}
+
 function recalibrar() {
   const bruta = estado.prevBruta;
   if (!bruta) return;
@@ -408,6 +416,11 @@ function recalibrar() {
   const apr = aprendizadoLocal()?.porModelo || null;
   const ref = estado.prevEm || Date.now();
   estado.prev = calibrarPrevisao(bruta, { calib, aprendizado: apr, refMs: ref });
+  // próximas horas ancoradas na temperatura medida agora (some em REGRAS.ancoragem.horas)
+  const medida = temperaturaMedida(REGRAS.ancoragem.idadeMaxMin, REGRAS.ancoragem.distanciaKm);
+  const anc = medida ? ancorarTemperatura(estado.prev, medida, MODELO_TEMP, Date.now()) : null;
+  if (anc) estado.prev = anc.prev;
+  estado.ancoragem = anc?.delta ? { delta: anc.delta, medida } : null;
   estado.ens = estado.ensBruto ? calibrarEnsemble(estado.ensBruto, calib, ref, bruta.offset) : null;
   cacheDias.clear();
 }
@@ -1354,7 +1367,8 @@ function previstoMedido(s) {
   const soPlacar = () => { if (placar) s.append(placar); else s.remove(); };
   if (!estado.obs || !temSerie) { soPlacar(); return; }
   const hoje = datas()[0];
-  const idx = indicesDoDia(p.horas, hoje, p.offset).filter((i) => p.horas[i] <= Date.now());
+  // só horas encerradas: a hora atual já recebe a ancoragem na medição e não serve para comparar
+  const idx = indicesDoDia(p.horas, hoje, p.offset).filter((i) => p.horas[i] + 3600000 <= Date.now());
   if (idx.length < 2) { soPlacar(); return; }
   const mods = modelosAtivos();
   const pt = pontoExato();
