@@ -1,6 +1,6 @@
 # Resultado da calibração (gerado automaticamente)
 
-Gerado em 2026-11-04 19:39 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
+Gerado em 2026-11-04 20:00 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
 
 Estação: INMET A884 Campo Bom. Medições de 2021-03-01 a 2026-08-31 (2010 dias válidos).
 
@@ -27,6 +27,72 @@ Todos os números de "depois" são **fora da amostra**: cada mês foi corrigido 
 | 4 dia(s) | 2,3 | 1,5 | 1,2 | 1,2 | 321 |
 | 5 dia(s) | 2,4 | 1,8 | 1,4 | 1,4 | 300 |
 
+## Temperatura hora a hora (ECMWF IFS): erro médio em °C
+
+Fora da amostra. "Bruta": como o modelo previu. "Diária": correção só da máxima e da mínima (método anterior). "Horária": viés de cada hora do dia por estação do ano, com base no curto prazo desde 2022-01-01 (1581 dias), mais o ajuste da máxima e da mínima. Tarde: 12 h a 18 h.
+
+| Antecedência | Dias | Por hora: bruta / diária / horária | Tarde: bruta / diária / horária | Máxima: bruta / diária / horária | Mínima: bruta / diária / horária | Em uso |
+|---|---|---|---|---|---|---|
+| curto prazo | 1581 | 1,2 / – / 1,2 | 1,6 / – / 1,5 | 2,0 / – / 1,2 | 0,8 / – / 0,8 | base |
+| 1 dia(s) | 304 | 1,4 / 1,4 / 1,3 | 1,7 / 1,5 / 1,4 | 1,9 / 1,2 / 1,2 | 0,9 / 0,9 / 0,9 | sim |
+| 2 dia(s) | 303 | 1,5 / 1,4 / 1,4 | 1,8 / 1,6 / 1,5 | 2,0 / 1,2 / 1,2 | 1,1 / 1,1 / 1,1 | sim |
+| 3 dia(s) | 302 | 1,6 / 1,5 / 1,4 | 1,9 / 1,7 / 1,6 | 2,1 / 1,4 / 1,4 | 1,1 / 1,1 / 1,1 | sim |
+| 4 dia(s) | 319 | 1,6 / 1,6 / 1,5 | 2,1 / 1,9 / 1,8 | 2,3 / 1,5 / 1,6 | 1,1 / 1,1 / 1,2 | sim |
+| 5 dia(s) | 300 | 1,8 / 1,8 / 1,7 | 2,4 / 2,1 / 2,0 | 2,4 / 1,8 / 1,8 | 1,4 / 1,4 / 1,5 | não |
+
+Viés por hora na véspera (previsto − medido, °C; negativo = o modelo prevê frio demais):
+
+| Estação | 0 h | 3 h | 6 h | 9 h | 12 h | 14 h | 15 h | 16 h | 18 h | 21 h |
+|---|---|---|---|---|---|---|---|---|---|---|
+| verao | -0,8 | -0,7 | -0,3 | 0,2 | -0,3 | -1,0 | -1,8 | -1,9 | -1,9 | -1,0 |
+| outono | -0,6 | -0,6 | -0,5 | 0,2 | -0,4 | -0,9 | -1,2 | -1,5 | -1,2 | -0,5 |
+| inverno | -0,5 | -0,2 | -0,5 | -0,2 | -0,0 | -0,0 | -0,2 | -0,0 | -0,3 | -0,2 |
+| primavera | -0,9 | -0,6 | -0,5 | -0,1 | -0,2 | -0,7 | -1,2 | -1,4 | -1,9 | -1,1 |
+
+## Temperatura hora a hora (ECMWF AIFS): erro médio em °C
+
+Fora da amostra. "Bruta": como o modelo previu. "Diária": correção só da máxima e da mínima (método anterior). "Horária": viés de cada hora do dia por estação do ano, com base no curto prazo desde 2025-02-17 (438 dias), mais o ajuste da máxima e da mínima. Tarde: 12 h a 18 h.
+
+| Antecedência | Dias | Por hora: bruta / diária / horária | Tarde: bruta / diária / horária | Máxima: bruta / diária / horária | Mínima: bruta / diária / horária | Em uso |
+|---|---|---|---|---|---|---|
+| curto prazo | 438 | 1,2 / – / 1,1 | 1,4 / – / 1,4 | 2,0 / – / 0,9 | 0,9 / – / 0,9 | base |
+| 1 dia(s) | 437 | 1,4 / 1,4 / 1,3 | 1,8 / 1,5 / 1,6 | 2,4 / 1,0 / 1,1 | 1,0 / 0,9 / 1,0 | não |
+| 2 dia(s) | 436 | 1,5 / 1,5 / 1,4 | 1,8 / 1,6 / 1,6 | 2,4 / 1,1 / 1,1 | 1,1 / 1,0 / 1,1 | não |
+| 3 dia(s) | 435 | 1,5 / 1,5 / 1,4 | 1,8 / 1,6 / 1,7 | 2,3 / 1,2 / 1,2 | 1,2 / 1,1 / 1,1 | sim |
+| 4 dia(s) | 420 | 1,6 / 1,6 / 1,5 | 1,9 / 1,8 / 1,8 | 2,4 / 1,3 / 1,3 | 1,3 / 1,2 / 1,2 | sim |
+| 5 dia(s) | 419 | 1,7 / 1,8 / 1,6 | 2,1 / 1,9 / 2,0 | 2,6 / 1,6 / 1,6 | 1,3 / 1,2 / 1,3 | não |
+
+Viés por hora na véspera (previsto − medido, °C; negativo = o modelo prevê frio demais):
+
+| Estação | 0 h | 3 h | 6 h | 9 h | 12 h | 14 h | 15 h | 16 h | 18 h | 21 h |
+|---|---|---|---|---|---|---|---|---|---|---|
+| verao | -1,0 | -0,3 | 2,2 | -0,0 | -1,3 | -1,3 | -1,3 | -1,6 | -1,5 | -0,8 |
+| outono | -0,7 | -0,3 | 1,0 | -0,7 | -1,9 | -1,2 | -0,9 | -0,8 | 0,2 | -0,3 |
+| inverno | -0,7 | -0,2 | 0,3 | -0,4 | -1,6 | -1,0 | -0,9 | -0,6 | 0,3 | -0,3 |
+| primavera | -0,9 | -0,2 | 1,9 | 0,0 | -1,1 | -1,0 | -1,1 | -1,5 | -1,6 | -0,9 |
+
+## Temperatura hora a hora (UKMO 10 km): erro médio em °C
+
+Fora da amostra. "Bruta": como o modelo previu. "Diária": correção só da máxima e da mínima (método anterior). "Horária": viés de cada hora do dia por estação do ano, com base no curto prazo desde 2022-03-01 (1522 dias), mais o ajuste da máxima e da mínima. Tarde: 12 h a 18 h.
+
+| Antecedência | Dias | Por hora: bruta / diária / horária | Tarde: bruta / diária / horária | Máxima: bruta / diária / horária | Mínima: bruta / diária / horária | Em uso |
+|---|---|---|---|---|---|---|
+| curto prazo | 1522 | 1,2 / – / 1,2 | 1,6 / – / 1,4 | 2,1 / – / 1,2 | 0,9 / – / 0,8 | base |
+| 1 dia(s) | 450 | 1,4 / 1,4 / 1,4 | 1,8 / 1,6 / 1,6 | 2,2 / 1,3 / 1,3 | 1,0 / 1,0 / 1,0 | sim |
+| 2 dia(s) | 522 | 1,6 / 1,5 / 1,5 | 2,0 / 1,7 / 1,8 | 2,4 / 1,4 / 1,4 | 1,1 / 1,1 / 1,1 | sim |
+| 3 dia(s) | 497 | 1,6 / 1,6 / 1,5 | 2,1 / 1,9 / 1,9 | 2,5 / 1,6 / 1,6 | 1,1 / 1,1 / 1,1 | sim |
+| 4 dia(s) | 467 | 1,7 / 1,7 / 1,6 | 2,2 / 2,0 / 2,0 | 2,6 / 1,8 / 1,8 | 1,2 / 1,2 / 1,2 | sim |
+| 5 dia(s) | 506 | 1,9 / 1,9 / 1,9 | 2,5 / 2,3 / 2,3 | 2,9 / 2,0 / 2,0 | 1,4 / 1,4 / 1,4 | sim |
+
+Viés por hora na véspera (previsto − medido, °C; negativo = o modelo prevê frio demais):
+
+| Estação | 0 h | 3 h | 6 h | 9 h | 12 h | 14 h | 15 h | 16 h | 18 h | 21 h |
+|---|---|---|---|---|---|---|---|---|---|---|
+| verao | -0,1 | -0,4 | -0,1 | -1,1 | -1,1 | -1,1 | -1,2 | -1,0 | -0,5 | -0,1 |
+| outono | -0,2 | -0,6 | -0,6 | -1,0 | -1,4 | -1,4 | -1,3 | -1,1 | -0,3 | 0,1 |
+| inverno | -0,2 | -0,0 | -0,2 | -0,3 | -1,1 | -1,0 | -0,8 | -0,5 | -0,4 | 0,1 |
+| primavera | -0,3 | -0,5 | -0,4 | -1,2 | -1,2 | -1,1 | -1,1 | -1,1 | -0,7 | -0,4 |
+
 ## Rajada exibida (mediana dos modelos): erro médio em km/h
 
 | Antecedência | Antes | Depois | Viés antes | Viés depois | Dias |
@@ -43,8 +109,8 @@ Chuva: consenso dos modelos do painel já corrigidos (1 mm ou mais). Máxima e m
 
 | Período | Chuva | Máxima | Mínima | Rajada |
 |---|---|---|---|---|
-| últimos 30 dias (2026-08-01 a 2026-08-30) | 80% | 73% | 87% | 87% |
-| todo o período (2025-10-16 a 2026-08-30, 257 dias) | 84% | 82% | 93% | 78% |
+| últimos 30 dias (2026-08-01 a 2026-08-30) | 80% | 70% | 93% | 87% |
+| todo o período (2025-10-16 a 2026-08-30, 257 dias) | 84% | 83% | 93% | 78% |
 
 ## Rajada de curto prazo (Historical Forecast) e coerência entre antecedências
 
@@ -143,15 +209,29 @@ Antecedências de 1 a 5 dias somadas. Usada quando o acerto sim/não sobe pelo m
 
 | Modelo | Antecedência | Acerto sim/não | Erro chuva (mm) | Erro máxima (°C) | Erro rajada (km/h) | Dias |
 |---|---|---|---|---|---|---|
-| ECMWF IFS | 1 | – | – | 1,3 | – | 383 |
-| ECMWF IFS | 3 | – | – | 1,5 | – | 379 |
-| ECMWF IFS | 5 | – | – | 1,9 | – | 375 |
-| ECMWF AIFS | 1 | – | – | 1,3 | – | 623 |
-| ECMWF AIFS | 3 | – | – | 1,4 | – | 621 |
-| ECMWF AIFS | 5 | – | – | 1,7 | – | 605 |
-| UKMO 10 km | 1 | – | – | 1,3 | 22,1 | 623 |
-| UKMO 10 km | 3 | – | – | 1,5 | 25,2 | 659 |
-| UKMO 10 km | 5 | – | – | 1,9 | 22,0 | 653 |
+| ECMWF IFS | 1 | – | – | 1,3 | – | 382 |
+| ECMWF IFS | 3 | – | – | 1,5 | – | 378 |
+| ECMWF IFS | 5 | – | – | 1,9 | – | 374 |
+| ECMWF AIFS | 1 | – | – | 1,3 | – | 622 |
+| ECMWF AIFS | 3 | – | – | 1,4 | – | 620 |
+| ECMWF AIFS | 5 | – | – | 1,7 | – | 604 |
+| UKMO 10 km | 1 | – | – | 1,3 | 22,1 | 622 |
+| UKMO 10 km | 3 | – | – | 1,5 | 25,2 | 658 |
+| UKMO 10 km | 5 | – | – | 1,9 | 22,0 | 652 |
+
+## Porto Alegre aeroporto (SBPA), sem correção: 1917 dias de 2021-03-01 a 2026-11-03
+
+| Modelo | Antecedência | Acerto sim/não | Erro chuva (mm) | Erro máxima (°C) | Erro rajada (km/h) | Dias |
+|---|---|---|---|---|---|---|
+| ECMWF IFS | 1 | – | – | 1,2 | – | 384 |
+| ECMWF IFS | 3 | – | – | 1,5 | – | 380 |
+| ECMWF IFS | 5 | – | – | 1,8 | – | 376 |
+| ECMWF AIFS | 1 | – | – | 1,3 | – | 624 |
+| ECMWF AIFS | 3 | – | – | 1,3 | – | 622 |
+| ECMWF AIFS | 5 | – | – | 1,6 | – | 606 |
+| UKMO 10 km | 1 | – | – | 1,2 | 12,6 | 573 |
+| UKMO 10 km | 3 | – | – | 1,4 | 12,7 | 575 |
+| UKMO 10 km | 5 | – | – | 1,9 | 13,1 | 570 |
 
 ## Pesos dos modelos do painel (560 dias comuns)
 
