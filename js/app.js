@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.18';
+const VERSAO = '1.2.19';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -231,10 +231,15 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
 }
 
 function agendar() {
-  // Os dados só são buscados em três momentos, a pedido do Gustavo: ao abrir o app, ao voltar para ele
-  // (inclusive pelo atalho na tela inicial) e no botão atualizar. Não há atualização periódica nem
-  // automática ao reconectar. O relógio abaixo só reescreve o texto "Atualizado há..." do topo.
-  setInterval(() => atualizarCabecalho(), 60000);
+  // Os dados são buscados ao abrir o app, ao voltar para ele (inclusive pelo atalho na tela inicial), no botão
+  // atualizar e, com a tela aberta e visível, a cada CONFIG.atualizarTelaAbertaMin minutos sem atualização.
+  // O relógio de 60 s reescreve o "Atualizado às..." do topo e confere se a última rodada já venceu.
+  // Não há busca com a página escondida nem automática ao reconectar.
+  setInterval(() => {
+    atualizarCabecalho();
+    const venceu = Date.now() - ultimaRodada >= CONFIG.atualizarTelaAbertaMin * 60000;
+    if (venceu && !document.hidden && navigator.onLine !== false) atualizarTudo();
+  }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarTudo(); });
   // página restaurada do cache de navegação (voltar/avançar ou reabrir a aba)
   window.addEventListener('pageshow', (e) => { if (e.persisted) atualizarTudo(); });
@@ -245,13 +250,14 @@ function agendar() {
 
 // Atualiza tudo, sem exceção: posição atual (salvo cidade escolhida nesta sessão), previsão, cenários,
 // medições, radar, alertas, El Niño, acerto dos modelos, mapa e a própria versão do app.
-let tudoRodando = false, tudoDesde = 0, ultimaCompleta = 0, rodada = 0;
+// ultimaRodada: início da última rodada (ou da abertura do app), base da atualização a cada 10 min com a tela aberta.
+let tudoRodando = false, tudoDesde = 0, ultimaRodada = Date.now(), rodada = 0;
 async function atualizarTudo() {
   // Já está atualizando tudo: o giro do botão mostra isso. Mas se a rodada passou de 45 s (o iPhone
   // suspende o app no meio e as esperas nunca terminam), ela é abandonada e uma nova começa.
   if (tudoRodando && Date.now() - tudoDesde < 45000) return;
   const minha = ++rodada;
-  tudoRodando = true; tudoDesde = Date.now();
+  tudoRodando = true; tudoDesde = ultimaRodada = Date.now();
   const vigia = setTimeout(() => { if (rodada === minha) pararGiro(); }, 50000);
   const btn = $('#btn-atualizar');
   btn.setAttribute('aria-busy', 'true'); btn.setAttribute('aria-label', 'Atualizando');
@@ -265,7 +271,6 @@ async function atualizarTudo() {
     await atualizar({ forcar: true });
     await gps;
     if (chave() !== antes) await atualizar({ forcar: true, local: true });
-    ultimaCompleta = Date.now();
   } finally {
     clearTimeout(vigia);
     if (rodada === minha) pararGiro();
