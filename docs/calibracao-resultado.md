@@ -1,6 +1,6 @@
 # Resultado da calibração (gerado automaticamente)
 
-Gerado em 2026-11-04 15:46 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
+Gerado em 2026-11-04 16:09 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
 
 Estação: INMET A884 Campo Bom. Medições de 2021-03-01 a 2026-08-31 (2010 dias válidos).
 
@@ -10,12 +10,12 @@ Todos os números de "depois" são **fora da amostra**: cada mês foi corrigido 
 
 | Modelo | No painel | De | Até | Dias |
 |---|---|---|---|---|
-| ECMWF IFS | sim | 2025-01-02 | 2026-11-03 | 404 |
+| ECMWF IFS | sim | 2022-01-01 | 2026-11-03 | 1768 |
 | ECMWF AIFS | sim | 2025-02-18 | 2026-11-03 | 624 |
-| UKMO 10 km | sim | 2024-08-06 | 2026-11-03 | 820 |
+| UKMO 10 km | sim | 2022-03-01 | 2026-11-03 | 1709 |
 | ECMWF IFS 0,25° | referência | 2024-02-04 | 2026-11-03 | 1004 |
-| GFS | referência | 2021-03-24 | 2026-11-03 | 2030 |
-| ICON | referência | 2024-01-20 | 2026-11-03 | 1019 |
+| GFS | referência | 2021-03-24 | 2026-11-03 | 2051 |
+| ICON | referência | 2022-11-17 | 2026-11-03 | 1448 |
 
 ## Temperatura exibida (ECMWF IFS): erro médio em °C
 
@@ -31,11 +31,11 @@ Todos os números de "depois" são **fora da amostra**: cada mês foi corrigido 
 
 | Antecedência | Antes | Depois | Viés antes | Viés depois | Dias |
 |---|---|---|---|---|---|
-| 1 dia(s) | 25,7 | 25,7 | 23,7 | 23,7 | 459 |
-| 2 dia(s) | 11,3 | 11,3 | 9,0 | 9,0 | 466 |
-| 3 dia(s) | 27,2 | 27,2 | 24,6 | 24,6 | 451 |
-| 4 dia(s) | 11,0 | 11,0 | 8,2 | 8,2 | 446 |
-| 5 dia(s) | 25,4 | 25,4 | 22,3 | 22,3 | 398 |
+| 1 dia(s) | 25,7 | 17,6 | 23,7 | 13,3 | 459 |
+| 2 dia(s) | 11,3 | 6,4 | 9,0 | 1,4 | 466 |
+| 3 dia(s) | 27,2 | 20,0 | 24,6 | 14,2 | 451 |
+| 4 dia(s) | 11,0 | 6,6 | 8,2 | 0,7 | 446 |
+| 5 dia(s) | 25,4 | 18,7 | 22,3 | 12,4 | 398 |
 
 ## Placar de acerto da véspera
 
@@ -43,8 +43,8 @@ Chuva: consenso dos modelos do painel (1 mm ou mais). Máxima e mínima: ECMWF I
 
 | Período | Chuva | Máxima | Mínima | Rajada |
 |---|---|---|---|---|
-| últimos 30 dias (2026-08-01 a 2026-08-30) | 67% | 73% | 87% | 67% |
-| todo o período (2025-10-16 a 2026-08-30, 257 dias) | 76% | 82% | 93% | 35% |
+| últimos 30 dias (2026-08-01 a 2026-08-30) | 67% | 73% | 87% | 87% |
+| todo o período (2025-10-16 a 2026-08-30, 257 dias) | 76% | 82% | 93% | 78% |
 
 ## Rajada de curto prazo (Historical Forecast) e coerência entre antecedências
 
@@ -52,12 +52,12 @@ Fator medido ÷ previsto. "Varia entre antecedências" = maior ÷ menor fator an
 
 | Modelo | Fator curto prazo | Erro antes | Erro depois | Dias | Fator 1 a 5 dias | Varia entre antecedências | Em uso no painel |
 |---|---|---|---|---|---|---|---|
-| ECMWF IFS | – | – | – | – | – | – | não |
+| ECMWF IFS | 0,75 | 9,3 | 4,8 | 1580 | – | – | curto prazo |
 | ECMWF AIFS | – | – | – | – | – | – | não |
-| UKMO 10 km | – | – | – | – | 0,50 / 0,71 / 0,50 / 0,73 / 0,50 | 1,46× | não |
-| ECMWF IFS 0,25° | – | – | – | – | – | – | não |
-| GFS | – | – | – | – | 0,85 / 0,84 / 0,84 / 0,82 / 0,87 | 1,05× | por antecedência |
-| ICON | – | – | – | – | 0,69 / 0,69 / 0,68 / 0,70 / 0,71 | 1,04× | por antecedência |
+| UKMO 10 km | 0,75 | 10,1 | 5,5 | 1521 | 0,50 / 0,71 / 0,50 / 0,73 / 0,50 | 1,46× | curto prazo |
+| ECMWF IFS 0,25° | 0,73 | 9,9 | 5,0 | 535 | – | – | curto prazo |
+| GFS | 0,90 | 7,2 | 6,2 | 1580 | 0,85 / 0,84 / 0,84 / 0,82 / 0,87 | 1,05× | por antecedência |
+| ICON | 0,71 | 10,9 | 5,0 | 1261 | 0,69 / 0,69 / 0,68 / 0,70 / 0,71 | 1,04× | por antecedência |
 
 ## Viés de cada modelo por estação do ano (antecedência de 1 dia)
 
@@ -67,16 +67,18 @@ Temperatura: previsto − medido, em °C (positivo = o modelo esquenta demais). 
 |---|---|---|---|---|---|---|
 | ECMWF IFS | máxima | -1,9 | -1,6 | -0,6 | -1,6 | sim |
 | ECMWF IFS | mínima | -0,3 | -0,2 | -0,2 | -0,5 | não |
+| ECMWF IFS | rajada | 0,75 | 0,75 | 0,76 | 0,76 | sim |
 | ECMWF IFS | vento | 0,59 | 0,59 | 0,62 | 0,58 | sim |
 | ECMWF AIFS | máxima | -2,7 | -2,4 | -1,9 | -2,4 | sim |
 | ECMWF AIFS | mínima | 0,6 | 0,7 | 0,4 | 0,5 | sim |
 | ECMWF AIFS | vento | 0,77 | 0,74 | 0,77 | 0,73 | sim |
 | UKMO 10 km | máxima | -2,0 | -2,1 | -1,6 | -1,9 | sim |
 | UKMO 10 km | mínima | -0,2 | -0,3 | 0,1 | -0,4 | sim |
-| UKMO 10 km | rajada | 0,63 | 0,65 | 0,50 | 0,61 | não |
+| UKMO 10 km | rajada | 0,71 | 0,77 | 0,83 | 0,72 | sim |
 | UKMO 10 km | vento | 0,57 | 0,59 | 0,67 | 0,60 | sim |
 | ECMWF IFS 0,25° | máxima | -2,6 | -1,7 | -1,0 | -2,1 | sim |
 | ECMWF IFS 0,25° | mínima | -0,3 | -0,0 | 0,1 | -0,1 | não |
+| ECMWF IFS 0,25° | rajada | 0,73 | 0,73 | 0,75 | 0,69 | sim |
 | ECMWF IFS 0,25° | vento | 0,59 | 0,59 | 0,61 | 0,56 | sim |
 | GFS | máxima | 0,4 | -0,4 | -0,7 | -0,8 | sim |
 | GFS | mínima | -0,6 | -0,1 | 0,7 | -0,2 | sim |
@@ -110,10 +112,38 @@ Temperatura: previsto − medido, em °C (positivo = o modelo esquenta demais). 
 | ICON | 3 | 81% | 81% | 36% | 1,27 | 0,98 | 4,7 |
 | ICON | 5 | 77% | 77% | 41% | 1,30 | 1,11 | 5,5 |
 
-## Pesos dos modelos do painel (335 dias comuns)
+## Porto Alegre Jardim Botânico (A801), sem correção: 2010 dias de 2021-03-01 a 2026-08-31
+
+| Modelo | Antecedência | Acerto sim/não | Erro chuva (mm) | Erro máxima (°C) | Erro rajada (km/h) | Dias |
+|---|---|---|---|---|---|---|
+| ECMWF IFS | 1 | 78% | 3,2 | 1,6 | – | 322 |
+| ECMWF IFS | 3 | 75% | 3,5 | 1,8 | – | 309 |
+| ECMWF IFS | 5 | 73% | 4,2 | 2,0 | – | 318 |
+| ECMWF AIFS | 1 | 79% | 2,8 | 1,8 | – | 547 |
+| ECMWF AIFS | 3 | 77% | 2,9 | 1,8 | – | 545 |
+| ECMWF AIFS | 5 | 72% | 3,5 | 2,0 | – | 531 |
+| UKMO 10 km | 1 | 82% | 3,5 | 1,4 | 26,7 | 586 |
+| UKMO 10 km | 3 | 78% | 4,2 | 1,7 | 30,7 | 586 |
+| UKMO 10 km | 5 | 73% | 5,1 | 2,1 | 26,2 | 581 |
+
+## Canoas (SBCO), sem correção: 2074 dias de 2021-03-01 a 2026-11-03
+
+| Modelo | Antecedência | Acerto sim/não | Erro chuva (mm) | Erro máxima (°C) | Erro rajada (km/h) | Dias |
+|---|---|---|---|---|---|---|
+| ECMWF IFS | 1 | – | – | 1,3 | – | 383 |
+| ECMWF IFS | 3 | – | – | 1,5 | – | 379 |
+| ECMWF IFS | 5 | – | – | 1,9 | – | 375 |
+| ECMWF AIFS | 1 | – | – | 1,3 | – | 623 |
+| ECMWF AIFS | 3 | – | – | 1,4 | – | 621 |
+| ECMWF AIFS | 5 | – | – | 1,7 | – | 605 |
+| UKMO 10 km | 1 | – | – | 1,3 | 22,1 | 623 |
+| UKMO 10 km | 3 | – | – | 1,5 | 25,2 | 659 |
+| UKMO 10 km | 5 | – | – | 1,9 | 22,0 | 653 |
+
+## Pesos dos modelos do painel (560 dias comuns)
 
 | Modelo | Erro chuva (mm) | Erro máxima (°C) | Erro rajada (km/h) | Peso relativo |
 |---|---|---|---|---|
 | ECMWF IFS | 4,0 | 2,1 | – | 1,04 |
-| ECMWF AIFS | 3,2 | 2,5 | – | 1,10 |
-| UKMO 10 km | 4,9 | 2,4 | 11,6 | 0,91 |
+| ECMWF AIFS | 3,2 | 2,4 | – | 1,10 |
+| UKMO 10 km | 4,8 | 2,4 | 11,2 | 0,90 |

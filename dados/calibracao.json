@@ -1,6 +1,6 @@
 {
  "versao": 1,
- "geradoEm": "2026-11-04T15:46:15.713Z",
+ "geradoEm": "2026-11-04T16:09:30.381Z",
  "estacao": {
   "id": "A884",
   "nome": "Campo Bom",
@@ -28,9 +28,9 @@
  },
  "cobertura": {
   "ecmwf_ifs": {
-   "ini": "2025-01-02",
+   "ini": "2022-01-01",
    "fim": "2026-11-03",
-   "dias": 404
+   "dias": 1768
   },
   "ecmwf_aifs025_single": {
    "ini": "2025-02-18",
@@ -38,9 +38,9 @@
    "dias": 624
   },
   "ukmo_global_deterministic_10km": {
-   "ini": "2024-08-06",
+   "ini": "2022-03-01",
    "fim": "2026-11-03",
-   "dias": 820
+   "dias": 1709
   },
   "ecmwf_ifs025": {
    "ini": "2024-02-04",
@@ -50,18 +50,18 @@
   "ncep_gfs_seamless": {
    "ini": "2021-03-24",
    "fim": "2026-11-03",
-   "dias": 2030
+   "dias": 2051
   },
   "dwd_icon_global": {
-   "ini": "2024-01-20",
+   "ini": "2022-11-17",
    "fim": "2026-11-03",
-   "dias": 1019
+   "dias": 1448
   }
  },
  "pesos": {
-  "ecmwf_ifs": 1.045,
-  "ecmwf_aifs025_single": 1.1,
-  "ukmo_global_deterministic_10km": 0.905
+  "ecmwf_ifs": 1.039,
+  "ecmwf_aifs025_single": 1.104,
+  "ukmo_global_deterministic_10km": 0.903
  },
  "maeComum": {
   "ecmwf_ifs": {
@@ -70,17 +70,17 @@
    "rajada": null
   },
   "ecmwf_aifs025_single": {
-   "chuva": 3.21,
-   "tmax": 2.47,
+   "chuva": 3.22,
+   "tmax": 2.41,
    "rajada": null
   },
   "ukmo_global_deterministic_10km": {
-   "chuva": 4.88,
+   "chuva": 4.84,
    "tmax": 2.37,
-   "rajada": 11.6
+   "rajada": 11.17
   }
  },
- "diasComuns": 335,
+ "diasComuns": 560,
  "resumo": {
   "temperaturaEcmwf": {
    "tmax": {
@@ -155,9 +155,9 @@
      "ukmo_global_deterministic_10km"
     ],
     "maeAntes": 25.69,
-    "maeDepois": 25.69,
+    "maeDepois": 17.58,
     "viesAntes": 23.72,
-    "viesDepois": 23.72
+    "viesDepois": 13.26
    },
    "2": {
     "n": 466,
@@ -165,9 +165,9 @@
      "ukmo_global_deterministic_10km"
     ],
     "maeAntes": 11.26,
-    "maeDepois": 11.26,
+    "maeDepois": 6.36,
     "viesAntes": 8.99,
-    "viesDepois": 8.99
+    "viesDepois": 1.41
    },
    "3": {
     "n": 451,
@@ -175,9 +175,9 @@
      "ukmo_global_deterministic_10km"
     ],
     "maeAntes": 27.23,
-    "maeDepois": 27.23,
+    "maeDepois": 20.03,
     "viesAntes": 24.55,
-    "viesDepois": 24.55
+    "viesDepois": 14.16
    },
    "4": {
     "n": 446,
@@ -185,9 +185,9 @@
      "ukmo_global_deterministic_10km"
     ],
     "maeAntes": 10.96,
-    "maeDepois": 10.96,
+    "maeDepois": 6.58,
     "viesAntes": 8.22,
-    "viesDepois": 8.22
+    "viesDepois": 0.7
    },
    "5": {
     "n": 398,
@@ -195,9 +195,9 @@
      "ukmo_global_deterministic_10km"
     ],
     "maeAntes": 25.37,
-    "maeDepois": 25.37,
+    "maeDepois": 18.67,
     "viesAntes": 22.27,
-    "viesDepois": 22.27
+    "viesDepois": 12.4
    }
   }
  },
@@ -232,9 +232,9 @@
    },
    "rajada": {
     "n": 30,
-    "acertos": 20,
-    "pct": 0.667,
-    "erroMedio": 7.15
+    "acertos": 26,
+    "pct": 0.867,
+    "erroMedio": 5.95
    }
   },
   "completo": {
@@ -260,13 +260,277 @@
    },
    "rajada": {
     "n": 237,
-    "acertos": 82,
-    "pct": 0.346,
-    "erroMedio": 13.53
+    "acertos": 185,
+    "pct": 0.781,
+    "erroMedio": 6.83
    }
   }
  },
- "outras": {},
+ "outras": {
+  "A801": {
+   "estacao": {
+    "id": "A801",
+    "tipo": "inmet",
+    "nome": "Porto Alegre Jardim Botânico",
+    "lat": -30.05361111,
+    "lon": -51.17472221,
+    "altitude": 41.18
+   },
+   "periodo": {
+    "ini": "2021-03-01",
+    "fim": "2026-08-31",
+    "diasComMedicao": 2010
+   },
+   "fontes": {
+    "medicoes": "INMET, BDMEP (portal.inmet.gov.br/dadoshistoricos), estação automática A801 Porto Alegre Jardim Botânico",
+    "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
+   },
+   "modelos": {
+    "ecmwf_ifs": {
+     "1": {
+      "n": 322,
+      "acertoChuva": 0.776,
+      "maeChuva": 3.18,
+      "maeTmax": 1.59,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 315,
+      "acertoChuva": 0.772,
+      "maeChuva": 3.32,
+      "maeTmax": 1.7,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 309,
+      "acertoChuva": 0.753,
+      "maeChuva": 3.49,
+      "maeTmax": 1.82,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 326,
+      "acertoChuva": 0.752,
+      "maeChuva": 3.39,
+      "maeTmax": 1.99,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 318,
+      "acertoChuva": 0.726,
+      "maeChuva": 4.15,
+      "maeTmax": 2.05,
+      "maeRajada": null
+     }
+    },
+    "ecmwf_aifs025_single": {
+     "1": {
+      "n": 547,
+      "acertoChuva": 0.787,
+      "maeChuva": 2.77,
+      "maeTmax": 1.84,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 546,
+      "acertoChuva": 0.781,
+      "maeChuva": 2.83,
+      "maeTmax": 1.81,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 545,
+      "acertoChuva": 0.773,
+      "maeChuva": 2.93,
+      "maeTmax": 1.8,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 531,
+      "acertoChuva": 0.763,
+      "maeChuva": 3.21,
+      "maeTmax": 1.86,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 531,
+      "acertoChuva": 0.716,
+      "maeChuva": 3.51,
+      "maeTmax": 2.02,
+      "maeRajada": null
+     }
+    },
+    "ukmo_global_deterministic_10km": {
+     "1": {
+      "n": 586,
+      "acertoChuva": 0.819,
+      "maeChuva": 3.45,
+      "maeTmax": 1.45,
+      "maeRajada": 26.71
+     },
+     "2": {
+      "n": 625,
+      "acertoChuva": 0.793,
+      "maeChuva": 3.79,
+      "maeTmax": 1.7,
+      "maeRajada": 12.26
+     },
+     "3": {
+      "n": 586,
+      "acertoChuva": 0.776,
+      "maeChuva": 4.2,
+      "maeTmax": 1.72,
+      "maeRajada": 30.72
+     },
+     "4": {
+      "n": 536,
+      "acertoChuva": 0.762,
+      "maeChuva": 4.75,
+      "maeTmax": 1.89,
+      "maeRajada": 12.67
+     },
+     "5": {
+      "n": 581,
+      "acertoChuva": 0.727,
+      "maeChuva": 5.06,
+      "maeTmax": 2.1,
+      "maeRajada": 26.17
+     }
+    }
+   }
+  },
+  "SBCO": {
+   "estacao": {
+    "id": "SBCO",
+    "tipo": "metar",
+    "nome": "Canoas",
+    "lat": -29.945,
+    "lon": -51.144
+   },
+   "periodo": {
+    "ini": "2021-03-01",
+    "fim": "2026-11-03",
+    "diasComMedicao": 2074
+   },
+   "fontes": {
+    "medicoes": "METAR SBCO Canoas, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
+    "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
+   },
+   "modelos": {
+    "ecmwf_ifs": {
+     "1": {
+      "n": 383,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.28,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 385,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.43,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 379,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.54,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 397,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.7,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 375,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.9,
+      "maeRajada": null
+     }
+    },
+    "ecmwf_aifs025_single": {
+     "1": {
+      "n": 623,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.32,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 622,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.37,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 621,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.39,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 606,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.51,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 605,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.68,
+      "maeRajada": null
+     }
+    },
+    "ukmo_global_deterministic_10km": {
+     "1": {
+      "n": 623,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.28,
+      "maeRajada": 22.05
+     },
+     "2": {
+      "n": 699,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.43,
+      "maeRajada": 11.19
+     },
+     "3": {
+      "n": 659,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.51,
+      "maeRajada": 25.2
+     },
+     "4": {
+      "n": 607,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.69,
+      "maeRajada": 11.7
+     },
+     "5": {
+      "n": 653,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.92,
+      "maeRajada": 21.96
+     }
+    }
+   }
+  }
+ },
  "modelos": {
   "ecmwf_ifs": {
    "nome": "ECMWF IFS",
@@ -475,7 +739,123 @@
      "ganho": -0.016
     }
    },
-   "rajada": {},
+   "rajada": {
+    "1": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.752,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.756
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
+     },
+     "maeAntes": 9.25,
+     "maeDepois": 4.79,
+     "viesAntes": 7.99,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    },
+    "2": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.752,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.756
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
+     },
+     "maeAntes": 9.25,
+     "maeDepois": 4.79,
+     "viesAntes": 7.99,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    },
+    "3": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.752,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.756
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
+     },
+     "maeAntes": 9.25,
+     "maeDepois": 4.79,
+     "viesAntes": 7.99,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    },
+    "4": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.752,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.756
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
+     },
+     "maeAntes": 9.25,
+     "maeDepois": 4.79,
+     "viesAntes": 7.99,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    },
+    "5": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.752,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.756
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
+     },
+     "maeAntes": 9.25,
+     "maeDepois": 4.79,
+     "viesAntes": 7.99,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    }
+   },
    "vento": {
     "1": {
      "usar": true,
@@ -646,7 +1026,29 @@
     }
    },
    "rajadaCoerencia": null,
-   "ventoCoerencia": 1.049
+   "ventoCoerencia": 1.049,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 1580,
+    "fatorAnual": 0.752,
+    "fator": {
+     "verao": 0.75,
+     "outono": 0.746,
+     "inverno": 0.759,
+     "primavera": 0.756
+    },
+    "nEstacao": {
+     "verao": 420,
+     "outono": 459,
+     "inverno": 382,
+     "primavera": 319
+    },
+    "maeAntes": 9.25,
+    "maeDepois": 4.79,
+    "viesAntes": 7.99,
+    "viesDepois": 0,
+    "ganho": 0.482
+   }
   },
   "ecmwf_aifs025_single": {
    "nome": "ECMWF AIFS",
@@ -1237,119 +1639,139 @@
    },
    "rajada": {
     "1": {
-     "usar": false,
-     "n": 459,
-     "fatorAnual": 0.5,
+     "usar": true,
+     "n": 1521,
+     "fatorAnual": 0.754,
      "fator": {
-      "verao": 0.627,
-      "outono": 0.651,
-      "inverno": 0.5,
-      "primavera": 0.607
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.72
      },
      "nEstacao": {
-      "verao": 144,
-      "outono": 95,
-      "inverno": 117,
-      "primavera": 103
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
      },
-     "maeAntes": 25.69,
-     "maeDepois": 17.53,
-     "viesAntes": 23.72,
-     "viesDepois": 8.55,
-     "ganho": 0.317,
-     "motivo": "fator varia 1.46× entre antecedências"
+     "maeAntes": 10.09,
+     "maeDepois": 5.45,
+     "viesAntes": 7.86,
+     "viesDepois": 0.01,
+     "ganho": 0.459,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.5,
+      "motivo": "fator varia 1.46× entre antecedências"
+     }
     },
     "2": {
-     "usar": false,
-     "n": 466,
-     "fatorAnual": 0.71,
+     "usar": true,
+     "n": 1521,
+     "fatorAnual": 0.754,
      "fator": {
-      "verao": 0.658,
-      "outono": 0.721,
-      "inverno": 0.87,
-      "primavera": 0.63
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.72
      },
      "nEstacao": {
-      "verao": 142,
-      "outono": 163,
-      "inverno": 101,
-      "primavera": 60
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
      },
-     "maeAntes": 11.26,
-     "maeDepois": 5.87,
-     "viesAntes": 8.99,
-     "viesDepois": 0.11,
-     "ganho": 0.479,
-     "motivo": "fator varia 1.46× entre antecedências"
+     "maeAntes": 10.09,
+     "maeDepois": 5.45,
+     "viesAntes": 7.86,
+     "viesDepois": 0.01,
+     "ganho": 0.459,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.71,
+      "motivo": "fator varia 1.46× entre antecedências"
+     }
     },
     "3": {
-     "usar": false,
-     "n": 451,
-     "fatorAnual": 0.5,
+     "usar": true,
+     "n": 1521,
+     "fatorAnual": 0.754,
      "fator": {
-      "verao": 0.659,
-      "outono": 0.689,
-      "inverno": 0.5,
-      "primavera": 0.644
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.72
      },
      "nEstacao": {
-      "verao": 143,
-      "outono": 95,
-      "inverno": 113,
-      "primavera": 100
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
      },
-     "maeAntes": 27.23,
-     "maeDepois": 21.28,
-     "viesAntes": 24.55,
-     "viesDepois": 11.47,
-     "ganho": 0.218,
-     "motivo": "fator varia 1.46× entre antecedências"
+     "maeAntes": 10.09,
+     "maeDepois": 5.45,
+     "viesAntes": 7.86,
+     "viesDepois": 0.01,
+     "ganho": 0.459,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.5,
+      "motivo": "fator varia 1.46× entre antecedências"
+     }
     },
     "4": {
-     "usar": false,
-     "n": 446,
-     "fatorAnual": 0.73,
+     "usar": true,
+     "n": 1521,
+     "fatorAnual": 0.754,
      "fator": {
-      "verao": 0.692,
-      "outono": 0.744,
-      "inverno": 0.892,
-      "primavera": 0.646
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.72
      },
      "nEstacao": {
-      "verao": 131,
-      "outono": 132,
-      "inverno": 97,
-      "primavera": 86
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
      },
-     "maeAntes": 10.96,
-     "maeDepois": 6.41,
-     "viesAntes": 8.22,
-     "viesDepois": 0.09,
-     "ganho": 0.416,
-     "motivo": "fator varia 1.46× entre antecedências"
+     "maeAntes": 10.09,
+     "maeDepois": 5.45,
+     "viesAntes": 7.86,
+     "viesDepois": 0.01,
+     "ganho": 0.459,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.73,
+      "motivo": "fator varia 1.46× entre antecedências"
+     }
     },
     "5": {
-     "usar": false,
-     "n": 398,
-     "fatorAnual": 0.501,
+     "usar": true,
+     "n": 1521,
+     "fatorAnual": 0.754,
      "fator": {
-      "verao": 0.634,
-      "outono": 0.684,
-      "inverno": 0.5,
-      "primavera": 0.623
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.72
      },
      "nEstacao": {
-      "verao": 129,
-      "outono": 83,
-      "inverno": 111,
-      "primavera": 75
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 319
      },
-     "maeAntes": 25.37,
-     "maeDepois": 19.41,
-     "viesAntes": 22.27,
-     "viesDepois": 8.68,
-     "ganho": 0.235,
-     "motivo": "fator varia 1.46× entre antecedências"
+     "maeAntes": 10.09,
+     "maeDepois": 5.45,
+     "viesAntes": 7.86,
+     "viesDepois": 0.01,
+     "ganho": 0.459,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.501,
+      "motivo": "fator varia 1.46× entre antecedências"
+     }
     }
    },
    "vento": {
@@ -1522,7 +1944,29 @@
     }
    },
    "rajadaCoerencia": 1.46,
-   "ventoCoerencia": 1.051
+   "ventoCoerencia": 1.051,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 1521,
+    "fatorAnual": 0.754,
+    "fator": {
+     "verao": 0.708,
+     "outono": 0.771,
+     "inverno": 0.83,
+     "primavera": 0.72
+    },
+    "nEstacao": {
+     "verao": 361,
+     "outono": 459,
+     "inverno": 382,
+     "primavera": 319
+    },
+    "maeAntes": 10.09,
+    "maeDepois": 5.45,
+    "viesAntes": 7.86,
+    "viesDepois": 0.01,
+    "ganho": 0.459
+   }
   },
   "ecmwf_ifs025": {
    "nome": "ECMWF IFS 0,25°",
@@ -1731,7 +2175,123 @@
      "ganho": -0.009
     }
    },
-   "rajada": {},
+   "rajada": {
+    "1": {
+     "usar": true,
+     "n": 535,
+     "fatorAnual": 0.73,
+     "fator": {
+      "verao": 0.734,
+      "outono": 0.729,
+      "inverno": 0.754,
+      "primavera": 0.69
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 65
+     },
+     "maeAntes": 9.87,
+     "maeDepois": 5,
+     "viesAntes": 8.37,
+     "viesDepois": 0.07,
+     "ganho": 0.494,
+     "origem": "curto prazo"
+    },
+    "2": {
+     "usar": true,
+     "n": 535,
+     "fatorAnual": 0.73,
+     "fator": {
+      "verao": 0.734,
+      "outono": 0.729,
+      "inverno": 0.754,
+      "primavera": 0.69
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 65
+     },
+     "maeAntes": 9.87,
+     "maeDepois": 5,
+     "viesAntes": 8.37,
+     "viesDepois": 0.07,
+     "ganho": 0.494,
+     "origem": "curto prazo"
+    },
+    "3": {
+     "usar": true,
+     "n": 535,
+     "fatorAnual": 0.73,
+     "fator": {
+      "verao": 0.734,
+      "outono": 0.729,
+      "inverno": 0.754,
+      "primavera": 0.69
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 65
+     },
+     "maeAntes": 9.87,
+     "maeDepois": 5,
+     "viesAntes": 8.37,
+     "viesDepois": 0.07,
+     "ganho": 0.494,
+     "origem": "curto prazo"
+    },
+    "4": {
+     "usar": true,
+     "n": 535,
+     "fatorAnual": 0.73,
+     "fator": {
+      "verao": 0.734,
+      "outono": 0.729,
+      "inverno": 0.754,
+      "primavera": 0.69
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 65
+     },
+     "maeAntes": 9.87,
+     "maeDepois": 5,
+     "viesAntes": 8.37,
+     "viesDepois": 0.07,
+     "ganho": 0.494,
+     "origem": "curto prazo"
+    },
+    "5": {
+     "usar": true,
+     "n": 535,
+     "fatorAnual": 0.73,
+     "fator": {
+      "verao": 0.734,
+      "outono": 0.729,
+      "inverno": 0.754,
+      "primavera": 0.69
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 65
+     },
+     "maeAntes": 9.87,
+     "maeDepois": 5,
+     "viesAntes": 8.37,
+     "viesDepois": 0.07,
+     "ganho": 0.494,
+     "origem": "curto prazo"
+    }
+   },
    "vento": {
     "1": {
      "usar": true,
@@ -1902,7 +2462,29 @@
     }
    },
    "rajadaCoerencia": null,
-   "ventoCoerencia": 1.026
+   "ventoCoerencia": 1.026,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 535,
+    "fatorAnual": 0.73,
+    "fator": {
+     "verao": 0.734,
+     "outono": 0.729,
+     "inverno": 0.754,
+     "primavera": 0.69
+    },
+    "nEstacao": {
+     "verao": 180,
+     "outono": 183,
+     "inverno": 107,
+     "primavera": 65
+    },
+    "maeAntes": 9.87,
+    "maeDepois": 5,
+    "viesAntes": 8.37,
+    "viesDepois": 0.07,
+    "ganho": 0.494
+   }
   },
   "ncep_gfs_seamless": {
    "nome": "GFS",
@@ -2393,7 +2975,29 @@
     }
    },
    "rajadaCoerencia": 1.055,
-   "ventoCoerencia": 1.073
+   "ventoCoerencia": 1.073,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 1580,
+    "fatorAnual": 0.898,
+    "fator": {
+     "verao": 0.918,
+     "outono": 0.876,
+     "inverno": 0.903,
+     "primavera": 0.896
+    },
+    "nEstacao": {
+     "verao": 420,
+     "outono": 459,
+     "inverno": 382,
+     "primavera": 319
+    },
+    "maeAntes": 7.19,
+    "maeDepois": 6.19,
+    "viesAntes": 2.74,
+    "viesDepois": 0,
+    "ganho": 0.138
+   }
   },
   "dwd_icon_global": {
    "nome": "ICON",
@@ -2884,7 +3488,29 @@
     }
    },
    "rajadaCoerencia": 1.038,
-   "ventoCoerencia": 1.054
+   "ventoCoerencia": 1.054,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 1261,
+    "fatorAnual": 0.708,
+    "fator": {
+     "verao": 0.726,
+     "outono": 0.713,
+     "inverno": 0.681,
+     "primavera": 0.705
+    },
+    "nEstacao": {
+     "verao": 361,
+     "outono": 367,
+     "inverno": 291,
+     "primavera": 242
+    },
+    "maeAntes": 10.86,
+    "maeDepois": 5.01,
+    "viesAntes": 9.85,
+    "viesDepois": 0,
+    "ganho": 0.539
+   }
   }
  }
 }
