@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.2.0';
+const VERSAO = '1.2.1';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -236,8 +236,9 @@ function renderAgora() {
   const pt = pontoExato();
   const med = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, Date.now(), 120).escolhida;
   if (med && med.distancia <= 25) {
-    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(med.valor) }), el('small', { text: `medido ${fmt.idade(med.ms)}` }));
-    alvo.title = `${med.fonte.nome}, ${fmt.n(med.distancia, 0)} km`;
+    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(med.valor) }));
+    alvo.title = `Medido em ${med.fonte.nome}, ${fmt.n(med.distancia, 0)} km, ${fmt.idade(med.ms)}`;
+    alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(med.valor)}, ${alvo.title}`);
     return;
   }
   if (!p) { alvo.replaceChildren(); return; }
@@ -251,8 +252,9 @@ function renderAgora() {
     for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= Date.now()) i = k;
     v = i < 0 ? null : mediana(mods.map((m) => p.modelos[m].vars.temperature_2m?.[i]), mods.map((m) => pesos[m] ?? 1));
   }
-  alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(v) ?? '–' }), el('small', { text: valido(v) ? 'previsto' : 'sem dado' }));
+  alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(v) ?? '–' }));
   alvo.title = 'Sem medição recente perto daqui; valor previsto pelos modelos para esta hora.';
+  alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(v) ?? 'sem dado'}, prevista`);
 }
 
 function avisar(texto, erro) {
@@ -471,12 +473,18 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const caixa = el('div', { class: 'grafico-primeira' });
   let modo = 'chance';
   const botoes = el('div', { class: 'troca', role: 'group', 'aria-label': 'Gráfico' });
+  const iniDia = p.horas[a.idxTodo[0]];
   const desenharModo = () => {
-    botoes.replaceChildren(...[['chance', 'Chance de chuva'], ['ceu', 'Faixa do Céu']].map(([k, nome]) =>
-      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome)));
+    // hoje: escolher entre as horas que faltam e o dia todo (a escolha fica salva no aparelho)
+    const todas = desdeAgora && prefs.ler('horasTodas', false);
+    const iniUsado = todas ? iniDia : ini;
+    botoes.replaceChildren(...[['chance', 'Chance de chuva'], ['ceu', 'Céu']].map(([k, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome)),
+    desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : null);
     caixa.replaceChildren();
-    if (modo === 'chance') caixa.append(graficoChance(ini, fim));
-    else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: ini, fimMs: fim, id: 'faixa-' + diaIndice }));
+    if (modo === 'chance') caixa.append(graficoChance(iniUsado, fim));
+    else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: iniUsado, fimMs: fim, id: 'faixa-' + diaIndice }));
   };
   filhos.push(botoes, caixa);
   alvo.replaceChildren(...filhos);
@@ -1233,7 +1241,20 @@ function painelEnso(P, disc, roniUlt) {
   const dataSem = (ms) => new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'UTC', day: 'numeric', month: 'short' });
   const rel = P.relativoSemanal?.dados?.at(-1), conv = P.convencionalSemanal?.dados?.at(-1);
   const dia = P.diario?.dados?.at(-1);
-  const prob = P.probCpc?.dados?.[0];
+  // trimestre atual (centrado no mês corrente) e os próximos, da NOAA CPC
+  const CENTRO = { DJF: 1, JFM: 2, FMA: 3, MAM: 4, AMJ: 5, MJJ: 6, JJA: 7, JAS: 8, ASO: 9, SON: 10, OND: 11, NDJ: 12 };
+  const mesAgora = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', month: 'numeric' }));
+  const probs = P.probCpc?.dados || [], forcas = P.forcaCpc?.dados || [];
+  const iAgora = Math.max(0, probs.findIndex((x) => CENTRO[x.tri] === mesAgora));
+  const prob = probs[iAgora];
+  const NOME_F = { fraco: 'fraco', moderado: 'moderado', forte: 'forte', muitoForte: 'muito forte' };
+  const forcaDe = (tri) => {
+    const f = forcas.find((x) => x.tri === tri)?.elNino;
+    if (!f) return null;
+    const [k, v] = Object.entries(f).sort((a, b) => b[1] - a[1])[0];
+    return v > 0 ? { nome: NOME_F[k], p: v, forteOuMais: f.forte + f.muitoForte } : null;
+  };
+  const fAgora = prob ? forcaDe(prob.tri) : null;
   const bloco = (rot, val, sub, marca, destaque) => el('div', { class: 'enso-bloco' + (destaque ? ' destaque' : '') },
     el('small', { text: rot }), el('b', { text: val }), el('span', { class: 'sub', text: sub }), marca ? el('span', { class: 'marca ' + marca[0], text: marca[1] }) : null);
   const filhos = [
@@ -1242,9 +1263,14 @@ function painelEnso(P, disc, roniUlt) {
     el('div', { class: 'enso-grade' },
       bloco('RONI, índice oficial', valido(roniUlt?.anom) ? `${roniUlt.anom > 0 ? '+' : ''}${fmt.n(roniUlt.anom, 2)} °C` : '–', roniUlt ? `trimestre ${roniUlt.seas} ${roniUlt.ano}` : 'indisponível', ['oficial', 'oficial'], true),
       bloco('Niño 3.4 da semana', sinal(rel?.n34), rel ? `relativo, semana de ${dataSem(rel.ms)}` : 'indisponível', ['medido', 'medido']),
-      bloco('Niño 3.4 convencional', sinal(conv?.n34), conv ? `semana de ${dataSem(conv.ms)}` : 'indisponível', ['medido', 'medido']),
-      dia ? bloco('Niño 3.4 de ontem', sinal(dia.anom), `${fmt.n(dia.sst, 1)} °C no mar, ${new Date(dia.data + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`, ['previsao', 'estimativa'])
-        : bloco('Chance de El Niño', prob ? `${prob.elNino}%` : '–', prob ? `trimestre ${prob.tri}, NOAA` : 'indisponível', ['oficial', 'oficial'])),
+      bloco('Chance de El Niño', prob ? `${prob.elNino}%` : '–', prob ? `trimestre ${prob.tri} (atual), NOAA` : 'indisponível', ['oficial', 'oficial'], true),
+      bloco('Força mais provável', fAgora ? fAgora.nome : '–', fAgora ? `${fAgora.p}% de chance; forte ou mais: ${fAgora.forteOuMais}%` : 'indisponível', ['oficial', 'oficial'], true),
+      dia ? bloco('Niño 3.4 de ontem', sinal(dia.anom), `${fmt.n(dia.sst, 1)} °C no mar, ${new Date(dia.data + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`, ['previsao', 'estimativa']) : null),
+    probs.length ? el('table', { class: 'enso-tri' },
+      el('thead', {}, el('tr', {}, el('th', { text: 'Trimestre' }), el('th', { class: 'n', text: 'El Niño' }), el('th', { text: 'Força mais provável' }))),
+      el('tbody', {}, ...probs.slice(iAgora).map((x) => { const f = forcaDe(x.tri); return el('tr', {},
+        el('td', { text: x.tri }), el('td', { class: 'n', text: `${x.elNino}%` }), el('td', { text: f ? `${f.nome} (${f.p}%)` : (x.neutro >= x.elNino ? `neutro mais provável (${x.neutro}%)` : '–') })); }))) : null,
+    probs.length ? el('p', { class: 'nota', text: 'Chance e força: previsão oficial da NOAA CPC, revisada na 2ª quinta-feira de cada mês. Força pelo RONI: fraco 0,5 a 1 °C, moderado 1 a 1,5, forte 1,5 a 2, muito forte 2 ou mais.' }) : null,
     conv && (valido(conv.n12) || valido(conv.n4)) ? el('div', { class: 'enso-regioes' },
       ...[['Niño 1+2', conv.n12, 'costa do Peru'], ['Niño 3', conv.n3, 'leste'], ['Niño 3.4', conv.n34, 'centro'], ['Niño 4', conv.n4, 'oeste']]
         .map(([n, v, onde]) => el('div', {}, el('small', { text: n }), el('b', { text: sinal(v) }), el('span', { text: onde })))) : null,
