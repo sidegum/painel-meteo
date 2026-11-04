@@ -511,3 +511,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
   background: var(--sup2); color: var(--texto); font: inherit; font-weight: 560; font-size: 13px; line-height: 1.3; text-align: left; border-left: 3px solid var(--linha); }
 .linha-placar .lt-txt { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
 .linha-placar .lt-txt small { font-size: 12px; font-weight: 500; color: var(--fraco); }
+
+/* Páginas avulsas (privacidade, widget do iPhone): coluna central. Sem estilo inline, por causa da CSP. */
+.pagina-simples { max-width: 680px; margin: 0 auto; padding-bottom: 40px; }
+.pagina-simples .titulo-aba { margin-left: 0; }

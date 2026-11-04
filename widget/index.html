@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR" data-visual="a">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Widget do iPhone</title>
+<link rel="stylesheet" href="../app.css">
+<script src="instalar.js" defer></script>
+</head>
+<body>
+<main class="detalhes pagina-simples">
+  <h1 class="titulo-aba">Widget do iPhone</h1>
+  <p>O widget mostra na tela de início a temperatura, a chuva de hoje e o risco de temporal, com os mesmos números do painel.</p>
+  <ol>
+    <li>Instale o app gratuito <b>Scriptable</b> na App Store.</li>
+    <li>Toque no botão abaixo para copiar o código do widget.</li>
+    <li>Abra o Scriptable, toque em <b>+</b>, cole o código e dê o nome <b>Painel do tempo</b>. Toque em <b>Concluído</b>.</li>
+    <li>Na tela de início, toque e segure num espaço vazio, toque em <b>Editar</b> e depois em <b>Adicionar Widget</b>. Escolha <b>Scriptable</b> e o tamanho médio ou pequeno.</li>
+    <li>Toque e segure o widget, escolha <b>Editar Widget</b> e, em <b>Script</b>, escolha <b>Painel do tempo</b>.</li>
+    <li>Na primeira vez, permita que o Scriptable use a sua localização.</li>
+  </ol>
+  <p><button type="button" id="btn-copiar" class="largo">Copiar código do widget</button></p>
+  <p class="nota" id="copiar-estado" role="status" aria-live="polite"></p>
+  <p class="nota">Se o botão não funcionar, abra o <a href="painel-widget.js">código do widget</a>, selecione todo o texto e copie.</p>
+  <p class="nota">O iPhone decide quando atualizar o widget, em geral a cada 15 a 30 minutos. Para ver na hora, toque no widget para abrir o painel.</p>
+  <p><a href="../index.html">Voltar ao painel</a></p>
+</main>
+</body>
+</html>

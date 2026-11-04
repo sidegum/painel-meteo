@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.20';
+const VERSAO = '1.2.21';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -34,11 +34,56 @@ const VERIFICACAO = [
   { id: 'SBCO', nome: 'Canoas (METAR)', lat: -29.945, lon: -51.144, chuva: false },
 ];
 
+// ------------------------------------------------------------------ modo widget
+
+/**
+ * Modo widget (?widget=1): a página é carregada fora da tela pelo widget do iPhone (widget/painel-widget.js,
+ * app Scriptable). Roda a mesma busca e a mesma análise do app e entrega o resumo de Hoje em
+ * window.painelResumo (Promise). Nesse modo não há GPS, telas, gravação de preferências nem service worker.
+ * O local vem dos parâmetros lat e lon (o widget já os arredonda); sem eles, o centro de Campo Bom.
+ * Contrato do resumo: docs/TECNICO.md, seção 11.
+ */
+const MODO_WIDGET = lerModoWidget(location.search);
+const FORMATO_RESUMO = 1;        // muda só quando o contrato do resumo mudar de forma incompatível
+const ESPERA_WIDGET_MS = 20000;  // teto para as fontes lentas; depois disso o resumo sai com o que chegou
+let entregarResumo = () => {};
+if (MODO_WIDGET) window.painelResumo = new Promise((ok) => { entregarResumo = ok; });
+
+/**
+ * Lê os parâmetros do modo widget.
+ * @param {string} busca location.search
+ * @returns {{local:{nome:string, regiao?:string, lat:number, lon:number, origem:string}}|null} null fora do modo widget
+ */
+function lerModoWidget(busca) {
+  const q = new URLSearchParams(busca);
+  if (q.get('widget') !== '1') return null;
+  const lat = Number(q.get('lat')), lon = Number(q.get('lon'));
+  const coordOk = q.has('lat') && q.has('lon') && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  if (!coordOk) return { local: { ...CONFIG.padrao, origem: 'padrao' } };
+  const nome = String(q.get('nome') || '').replace(/[^\p{L}\p{N} '.,-]/gu, '').trim().slice(0, 40) || 'Sua localização';
+  return { local: { nome, lat: arredondaCoord(lat), lon: arredondaCoord(lon), origem: 'widget' } };
+}
+
+/**
+ * Início no modo widget: busca todas as fontes que entram na análise de Hoje (sem El Niño) e entrega o resumo.
+ * Uma falha nunca deixa a Promise pendente: sai { formato, erro }.
+ */
+async function iniciarWidget() {
+  estado.local = MODO_WIDGET.local;
+  try {
+    await Promise.race([atualizar({ forcar: true, completo: true }), new Promise((ok) => setTimeout(ok, ESPERA_WIDGET_MS))]);
+    entregarResumo(estado.prev ? resumoWidget() : { formato: FORMATO_RESUMO, erro: estado.erros.previsao || 'previsão indisponível' });
+  } catch (e) {
+    entregarResumo({ formato: FORMATO_RESUMO, erro: String(e?.message || e).slice(0, 120) });
+  }
+}
+
 // ------------------------------------------------------------------ início
 
 window.addEventListener('DOMContentLoaded', iniciar);
 
 async function iniciar() {
+  if (MODO_WIDGET) { await iniciarWidget(); return; }
   aplicarTema();
   $('#versao').textContent = `Versão ${VERSAO}`;
   configurarNavegacao();
@@ -171,10 +216,11 @@ let atualizando = false, atualizandoDesde = 0;
 /**
  * Busca as fontes vencidas (CONFIG.intervalos) em paralelo e redesenha quando chegam.
  * Retorna quando a previsão chega (ou quando todas terminam, com teto de 30 s), para o botão parar de girar.
- * @param {{forcar?:boolean, local?:boolean, agora?:boolean}} [op] forcar/local ignoram a validade;
- *   local também descarta dados do local anterior; agora força medições e radar.
+ * @param {{forcar?:boolean, local?:boolean, agora?:boolean, completo?:boolean}} [op] forcar/local ignoram a validade;
+ *   local também descarta dados do local anterior; agora força medições e radar; completo só retorna quando
+ *   todas as fontes terminarem (teto de 30 s), usado pelo modo widget.
  */
-async function atualizar({ forcar = false, local = false, agora = false } = {}) {
+async function atualizar({ forcar = false, local = false, agora = false, completo = false } = {}) {
   if (!estado.local || estado.apagado) return;
   if (atualizando && Date.now() - atualizandoDesde > 40000) atualizando = false; // busca presa (app suspenso no meio): recomeça
   // Uma busca automática não repete outra em andamento; a pedida pelo botão sempre sai na hora, sem esperar.
@@ -217,7 +263,7 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
       .then((c) => { estado.chegada = c; estado.chegadaEm = Date.now(); })
       .catch(() => { estado.chegada = null; }));
     // El Niño: arquivo do robô do GitHub ou Worker; no botão atualizar, busca de novo também
-    if (venceu(estado.ensoEm, I.enso)) tarefas.push(buscarEnso()
+    if (!MODO_WIDGET && venceu(estado.ensoEm, I.enso)) tarefas.push(buscarEnso()
       .then((e) => { estado.enso = e; estado.ensoEm = Date.now(); salvarCache('enso', e); delete estado.erros.enso; })
       .catch((e) => { estado.erros.enso = e.message; }));
     if (w && venceu(estado.acertoEm, I.acerto)) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); recalibrar(); }));
@@ -230,7 +276,7 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     const resto = Promise.race([Promise.all(tarefas), new Promise((r) => setTimeout(r, 30000))])
       .then(() => { if (tarefas.length && estado.prev) renderTudo(); })
       .finally(() => { atualizando = false; atualizarCabecalho(); });
-    await Promise.race([principal, resto]);
+    await (completo ? resto : Promise.race([principal, resto]));
   } catch {
     atualizando = false;
   } finally {
@@ -314,24 +360,21 @@ function atualizarCabecalho() {
   else avisar('', false);
 }
 
-// Temperatura agora: medição da estação mais próxima (até 25 km e 2 h); sem ela, a previsão para esta hora.
-function renderAgora() {
-  const alvo = $('#agora');
-  const noResumo = document.getElementById('agora-hoje');
-  const p = estado.prev;
+/**
+ * Temperatura agora: medição da estação mais próxima (até 25 km e 2 h); sem ela, a prevista para esta hora
+ * (valor "current" do ECMWF, MODELO_TEMP; sem ele, mediana ponderada dos modelos; por fim, a hora cheia).
+ * Fonte única do topo, do resumo de Hoje e do widget.
+ * @returns {{valor:number|null, medida:boolean, estacao:object|null, ms:number|null, distanciaKm:number|null}|null}
+ *   estacao é a fonte da medição (null quando prevista); null sem medição e sem previsão
+ */
+function temperaturaAgora() {
   const pt = pontoExato();
   const med = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, Date.now(), 120).escolhida;
-  if (med && med.distancia <= 25) {
-    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(med.valor) }));
-    alvo.title = `Medido em ${med.fonte.nome}, ${fmt.n(med.distancia, 0)} km, ${fmt.idade(med.ms)}`;
-    alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(med.valor)}, ${alvo.title}`);
-    if (noResumo) { noResumo.replaceChildren(el('b', { text: fmt.c(med.valor) }), el('span', { class: 'rot-agora', text: 'agora' })); noResumo.title = alvo.title; }
-    return;
-  }
-  if (!p) { alvo.replaceChildren(); return; }
+  if (med && med.distancia <= 25) return { valor: med.valor, medida: true, estacao: med.fonte, ms: med.ms, distanciaKm: med.distancia };
+  const p = estado.prev;
+  if (!p) return null;
   const { pesos } = pesosAtuais();
   const mods = modelosAtivos();
-  // valor "current" dos modelos (intervalo de 15 min); se faltar, a hora cheia mais recente
   let v = valido(p.atual?.temp?.[MODELO_TEMP]) ? p.atual.temp[MODELO_TEMP] : mediana(mods.map((m) => p.atual?.temp?.[m]), mods.map((m) => pesos[m] ?? 1));
   if (!valido(v)) v = p.atual?.geral ?? null;
   if (!valido(v)) {
@@ -339,10 +382,28 @@ function renderAgora() {
     for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= Date.now()) i = k;
     v = i < 0 ? null : tempHora(p, 'temperature_2m', i, mods);
   }
-  alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(v) ?? '–' }));
-  alvo.title = 'Sem medição recente perto daqui; valor previsto pelos modelos para esta hora.';
-  alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(v) ?? 'sem dado'}, prevista`);
-  if (noResumo) { noResumo.replaceChildren(el('b', { text: fmt.c(v) ?? '–' }), el('span', { class: 'rot-agora', text: 'agora (prevista)' })); noResumo.title = alvo.title; }
+  return { valor: valido(v) ? v : null, medida: false, estacao: null, ms: estado.prevEm, distanciaKm: null };
+}
+
+// Temperatura agora no topo e no resumo de Hoje (temperaturaAgora).
+function renderAgora() {
+  const alvo = $('#agora');
+  const noResumo = document.getElementById('agora-hoje');
+  const t = temperaturaAgora();
+  if (!t) { alvo.replaceChildren(); return; }
+  const texto = fmt.c(t.valor) ?? '–';
+  alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: texto }));
+  if (t.medida) {
+    alvo.title = `Medido em ${t.estacao.nome}, ${fmt.n(t.distanciaKm, 0)} km, ${fmt.idade(t.ms)}`;
+    alvo.setAttribute('aria-label', `Temperatura agora ${texto}, ${alvo.title}`);
+  } else {
+    alvo.title = 'Sem medição recente perto daqui; valor previsto pelos modelos para esta hora.';
+    alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(t.valor) ?? 'sem dado'}, prevista`);
+  }
+  if (noResumo) {
+    noResumo.replaceChildren(el('b', { text: texto }), el('span', { class: 'rot-agora', text: t.medida ? 'agora' : 'agora (prevista)' }));
+    noResumo.title = alvo.title;
+  }
 }
 
 // No topo, a temperatura só aparece quando a de hoje (no resumo) não está visível.
@@ -530,9 +591,95 @@ function chegandoAgora() {
   return medicaoChuvaAgora()?.chovendo ? null : c;
 }
 
+/**
+ * Situação da chuva num dia analisado (analisarDia), com os textos da primeira tela. Fonte única da primeira
+ * tela e do widget.
+ * - Chovendo (medição agora, só hoje): quanto ainda deve cair e até quando (chuvaRestante).
+ * - Chuva chegando pelo radar (só hoje, sem chuva no local): horário previsto de início.
+ * - Senão: volume provável e horário mais provável, quando a chance é pelo menos "pouco provável".
+ * @param {object} a resultado de analisarDia
+ * @returns {{agoraChuva:object|null, chovendo:boolean, chegando:object|null, temChuva:boolean,
+ *   resposta:string|null, detalhe:string}} resposta é a frase curta ("Vai chover"); detalhe pode ser vazio
+ */
+function situacaoChuva(a) {
+  const p = estado.prev, av = a.av;
+  const hoje = a.diaIndice === 0;
+  const agoraChuva = hoje ? medicaoChuvaAgora() : null;
+  const chovendo = !!agoraChuva?.chovendo;
+  const chegando = hoje && !chovendo ? chegandoAgora() : null;
+  const resposta = chovendo ? 'Chovendo agora' : chegando ? 'Chuva chegando' : respostaChuva(av.prob);
+  const temChuva = av.prob !== null && av.prob >= REGRAS.ocorrencia.poucoProvavel;
+  let detalhe;
+  if (chovendo) {
+    // Chovendo: só a estimativa de quanto ainda cai e quando para. A origem (estação ou radar) fica no toque longo.
+    const resto = chuvaRestante();
+    detalhe = !resto ? '' : resto.fraca ? 'chuva fraca, deve passar logo'
+      : `≈ ${fmt.mm(resto.mm)} ${resto.maisDe12h ? 'até pelo menos' : 'até'} ${fmt.hora(resto.ate, p.offset)}`;
+  } else {
+    const partes = [];
+    if (chegando) partes.push(`deve começar por volta das ${fmt.horaMin(chegando.chegaMs, p.offset)}${chegando.vemDe ? `, vinda do ${chegando.vemDe}` : ''} (radar)`);
+    if (temChuva && av.volume) partes.push(`cerca de ${fmt.mm(av.volume.mediana)}${av.volumeIncerto ? ` (provável entre ${fmt.n(av.volume.min, 0)} e ${fmt.n(av.volume.max, 0)} mm)` : ''}`);
+    const jan = a.horasChuva.janela;
+    if (!chegando && temChuva && jan) partes.push(`mais provável ${fmt.hora(jan.ini, p.offset)} a ${fmt.hora(jan.fim + 3600000, p.offset)}`);
+    detalhe = partes.join(' · ');
+  }
+  return { agoraChuva, chovendo, chegando, temChuva, resposta, detalhe };
+}
+
+/**
+ * Resumo de Hoje para o widget do iPhone, montado com as mesmas funções e os mesmos formatos da primeira tela
+ * (temperaturaAgora, analisarDia, situacaoChuva, avaliarRisco, avisosOrdenados, fmt). O widget só exibe os
+ * textos prontos de "textos"; os valores numéricos vão junto apenas para cor e ícone.
+ * Contrato (FORMATO_RESUMO): docs/TECNICO.md, seção 11.
+ * @returns {object} objeto simples, serializável em JSON
+ */
+function resumoWidget() {
+  const p = estado.prev, off = p.offset;
+  const a = analisarDia(datas()[0], 0, true);
+  const av = a.av;
+  const chuva = situacaoChuva(a);
+  const risco = avaliarRisco(a, chuva.chovendo, !!chuva.chegando);
+  const temRisco = !!risco && risco.nivel !== 'baixo';
+  const avisos = avisosOrdenados();
+  const t = temperaturaAgora();
+  const rp = a.rajadaPico;
+  const alertasOk = !!estado.alertas && !estado.alertas.indisponivel;
+  // mesma regra da primeira tela: risco moderado ou alto substitui a linha de avisos do INMET
+  const linhaTemporal = temRisco ? `Risco ${risco.nivel} de temporal`
+    : !alertasOk ? 'Alertas indisponíveis'
+      : avisos.length ? `Aviso do INMET: ${avisos[0].titulo.toLowerCase()}${avisos[0].severidade ? ` (${avisos[0].severidade.toLowerCase()})` : ''}`
+        : 'Nenhum aviso do INMET';
+  return {
+    formato: FORMATO_RESUMO, versao: VERSAO, geradoMs: Date.now(), previsaoMs: estado.prevEm,
+    valores: {
+      temperatura: t?.valor ?? null, temperaturaMedida: !!t?.medida,
+      chance: av.prob, chovendo: chuva.chovendo, chegando: !!chuva.chegando,
+      temporal: temRisco ? risco.nivel : null, aviso: alertasOk && avisos.length > 0,
+      rajadaKmh: rp ? Math.round(av.rajada?.mediana ?? rp.valor) : null,
+    },
+    textos: {
+      local: estado.local.nome,
+      temperatura: fmt.c(t?.valor) ?? '–',
+      rotuloTemperatura: t?.medida ? 'agora' : 'agora (prevista)',
+      // notas no formato "Fonte · Horário" (notaFonte e notaPrevisao)
+      notaTemperatura: t?.medida ? notaFonte({ fonte: t.estacao, ms: t.ms }, off) : notaPrevisao(off),
+      notaPrevisao: notaPrevisao(off),
+      minMax: `mín ${fmt.c(a.tmin) ?? '–'} · máx ${fmt.c(a.tmax) ?? '–'}`,
+      chuva: chuva.resposta || 'Chuva sem dado',
+      chance: chuva.chovendo ? 'agora' : (fmt.pct(av.prob) ?? '–'),
+      chuvaDetalhe: chuva.detalhe,
+      temporal: linhaTemporal,
+      temporalFonte: temRisco ? (risco.aviso ? 'INMET' : 'Previsão') : null,
+      rajada: rp ? `Rajada ${Math.round(av.rajada?.mediana ?? rp.valor)} km/h${direcaoTexto(rp.dir) ? ` de ${direcaoTexto(rp.dir)}` : ''} às ${fmt.hora(rp.ms, off)}` : 'Rajada sem dado',
+      confianca: `Confiança ${av.confianca.geral}`,
+    },
+  };
+}
+
 // ------------------------------------------------------------------ render geral
 
 function renderTudo() {
+  if (MODO_WIDGET) return; // modo widget: sem telas, só o resumo (resumoWidget)
   if (!estado.prev) { renderSemPrevisao(); return; }
   for (const f of estado.faixas) f.destruir();
   estado.faixas = [];
@@ -580,22 +727,9 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const ceu = condicaoCeu(a.idx.map((i) => nuv[i]), a.idx.map((i) => (valido(dia[i]) ? Math.round(dia[i]) : null)), av.prob);
 
   // chuva: resposta curta, chance, volume e horário
-  const agoraChuva = diaIndice === 0 ? medicaoChuvaAgora() : null;
-  const chovendo = !!agoraChuva?.chovendo;
-  const chegando = diaIndice === 0 && !chovendo ? chegandoAgora() : null;
-  const resp = chovendo ? 'Chovendo agora' : chegando ? 'Chuva chegando' : respostaChuva(av.prob);
-  const resto = chovendo ? chuvaRestante() : null;
+  const { agoraChuva, chovendo, chegando, temChuva, resposta: resp, detalhe } = situacaoChuva(a);
   if (chovendo && ceu) { ceu.chuva = 'provavel'; ceu.texto = ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'Pancadas de chuva' : 'Chuva'; }
-  const temChuva = av.prob !== null && av.prob >= REGRAS.ocorrencia.poucoProvavel;
-  const detalhe = [];
-  // Chovendo: só a estimativa de quanto ainda cai e quando para. A origem (estação ou radar) fica no toque longo.
-  const textoResto = !resto ? null : resto.fraca ? 'chuva fraca, deve passar logo'
-    : `≈ ${fmt.mm(resto.mm)} ${resto.maisDe12h ? 'até pelo menos' : 'até'} ${fmt.hora(resto.ate, p.offset)}`;
   const origemAgora = chovendo ? (agoraChuva.estacao?.valor >= REGRAS.chuvaHoraMm ? `medido pela estação ${agoraChuva.estacao.fonte.nome}` : 'visto pelo radar') : '';
-  if (!chovendo && temChuva && av.volume) detalhe.push(`cerca de ${fmt.mm(av.volume.mediana)}${av.volumeIncerto ? ` (provável entre ${fmt.n(av.volume.min, 0)} e ${fmt.n(av.volume.max, 0)} mm)` : ''}`);
-  if (chegando) detalhe.unshift(`deve começar por volta das ${fmt.horaMin(chegando.chegaMs, p.offset)}${chegando.vemDe ? `, vinda do ${chegando.vemDe}` : ''} (radar)`);
-  const jan = a.horasChuva.janela;
-  if (!chovendo && !chegando && temChuva && jan) detalhe.push(`mais provável ${fmt.hora(jan.ini, p.offset)} a ${fmt.hora(jan.fim + 3600000, p.offset)}`);
 
   const botaoConf = el('button', { type: 'button', class: 'confianca', 'data-n': av.confianca.geral, onclick: () => explicarConfianca(a) },
     el('span', { class: 'nivel', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), `Confiança ${av.confianca.geral}`);
@@ -611,7 +745,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       el('span', { class: 'bloco-t chuva' }, el('small', { text: 'chuva' }), el('b', { text: chovendo ? 'agora' : (av.prob === null ? '–' : fmt.pct(av.prob)) }))),
     el('div', { class: 'resumo-chuva' + (chovendo ? ' chovendo' : '') },
       el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
-      el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
+      el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: detalhe || ' ' })));
 
   // Risco de temporal (moderado ou alto) substitui a linha de avisos do INMET: um cartão só, com a fonte,
   // e os horários de todos os avisos do local ao tocar. Sem risco, a linha de avisos aparece sozinha.

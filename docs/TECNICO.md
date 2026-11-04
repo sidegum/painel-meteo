@@ -600,7 +600,88 @@ Nenhuma chave contém a localização ou o IP do usuário.
 
 ---
 
-## 11. Procedimento de alteração
+## 11. Widget do iPhone (`widget/`)
+
+Guia de uso: `docs/WIDGET.md`.
+
+### 11.1 Arquitetura
+
+O iOS não permite widget de PWA. O widget roda no app Scriptable (`widget/painel-widget.js`) e **não calcula nada**:
+abre o próprio painel num `WebView` fora da tela, no modo widget, e só exibe os textos prontos que o painel devolve.
+Assim o widget nunca diverge do app (regra de não conflito), e qualquer ajuste de regra ou calibração vale para os dois.
+
+```
+Scriptable ── GPS (≈3 km, arredondado a 2 casas) ──► WebView: APP/?widget=1&lat=..&lon=..&nome=..
+                                                        │  js/app.js (MODO_WIDGET): atualizar({completo}) → resumoWidget()
+◄──────────── JSON (window.painelResumo) ───────────────┘
+```
+
+### 11.2 Modo widget em `js/app.js`
+
+- `lerModoWidget(location.search)`: ativa com `widget=1`. Valida `lat` e `lon` (faixas geográficas) e arredonda a 2 casas.
+  `nome` é limpo (letras, números e pontuação simples, até 40 caracteres). Sem coordenada válida, usa `CONFIG.padrao`.
+- `iniciarWidget()`: no lugar de `iniciar()`. Não usa GPS, não grava preferências, não lê cache e não registra o
+  service worker. Chama `atualizar({ forcar: true, completo: true })` com teto de `ESPERA_WIDGET_MS` (20 s) e resolve
+  `window.painelResumo` com `resumoWidget()` ou `{ formato, erro }`. A Promise nunca fica pendente.
+- `atualizar({ completo })`: com `completo`, só retorna quando todas as fontes terminam (o teto interno de 30 s continua).
+  No modo widget, El Niño não é buscado (não entra na tela Hoje).
+- `renderTudo()` retorna logo no modo widget: não há telas a desenhar.
+
+### 11.3 Funções compartilhadas pela tela Hoje e pelo widget
+
+- `temperaturaAgora()`: estação a até 25 km e 2 h; senão o valor atual do ECMWF (`MODELO_TEMP`), a mediana ponderada
+  dos modelos ou a hora cheia. Usada por `renderAgora()` e `resumoWidget()`.
+- `situacaoChuva(a)`: chuva medida agora, chuva chegando pelo radar, frase curta (`respostaChuva`) e texto de detalhe
+  (quanto ainda cai, horário de início pelo radar, volume e janela provável). Usada por `renderPrimeira()` e `resumoWidget()`.
+- `resumoWidget()`: junta `temperaturaAgora`, `analisarDia(hoje)`, `situacaoChuva`, `avaliarRisco`, `avisosOrdenados`,
+  `notaFonte`/`notaPrevisao` e `fmt`.
+
+### 11.4 Contrato do resumo (`FORMATO_RESUMO = 1`)
+
+```js
+{
+  formato: 1, versao: '1.2.21', geradoMs, previsaoMs,
+  valores: {               // só para cor e ícone no widget
+    temperatura, temperaturaMedida, chance, chovendo, chegando,
+    temporal: 'moderado' | 'alto' | null, aviso: boolean, rajadaKmh,
+  },
+  textos: {                // exibidos como estão
+    local, temperatura, rotuloTemperatura, notaTemperatura, notaPrevisao, minMax,
+    chuva, chance, chuvaDetalhe, temporal, temporalFonte, rajada, confianca,
+  },
+}
+```
+
+Em falha: `{ formato: 1, erro: 'mensagem' }`. Mudança incompatível exige subir `FORMATO_RESUMO` em `js/app.js` e
+`CONFIG.formatoResumo` no widget juntos (o teste `test/widget.test.mjs` confere que são iguais). Com formato diferente,
+o widget não exibe o resumo.
+
+### 11.5 Script do Scriptable (`widget/painel-widget.js`)
+
+- `CONFIG.appUrl`: único endereço a trocar na mudança de hospedagem.
+- `obterLocal(parametro)`: parâmetro do widget `"lat,lon"`; senão GPS com `Location.setAccuracyToThreeKilometers()` e
+  teto de 8 s, mais o nome da cidade por `Location.reverseGeocode` (4 s); senão o último local; senão nenhum (o painel usa Campo Bom).
+- `buscarResumo(local)`: `WebView.loadURL` (15 s) e `evaluateJavaScript(..., true)`, que espera `window.painelResumo`
+  por até 25 s e devolve JSON por `completion()`. Valida `formato` e `erro`.
+- Cache: último resumo válido e último local em `painel-meteo-widget.json`, na pasta local do Scriptable. Sem resumo
+  novo, mostra o guardado com a nota "Sem atualização · dados de HH:MM".
+- `montarWidget(resumo, guardado, familia)`: pequeno, médio e grande; na tela bloqueada, `accessoryRectangular`,
+  `accessoryCircular` e `accessoryInline`. Toque abre `appUrl`. `refreshAfterDate` pede nova execução em 15 min.
+- O Scriptable não tem `setTimeout`: `comLimite()` usa `Timer.schedule`.
+- `await principal()` fica no fim do arquivo, depois de todas as declarações `const`.
+
+### 11.6 Instalação
+
+`widget/index.html` (link "Widget do iPhone" no rodapé) mostra os passos e copia o código. No Safari, a cópia usa
+`ClipboardItem` com Promise para manter a permissão do toque durante o download (`widget/instalar.js`).
+
+### 11.7 Testes
+
+`test/widget.test.mjs` roda o script com uma simulação mínima da API do Scriptable: local e arredondamento, parâmetro
+fixo, cache sem conexão, resumo com erro ou formato diferente, linha de temporal e todos os tamanhos. O Scriptable
+real (WebView, GPS e agenda do iOS) só é testado no iPhone.
+
+## 12. Procedimento de alteração
 
 1. Mudar o código. Toda regra numérica nova entra em `analise.js`, com limite em `REGRAS` e teste.
 2. Subir `VERSAO` em `js/app.js` e em `sw.js`.
