@@ -126,8 +126,11 @@ O `setInterval` de 60 s reescreve o cabeçalho ("Atualizado às HH:MM", com ", d
 |---|---|
 | `local` | `{ nome, regiao, lat, lon, origem: 'gps' \| 'cidade' \| 'padrao' }`. Em `localStorage` fica a versão arredondada. |
 | `localExato` | Coordenada exata do GPS, só em memória. É usada para distâncias calculadas no aparelho. |
-| `prev` | Saída de `normalizarPrevisao` (seção 4.2). |
-| `ens` | `{ [modeloEnsemble]: { horas[], membros: { precipitation: [[...]], wind_gusts_10m: [[...]] } } }` |
+| `prevBruta` | Saída de `normalizarPrevisao` (seção 4.2), como veio da Open-Meteo. É o que vai para o cache local. |
+| `prev` | `prevBruta` calibrada por `recalibrar` (seção 3.7). Todas as telas leem daqui. |
+| `ensBruto` | Cenários como vieram da Ensemble API. |
+| `calib` | Conteúdo de `dados/calibracao.json` (seção 3.7 e CALIBRACAO.md). |
+| `ens` | `ensBruto` com o fator de rajada aplicado. Formato: `{ [modeloEnsemble]: { horas[], membros: { precipitation: [[...]], wind_gusts_10m: [[...]] } } }` |
 | `obs` | Resposta de `/v1/observacoes`: `{ fontes: [{ id, tipo, nome, lat, lon, serie[], acumulados }], status }` |
 | `alertas` | `{ avisos: [...], semArea?, indisponivel? }` |
 | `acerto` | `{ [estacao]: resposta de /v1/acerto }` |
@@ -224,34 +227,46 @@ Pontos → nível: 0 ou 1 = baixa, 2 = média, 3 = alta. A confiança **geral** 
 
 A confiança mede o quanto sistemas independentes concordam sobre a estimativa. Ela não mede se a chuva é certa: "30% com confiança alta" significa que todos os sistemas dizem cerca de 30%.
 
-### 3.7 Aprendizado local
+### 3.7 Aprendizado local e calibração com histórico
 
-O Worker guarda, todo dia, a previsão de cada modelo (de 1 a 5 dias antes) e a medição das estações. O app usa esse histórico de três formas, todas com a mesma forma de confiança crescente:
+O painel aprende em duas camadas, que se somam (método completo e números em [CALIBRACAO.md](CALIBRACAO.md)):
+
+1. **Histórico (ponto de partida).** `dados/calibracao.json`, gerado todo mês pelo GitHub Actions (`scripts/historico.mjs` + `scripts/calibrar.mjs`), compara anos de previsões passadas de cada modelo (Open-Meteo Previous Runs) com as medições da estação do INMET A884 Campo Bom. Traz o viés de máxima e mínima e o fator de rajada e vento por modelo, antecedência (1 a 5 dias) e estação do ano, mais os pesos relativos dos modelos. Cada correção só é marcada para uso (`usar: true`) se reduziu o erro fora da amostra.
+2. **Aprendizado recente (refino).** O Worker guarda, todo dia, a previsão de cada modelo (de 1 a 5 dias antes) e a medição das estações.
+
+A confiança de cada estimativa cresce com o número de dias:
 
 ```
 c = n / (n + meia)        n = dias (ou casos) verificados; c = 0,5 quando n = meia
 ```
 
-1. **Pesos dos modelos (`pesosModelos`).** Para cada modelo com 7 ou mais dias, calcula o erro relativo `r = média dos erros / erro do modelo` na chuva (MAE, piso de 0,5 mm) e na máxima (MAE, piso de 0,3 °C). O peso final é `pesoInicial × (1 + c·(r − 1))`, com `meiaPesos = 30` dias, limitado entre 0,7 e 1,3. Exige pelo menos dois modelos comparáveis.
-2. **Viés de temperatura (`correcaoTemperatura`).** O viés médio (previsto − medido) da máxima e da mínima, por modelo e antecedência, multiplicado por `c` (`meiaVies = 10`) e limitado a ±3 °C. O valor é **subtraído** da previsão.
-   - Exemplo: com 20 dias e viés de +1,5 °C, temos c = 20/30 ≈ 0,67 e a correção é −1,0 °C.
-3. **Calibração da chance (`calibrarProb`).** Para cada faixa de 10% de chance prevista, o Worker calcula com que frequência choveu de fato. A chance é deslocada em direção a essa frequência, `p + c·(freq − p)`, com `c` por faixa (`meiaCalib = 10` casos). Só vale com 30 ou mais pares no total.
+1. **Pesos dos modelos (`pesosModelos`).** Ponto de partida: `pesoInicial × (1 + c_h·(r_h − 1))`, em que `r_h` é o peso relativo do histórico (`pesosHistoricos`, erro de chuva, máxima e rajada) e `c_h = diasComuns / (diasComuns + 30)`. Depois, para cada modelo com 7 ou mais dias recentes, o erro relativo recente `r = média dos erros / erro do modelo` na chuva (piso de 0,5 mm) e na máxima (piso de 0,3 °C) ajusta esse ponto de partida: `base × (1 + c·(r − 1))`, com `meiaPesos = 30`. Tudo limitado entre 0,7 e 1,3.
+2. **Viés de temperatura (`correcaoTemperatura`).** Média ponderada entre o viés recente (n dias) e o histórico (`viesHistorico`, peso `REGRAS.calibracao.forcaHistorico = 20`): `(n·recente + 20·histórico) / (n + 20)`. Sem histórico, o histórico vale 0 com peso `meiaVies = 10` (comportamento original). Antes de 7 dias recentes, vale só o histórico. Limitado a ±3 °C e **subtraído** da previsão.
+   - Exemplo: histórico −1,5 °C (o modelo esfria demais) e 20 dias recentes com +0,5 °C: (20·0,5 + 20·(−1,5)) / 40 = −0,5 °C, ou seja, a previsão sobe 0,5 °C.
+3. **Calibração da chance (`calibrarProb`).** Para cada faixa de 10% de chance prevista, o Worker calcula com que frequência choveu de fato. A chance é deslocada em direção a essa frequência, `p + c·(freq − p)`, com `c` por faixa (`meiaCalib = 10` casos). Só vale com 30 ou mais pares no total. (A Previous Runs não guarda cenários, então essa parte só existe no aprendizado recente.)
 
-O aprendizado só é aplicado a até 50 km da estação onde foi medido (`aprendizadoLocal`, em app.js).
+**Onde é aplicado: uma fonte única.** `recalibrar()` (app.js) recalcula `estado.prev` e `estado.ens` a partir das séries brutas (`estado.prevBruta`, `estado.ensBruto`) sempre que chega previsão, cenários, calibração ou aprendizado. Ela chama:
+
+- `calibrarPrevisao(prev, { calib, aprendizado, refMs })`: corrige `temperature_2m` hora a hora (a correção de cada hora é interpolada entre a da mínima e a da máxima pela posição da hora entre a mínima e a máxima do dia daquele modelo, de modo que a máxima do gráfico é exatamente a máxima corrigida do dia), a temperatura `current` e multiplica `wind_gusts_10m` e `wind_speed_10m` pelo fator histórico. A antecedência de cada dia é a distância até o dia da busca, mínimo 1, máximo 5.
+- `calibrarEnsemble(ens, calib, refMs, offset)`: aplica o fator de rajada aos membros dos cenários, usando o modelo determinístico de mesma origem (`CALIBRACAO_ENSEMBLE`).
+
+Todas as telas (primeira tela, gráficos, Semana, comparação, pressão) leem `estado.prev` e `estado.ens`, então herdam a mesma correção e nunca se contradizem. `analisarDia` não aplica nenhuma correção própria.
+
+As duas camadas só valem a até 50 km da estação onde foram medidas (`calibracaoAplicavel` e `aprendizadoLocal`).
 
 ### 3.8 Temperatura no padrão europeu (ECMWF)
 
 Implementado em `app.js` (`MODELO_TEMP = 'ecmwf_ifs'`):
 
-- **Mínima e máxima do dia** (`analisarDia`): a do ECMWF IFS, já corrigida pelo viés aprendido (3.7, item 2). Se o IFS não tiver dado, entra a mediana ponderada dos demais modelos corrigidos. `tminFaixa` e `tmaxFaixa` guardam o intervalo entre os modelos, como informação de dispersão.
-- **Temperatura por hora** (`tempHora` e `serieTemp`): o valor horário do IFS. Se faltar, a mediana ponderada dos modelos. A série horária **não** recebe correção de viés, porque o viés é medido sobre os extremos diários.
+- **Mínima e máxima do dia** (`analisarDia`): a do ECMWF IFS, lida da série já corrigida (3.7). Se o IFS não tiver dado, entra a mediana ponderada dos demais modelos. `tminFaixa` e `tmaxFaixa` guardam o intervalo entre os modelos, como informação de dispersão.
+- **Temperatura por hora** (`tempHora` e `serieTemp`): o valor horário do IFS, já corrigido. Se faltar, a mediana ponderada dos modelos.
 - **Temperatura "agora"** (`renderAgora`), em ordem de preferência:
   1. A medição da estação mais próxima, a até 25 km e com até 2 h.
-  2. O campo `current` do IFS, em resolução de 15 min.
+  2. O campo `current` do IFS, em resolução de 15 min, corrigido.
   3. A mediana ponderada dos `current` dos modelos.
   4. A hora cheia mais recente.
 
-Chuva e vento continuam usando a combinação ponderada dos três modelos.
+Chuva continua usando a combinação ponderada dos três modelos, sem correção de volume (motivo em CALIBRACAO.md). Rajada e vento usam a mesma combinação, sobre as séries já corrigidas.
 
 ### 3.9 Demais funções
 
@@ -345,6 +360,7 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
 - `worker(rota, params)`: chamada às rotas fixas do Worker. `workerConfigurado()` valida a URL do Worker em `config.js`.
 - `buscarAlertasDireto` e `buscarObservacoesDireto`: alternativas sem Worker (INMET direto, quando o CORS permite).
 - `buscarEnso`: tenta o Worker. Se falhar, lê `dados/enso.json`, publicado no próprio Pages.
+- `buscarCalibracao`: lê `dados/calibracao.json` do próprio Pages (sem Worker) e confere `versao` e os campos básicos. É buscada com o mesmo intervalo do acerto (1 vez por dia) e guardada no cache local.
 - `buscarRadar`: lê `weather-maps.json` da RainViewer. Valida o host (`*.rainviewer.com`) e o formato dos caminhos dos quadros antes de usá-los.
 - `pixelDoPonto(lat, lon, z)`: projeção Web Mercator → tile (x, y) e pixel dentro do tile de 256 px.
 - `buscarChuvaRadar(lat, lon)`:
@@ -573,10 +589,14 @@ Nenhuma chave contém a localização ou o IP do usuário.
   - O script reaproveita `atualizarEnso` do Worker com um "KV" de arquivo.
   - Também estima o Niño 3.4 diário: a média da temperatura do mar em 18 pontos entre 5°N e 5°S, 170°W e 120°W (Open-Meteo Marine), menos a climatologia mensal de 1991 a 2020 derivada do `sstoi.indices` do CPC e interpolada entre os meios dos meses.
   - O resultado é gravado em `dados/enso.json`.
+- `.github/workflows/calibracao.yml`: no dia 5 de cada mês (e quando os scripts da calibração mudam), roda:
+  - `scripts/historico.mjs`: baixa os ZIPs anuais do INMET (BDMEP), extrai a A884 (`scripts/lib/inmet.mjs`: leitor de ZIP próprio, CSV em Latin-1, controle de qualidade, dia local) e as previsões passadas da Previous Runs API (6 modelos, 1 a 5 dias antes, blocos de 60 dias). Grava `dados/historico/A884-diario.json` (uma linha por dia, incremental).
+  - `scripts/calibrar.mjs`: calcula `dados/calibracao.json` e `docs/calibracao-resultado.md` (`scripts/lib/calibracao.mjs`). Detalhes em CALIBRACAO.md.
 - `scripts/configurar.mjs`: grava a URL do Worker em `js/config.js`.
 - `test/analise.test.mjs`: 21 testes das funções puras.
 - `worker/test/worker.test.mjs`: 24 testes dos parsers e das regras do Worker, com fixtures reais.
-- O comando `npm test` roda os dois.
+- `test/calibracao.test.mjs`: leitor de ZIP e CSV do INMET, agregação diária, viés, fator, validação fora da amostra e aplicação no app (séries, cenários, pesos).
+- O comando `npm test` roda os três.
 
 ---
 
