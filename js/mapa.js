@@ -27,6 +27,10 @@ const ESCALA_NUVEM = [[10, 230, 234, 240, 0], [40, 230, 234, 240, 0.25], [70, 22
 const ESCALA_NUVEM_CLARO = [[10, 90, 100, 115, 0], [40, 90, 100, 115, 0.2], [70, 80, 90, 105, 0.4], [100, 70, 78, 92, 0.6]];
 const ESCALA_RAJADA = [[20, 230, 200, 70, 0], [35, 230, 200, 70, 0.45], [50, 235, 140, 50, 0.6], [70, 215, 60, 50, 0.7], [90, 160, 30, 120, 0.8]];
 
+/**
+ * Cor de um valor numa escala de paradas [valor, r, g, b, alfa], por interpolação linear entre paradas vizinhas.
+ * @returns {number[]} [r, g, b, alfa]; transparente para valor ausente
+ */
 function corNa(escala, v) {
   if (v === null || v === undefined || !Number.isFinite(v)) return [0, 0, 0, 0];
   if (v <= escala[0][0]) return escala[0].slice(1);
@@ -72,6 +76,11 @@ async function grade(lat, lon) {
 }
 
 // Desenha a grade como imagem suave: interpolação bilinear entre os pontos.
+/**
+ * Rasteriza a grade n x n numa imagem 192 x 192 por interpolação bilinear. Pontos sem dado saem da conta
+ * e os pesos restantes são renormalizados; com peso total abaixo de 0,05 o pixel fica transparente.
+ * @returns {string} data URL PNG para L.imageOverlay
+ */
 function imagemGrade(g, valores, escala) {
   const n = g.n, lado = 192, cv = document.createElement('canvas');
   cv.width = lado; cv.height = lado;
@@ -106,6 +115,11 @@ const perto = (a, lat, lon) => a.poligonos.some((anel) => anel.some(([la, lo]) =
 
 // Dois dedos: arrastar move o mapa e afastar ou juntar dá zoom em volta do ponto entre os dedos.
 // Um dedo é ignorado pelo mapa e rola a página; aparece uma dica curta de usar dois dedos.
+/**
+ * Gestos de toque do mapa: um dedo rola a página (com dica), dois dedos fazem zoom contínuo
+ * (zoom inicial + log2 da razão das distâncias) e movem o mapa mantendo sob os dedos o ponto geográfico
+ * inicial. Ao soltar, o zoom assenta no meio nível mais próximo.
+ */
 function gestosDoisDedos(L, mapa, caixa) {
   const dica = el('div', { class: 'mapa-dica', 'aria-hidden': 'true', text: 'Use dois dedos para mover o mapa' });
   caixa.append(dica);

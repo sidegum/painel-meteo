@@ -163,6 +163,12 @@ function configurarLocal() {
 // ------------------------------------------------------------------ atualização
 
 let atualizando = false, atualizandoDesde = 0;
+/**
+ * Busca as fontes vencidas (CONFIG.intervalos) em paralelo e redesenha quando chegam.
+ * Retorna quando a previsão chega (ou quando todas terminam, com teto de 30 s), para o botão parar de girar.
+ * @param {{forcar?:boolean, local?:boolean, agora?:boolean}} [op] forcar/local ignoram a validade;
+ *   local também descarta dados do local anterior; agora força medições e radar.
+ */
 async function atualizar({ forcar = false, local = false, agora = false } = {}) {
   if (!estado.local || estado.apagado) return;
   if (atualizando && Date.now() - atualizandoDesde > 40000) atualizando = false; // busca presa (app suspenso no meio): recomeça
@@ -383,6 +389,14 @@ function datas() {
 }
 
 const cacheDias = new Map();
+/**
+ * Análise de um dia: resumos por modelo, cenários, avaliarDia, janela provável de chuva, pico de rajada
+ * (direção por média vetorial), mínima e máxima pelo ECMWF com correção de viés e limites da Semana.
+ * Memorizada em cacheDias pela data e pelos instantes de atualização de cada fonte.
+ * @param {string} data "AAAA-MM-DD" local
+ * @param {number} diaIndice 0 = hoje
+ * @param {boolean} desdeAgora considerar só as horas restantes
+ */
 function analisarDia(data, diaIndice, desdeAgora) {
   const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}`;
   if (cacheDias.has(chave)) return cacheDias.get(chave);
@@ -656,6 +670,13 @@ function graficoChance(iniMs, fimMs) {
 
 // Barras por hora com eixo vertical à esquerda e linha pontilhada na altura do valor da hora atual.
 // Nada de números sobre as barras: o valor exato aparece embaixo ao tocar num horário.
+/**
+ * Gráfico de barras por hora com eixo vertical rotulado, linhas-guia, linha tracejada no valor da hora atual
+ * e detalhe exato só ao tocar num horário. Alturas e marcas são percentuais da área (0 a 100).
+ * @param {object} o pontos, classe CSS, título, nome acessível, pct(ponto), medido(ponto), ticks [[pos, rótulo]],
+ *   agoraPct, texto inicial e detalhe(ponto)
+ * @returns {HTMLElement}
+ */
 function barrasComEixo({ pontos, classe, titulo, nome, pct, medido = () => false, ticks, agoraPct, inicial, detalhe }) {
   const p = estado.prev;
   const info = el('p', { class: 'chance-info', 'aria-live': 'polite', text: inicial });
