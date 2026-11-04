@@ -33,8 +33,8 @@ async function nino34Diario() {
     if (!porDia.has(d)) porDia.set(d, []);
     porDia.get(d).push(vs.reduce((s, v) => s + v, 0) / vs.length);
   });
-  const hoje = new Date().toISOString().slice(0, 10);
-  const dias = [...porDia.entries()].filter(([d, v]) => d <= hoje && v.length >= 20).map(([d, v]) => ({ data: d, sst: v.reduce((s, x) => s + x, 0) / v.length }));
+  const hoje = new Date().toISOString().slice(0, 10); // só dias completos e já passados (o dia atual traz previsão)
+  const dias = [...porDia.entries()].filter(([d, v]) => d < hoje && v.length >= 20).map(([d, v]) => ({ data: d, sst: v.reduce((s, x) => s + x, 0) / v.length }));
   if (dias.length < 7) throw new Error('poucos dias com temperatura do mar');
   return dias;
 }
