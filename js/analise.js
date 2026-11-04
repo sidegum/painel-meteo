@@ -55,6 +55,9 @@ export const REGRAS = {
   ceu: {                       // cobertura média de nuvens (%) -> condição do céu
     limpo: 20, poucasNuvens: 45, parcial: 75,
   },
+  ceuMedido: {                 // céu de agora pelo METAR: aeroporto até 50 km, boletim de até 90 min
+    distanciaKm: 50, idadeMin: 90,
+  },
   // Pressão ao nível do mar (hPa). Tendência de 3 h pelos termos do Met Office e da OMM:
   // estável < 0,1; devagar 0,1 a 1,5; normal 1,6 a 3,5; rápido 3,6 a 6,0; muito rápido acima de 6,0.
   pressao: {
