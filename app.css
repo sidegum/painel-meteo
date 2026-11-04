@@ -495,8 +495,11 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .pressao .grafico { margin-top: 8px; }
 
 /* Risco de temporal: linha clicável abaixo da rajada, só para risco moderado ou alto */
-.linha-temporal { display: flex; align-items: center; gap: 6px; width: 100%; margin: 6px 0 2px; padding: 8px 10px; border: 0; border-radius: 8px;
-  background: var(--sup2); color: var(--texto); font: inherit; font-weight: 640; font-size: 15px; text-align: left; border-left: 4px solid var(--rajada); }
+.linha-temporal { display: flex; align-items: center; gap: 6px; width: 100%; margin: 4px 0 2px; padding: 5px 8px; border: 0; border-radius: 6px;
+  background: var(--sup2); color: var(--texto); font: inherit; font-weight: 640; font-size: 13px; line-height: 1.25; text-align: left; border-left: 3px solid var(--rajada); }
 .linha-temporal.alto { border-left-color: var(--quente); background: var(--alerta-fundo); }
-.linha-temporal .raio { width: 16px; height: 16px; flex: none; fill: var(--rajada); }
+.linha-temporal .raio { width: 13px; height: 13px; flex: none; fill: var(--rajada); }
 .linha-temporal.alto .raio { fill: var(--quente); }
+
+.linha-temporal .lt-txt { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
+.linha-temporal .lt-txt small { font-size: 12px; font-weight: 500; color: var(--fraco); }
