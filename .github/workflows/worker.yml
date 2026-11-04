@@ -1,0 +1,104 @@
+name: Publicar Worker
+
+# Publica o Worker na Cloudflare sempre que o código dele muda na main, ou à mão.
+# Precisa de dois segredos do repositório: CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID.
+# Sem eles, o workflow só avisa e termina sem erro.
+# O token do INMET (opcional) fica só na Cloudflare: painel do Worker > Settings > Variables and Secrets.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - '.github/workflows/worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: worker
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Conferir segredos
+        id: seg
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Faltam os segredos CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID. Nada foi publicado."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.seg.outputs.ok == 'true'
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        if: steps.seg.outputs.ok == 'true'
+        with:
+          node-version: '22'
+
+      - name: Testar o Worker
+        if: steps.seg.outputs.ok == 'true'
+        run: node --test worker/test/
+
+      - name: Preparar KV e subdomínio workers.dev
+        if: steps.seg.outputs.ok == 'true'
+        id: cf
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID"
+          auth=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
+
+          # KV: reaproveita o namespace "painel-meteo-kv" ou cria na primeira vez.
+          kv=$(curl -sf "${auth[@]}" "$api/storage/kv/namespaces?per_page=100" | jq -r '.result[] | select(.title=="painel-meteo-kv") | .id' | head -1)
+          if [ -z "$kv" ]; then
+            kv=$(curl -sf "${auth[@]}" -X POST "$api/storage/kv/namespaces" -d '{"title":"painel-meteo-kv"}' | jq -r '.result.id')
+          fi
+          [ -n "$kv" ] && [ "$kv" != "null" ] || { echo "::error::Não consegui criar o KV. Confira as permissões do token."; exit 1; }
+          sed -i "s/COLE_AQUI_O_ID_DO_KV/$kv/" worker/wrangler.toml
+
+          # Subdomínio workers.dev: usa o da conta ou registra um na primeira vez.
+          sub=$(curl -sf "${auth[@]}" "$api/workers/subdomain" | jq -r '.result.subdomain // empty' || true)
+          if [ -z "$sub" ]; then
+            sub="painel-$(echo "$CLOUDFLARE_ACCOUNT_ID" | cut -c1-8)"
+            curl -sf "${auth[@]}" -X PUT "$api/workers/subdomain" -d "{\"subdomain\":\"$sub\"}" > /dev/null
+          fi
+          echo "url=https://painel-meteo.$sub.workers.dev" >> "$GITHUB_OUTPUT"
+
+      - name: Publicar
+        if: steps.seg.outputs.ok == 'true'
+        working-directory: worker
+        run: npx --yes wrangler@4 deploy
+
+      - name: Conferir saúde
+        if: steps.seg.outputs.ok == 'true'
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -sf "${{ steps.cf.outputs.url }}/v1/saude"; then echo; exit 0; fi
+            sleep 10
+          done
+          echo "::warning::O Worker foi publicado, mas ainda não respondeu. O endereço workers.dev pode levar alguns minutos na primeira vez."
+
+      - name: Apontar o app para o Worker
+        if: steps.seg.outputs.ok == 'true'
+        run: |
+          git checkout -- worker/wrangler.toml
+          node scripts/configurar.mjs "${{ steps.cf.outputs.url }}"
+          if git diff --quiet -- js/config.js index.html; then echo "App já aponta para o Worker."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add js/config.js index.html
+          git commit -m "Aponta o app para o Worker publicado"
+          git pull --rebase -q origin main
+          git push
