@@ -1,7 +1,7 @@
 // Testes das regras de análise. Rodar: node --test test/analise.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { avaliarDia, mediana, escolherFonte, leituraValida, fraseDoDia, pesosModelos, probLimites, isoLocalParaMs, partesLocais, direcaoTexto, arredondaCoord, condicaoCeu, respostaChuva } from '../js/analise.js';
+import { avaliarDia, correcaoTemperatura, calibrarProb, mediana, escolherFonte, leituraValida, fraseDoDia, pesosModelos, probLimites, isoLocalParaMs, partesLocais, direcaoTexto, arredondaCoord, condicaoCeu, respostaChuva } from '../js/analise.js';
 
 const r = (modelo, chuva, rajada) => ({ modelo, chuva, probMax: null, rajada: rajada === null ? null : { valor: rajada }, tmin: 15, tmax: 25 });
 
@@ -61,10 +61,32 @@ test('limites semanais sem ensemble são concordância', () => {
   assert.equal(l.rajada[1].p, 0.5);
 });
 
-test('pesos iguais até 30 dias, depois ajuste moderado', () => {
-  assert.equal(pesosModelos({ a: { dias: 10, maeChuva: 1 }, b: { dias: 10, maeChuva: 9 } }, ['a', 'b']).ajustado, false);
-  const p = pesosModelos({ a: { dias: 40, maeChuva: 1 }, b: { dias: 40, maeChuva: 9 } }, ['a', 'b']);
-  assert.ok(p.ajustado && p.pesos.a <= 1.3 && p.pesos.b >= 0.7);
+test('pesos iniciais até 7 dias, depois ajuste gradual e limitado', () => {
+  assert.equal(pesosModelos({ a: { dias: 5, maeChuva: 1 }, b: { dias: 5, maeChuva: 9 } }, ['a', 'b']).ajustado, false);
+  const pouco = pesosModelos({ a: { dias: 8, maeChuva: 1 }, b: { dias: 8, maeChuva: 1.4 } }, ['a', 'b']);
+  const muito = pesosModelos({ a: { dias: 90, maeChuva: 1 }, b: { dias: 90, maeChuva: 1.4 } }, ['a', 'b']);
+  assert.ok(pouco.ajustado && muito.ajustado);
+  assert.ok(muito.pesos.a > pouco.pesos.a && muito.pesos.b < pouco.pesos.b); // mais dias, mais confiança no ajuste
+  assert.ok(muito.pesos.a <= 1.3 && muito.pesos.b >= 0.7);
+  // temperatura também conta
+  const t = pesosModelos({ a: { dias: 60, maeTmax: 0.8 }, b: { dias: 60, maeTmax: 2.4 } }, ['a', 'b']);
+  assert.ok(t.pesos.a > t.pesos.b);
+});
+
+test('viés de temperatura aprendido, gradual e limitado', () => {
+  assert.deepEqual(correcaoTemperatura({ viesTmax: 2, amostrasTmax: 3 }), { tmax: 0, tmin: 0 }); // poucos dias: não corrige
+  const c = correcaoTemperatura({ viesTmax: 2, amostrasTmax: 10, viesTmin: -1, amostrasTmin: 30 });
+  assert.equal(c.tmax, 1); // 10 / (10 + 10) do viés
+  assert.equal(c.tmin, -0.75);
+  assert.equal(correcaoTemperatura({ viesTmax: 9, amostrasTmax: 1000 }).tmax, 3); // limite de 3 °C
+});
+
+test('calibração da chance pelo histórico', () => {
+  const bins = Array.from({ length: 10 }, () => ({ n: 0, freq: null }));
+  bins[3] = { n: 10, freq: 0.6 }; // quando disse 30-40%, choveu 60% das vezes
+  assert.equal(calibrarProb(0.35, { pares: 10, bins }), 0.35); // poucos pares: não mexe
+  assert.ok(Math.abs(calibrarProb(0.35, { pares: 40, bins }) - 0.475) < 1e-9);
+  assert.equal(calibrarProb(0.85, { pares: 40, bins }), 0.85); // faixa sem casos: não mexe
 });
 
 test('estação: descarta 9999, antiga e escolhe a mais próxima válida', () => {

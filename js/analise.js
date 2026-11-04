@@ -26,8 +26,18 @@ export const REGRAS = {
   pesoInicial: {
     ecmwf_ifs: 1.3, ecmwf_aifs025_single: 1.15, ukmo_global_deterministic_10km: 1.15,
   },
+  // Aprendizado: o painel compara o que previu com o que as estações mediram e se corrige aos poucos.
+  // Cada correção entra com peso n / (n + meia), ou seja, vale metade quando há "meia" dias de dados.
+  aprendizado: {
+    diasInicio: 7,             // começa a corrigir com 7 dias verificados
+    meiaPesos: 30,             // pesos dos modelos: confiança de 50% com 30 dias
+    meiaVies: 10,              // viés de temperatura: confiança de 50% com 10 dias
+    viesMax: 3,                // correção de temperatura limitada a ±3 °C
+    calibMinPares: 30,         // calibração da chance só com 30 pares previsão x medição
+    meiaCalib: 10,             // por faixa de chance: confiança de 50% com 10 casos
+  },
   acerto: {
-    diasMinimos: 30,           // pesos iniciais até ter 30 dias de dados locais
+    diasMinimos: 30,           // a taxa de acerto local só pesa na confiança com 30 dias
     pesoMin: 0.7, pesoMax: 1.3, // ajuste moderado depois disso
     taxaAcertoBaixa: 0.6,      // acerto de chuva abaixo disso reduz a confiança
     distanciaMaxKm: 50,        // estação de verificação mais longe que isso é ignorada
@@ -253,6 +263,9 @@ export function avaliarDia(resumos, membros, ctx = {}) {
     prob = chuvas.filter((x) => x >= R.chuvaMinimaMm).length / chuvas.length;
     fonteProb = `concordância entre ${chuvas.length} modelos (sem ensemble)`;
   }
+  // calibração aprendida com o histórico local (quando houver casos suficientes)
+  const probBruta = prob;
+  if (prob !== null && ctx.calibracao) prob = calibrarProb(prob, ctx.calibracao);
   const probModelos = mediana(resumos.map((r) => r.probMax));
 
   // volume se chover
@@ -355,7 +368,7 @@ export function avaliarDia(resumos, membros, ctx = {}) {
   }
 
   return {
-    prob, fonteProb, probModelos, volume, volumeIncerto, concordancia, mensagemChuva,
+    prob, probBruta, fonteProb, probModelos, volume, volumeIncerto, concordancia, mensagemChuva,
     rajada: rajadaFaixa, rajadaIncerta,
     confianca: { geral, chuva: chuvaNivel, rajada: rajadaNivel, motivos: [...new Set(motivos)] },
   };
@@ -456,16 +469,52 @@ export function horizonteDivergencia(prev, modelos) {
 // acertoPorModelo: { modelo: { dias, maeChuva } }. Pesos iniciais (verificação global) até 30 dias de dados
 // locais; depois, peso inicial vezes o acerto local relativo (inverso do erro), limitado.
 export function pesosModelos(acertoPorModelo, modelos) {
-  const A = REGRAS.acerto;
+  const A = REGRAS.acerto, L = REGRAS.aprendizado;
   const base = (m) => REGRAS.pesoInicial[m] ?? 1;
   const pesos = Object.fromEntries(modelos.map((m) => [m, base(m)]));
   if (!acertoPorModelo) return { pesos, ajustado: false };
-  const ok = modelos.filter((m) => acertoPorModelo[m]?.dias >= A.diasMinimos && valido(acertoPorModelo[m].maeChuva));
+  const ok = modelos.filter((m) => acertoPorModelo[m]?.dias >= L.diasInicio && (valido(acertoPorModelo[m].maeChuva) || valido(acertoPorModelo[m].maeTmax)));
   if (ok.length < 2) return { pesos, ajustado: false };
-  const inv = ok.map((m) => 1 / Math.max(acertoPorModelo[m].maeChuva, 0.5));
-  const media = inv.reduce((s, x) => s + x, 0) / inv.length;
-  ok.forEach((m, k) => { pesos[m] = Math.min(A.pesoMax, Math.max(A.pesoMin, base(m) * (inv[k] / media))); });
+  // erro relativo de cada modelo em cada medida (chuva e temperatura máxima): média dos outros / o dele
+  const rel = (campo, piso) => {
+    const xs = ok.filter((m) => valido(acertoPorModelo[m][campo]));
+    if (xs.length < 2) return null;
+    const media = xs.reduce((t, m) => t + Math.max(acertoPorModelo[m][campo], piso), 0) / xs.length;
+    return Object.fromEntries(xs.map((m) => [m, media / Math.max(acertoPorModelo[m][campo], piso)]));
+  };
+  const rc = rel('maeChuva', 0.5), rt = rel('maeTmax', 0.3);
+  ok.forEach((m) => {
+    const rs = [rc?.[m], rt?.[m]].filter(valido);
+    if (!rs.length) return;
+    const r = rs.reduce((t, x) => t + x, 0) / rs.length;
+    const c = acertoPorModelo[m].dias / (acertoPorModelo[m].dias + L.meiaPesos);
+    pesos[m] = Math.min(A.pesoMax, Math.max(A.pesoMin, base(m) * (1 + c * (r - 1))));
+  });
   return { pesos, ajustado: true };
+}
+
+// Viés de temperatura aprendido para um modelo: quanto ele erra para cima (+) ou para baixo (-),
+// já reduzido pela confiança. Subtrair da previsão do modelo.
+export function correcaoTemperatura(acertoModeloLead) {
+  const L = REGRAS.aprendizado;
+  const um = (vies, n) => {
+    if (!valido(vies) || !(n >= L.diasInicio)) return 0;
+    const c = n / (n + L.meiaVies);
+    return Math.max(-L.viesMax, Math.min(L.viesMax, vies * c));
+  };
+  const a = acertoModeloLead || {};
+  return { tmax: um(a.viesTmax, a.amostrasTmax), tmin: um(a.viesTmin, a.amostrasTmin) };
+}
+
+// Chance de chuva calibrada pelo histórico: se, quando o painel disse 30%, choveu em 50% das vezes,
+// a chance sobe na direção de 50%, na medida da quantidade de casos naquela faixa.
+export function calibrarProb(p, calib) {
+  const L = REGRAS.aprendizado;
+  if (!valido(p) || !calib || !(calib.pares >= L.calibMinPares)) return p;
+  const b = calib.bins?.[Math.min(9, Math.floor(p * 10))];
+  if (!b?.n || !valido(b.freq)) return p;
+  const c = b.n / (b.n + L.meiaCalib);
+  return Math.max(0, Math.min(1, p + c * (b.freq - p)));
 }
 
 // Consenso por hora para gráficos: mediana, mínimo e máximo entre modelos.
