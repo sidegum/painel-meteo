@@ -1,6 +1,6 @@
 # Resultado da calibração (gerado automaticamente)
 
-Gerado em 2026-11-04 20:00 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
+Gerado em 2026-11-04 20:22 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
 
 Estação: INMET A884 Campo Bom. Medições de 2021-03-01 a 2026-08-31 (2010 dias válidos).
 
@@ -223,15 +223,15 @@ Antecedências de 1 a 5 dias somadas. Usada quando o acerto sim/não sobe pelo m
 
 | Modelo | Antecedência | Acerto sim/não | Erro chuva (mm) | Erro máxima (°C) | Erro rajada (km/h) | Dias |
 |---|---|---|---|---|---|---|
-| ECMWF IFS | 1 | – | – | 1,2 | – | 384 |
-| ECMWF IFS | 3 | – | – | 1,5 | – | 380 |
-| ECMWF IFS | 5 | – | – | 1,8 | – | 376 |
-| ECMWF AIFS | 1 | – | – | 1,3 | – | 624 |
-| ECMWF AIFS | 3 | – | – | 1,3 | – | 622 |
-| ECMWF AIFS | 5 | – | – | 1,6 | – | 606 |
-| UKMO 10 km | 1 | – | – | 1,2 | 12,6 | 573 |
-| UKMO 10 km | 3 | – | – | 1,4 | 12,7 | 575 |
-| UKMO 10 km | 5 | – | – | 1,9 | 13,1 | 570 |
+| ECMWF IFS | 1 | – | – | 1,2 | – | 383 |
+| ECMWF IFS | 3 | – | – | 1,5 | – | 379 |
+| ECMWF IFS | 5 | – | – | 1,8 | – | 375 |
+| ECMWF AIFS | 1 | – | – | 1,3 | – | 623 |
+| ECMWF AIFS | 3 | – | – | 1,3 | – | 621 |
+| ECMWF AIFS | 5 | – | – | 1,6 | – | 605 |
+| UKMO 10 km | 1 | – | – | 1,2 | 12,6 | 572 |
+| UKMO 10 km | 3 | – | – | 1,4 | 12,7 | 574 |
+| UKMO 10 km | 5 | – | – | 1,9 | 13,1 | 569 |
 
 ## Pesos dos modelos do painel (560 dias comuns)
 
