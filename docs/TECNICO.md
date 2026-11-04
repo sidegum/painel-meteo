@@ -640,7 +640,7 @@ Scriptable ── GPS (≈3 km, arredondado a 2 casas) ──► WebView: APP/?w
 
 ```js
 {
-  formato: 1, versao: '1.2.23', geradoMs, previsaoMs,
+  formato: 1, versao: '1.2.24', geradoMs, previsaoMs,
   valores: {               // só para cor e ícone no widget
     temperatura, temperaturaMedida, chance, chovendo, chegando,
     temporal: 'moderado' | 'alto' | null, aviso: boolean, rajadaKmh,

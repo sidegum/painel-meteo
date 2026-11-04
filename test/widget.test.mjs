@@ -11,7 +11,7 @@ const APP = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 
 /** Resumo no formato 1, como o painel entrega em window.painelResumo (capturado do modo widget). */
 export const RESUMO = {
-  formato: 1, versao: '1.2.23', geradoMs: 1793809395885, previsaoMs: 1793809395850,
+  formato: 1, versao: '1.2.24', geradoMs: 1793809395885, previsaoMs: 1793809395850,
   valores: { temperatura: 21.3, temperaturaMedida: true, chance: 0.98, chovendo: true, chegando: false, temporal: 'alto', aviso: true, rajadaKmh: 19 },
   textos: {
     local: 'Campo Bom', temperatura: '21°', rotuloTemperatura: 'agora',
