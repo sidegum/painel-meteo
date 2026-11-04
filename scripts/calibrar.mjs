@@ -18,6 +18,10 @@ const ARQ_RELAT = new URL('../docs/calibracao-resultado.md', import.meta.url);
 
 const tabela = JSON.parse(await readFile(ARQ_HIST, 'utf8'));
 const datasObs = Object.keys(tabela.dias).filter((d) => tabela.dias[d].obs).sort();
+if (datasObs.length < PARAM.minPares) {
+  console.log(`Só ${datasObs.length} dias com medição: calibração não recalculada (o arquivo anterior continua valendo).`);
+  process.exit(0);
+}
 const modelosApp = Object.keys(MODELOS_CALIBRACAO).filter((m) => MODELOS_CALIBRACAO[m].app);
 
 const porEstacao = (aj, campo) => Object.fromEntries(ESTACOES.map((e) => [e, r(aj.porEstacao[e][campo], 3)]));
