@@ -134,10 +134,14 @@ export function criarGrafico(container, cfg) {
   }, dados, rolar);
   graficos.add(u);
 
-  // valores iniciais: horário atual ou primeiro ponto
+  // Valores iniciais da legenda: o da hora atual. Se a série ainda não tem a hora atual (por exemplo, a estação
+  // publica a leitura com atraso), mostra o último valor disponível antes dela. Gráfico só com horas passadas: o último.
   const agoraI = xs.findIndex((x) => x * 1000 > Date.now() - 3600000);
+  const iLegenda = agoraI < 0 ? xs.length - 1 : agoraI;
   cfg.series.forEach((s, k) => {
-    const v = dados[k + 1][Math.max(0, agoraI)];
+    let i = iLegenda;
+    while (i > 0 && !valido(dados[k + 1][i])) i--;
+    const v = dados[k + 1][i];
     valores[k].textContent = valido(v) ? (s.formato ? s.formato(v) : String(Math.round(v * 10) / 10)) : 'sem dado';
   });
   // começa mostrando "agora" perto da borda esquerda
