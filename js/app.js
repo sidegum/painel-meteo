@@ -602,7 +602,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       motivos.length ? el('p', { text: `Pela previsão: ${motivos.join('; ')}.` }) : null,
       el('p', { text: 'Durante o temporal, fique longe de árvores e áreas abertas. Emergência: Defesa Civil, 199.' })) },
       svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })),
-      el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal`, periodo ? el('small', { text: `Aviso do INMET ${periodo}` }) : null)));
+      el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal`, periodo ? el('small', { text: `INMET, ${periodo}` }) : null)));
   }
 
   // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
