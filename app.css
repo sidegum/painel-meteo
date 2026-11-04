@@ -78,7 +78,7 @@ button { cursor: pointer; }
 }
 .local-nome { font-weight: 660; font-stretch: 106%; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .local-nome::after { content: ''; display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-right: 2px solid var(--fraco); border-bottom: 2px solid var(--fraco); transform: translateY(-3px) rotate(45deg); }
-.local-hora { color: var(--fraco); font-size: 12px; }
+.local-hora { color: var(--fraco); font-size: 11px; line-height: 1.2; }
 .local-hora.atrasado { color: var(--quente); font-weight: 600; }
 .atualizar {
   min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 22px;
@@ -404,3 +404,12 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .troca-horas button { font-size: 12px; padding: 0 8px; }
 
 @media (min-width: 720px) { .topo { max-width: 712px; } .faixa-aviso { max-width: 680px; } }
+
+/* temperatura agora no resumo de hoje (acima do céu); no topo só quando o resumo sai da tela */
+.resumo-agora { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 2px; }
+.resumo-agora b { font-size: 44px; font-weight: 640; letter-spacing: -.03em; line-height: 1; }
+.resumo-agora .rot-agora { font-size: 13px; color: var(--fraco); font-weight: 600; }
+.agora.oculto { visibility: hidden; }
+
+.resumo-ceu .ceu-mm { margin-left: auto; font-size: 14px; color: var(--fraco); white-space: nowrap; }
+.resumo-ceu .ceu-mm b { color: var(--chuva-txt); font-size: 18px; font-weight: 680; }
