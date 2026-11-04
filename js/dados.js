@@ -276,7 +276,11 @@ export async function buscarObservacoesDireto() {
   return { geradoEm: Date.now(), direto: true, status: { inmet: { ok: true, estacoes: 1, aviso: 'sem Worker: só a última leitura da estação de Campo Bom' }, metar: { ok: false, erro: 'METAR requer o Worker (a AviationWeather não permite leitura direta pelo navegador)' } },
     fontes: [{ id: String(e.CODIGO || '').replace(/[^A-Z0-9]/gi, '').slice(0, 8), tipo: 'inmet', nome: String(e.NOME || '').slice(0, 80), lat, lon, serie: [ponto], modo: 'só a última leitura' }] };
 }
-export const buscarEnso = () => worker('enso');
+// El Niño: arquivo atualizado pelo GitHub Actions e publicado junto com o app (mesma origem, sem Worker).
+export async function buscarEnso() {
+  if (workerConfigurado()) { try { return await worker('enso'); } catch {} }
+  return buscarJson('enso-arquivo', new URL('dados/enso.json', location.href).href, { timeout: 15000, maxBytes: 3e6 });
+}
 export const buscarAcerto = (estacao) => worker('acerto', { estacao: String(estacao).replace(/[^A-Za-z0-9]/g, '').slice(0, 8) });
 
 // ---------- RainViewer ----------
@@ -289,4 +293,37 @@ export async function buscarRadar() {
     .map((q) => ({ ms: q.time * 1000, path: String(q.path) }));
   if (!quadros.length) throw new ErroFonte('rainviewer', 'formato', 'sem quadros de radar');
   return { host, quadros, gerado: valido(j.generated) ? j.generated * 1000 : null };
+}
+
+// Chuva sobre o ponto pelo radar: lê o quadro mais recente do RainViewer (zoom 7, cerca de 1,2 km por
+// pixel) e conta os pixels com eco num quadrado de 5 x 5 em volta do ponto. A coordenada usada é a
+// arredondada; o pedido só revela o quadrado de cerca de 300 km do mapa, como o próprio mapa.
+export function pixelDoPonto(lat, lon, z = 7) {
+  const n = 2 ** z, rad = (lat * Math.PI) / 180;
+  const fx = ((lon + 180) / 360) * n;
+  const fy = ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * n;
+  const x = Math.floor(fx), y = Math.floor(fy);
+  return { z, x, y, px: Math.floor((fx - x) * 256), py: Math.floor((fy - y) * 256) };
+}
+export async function buscarChuvaRadar(lat, lon) {
+  const r = await buscarRadar();
+  const q = r.quadros[r.quadros.length - 1];
+  const t = pixelDoPonto(arredondaCoord(lat), arredondaCoord(lon));
+  const url = `${r.host}${q.path}/256/${t.z}/${t.x}/${t.y}/2/0_0.png`;
+  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 10000);
+  let blob;
+  try {
+    const resp = await fetch(url, { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+    if (!resp.ok) throw new ErroFonte('rainviewer', 'http', `erro ${resp.status}`);
+    blob = await resp.blob();
+  } catch (e) { throw e instanceof ErroFonte ? e : new ErroFonte('rainviewer', 'rede', 'falha ao ler o radar'); }
+  finally { clearTimeout(to); }
+  const img = await createImageBitmap(blob);
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(256, 256) : Object.assign(document.createElement('canvas'), { width: 256, height: 256 });
+  const c = cv.getContext('2d'); c.drawImage(img, 0, 0);
+  const x0 = Math.max(0, t.px - 2), y0 = Math.max(0, t.py - 2);
+  const d = c.getImageData(x0, y0, Math.min(5, 256 - x0), Math.min(5, 256 - y0)).data;
+  let eco = 0, total = 0;
+  for (let i = 3; i < d.length; i += 4) { total++; if (d[i] > 40) eco++; }
+  return { ms: q.ms, eco, total, chuva: eco >= 3 };
 }

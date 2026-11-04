@@ -17,7 +17,8 @@ export const REGRAS = {
     { min: 60, nome: 'fortes' },
     { min: 40, nome: 'moderadas' },
   ],
-  divisaoCenarios: [0.3, 0.7], // probabilidade nesse intervalo = cenários divididos
+  divisaoCenarios: [0.3, 0.7], // probabilidade nesse intervalo = cenários divididos (só informativo)
+  difSistemas: [0.3, 0.5],     // diferença de probabilidade entre sistemas de cenários: -1 / -2 níveis
   horizonteLongoDias: 4,       // a partir do 5º dia, perde um nível de confiança
   // Só os modelos globais de melhor desempenho nas verificações publicadas (centro líder da OMM para
   // verificação, sediado no ECMWF): ECMWF IFS, ECMWF AIFS e UKMO. GFS e ICON saíram da previsão.
@@ -196,13 +197,13 @@ export function resumoModeloDia(prev, modelo, idx) {
 // Membros do ensemble: { precipitation: [[...horas], ...], wind_gusts_10m: [...] }
 export function membrosDia(ens, data, offsetSeg, aPartirMs) {
   if (!ens) return null;
-  const out = { chuva: [], rajada: [], modelos: [] };
+  const out = { chuva: [], rajada: [], modelos: [], porModelo: {} };
   for (const [modelo, e] of Object.entries(ens)) {
     const idx = indicesDoDia(e.horas, data, offsetSeg, aPartirMs);
     if (!idx.length) continue;
     let usou = false;
     for (const m of e.membros.precipitation || []) {
-      const s = soma(m, idx); if (s !== null) { out.chuva.push(s); usou = true; }
+      const s = soma(m, idx); if (s !== null) { out.chuva.push(s); (out.porModelo[modelo] ||= []).push(s); usou = true; }
     }
     for (const m of e.membros.wind_gusts_10m || []) {
       const x = maximo(idx.map((i) => m[i])); if (x !== null) { out.rajada.push(x); usou = true; }
@@ -240,7 +241,12 @@ export function avaliarDia(resumos, membros, ctx = {}) {
 
   // 1. probabilidade dos cenários
   let prob = null, fonteProb = null;
-  if (membros?.chuva?.length >= 10) {
+  const sistemas = Object.entries(membros?.porModelo || {}).filter(([, xs]) => xs.length >= 10);
+  if (sistemas.length >= 2) {
+    // média das probabilidades de cada sistema: o Met Office (18 cenários) pesa igual ao ECMWF (51)
+    prob = sistemas.reduce((t, [, xs]) => t + xs.filter((x) => x >= R.chuvaMinimaMm).length / xs.length, 0) / sistemas.length;
+    fonteProb = `${membros.chuva.length} cenários de ${sistemas.length} sistemas`;
+  } else if (membros?.chuva?.length >= 10) {
     prob = membros.chuva.filter((x) => x >= R.chuvaMinimaMm).length / membros.chuva.length;
     fonteProb = `${membros.chuva.length} cenários do ensemble`;
   } else if (chuvas.length) {
@@ -274,35 +280,49 @@ export function avaliarDia(resumos, membros, ctx = {}) {
     }
   }
 
+  // Confiança = quanto os sistemas independentes concordam sobre a estimativa (não se a chuva é certa).
+  // "30% de chance" com ECMWF e Met Office dizendo o mesmo é uma estimativa confiável.
+  // Cada motivo conta uma vez; volume diferente não rebaixa (mostramos a melhor estimativa e a faixa).
   let pontosChuva = 3;
-  if (prob === null) { pontosChuva = 1; motivos.push('sem dados de chuva suficientes'); }
-  if (concordancia !== null && concordancia < 1) {
+  const porSistema = Object.values(membros?.porModelo || {}).filter((xs) => xs.length >= 10)
+    .map((xs) => xs.filter((x) => x >= R.chuvaMinimaMm).length / xs.length);
+  if (prob === null) { pontosChuva = 0; motivos.push('sem dados de chuva suficientes'); }
+  else if (porSistema.length >= 2) {
+    const dif = maximo(porSistema) - minimo(porSistema);
+    if (dif > R.difSistemas[1]) { pontosChuva -= 2; motivos.push(`os sistemas de cenários discordam muito (${Math.round(minimo(porSistema) * 100)}% a ${Math.round(maximo(porSistema) * 100)}%)`); }
+    else if (dif > R.difSistemas[0]) { pontosChuva -= 1; motivos.push(`os sistemas de cenários diferem (${Math.round(minimo(porSistema) * 100)}% a ${Math.round(maximo(porSistema) * 100)}%)`); }
+  } else if (membros?.chuva?.length >= 10) {
+    // um só sistema: perde um nível só se os modelos determinísticos contradizem os cenários
+    if (concordancia !== null && chuvas.length >= 2) {
+      const fracDet = chuvas.filter((x) => x >= R.chuvaMinimaMm).length / chuvas.length;
+      if (Math.abs(fracDet - prob) > 0.5) { pontosChuva -= 1; motivos.push('modelos e cenários apontam em direções opostas'); }
+    }
+  } else if (concordancia !== null && concordancia < 1) {
     pontosChuva -= concordancia <= 0.6 ? 2 : 1;
-    motivos.push(`modelos discordam sobre chover (${Math.round(concordancia * 100)}% no mesmo lado)`);
-  }
-  if (concordancia === null && chuvas.length < 2) { pontosChuva -= 1; motivos.push('menos de dois modelos com dados'); }
-  if (prob !== null && prob >= R.divisaoCenarios[0] && prob <= R.divisaoCenarios[1]) {
-    pontosChuva -= 1; motivos.push('cenários divididos entre chover e não chover');
-  }
-  if (volumeIncerto) { pontosChuva -= 1; motivos.push('volume muito diferente entre modelos'); }
+    motivos.push(`modelos discordam sobre chover (${Math.round(concordancia * 100)}% no mesmo lado), sem cenários para desempatar`);
+  } else if (chuvas.length < 2) { pontosChuva -= 1; motivos.push('menos de dois modelos com dados'); }
 
-  // 3. rajadas
+  // 3. rajadas: cenários quando existem; senão, diferença entre modelos
   const rajadas = resumos.map((r) => r.rajada?.valor).filter(valido);
   let pontosRajada = 3, rajadaIncerta = false;
   const rajadaMed = mediana(resumos.map((r) => r.rajada?.valor), resumos.map((r) => pesos[r.modelo] ?? 1));
-  if (rajadas.length >= 2) {
-    rajadaIncerta = (maximo(rajadas) - minimo(rajadas)) / Math.max(rajadaMed, 10) >= R.rajadaIncertaRazao;
-    if (rajadaIncerta) { pontosRajada -= 1; motivos.push('rajadas diferentes entre modelos'); }
-    const classes = new Set(rajadas.map((x) => classeRajada(x) || 'fracas'));
-    if (classes.size > 2) { pontosRajada -= 1; motivos.push('modelos divergem na força das rajadas'); }
-  } else { pontosRajada = 1; motivos.push('rajada de um só modelo ou nenhum'); }
+  if (membros?.rajada?.length >= 10) {
+    const q1 = quantil(membros.rajada, 0.1), q9 = quantil(membros.rajada, 0.9), qm = quantil(membros.rajada, 0.5);
+    rajadaIncerta = (q9 - q1) / Math.max(qm, 15) >= R.rajadaIncertaRazao * 2;
+    if (rajadaIncerta && classeRajada(q9)) { pontosRajada -= 1; motivos.push('cenários variam muito na força das rajadas'); }
+  } else if (rajadas.length >= 2) {
+    rajadaIncerta = (maximo(rajadas) - minimo(rajadas)) / Math.max(rajadaMed, 15) >= R.rajadaIncertaRazao;
+    if (rajadaIncerta && classeRajada(maximo(rajadas))) { pontosRajada -= 1; motivos.push('rajadas diferentes entre modelos'); }
+  } else if (!rajadas.length) { pontosRajada = 1; motivos.push('sem previsão de rajada'); }
   const rajadaFaixa = membros?.rajada?.length >= 10
     ? { min: quantil(membros.rajada, 0.1), max: quantil(membros.rajada, 0.9), mediana: quantil(membros.rajada, 0.5), origem: 'cenários' }
     : rajadas.length ? { min: minimo(rajadas), max: maximo(rajadas), mediana: rajadaMed, origem: 'modelos' } : null;
 
-  // horizonte
-  if ((ctx.diaIndice ?? 0) >= R.horizonteLongoDias) {
-    pontosChuva -= 1; pontosRajada -= 1; motivos.push('previsão para mais de 4 dias');
+  // horizonte: a partir do 5º dia perde um nível; a partir do 8º, dois
+  const dia = ctx.diaIndice ?? 0;
+  if (dia >= R.horizonteLongoDias) {
+    const n = dia >= 7 ? 2 : 1;
+    pontosChuva -= n; pontosRajada -= n; motivos.push(`previsão para daqui a ${dia} dias`);
   }
 
   // 4. desempenho local recente e distância da estação
@@ -322,7 +342,9 @@ export function avaliarDia(resumos, membros, ctx = {}) {
   const nivel = (p) => NIVEIS[Math.max(0, Math.min(3, p))];
   const chuvaNivel = nivel(pontosChuva), rajadaNivel = nivel(pontosRajada);
   const ordem = { baixa: 0, 'média': 1, alta: 2 };
-  const geral = ordem[chuvaNivel] <= ordem[rajadaNivel] ? chuvaNivel : rajadaNivel;
+  // a rajada só pesa no geral quando é relevante (moderada ou mais forte)
+  const rajadaRelevante = classeRajada(rajadaFaixa?.max ?? rajadaMed);
+  const geral = rajadaRelevante && ordem[rajadaNivel] < ordem[chuvaNivel] ? rajadaNivel : chuvaNivel;
 
   // mensagem curta de chuva
   let mensagemChuva = null;

@@ -9,7 +9,8 @@ test('exemplo da especificação: ECMWF 18, ICON 15, GFS 3 -> chuva provável, v
   const av = avaliarDia([r('ecmwf_ifs', 18, 50), r('dwd_icon_global', 15, 48), r('ncep_gfs_seamless', 3, 52)], null);
   assert.equal(av.mensagemChuva, 'chuva provável, volume incerto');
   assert.equal(av.volumeIncerto, true);
-  assert.notEqual(av.confianca.chuva, 'alta');
+  // os três concordam que chove: a ocorrência é confiável; o volume vai como faixa, sem rebaixar
+  assert.equal(av.confianca.chuva, 'alta');
   assert.equal(av.volume.mediana, 15); // não é a média de 12 mm
   assert.deepEqual([av.volume.min, av.volume.max], [3, 18]);
 });
@@ -20,9 +21,21 @@ test('modelos concordantes -> confiança alta', () => {
   assert.equal(av.mensagemChuva, 'chuva provável');
 });
 
-test('discordância sobre chover reduz a confiança', () => {
+test('discordância sobre chover sem cenários reduz um nível', () => {
   const av = avaliarDia([r('ecmwf_ifs', 12, 30), r('dwd_icon_global', 0, 30), r('ncep_gfs_seamless', 0.2, 30)], null);
-  assert.equal(av.confianca.chuva, 'baixa');
+  assert.equal(av.confianca.chuva, 'média');
+});
+
+test('sistemas de cenários que concordam dão confiança alta mesmo com chance de 30%', () => {
+  const ens = (n, molhados) => [...Array(n - molhados).fill(0), ...Array(molhados).fill(4)];
+  const a = ens(51, 15), b = ens(18, 6);
+  const membros = { chuva: [...a, ...b], rajada: Array(69).fill(30), modelos: ['x', 'y'], porModelo: { x: a, y: b } };
+  const av = avaliarDia([r('ecmwf_ifs', 2, 30), r('ukmo_global_deterministic_10km', 0, 30)], membros);
+  assert.equal(Math.round(av.prob * 100), 31);
+  assert.equal(av.confianca.geral, 'alta');
+  const c = ens(51, 32);
+  const m2 = { chuva: [...a, ...c], rajada: Array(102).fill(30), modelos: ['x', 'y'], porModelo: { x: a, y: c } };
+  assert.equal(avaliarDia([r('ecmwf_ifs', 2, 30)], m2).confianca.chuva, 'média');
 });
 
 test('ensemble manda na probabilidade quando existe', () => {
@@ -30,7 +43,7 @@ test('ensemble manda na probabilidade quando existe', () => {
   const av = avaliarDia([r('ecmwf_ifs', 5, 45), r('ncep_gfs_seamless', 6, 44)], membros);
   assert.equal(Math.round(av.prob * 100), 41);
   assert.match(av.fonteProb, /51 cenários/);
-  assert.ok(av.confianca.motivos.some((m) => /divididos/.test(m)));
+  assert.ok(av.confianca.motivos.some((m) => /direções opostas/.test(m))); // os 2 modelos chovem, só 41% dos cenários
 });
 
 test('valor ausente não vira zero', () => {
@@ -108,4 +121,11 @@ test('pesos iniciais favorecem ECMWF e UKMO sem dados locais', () => {
   // acerto local ruim do ECMWF reduz o peso, sem passar do limite
   const q = pesosModelos({ ecmwf_ifs: { dias: 40, maeChuva: 9 }, ncep_gfs_seamless: { dias: 40, maeChuva: 1 } }, ['ecmwf_ifs', 'ncep_gfs_seamless']);
   assert.ok(q.ajustado && q.pesos.ecmwf_ifs >= 0.7 && q.pesos.ncep_gfs_seamless <= 1.3);
+});
+
+test('radar: pixel do ponto no quadro de zoom 7', async () => {
+  const { pixelDoPonto } = await import('../js/dados.js');
+  const t = pixelDoPonto(-29.68, -51.05);
+  assert.deepEqual([t.z, t.x, t.y], [7, 45, 75]);
+  assert.ok(t.px >= 0 && t.px < 256 && t.py >= 0 && t.py < 256);
 });

@@ -83,3 +83,14 @@ O app também atualiza ao voltar para ele, ao puxar a tela para baixo e no botã
 ## Licenças e atribuições
 
 Previsões: Open-Meteo (CC BY 4.0). Busca de cidades: GeoNames. Radar: RainViewer. Mapa: OpenStreetMap. Medições: INMET e AviationWeather (NOAA). El Niño: NOAA CPC e IRI. Bibliotecas: uPlot (MIT), Leaflet (BSD-2), Archivo (OFL-1.1).
+
+## Dados do El Niño sem Worker
+
+O workflow `.github/workflows/enso.yml` roda a cada 3 horas. Ele executa `scripts/atualizar-enso.mjs` e publica `dados/enso.json` junto com o app.
+
+O arquivo reúne:
+- NOAA CPC: índices semanais, ONI, RONI, discussão e probabilidades.
+- IRI.
+- Uma estimativa diária do Niño 3.4, feita com a temperatura do mar da Open-Meteo Marine.
+
+Para forçar uma atualização, abra Actions > Dados do El Niño > Run workflow.
