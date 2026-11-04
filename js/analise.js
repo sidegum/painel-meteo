@@ -78,6 +78,9 @@ export const REGRAS = {
     horizonteMin: 120,         // só avisa chegada nas próximas 2 h
     passoMin: 5,
     probChegando: 0.7,         // chuva chegando pelo radar: a chance do dia passa a ser no mínimo "provável"
+    probSeco: 0.1,             // radar seco no local e nada chegando: chance máxima nas horas cobertas pelo radar
+    secoMinimoMin: 30,         // janela seca mínima para valer (abaixo disso, os modelos decidem)
+    velMaxKmh: 100,            // sem movimento medido: a chuva mais próxima não chega mais rápido que isso
   },
   // Risco de temporal: só avaliado quando há chuva prevista, chegando ou ocorrendo, ou aviso do INMET.
   temporal: {
@@ -1026,6 +1029,38 @@ export function deslocamentoRadar(antigo, novo, n) {
  * @returns {number|null} minutos até a chegada (0 = já sobre o local), ou null se nada chega no horizonte
  */
 export function chegadaChuva(grade, n, px, py, desl) {
+  return percorrerRadar(grade, n, px, py, desl).chega;
+}
+
+/**
+ * Por quantos minutos o radar garante o local sem chuva, a partir do quadro mais recente.
+ * Com movimento medido: até a chegada extrapolada (ou o horizonte inteiro, se nada chega).
+ * Sem movimento (pouco eco para medir): distância até a célula com eco mais próxima, percorrida a
+ * REGRAS.radar.velMaxKmh. Com eco sobre o local, 0.
+ * @param {Float32Array} grade fração de eco por célula (n x n)
+ * @param {{dx:number, dy:number}|null} desl deslocamento em células por REGRAS.radar.intervaloMin, ou null
+ * @param {number} kmCelula tamanho da célula em km
+ * @returns {number|null} minutos (0 a REGRAS.radar.horizonteMin), ou null se a área conhecida não basta
+ */
+export function secoPeloRadar(grade, n, px, py, desl, kmCelula) {
+  const R = REGRAS.radar;
+  if (desl) {
+    const r = percorrerRadar(grade, n, px, py, desl);
+    if (r.chega !== null) return r.chega;
+    if (r.secoAte !== null && r.secoAte >= R.horizonteMin) return R.horizonteMin;
+  }
+  // sem movimento confiável (ou a trajetória saiu da grade): cota pela chuva mais próxima
+  let d2 = Infinity;
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (grade[y * n + x] >= R.ecoMin) d2 = Math.min(d2, (x - px) ** 2 + (y - py) ** 2);
+  const bordaKm = Math.min(px, py, n - 1 - px, n - 1 - py) * kmCelula; // além da grade não se sabe
+  const distKm = Math.min(Math.sqrt(d2) * kmCelula, bordaKm);
+  const min = Math.floor((distKm / R.velMaxKmh) * 60 / R.passoMin) * R.passoMin;
+  return Math.max(0, Math.min(R.horizonteMin, min));
+}
+
+// Caminha de trás para a frente pela trajetória extrapolada: o eco que estará no local daqui a t minutos
+// está hoje em (px, py) - v·t. chega = primeiro t com eco; secoAte = último t verificado sem eco.
+function percorrerRadar(grade, n, px, py, desl) {
   const R = REGRAS.radar;
   const vx = desl.dx / R.intervaloMin, vy = desl.dy / R.intervaloMin;
   const temEco = (cx, cy) => {
@@ -1038,12 +1073,14 @@ export function chegadaChuva(grade, n, px, py, desl) {
     }
     return soma / cont >= R.ecoMin;
   };
+  let secoAte = null;
   for (let t = 0; t <= R.horizonteMin; t += R.passoMin) {
     const r = temEco(px - vx * t, py - vy * t);
-    if (r === null) return null;
-    if (r) return t;
+    if (r === null) return { chega: null, secoAte };
+    if (r) return { chega: t, secoAte };
+    secoAte = t;
   }
-  return null;
+  return { chega: null, secoAte };
 }
 
 // ---------- risco de temporal ----------
