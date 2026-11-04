@@ -198,3 +198,33 @@ test('pressão nunca contradiz a chance de chuva principal', async () => {
     if (comChuva) assert.ok(!/tempo firme/i.test(l.titulo + l.texto) && l.classe !== 'firme', `${JSON.stringify(c)} ${prob}`);
   }
 });
+
+test('radar: deslocamento por correlação de blocos e chegada estimada', async () => {
+  const { deslocamentoRadar, chegadaChuva } = await import('../js/analise.js');
+  const n = 64;
+  const blob = (cx, cy) => { const g = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= 36) g[y * n + x] = 1; return g; };
+  // eco andou 5 células para leste e 2 para o sul em 60 min
+  const d = deslocamentoRadar(blob(20, 30), blob(25, 32), n);
+  assert.deepEqual([d.dx, d.dy], [5, 2]);
+  // local 20 células a leste do eco atual, na mesma linha: chega em cerca de 20 / 5 x 60 = 240 min, fora do horizonte
+  assert.equal(chegadaChuva(blob(25, 32), n, 45, 32, { dx: 5, dy: 0 }), null);
+  // local 10 células a leste: a borda (raio 6) está a 4 células, chega entre 40 e 60 min
+  const t = chegadaChuva(blob(25, 32), n, 35, 32, { dx: 5, dy: 0 });
+  assert.ok(t >= 30 && t <= 60, String(t));
+  // sobre o eco: 0 min
+  assert.equal(chegadaChuva(blob(25, 32), n, 25, 32, { dx: 5, dy: 0 }), 0);
+  // pouco eco: não mede movimento
+  assert.equal(deslocamentoRadar(new Float32Array(n * n), new Float32Array(n * n), n), null);
+});
+
+test('risco de temporal: só com chuva prevista ou aviso, por pontos', async () => {
+  const { riscoTemporal } = await import('../js/analise.js');
+  // sem chuva prevista: nunca contradiz a previsão
+  assert.equal(riscoTemporal({ prob: 0.1, cape: 3000, rajada: 90 }), null);
+  assert.equal(riscoTemporal({ prob: 0.8, cape: 300 }).nivel, 'baixo');
+  assert.equal(riscoTemporal({ prob: 0.8, cape: 1500, chuvaHora: 12 }).nivel, 'moderado');
+  assert.equal(riscoTemporal({ chegando: true, cape: 2800, rajada: 85 }).nivel, 'alto');
+  // aviso do INMET: o nível oficial prevalece, para cima e para baixo
+  assert.equal(riscoTemporal({ prob: 0.1, aviso: 'Perigo' }).nivel, 'alto');
+  assert.equal(riscoTemporal({ prob: 0.9, cape: 3000, rajada: 90, aviso: 'Perigo Potencial' }).nivel, 'moderado');
+});

@@ -1,7 +1,7 @@
 // Busca e normalização de dados. Toda resposta externa é tratada como não confiável:
 // só números e textos esperados são copiados, nada vai para innerHTML.
 import { CONFIG } from './config.js';
-import { arredondaCoord, isoLocalParaMs, valido, MODELOS } from './analise.js';
+import { arredondaCoord, isoLocalParaMs, valido, MODELOS, REGRAS, deslocamentoRadar, chegadaChuva, direcaoTexto } from './analise.js';
 
 const CACHE = 'painel-dados-v1';
 
@@ -327,6 +327,17 @@ export function pixelDoPonto(lat, lon, z = 7) {
  * (alfa > 40) num quadrado 5 x 5 em volta do ponto arredondado. Chovendo com 3 ou mais pixels.
  * @returns {Promise<{ms:number, eco:number, total:number, chuva:boolean}>}
  */
+// Lê um tile do radar como imagem (fetch sem credenciais, tempo limite de 10 s).
+async function tileRadar(url) {
+  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 10000);
+  try {
+    const resp = await fetch(url, { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+    if (!resp.ok) throw new ErroFonte('rainviewer', 'http', `erro ${resp.status}`);
+    return await createImageBitmap(await resp.blob());
+  } catch (e) { throw e instanceof ErroFonte ? e : new ErroFonte('rainviewer', 'rede', 'falha ao ler o radar'); }
+  finally { clearTimeout(to); }
+}
+
 export async function buscarChuvaRadar(lat, lon) {
   const r = await buscarRadar();
   const q = r.quadros[r.quadros.length - 1];
@@ -391,4 +402,75 @@ export async function buscarGradeMapa(lat, lon) {
     tmax5: j.map((r) => num(ext(r?.daily?.temperature_2m_max, Math.max), -40, 55)),
     tmin5: j.map((r) => num(ext(r?.daily?.temperature_2m_min, Math.min), -40, 55)),
   };
+}
+
+// ---------- Chuva chegando (nowcasting pelo radar) ----------
+
+/**
+ * Intensidade aproximada (0 a 1) de um pixel da paleta 2 da RainViewer ("Universal Blue"): ecos fracos são
+ * bege semitransparentes; depois azul do claro ao escuro; depois amarelo, laranja, vermelho e rosa.
+ * Serve só para dar textura à medida do movimento; a presença de chuva usa o alfa.
+ */
+function intensidadePixel(r, g, b, a) {
+  if (a <= 40) return 0;
+  if (a < 255) return 0.1 + 0.2 * (a / 255);
+  if (b > r) return 0.35 + 0.3 * (1 - Math.min(g, 200) / 200);
+  return 0.7 + 0.3 * (1 - Math.min(g, 224) / 224);
+}
+
+/**
+ * Mosaico 2 x 2 de tiles do radar (zoom 6, cerca de 2 km por pixel no RS) com o local dentro da metade central,
+ * reduzido a 128 x 128 células de 4 x 4 pixels: fração de pixels com eco (alfa > 40) e intensidade média.
+ * @returns {Promise<{eco:Float32Array, intensidade:Float32Array, n:number, px:number, py:number, kmCelula:number}>}
+ */
+async function gradeRadar(host, path, lat, lon) {
+  const z = 6, t = pixelDoPonto(lat, lon, z);
+  const x0 = t.px < 128 ? t.x - 1 : t.x, y0 = t.py < 128 ? t.y - 1 : t.y;
+  const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(512, 512) : Object.assign(document.createElement('canvas'), { width: 512, height: 512 });
+  const c = cv.getContext('2d');
+  const imgs = await Promise.all([[0, 0], [1, 0], [0, 1], [1, 1]].map(([i, j]) => tileRadar(`${host}${path}/256/${z}/${x0 + i}/${y0 + j}/2/0_0.png`).then((img) => [i, j, img])));
+  for (const [i, j, img] of imgs) c.drawImage(img, i * 256, j * 256);
+  const d = c.getImageData(0, 0, 512, 512).data, n = 128;
+  const eco = new Float32Array(n * n), intensidade = new Float32Array(n * n);
+  for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
+    const k = (y * 512 + x) * 4, cel = (y >> 2) * n + (x >> 2);
+    if (d[k + 3] > 40) eco[cel] += 1 / 16;
+    intensidade[cel] += intensidadePixel(d[k], d[k + 1], d[k + 2], d[k + 3]) / 16;
+  }
+  const px = ((t.x - x0) * 256 + t.px) / 4, py = ((t.y - y0) * 256 + t.py) / 4;
+  const kmCelula = (40075 * Math.cos((lat * Math.PI) / 180) / (256 * 2 ** z)) * 4;
+  return { eco, intensidade, n, px, py, kmCelula };
+}
+
+/**
+ * Chuva chegando: mede o movimento dos ecos entre o quadro mais recente e os de 30 e 60 min antes
+ * (deslocamentoRadar sobre a intensidade). As duas velocidades precisam concordar dentro de
+ * REGRAS.radar.concordanciaKmh; a de 60 min é extrapolada até o local (chegadaChuva). Coordenada arredondada.
+ * @returns {Promise<{ms:number, minutos:number|null, chegaMs:number|null, kmh:number, vemDe:string|null}|null>}
+ *   null quando o movimento não pode ser medido com segurança
+ */
+export async function buscarChegadaChuva(lat, lon) {
+  const R = REGRAS.radar;
+  const r = await buscarRadar();
+  const ult = r.quadros[r.quadros.length - 1];
+  const antes = (min) => r.quadros.find((q) => Math.abs(ult.ms - q.ms - min * 60000) <= 5 * 60000);
+  const q30 = antes(30), q60 = antes(R.intervaloMin);
+  if (!q30 || !q60) return null;
+  const la = arredondaCoord(lat), lo = arredondaCoord(lon);
+  const [g60, g30, g] = await Promise.all([q60, q30, ult].map((q) => gradeRadar(r.host, q.path, la, lo)));
+  // velocidade em células por REGRAS.radar.intervaloMin, normalizada pelo intervalo real entre os quadros
+  const vel = (ga, q) => {
+    const d = deslocamentoRadar(ga.intensidade, g.intensidade, g.n);
+    if (!d) return null;
+    const f = R.intervaloMin * 60000 / (ult.ms - q.ms);
+    return { dx: d.dx * f, dy: d.dy * f };
+  };
+  const v60 = vel(g60, q60), v30 = vel(g30, q30);
+  if (!v60 || !v30) return null;
+  const kmh = (v) => Math.hypot(v.dx, v.dy) * g.kmCelula * (60 / R.intervaloMin);
+  if (Math.hypot(v60.dx - v30.dx, v60.dy - v30.dy) * g.kmCelula * (60 / R.intervaloMin) > R.concordanciaKmh) return null;
+  const minutos = chegadaChuva(g.eco, g.n, g.px, g.py, v60);
+  // direção de onde a chuva vem (meteorológica): oposta ao movimento; o eixo y da imagem aponta para o sul
+  const vemDe = kmh(v60) >= 5 ? direcaoTexto((Math.atan2(-v60.dx, v60.dy) * 180 / Math.PI + 360) % 360) : null;
+  return { ms: ult.ms, minutos, chegaMs: minutos === null ? null : ult.ms + minutos * 60000, kmh: kmh(v60), vemDe };
 }

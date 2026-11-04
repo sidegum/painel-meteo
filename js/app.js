@@ -4,17 +4,17 @@ import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, periodoDoDia, classeRajada,
-  condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao,
+  condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
 } from './analise.js';
 import {
   buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto,
-  salvarCache, lerCache, workerConfigurado, MODELOS_ENSEMBLE, buscarAlertasDireto, buscarObservacoesDireto, buscarChuvaRadar,
+  salvarCache, lerCache, workerConfigurado, MODELOS_ENSEMBLE, buscarAlertasDireto, buscarObservacoesDireto, buscarChuvaRadar, buscarChegadaChuva,
 } from './dados.js';
 import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno } from './ui.js';
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.14';
+const VERSAO = '1.2.15';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -207,6 +207,10 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     if (agora || venceu(estado.radarAgoraEm, 5)) tarefas.push(buscarChuvaRadar(lat, lon)
       .then((r) => { estado.radarAgora = r; estado.radarAgoraEm = Date.now(); })
       .catch(() => { estado.radarAgora = null; }));
+    // Chuva chegando: movimento dos ecos do radar extrapolado até o local (mesma cadência do radar).
+    if (agora || venceu(estado.chegadaEm, 5)) tarefas.push(buscarChegadaChuva(lat, lon)
+      .then((c) => { estado.chegada = c; estado.chegadaEm = Date.now(); })
+      .catch(() => { estado.chegada = null; }));
     // El Niño: arquivo do robô do GitHub ou Worker; no botão atualizar, busca de novo também
     if (venceu(estado.ensoEm, I.enso)) tarefas.push(buscarEnso()
       .then((e) => { estado.enso = e; estado.ensoEm = Date.now(); salvarCache('enso', e); delete estado.erros.enso; })
@@ -398,7 +402,7 @@ const cacheDias = new Map();
  * @param {boolean} desdeAgora considerar só as horas restantes
  */
 function analisarDia(data, diaIndice, desdeAgora) {
-  const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}`;
+  const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}|${estado.chegadaEm}|${estado.radarAgoraEm}`;
   if (cacheDias.has(chave)) return cacheDias.get(chave);
   const p = estado.prev, mods = modelosAtivos();
   const inicio = desdeAgora ? Date.now() : -Infinity;
@@ -417,7 +421,7 @@ function analisarDia(data, diaIndice, desdeAgora) {
   });
   const membros = membrosDia(estado.ens, data, p.offset, inicio);
   const medAgora = diaIndice === 0 ? medicaoChuvaAgora() : null;
-  const av = avaliarDia(resumos, membros, { diaIndice, acerto: acertoCtx(diaIndice), pesos, medicaoAgora: medAgora, calibracao: apr?.calibracao });
+  const av = avaliarDia(resumos, membros, { diaIndice, acerto: acertoCtx(diaIndice), pesos, medicaoAgora: medAgora, calibracao: apr?.calibracao, chegando: diaIndice === 0 && !!chegandoAgora() });
   const horasChuva = horasProvaveisDeChuva(p, usar, mods);
   // rajada: pico da mediana horária entre modelos, com horário e direção
   const cons = consensoHorario(p, 'wind_gusts_10m', mods);
@@ -484,6 +488,17 @@ function medicaoChuvaAgora() {
   return { chovendo: chovendoEst || chovendoRadar, estacao: est, radar: r };
 }
 
+/**
+ * Chuva chegando pelo radar, válida agora: quadro de até 30 min, chegada ainda por vir (ou há menos de 10 min)
+ * e sem chuva medida no local (chovendo, a tela já diz "Chovendo agora").
+ * @returns {{minutos:number, chegaMs:number, kmh:number, vemDe:string|null}|null}
+ */
+function chegandoAgora() {
+  const c = estado.chegada, agora = Date.now();
+  if (!c || !valido(c.chegaMs) || !(c.minutos > 0) || agora - c.ms > 30 * 60000 || c.chegaMs < agora - 10 * 60000) return null;
+  return medicaoChuvaAgora()?.chovendo ? null : c;
+}
+
 // ------------------------------------------------------------------ render geral
 
 function renderTudo() {
@@ -536,7 +551,8 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   // chuva: resposta curta, chance, volume e horário
   const agoraChuva = diaIndice === 0 ? medicaoChuvaAgora() : null;
   const chovendo = !!agoraChuva?.chovendo;
-  const resp = chovendo ? 'Chovendo agora' : respostaChuva(av.prob);
+  const chegando = diaIndice === 0 && !chovendo ? chegandoAgora() : null;
+  const resp = chovendo ? 'Chovendo agora' : chegando ? 'Chuva chegando' : respostaChuva(av.prob);
   const resto = chovendo ? chuvaRestante() : null;
   if (chovendo && ceu) { ceu.chuva = 'provavel'; ceu.texto = ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'Pancadas de chuva' : 'Chuva'; }
   const temChuva = av.prob !== null && av.prob >= REGRAS.ocorrencia.poucoProvavel;
@@ -546,8 +562,9 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     : `≈ ${fmt.mm(resto.mm)} ${resto.maisDe12h ? 'até pelo menos' : 'até'} ${fmt.hora(resto.ate, p.offset)}`;
   const origemAgora = chovendo ? (agoraChuva.estacao?.valor >= REGRAS.chuvaHoraMm ? `medido pela estação ${agoraChuva.estacao.fonte.nome}` : 'visto pelo radar') : '';
   if (!chovendo && temChuva && av.volume) detalhe.push(`cerca de ${fmt.mm(av.volume.mediana)}${av.volumeIncerto ? ` (provável entre ${fmt.n(av.volume.min, 0)} e ${fmt.n(av.volume.max, 0)} mm)` : ''}`);
+  if (chegando) detalhe.unshift(`deve começar por volta das ${fmt.horaMin(chegando.chegaMs, p.offset)}${chegando.vemDe ? `, vinda do ${chegando.vemDe}` : ''} (radar)`);
   const jan = a.horasChuva.janela;
-  if (!chovendo && temChuva && jan) detalhe.push(`mais provável ${fmt.hora(jan.ini, p.offset)} a ${fmt.hora(jan.fim + 3600000, p.offset)}`);
+  if (!chovendo && !chegando && temChuva && jan) detalhe.push(`mais provável ${fmt.hora(jan.ini, p.offset)} a ${fmt.hora(jan.fim + 3600000, p.offset)}`);
 
   const botaoConf = el('button', { type: 'button', class: 'confianca', 'data-n': av.confianca.geral, onclick: () => explicarConfianca(a) },
     el('span', { class: 'nivel', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), `Confiança ${av.confianca.geral}`);
@@ -574,6 +591,16 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       el('span', { class: 'rot', text: 'Rajada ' }),
       rp ? el('strong', { text: `${Math.round(av.rajada?.mediana ?? rp.valor)} km/h` }) : ausente('sem dado'),
       rp ? el('span', { class: 'raj-det' }, ` de ${direcaoTexto(rp.dir) || '?'} `, setaVento(rp.dir), ` às ${fmt.hora(rp.ms, p.offset)}`) : '')));
+
+  // risco de temporal: só aparece quando é moderado ou alto
+  const risco = avaliarRisco(a, chovendo, !!chegando);
+  if (risco && risco.nivel !== 'baixo') {
+    filhos.push(el('button', { type: 'button', class: `linha-temporal ${risco.nivel}`, onclick: () => mostrarInfo(`Risco ${risco.nivel} de temporal`,
+      el('p', { text: `Por quê: ${risco.motivos.join('; ')}.` }),
+      el('p', { text: 'Temporal é chuva forte em pouco tempo, com raios e às vezes granizo e rajadas fortes. Evite áreas abertas e árvores durante a chuva e acompanhe os avisos da Defesa Civil (199).' }),
+      el('p', { class: 'nota', text: 'Como é calculado: energia para tempestades (CAPE) acima de 1000 J/kg soma 1 ponto e acima de 2500 soma 2; chuva acima de 10 mm/h soma 1 e acima de 25 soma 2; rajadas acima de 60 km/h somam 1 e acima de 80 somam 2; pressão caindo rápido soma 1. Com 2 pontos o risco é moderado e com 4, alto. Com aviso de tempestade do INMET em vigor, vale o nível do aviso: perigo potencial é moderado; perigo e grande perigo são alto. Só é avaliado quando há chuva prevista, chegando ou ocorrendo, ou aviso do INMET.' })) },
+      svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })), `Risco ${risco.nivel} de temporal`));
+  }
 
   // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
   // só as horas deste dia: hoje, da hora atual até 23h; amanhã, de 0h a 23h
@@ -652,6 +679,9 @@ function graficoChance(iniMs, fimMs) {
   const temAgora = pontos.some((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
   const agoraM = temAgora ? medicaoChuvaAgora() : null;
   for (const x of pontos) if (agoraM?.chovendo && Date.now() >= x.ms && Date.now() < x.ms + 3600000) { x.p = 1; x.origem = 'medido'; x.medido = true; }
+  // chuva chegando pelo radar: a hora da chegada e a seguinte ficam no mínimo "prováveis", como no resumo do dia
+  const ch = agoraM?.chovendo ? null : chegandoAgora();
+  if (ch) for (const x of pontos) if (x.ms + 3600000 > ch.chegaMs && x.ms < ch.chegaMs + 2 * 3600000 && !(x.p >= REGRAS.radar.probChegando)) { x.p = REGRAS.radar.probChegando; x.origem = 'radar'; }
   const validos = pontos.filter((x) => valido(x.p));
   const origem = validos.some((x) => x.origem === 'cenários') ? 'cenários do ensemble' : 'probabilidade dos modelos';
   const atual = pontos.find((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
@@ -664,7 +694,7 @@ function graficoChance(iniMs, fimMs) {
     ticks: [0, 20, 40, 60, 80, 100].map((v) => [pos(v / 100), `${v}%`]),
     agoraPct: atual && valido(atual.p) ? pos(atual.p) : null,
     inicial: agoraM?.chovendo ? 'Chovendo agora. Toque num horário para ver a chance de chuva.' : 'Toque num horário para ver a chance de chuva.',
-    detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' : 'sem dado'}${valido(x.mm) ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
+    detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' + (x.origem === 'radar' ? ' (chuva chegando pelo radar)' : '') : 'sem dado'}${valido(x.mm) ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
   });
 }
 
@@ -754,7 +784,9 @@ function iconeCeu(ceu) {
 
 function linhaAlerta() {
   if (!estado.alertas || estado.alertas.indisponivel) return el('button', { type: 'button', class: 'alerta indisponivel', onclick: () => mostrarInfo('Alertas', el('p', { text: 'A consulta aos avisos do INMET falhou. Isso não significa que não há alertas.' }), linkExterno('https://alertas2.inmet.gov.br/', 'Avisos do INMET')) }, 'Alertas indisponíveis');
-  const meus = alertasDoLocal();
+  // o mais grave primeiro, para a linha concordar com o risco de temporal (que usa o aviso mais grave)
+  const grau = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
+  const meus = alertasDoLocal().sort((x, y) => grau(y) - grau(x));
   if (!meus.length) return el('p', { class: 'nota', style: { margin: '2px 0' } }, `Nenhum aviso do INMET encontrado para este local (consulta ${fmt.idade(estado.alertasEm)}).`);
   const a = meus[0];
   return el('button', { type: 'button', class: 'alerta', onclick: () => detalheAlertas(meus) },
@@ -792,14 +824,21 @@ function detalheAlertas(lista) {
   el('p', { class: 'oficial', text: 'Siga as orientações da Defesa Civil (199) e do INMET.' }), linkExterno('https://alertas2.inmet.gov.br/', 'Abrir avisos no INMET'));
 }
 
+/**
+ * Explicação curta da confiança: o que o nível significa, os motivos objetivos que a reduziram
+ * (avaliarDia) e uma nota de que ela mede concordância entre previsões, não a chance de chover.
+ */
 function explicarConfianca(a) {
   const c = a.av.confianca;
+  const sentido = {
+    alta: 'As previsões concordam entre si. A estimativa é segura.',
+    'média': 'As previsões concordam só em parte. A estimativa pode mudar.',
+    baixa: 'As previsões discordam. Trate esta estimativa como incerta.',
+  }[c.geral];
   mostrarInfo(`Confiança ${c.geral}`,
-    el('p', {}, `Chuva: ${c.chuva}. Rajadas: ${c.rajada}. A confiança geral é a menor das duas.`),
-    el('p', {}, a.av.fonteProb ? `Chance de chuva calculada por ${a.av.fonteProb}.` : 'Sem dados para calcular a chance de chuva.'),
-    c.motivos.length ? el('ul', {}, ...c.motivos.map((m) => el('li', { text: m }))) : el('p', { text: 'Modelos e cenários concordam.' }),
-    a.pesosAjustados ? el('p', { class: 'nota', text: 'Pesos dos modelos ajustados pelo acerto local dos últimos 30 dias ou mais.' }) : el('p', { class: 'nota', text: 'Pesos iniciais pela verificação global: ECMWF IFS 1,3; ECMWF AIFS e UKMO 1,15. Depois de 30 dias de dados locais, o acerto medido aqui ajusta esses pesos.' }),
-    regraConfianca());
+    el('p', { text: sentido }),
+    c.motivos.length ? el('p', { text: `Por quê: ${c.motivos.join('; ')}.` }) : null,
+    el('p', { class: 'nota', text: 'A confiança mede se os modelos concordam, não se vai chover. A regra completa está na aba Modelos.' }));
 }
 
 function regraConfianca() {
@@ -864,14 +903,13 @@ function proximasHoras() {
   for (let i = 0; i < p.horas.length && n < 24; i++) {
     if (p.horas[i] + 3600000 <= agora) continue;
     n++;
-    const dir = direcaoMedia(mods.map((m) => p.modelos[m].vars.wind_direction_10m?.[i]));
     const altura = valido(mm[i]) ? Math.max(1, Math.sqrt(Math.min(mm[i], 10) / 10) * 34) : 0;
     lista.append(el('div', { class: 'hora' + (dia[i] === 0 ? ' noite' : ''), role: 'listitem' },
       el('div', { class: 'h', text: fmt.hora(p.horas[i], p.offset) }),
       el('div', { class: 'barra', 'aria-hidden': 'true' }, valido(mm[i]) ? el('i', { style: { height: altura + 'px' } }) : ''),
       el('div', { class: 'p', text: valido(prob[i]) ? `${Math.round(prob[i])}%` : '–' }),
       el('div', { class: 'mm', text: valido(mm[i]) ? `${fmt.n(mm[i], 1)} mm` : 'sem dado' }),
-      el('div', {}, setaVento(dir), ' ', valido(vento[i]) ? Math.round(vento[i]) : '–'),
+      el('div', { class: 'v', text: valido(vento[i]) ? `${Math.round(vento[i])}` : '–' }),
       el('div', { class: 'g', text: valido(raj[i]) ? `${Math.round(raj[i])}` : '–' })));
   }
   return secao('Próximas horas', 'Chance de chuva, volume, vento e rajada (km/h).', lista);
@@ -944,15 +982,16 @@ function instrumentos() {
 }
 
 /**
- * Análise da pressão ao nível do mar, no topo do bloco "Medições agora".
- * Medição: série da estação escolhida (INMET reduz a pressão da estação ao nível do mar; METAR informa SLP).
- * Sem série medida, as tendências usam a previsão (ECMWF, ou mediana dos modelos) e isso é dito na tela.
- * Previsão: variação nas próximas REGRAS.pressao.previsaoHoras horas e menor pressão nas próximas 24 h.
- * O sinal de chuva vem de avaliarPressao (analise.js) e não altera a chance de chuva dos modelos.
- * @param {object|null} pr leitura escolhida por escolherFonte para 'pressao'
- * @returns {HTMLElement}
+ * Dados de pressão para o painel e para o risco de temporal: leitura escolhida, séries medida e prevista
+ * (ancorada na medição), variações de 3 h e 24 h, variação prevista e menor pressão nas próximas 24 h.
+ * Ver docs/TECNICO.md, seção 3.10.
+ * @param {object|null} [pr] leitura de 'pressao' escolhida por escolherFonte (padrão: a estação mais próxima)
  */
-function painelPressao(pr) {
+function dadosPressao(pr = undefined) {
+  if (pr === undefined) {
+    const pt = pontoExato();
+    pr = escolherFonte(fontesNormalizadas(), 'pressao', pt.lat, pt.lon, Date.now(), CONFIG.idadeMaxMedicaoMin).escolhida;
+  }
   const R = REGRAS.pressao, p = estado.prev, agora = Date.now();
   const mods = modelosAtivos();
   const prevHora = (i) => {
@@ -986,6 +1025,42 @@ function painelPressao(pr) {
     if (iN < seriePrev.length && valido(seriePrev[i0].valor) && valido(seriePrev[iN].valor)) varPrev = seriePrev[iN].valor - seriePrev[i0].valor;
     for (let k = i0 + 1; k <= i0 + 24 && k < seriePrev.length; k++) if (valido(seriePrev[k].valor) && (!minimo24 || seriePrev[k].valor < minimo24.valor)) minimo24 = seriePrev[k];
   }
+  return { pr, p, agora, i0, seriePrev, serieMed, v3, v24, origemTend, atual, ancora, varPrev, minimo24 };
+}
+
+/**
+ * Risco de temporal do dia (riscoTemporal em analise.js), com os mesmos valores mostrados na tela:
+ * rajada do resumo do dia, maior chuva horária e maior CAPE (medianas entre modelos) nas horas do dia,
+ * queda de pressão de 3 h (só hoje) e aviso de tempestade do INMET válido para o local e a data.
+ */
+function avaliarRisco(a, chovendo, chegando) {
+  const p = estado.prev, mods = modelosAtivos();
+  const maxNoDia = (v) => maximo(a.idx.map((i) => consensoHorario(p, v, mods).med[i]));
+  const avisos = alertasDoLocal().filter((x) => /tempestade|granizo|vendaval/i.test(x.titulo || '')
+    && (!x.inicio || x.inicio.slice(0, 10) <= a.data) && (!x.fim || x.fim.slice(0, 10) >= a.data));
+  const ordem = ['perigo potencial', 'perigo', 'grande perigo'];
+  const aviso = avisos.map((x) => String(x.severidade || '').trim().toLowerCase()).sort((x, y) => ordem.indexOf(y) - ordem.indexOf(x))[0] || null;
+  return riscoTemporal({
+    prob: a.av.prob, chovendo, chegando,
+    cape: maxNoDia('cape'), chuvaHora: maxNoDia('precipitation'),
+    rajada: a.av.rajada?.mediana ?? a.rajadaPico?.valor ?? null,
+    d3Pressao: a.diaIndice === 0 ? dadosPressao().v3?.delta ?? null : null,
+    aviso,
+  });
+}
+
+/**
+ * Análise da pressão ao nível do mar, no topo do bloco "Medições agora".
+ * Medição: série da estação escolhida (INMET reduz a pressão da estação ao nível do mar; METAR informa SLP).
+ * Sem série medida, as tendências usam a previsão (ECMWF, ou mediana dos modelos) e isso é dito na tela.
+ * Previsão: variação nas próximas REGRAS.pressao.previsaoHoras horas e menor pressão nas próximas 24 h.
+ * O sinal de chuva vem de avaliarPressao (analise.js) e não altera a chance de chuva dos modelos.
+ * @param {object|null} pr leitura escolhida por escolherFonte para 'pressao'
+ * @returns {HTMLElement}
+ */
+function painelPressao(pr) {
+  const R = REGRAS.pressao;
+  const { p, agora, i0, seriePrev, serieMed, v3, v24, origemTend, atual, ancora, varPrev, minimo24 } = dadosPressao(pr);
   const cls = classeTendenciaPressao(v3?.delta);
   const av = avaliarPressao({ atual, d3: v3?.delta, d24: v24?.delta, prev: varPrev });
   const caixa = el('div', { class: 'pressao' });

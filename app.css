@@ -153,7 +153,8 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .resumo { padding: 6px 0 10px; }
 .resumo-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 4px; }
 .resumo-quando { margin: 0; font-size: 13px; color: var(--fraco); min-width: 0; }
-.resumo-topo .confianca { min-height: 32px; font-size: 12px; padding: 0 10px; gap: 6px; white-space: nowrap; flex: none; border-width: 1px; }
+.resumo-topo .confianca .nivel i { width: 5px; height: 11px; }
+.resumo-topo .confianca { min-height: 28px; font-size: 11px; padding: 0 9px; gap: 5px; white-space: nowrap; flex: none; border-width: 1px; }
 .resumo-ceu { display: flex; align-items: center; gap: 10px; }
 .icone-ceu { width: 36px; height: 36px; flex: none; }
 .icone-ceu .tr { fill: none; stroke: var(--texto); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
@@ -163,7 +164,7 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .resumo-temp { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 10px 0 8px; }
 .bloco-t { display: flex; flex-direction: column; }
 .bloco-t small { font-size: 12px; color: var(--fraco); font-weight: 560; }
-.bloco-t b { font-size: 29px; line-height: 1.05; font-weight: 640; letter-spacing: -.02em; }
+.bloco-t b { font-size: 24px; line-height: 1.05; font-weight: 640; letter-spacing: -.02em; }
 .bloco-t.chuva b { color: var(--chuva-txt); }
 .resumo-chuva { display: grid; grid-template-columns: 1fr; gap: 2px; }
 .resumo-chuva strong { font-size: 16px; font-weight: 680; }
@@ -430,7 +431,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 
 /* temperatura agora no resumo de hoje (acima do céu); no topo só quando o resumo sai da tela */
 .resumo-agora { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 2px; }
-.resumo-agora b { font-size: 44px; font-weight: 640; letter-spacing: -.03em; line-height: 1; }
+.resumo-agora b { font-size: 40px; font-weight: 640; letter-spacing: -.03em; line-height: 1; }
 .resumo-agora .rot-agora { font-size: 13px; color: var(--fraco); font-weight: 600; }
 .agora.oculto { visibility: hidden; }
 
@@ -492,3 +493,10 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .pr-lista dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 .pr-sinal { margin: 8px 0 4px; font-size: 15px; line-height: 1.35; }
 .pressao .grafico { margin-top: 8px; }
+
+/* Risco de temporal: linha clicável abaixo da rajada, só para risco moderado ou alto */
+.linha-temporal { display: flex; align-items: center; gap: 6px; width: 100%; margin: 6px 0 2px; padding: 8px 10px; border: 0; border-radius: 8px;
+  background: var(--sup2); color: var(--texto); font: inherit; font-weight: 640; font-size: 15px; text-align: left; border-left: 4px solid var(--rajada); }
+.linha-temporal.alto { border-left-color: var(--quente); background: var(--alerta-fundo); }
+.linha-temporal .raio { width: 16px; height: 16px; flex: none; fill: var(--rajada); }
+.linha-temporal.alto .raio { fill: var(--quente); }
