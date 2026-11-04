@@ -188,9 +188,11 @@ export function dataLocal(msFimHora, offsetH = -3) {
 /**
  * Agrega as horas em dias locais com o mesmo critério do Worker (obsDoDia): o dia só conta com dados
  * suficientes, para não comparar previsão de 24 h com medição de meio dia.
+ * @param {{minHoras?: number}} [op] mínimo de leituras para máxima, mínima, rajada e vento (20 no INMET; o METAR,
+ *   que pode ter várias leituras por hora, conta horas distintas e usa 18)
  * @returns {Map<string, {chuva: ?number, tmax: ?number, tmin: ?number, rajada: ?number, vento: ?number, horas: number}>}
  */
-export function diasLocais(horas, offsetH = -3) {
+export function diasLocais(horas, offsetH = -3, { minHoras = 20 } = {}) {
   const grupos = new Map();
   for (const h of horas) {
     const d = dataLocal(h.ms, offsetH);
@@ -199,17 +201,55 @@ export function diasLocais(horas, offsetH = -3) {
   }
   const out = new Map();
   for (const [d, hs] of grupos) {
-    const v = (k) => hs.map((h) => h[k]).filter((x) => x !== null && x !== undefined);
-    const t = v('temp'), tx = v('tmax'), tn = v('tmin'), c = v('chuva'), r = v('rajada'), w = v('vento');
+    const v = (k) => hs.filter((h) => h[k] !== null && h[k] !== undefined);
+    const vals = (k) => v(k).map((h) => h[k]);
+    const horasDistintas = (k) => new Set(v(k).map((h) => Math.floor(h.ms / 3600000))).size;
+    const ok = (k) => horasDistintas(k) >= minHoras;
+    const c = vals('chuva');
     // máxima e mínima pelas colunas "na hora anterior" (pegam o extremo entre leituras); sem elas, a instantânea
-    const tmaxs = tx.length >= 20 ? tx : t, tmins = tn.length >= 20 ? tn : t;
+    const kMax = ok('tmax') ? 'tmax' : 'temp', kMin = ok('tmin') ? 'tmin' : 'temp';
     out.set(d, {
-      horas: hs.length,
+      horas: new Set(hs.map((h) => Math.floor(h.ms / 3600000))).size,
       chuva: c.length >= 22 ? Math.round(c.reduce((s, x) => s + x, 0) * 10) / 10 : null,
-      tmax: tmaxs.length >= 20 ? Math.max(...tmaxs) : null,
-      tmin: tmins.length >= 20 ? Math.min(...tmins) : null,
-      rajada: r.length >= 20 ? Math.max(...r) : null,
-      vento: w.length >= 20 ? Math.max(...w) : null,
+      tmax: ok(kMax) ? Math.max(...vals(kMax)) : null,
+      tmin: ok(kMin) ? Math.min(...vals(kMin)) : null,
+      rajada: ok('rajada') ? Math.max(...vals('rajada')) : null,
+      vento: ok('vento') ? Math.max(...vals('vento')) : null,
+    });
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ METAR (arquivo da IEM)
+
+/**
+ * Interpreta o CSV do serviço asos.py da Iowa Environmental Mesonet (format=onlycomma, missing=M):
+ *   station,valid,tmpf,sknt,gust
+ *   SBCO,2025-01-01 00:00,77.00,8.00,M
+ * `valid` em UTC. Converte °F → °C e nós → km/h. A rajada do dia, no METAR, só existe quando o vento
+ * oscila mais de 10 nós; nas outras horas vale o vento médio, como no Worker (obsDoDia).
+ * @param {string} texto
+ * @returns {{ms: number, temp: ?number, tmax: null, tmin: null, chuva: null, rajada: ?number, vento: ?number}[]}
+ */
+export function lerCsvIem(texto) {
+  const linhas = texto.split(/\r?\n/).filter((l) => l && !l.startsWith('#'));
+  if (!linhas.length) return [];
+  const cab = linhas[0].split(',').map((c) => c.trim().toLowerCase());
+  const i = (k) => cab.indexOf(k);
+  const iv = i('valid'), it = i('tmpf'), iw = i('sknt'), ig = i('gust');
+  if (iv < 0) throw new Error('CSV da IEM sem coluna valid');
+  const n = (s) => { const x = Number(s); return s === undefined || s === 'M' || s === '' || !Number.isFinite(x) ? null : x; };
+  const out = [];
+  for (const l of linhas.slice(1)) {
+    const c = l.split(',');
+    const m = String(c[iv] || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+    if (!m) continue;
+    const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    const f = n(c[it]), w = n(c[iw]), g = n(c[ig]);
+    const kmh = (x) => (x === null ? null : Math.round(x * 1.852 * 10) / 10);
+    out.push({
+      ms, temp: f === null ? null : Math.round(((f - 32) * 5) / 9 * 10) / 10, tmax: null, tmin: null, chuva: null,
+      vento: kmh(w), rajada: kmh(g ?? w),
     });
   }
   return out;

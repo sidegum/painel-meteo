@@ -1,6 +1,6 @@
 # Resultado da calibração (gerado automaticamente)
 
-Gerado em 2026-11-04 15:39 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
+Gerado em 2026-11-04 15:46 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
 
 Estação: INMET A884 Campo Bom. Medições de 2021-03-01 a 2026-08-31 (2010 dias válidos).
 
@@ -31,11 +31,33 @@ Todos os números de "depois" são **fora da amostra**: cada mês foi corrigido 
 
 | Antecedência | Antes | Depois | Viés antes | Viés depois | Dias |
 |---|---|---|---|---|---|
-| 1 dia(s) | 25,7 | 17,5 | 23,7 | 8,6 | 459 |
-| 2 dia(s) | 11,3 | 5,9 | 9,0 | 0,1 | 466 |
-| 3 dia(s) | 27,2 | 21,3 | 24,6 | 11,5 | 451 |
-| 4 dia(s) | 11,0 | 6,4 | 8,2 | 0,1 | 446 |
-| 5 dia(s) | 25,4 | 19,4 | 22,3 | 8,7 | 398 |
+| 1 dia(s) | 25,7 | 25,7 | 23,7 | 23,7 | 459 |
+| 2 dia(s) | 11,3 | 11,3 | 9,0 | 9,0 | 466 |
+| 3 dia(s) | 27,2 | 27,2 | 24,6 | 24,6 | 451 |
+| 4 dia(s) | 11,0 | 11,0 | 8,2 | 8,2 | 446 |
+| 5 dia(s) | 25,4 | 25,4 | 22,3 | 22,3 | 398 |
+
+## Placar de acerto da véspera
+
+Chuva: consenso dos modelos do painel (1 mm ou mais). Máxima e mínima: ECMWF IFS corrigido, acerto = até ±2 °C. Rajada: mediana corrigida, acerto = até ±10 km/h.
+
+| Período | Chuva | Máxima | Mínima | Rajada |
+|---|---|---|---|---|
+| últimos 30 dias (2026-08-01 a 2026-08-30) | 67% | 73% | 87% | 67% |
+| todo o período (2025-10-16 a 2026-08-30, 257 dias) | 76% | 82% | 93% | 35% |
+
+## Rajada de curto prazo (Historical Forecast) e coerência entre antecedências
+
+Fator medido ÷ previsto. "Varia entre antecedências" = maior ÷ menor fator anual de 1 a 5 dias na Previous Runs.
+
+| Modelo | Fator curto prazo | Erro antes | Erro depois | Dias | Fator 1 a 5 dias | Varia entre antecedências | Em uso no painel |
+|---|---|---|---|---|---|---|---|
+| ECMWF IFS | – | – | – | – | – | – | não |
+| ECMWF AIFS | – | – | – | – | – | – | não |
+| UKMO 10 km | – | – | – | – | 0,50 / 0,71 / 0,50 / 0,73 / 0,50 | 1,46× | não |
+| ECMWF IFS 0,25° | – | – | – | – | – | – | não |
+| GFS | – | – | – | – | 0,85 / 0,84 / 0,84 / 0,82 / 0,87 | 1,05× | por antecedência |
+| ICON | – | – | – | – | 0,69 / 0,69 / 0,68 / 0,70 / 0,71 | 1,04× | por antecedência |
 
 ## Viés de cada modelo por estação do ano (antecedência de 1 dia)
 
@@ -51,7 +73,7 @@ Temperatura: previsto − medido, em °C (positivo = o modelo esquenta demais). 
 | ECMWF AIFS | vento | 0,77 | 0,74 | 0,77 | 0,73 | sim |
 | UKMO 10 km | máxima | -2,0 | -2,1 | -1,6 | -1,9 | sim |
 | UKMO 10 km | mínima | -0,2 | -0,3 | 0,1 | -0,4 | sim |
-| UKMO 10 km | rajada | 0,63 | 0,65 | 0,50 | 0,61 | sim |
+| UKMO 10 km | rajada | 0,63 | 0,65 | 0,50 | 0,61 | não |
 | UKMO 10 km | vento | 0,57 | 0,59 | 0,67 | 0,60 | sim |
 | ECMWF IFS 0,25° | máxima | -2,6 | -1,7 | -1,0 | -2,1 | sim |
 | ECMWF IFS 0,25° | mínima | -0,3 | -0,0 | 0,1 | -0,1 | não |

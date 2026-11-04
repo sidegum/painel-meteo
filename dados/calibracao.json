@@ -1,6 +1,6 @@
 {
  "versao": 1,
- "geradoEm": "2026-11-04T15:39:27.682Z",
+ "geradoEm": "2026-11-04T15:46:15.713Z",
  "estacao": {
   "id": "A884",
   "nome": "Campo Bom",
@@ -151,41 +151,122 @@
   "rajadaMediana": {
    "1": {
     "n": 459,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
     "maeAntes": 25.69,
-    "maeDepois": 17.53,
+    "maeDepois": 25.69,
     "viesAntes": 23.72,
-    "viesDepois": 8.55
+    "viesDepois": 23.72
    },
    "2": {
     "n": 466,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
     "maeAntes": 11.26,
-    "maeDepois": 5.87,
+    "maeDepois": 11.26,
     "viesAntes": 8.99,
-    "viesDepois": 0.11
+    "viesDepois": 8.99
    },
    "3": {
     "n": 451,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
     "maeAntes": 27.23,
-    "maeDepois": 21.28,
+    "maeDepois": 27.23,
     "viesAntes": 24.55,
-    "viesDepois": 11.47
+    "viesDepois": 24.55
    },
    "4": {
     "n": 446,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
     "maeAntes": 10.96,
-    "maeDepois": 6.41,
+    "maeDepois": 10.96,
     "viesAntes": 8.22,
-    "viesDepois": 0.09
+    "viesDepois": 8.22
    },
    "5": {
     "n": 398,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
     "maeAntes": 25.37,
-    "maeDepois": 19.41,
+    "maeDepois": 25.37,
     "viesAntes": 22.27,
-    "viesDepois": 8.68
+    "viesDepois": 22.27
    }
   }
  },
+ "placar": {
+  "antecedencia": 1,
+  "limites": {
+   "tempC": 2,
+   "rajadaKmh": 10,
+   "dias": 30
+  },
+  "fonte": "INMET A884",
+  "ultimos": {
+   "ini": "2026-08-01",
+   "fim": "2026-08-30",
+   "dias": 30,
+   "chuva": {
+    "n": 30,
+    "acertos": 20,
+    "pct": 0.667
+   },
+   "tmax": {
+    "n": 30,
+    "acertos": 22,
+    "pct": 0.733,
+    "erroMedio": 1.71
+   },
+   "tmin": {
+    "n": 30,
+    "acertos": 26,
+    "pct": 0.867,
+    "erroMedio": 0.99
+   },
+   "rajada": {
+    "n": 30,
+    "acertos": 20,
+    "pct": 0.667,
+    "erroMedio": 7.15
+   }
+  },
+  "completo": {
+   "ini": "2025-10-16",
+   "fim": "2026-08-30",
+   "dias": 257,
+   "chuva": {
+    "n": 257,
+    "acertos": 195,
+    "pct": 0.759
+   },
+   "tmax": {
+    "n": 242,
+    "acertos": 199,
+    "pct": 0.822,
+    "erroMedio": 1.2
+   },
+   "tmin": {
+    "n": 242,
+    "acertos": 224,
+    "pct": 0.926,
+    "erroMedio": 0.92
+   },
+   "rajada": {
+    "n": 237,
+    "acertos": 82,
+    "pct": 0.346,
+    "erroMedio": 13.53
+   }
+  }
+ },
+ "outras": {},
  "modelos": {
   "ecmwf_ifs": {
    "nome": "ECMWF IFS",
@@ -563,7 +644,9 @@
      "viesFrequencia": 1.547,
      "csi": 0.447
     }
-   }
+   },
+   "rajadaCoerencia": null,
+   "ventoCoerencia": 1.049
   },
   "ecmwf_aifs025_single": {
    "nome": "ECMWF AIFS",
@@ -941,7 +1024,9 @@
      "viesFrequencia": 2.18,
      "csi": 0.426
     }
-   }
+   },
+   "rajadaCoerencia": null,
+   "ventoCoerencia": 1.036
   },
   "ukmo_global_deterministic_10km": {
    "nome": "UKMO 10 km",
@@ -1152,7 +1237,7 @@
    },
    "rajada": {
     "1": {
-     "usar": true,
+     "usar": false,
      "n": 459,
      "fatorAnual": 0.5,
      "fator": {
@@ -1171,10 +1256,11 @@
      "maeDepois": 17.53,
      "viesAntes": 23.72,
      "viesDepois": 8.55,
-     "ganho": 0.317
+     "ganho": 0.317,
+     "motivo": "fator varia 1.46× entre antecedências"
     },
     "2": {
-     "usar": true,
+     "usar": false,
      "n": 466,
      "fatorAnual": 0.71,
      "fator": {
@@ -1193,10 +1279,11 @@
      "maeDepois": 5.87,
      "viesAntes": 8.99,
      "viesDepois": 0.11,
-     "ganho": 0.479
+     "ganho": 0.479,
+     "motivo": "fator varia 1.46× entre antecedências"
     },
     "3": {
-     "usar": true,
+     "usar": false,
      "n": 451,
      "fatorAnual": 0.5,
      "fator": {
@@ -1215,10 +1302,11 @@
      "maeDepois": 21.28,
      "viesAntes": 24.55,
      "viesDepois": 11.47,
-     "ganho": 0.218
+     "ganho": 0.218,
+     "motivo": "fator varia 1.46× entre antecedências"
     },
     "4": {
-     "usar": true,
+     "usar": false,
      "n": 446,
      "fatorAnual": 0.73,
      "fator": {
@@ -1237,10 +1325,11 @@
      "maeDepois": 6.41,
      "viesAntes": 8.22,
      "viesDepois": 0.09,
-     "ganho": 0.416
+     "ganho": 0.416,
+     "motivo": "fator varia 1.46× entre antecedências"
     },
     "5": {
-     "usar": true,
+     "usar": false,
      "n": 398,
      "fatorAnual": 0.501,
      "fator": {
@@ -1259,7 +1348,8 @@
      "maeDepois": 19.41,
      "viesAntes": 22.27,
      "viesDepois": 8.68,
-     "ganho": 0.235
+     "ganho": 0.235,
+     "motivo": "fator varia 1.46× entre antecedências"
     }
    },
    "vento": {
@@ -1430,7 +1520,9 @@
      "viesFrequencia": 1.48,
      "csi": 0.445
     }
-   }
+   },
+   "rajadaCoerencia": 1.46,
+   "ventoCoerencia": 1.051
   },
   "ecmwf_ifs025": {
    "nome": "ECMWF IFS 0,25°",
@@ -1808,7 +1900,9 @@
      "viesFrequencia": 1.357,
      "csi": 0.501
     }
-   }
+   },
+   "rajadaCoerencia": null,
+   "ventoCoerencia": 1.026
   },
   "ncep_gfs_seamless": {
    "nome": "GFS",
@@ -2297,7 +2391,9 @@
      "viesFrequencia": 1.043,
      "csi": 0.48
     }
-   }
+   },
+   "rajadaCoerencia": 1.055,
+   "ventoCoerencia": 1.073
   },
   "dwd_icon_global": {
    "nome": "ICON",
@@ -2786,7 +2882,9 @@
      "viesFrequencia": 1.299,
      "csi": 0.5
     }
-   }
+   },
+   "rajadaCoerencia": 1.038,
+   "ventoCoerencia": 1.054
   }
  }
 }

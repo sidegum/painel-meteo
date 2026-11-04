@@ -197,3 +197,22 @@ test('pesos: histórico ajusta o ponto de partida dentro dos limites', () => {
   assert.equal(com.historico, true);
   assert.ok(Object.values(com.pesos).every((w) => w >= 0.7 && w <= 1.3));
 });
+
+test('METAR da IEM: °F → °C, nós → km/h, rajada só quando informada', async () => {
+  const { lerCsvIem, diasLocais: dias } = await import('../scripts/lib/inmet.mjs');
+  const csv = 'station,valid,tmpf,sknt,gust\nSBCO,2025-01-01 03:00,68.00,10.00,M\nSBCO,2025-01-01 04:00,M,5.00,25.00\n';
+  const h = lerCsvIem(csv);
+  assert.equal(h.length, 2);
+  assert.equal(h[0].temp, 20);
+  assert.equal(h[0].vento, 18.5);
+  assert.equal(h[0].rajada, 18.5);   // sem rajada: vale o vento médio
+  assert.equal(h[1].rajada, 46.3);
+  assert.equal(h[1].temp, null);
+  // 18 horas distintas bastam no METAR; leituras especiais na mesma hora não contam duas vezes
+  const muitas = Array.from({ length: 18 }, (_, k) => ({ ms: Date.UTC(2025, 0, 2, 3 + k), temp: 20 + k / 2, chuva: null, rajada: 20, vento: 10 }));
+  muitas.push({ ...muitas[0], ms: muitas[0].ms + 1800000 });
+  const d = dias(muitas, -3, { minHoras: 18 }).get('2025-01-02');
+  assert.equal(d.horas, 18);
+  assert.equal(d.tmax, 28.5);
+  assert.equal(d.chuva, null);
+});
