@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.17';
+const VERSAO = '1.2.18';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -582,7 +582,12 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
       el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
 
-  const filhos = [resumo, linhaAlerta()];
+  // Risco de temporal (moderado ou alto) substitui a linha de avisos do INMET: um cartão só, com a fonte,
+  // e os horários de todos os avisos do local ao tocar. Sem risco, a linha de avisos aparece sozinha.
+  const risco = avaliarRisco(a, chovendo, !!chegando);
+  const temRisco = risco && risco.nivel !== 'baixo';
+  const filhos = [resumo];
+  filhos.push(temRisco ? cartaoTemporal(risco) : linhaAlerta());
 
   // rajada
   const rp = a.rajadaPico;
@@ -592,18 +597,6 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       rp ? el('strong', { text: `${Math.round(av.rajada?.mediana ?? rp.valor)} km/h` }) : ausente('sem dado'),
       rp ? el('span', { class: 'raj-det' }, ` de ${direcaoTexto(rp.dir) || '?'} `, setaVento(rp.dir), ` às ${fmt.hora(rp.ms, p.offset)}`) : '')));
 
-  // risco de temporal: só aparece quando é moderado ou alto
-  const risco = avaliarRisco(a, chovendo, !!chegando);
-  if (risco && risco.nivel !== 'baixo') {
-    const periodo = risco.aviso ? periodoAviso(risco.aviso) : null;
-    const motivos = risco.motivos.filter((m) => !/aviso de tempestade do INMET/.test(m));
-    filhos.push(el('button', { type: 'button', class: `linha-temporal ${risco.nivel}`, onclick: () => mostrarInfo(`Risco ${risco.nivel} de temporal`,
-      risco.aviso ? el('p', {}, el('b', { text: `Aviso do INMET${periodo ? ` ${periodo}` : ''}.` }), ` ${risco.aviso.titulo} (${String(risco.aviso.severidade || '').toLowerCase()}).`) : null,
-      motivos.length ? el('p', { text: `Pela previsão: ${motivos.join('; ')}.` }) : null,
-      el('p', { text: 'Durante o temporal, fique longe de árvores e áreas abertas. Emergência: Defesa Civil, 199.' })) },
-      svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })),
-      el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal`, periodo ? el('small', { text: `INMET, ${periodo}` }) : null)));
-  }
 
   // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
   // só as horas deste dia: hoje, da hora atual até 23h; amanhã, de 0h a 23h
@@ -732,7 +725,7 @@ function barrasComEixo({ pontos, classe, titulo, nome, pct, medido = () => false
     el('div', { class: 'gb-corpo' }, eixoY, area), el('div', { class: 'gb-rodape' }, el('span'), eixoX), info);
 }
 
-// Temperatura por hora: ECMWF (modelo europeu), com o mesmo formato do gráfico de chuva.
+// Temperatura por hora: ECMWF, com o mesmo formato do gráfico de chuva.
 // O eixo vai de pouco abaixo da mínima a pouco acima da máxima do período, em passos redondos.
 function graficoTemperatura(iniMs, fimMs) {
   const p = estado.prev, mods = modelosAtivos();
@@ -750,7 +743,7 @@ function graficoTemperatura(iniMs, fimMs) {
   for (let v = base; v <= topo + 1e-9; v += passo) ticks.push([pct(v), `${v}°`]);
   const atual = pontos.find((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
   return barrasComEixo({
-    pontos, classe: 'temp', titulo: 'Previsão: ECMWF (modelo europeu)', nome: 'Temperatura por hora',
+    pontos, classe: 'temp', titulo: 'Previsão Open-Meteo', nome: 'Temperatura por hora',
     pct: (x) => (valido(x.t) ? pct(x.t) : null), ticks,
     agoraPct: atual && valido(atual.t) ? pct(atual.t) : null,
     inicial: 'Toque num horário para ver a temperatura.',
@@ -785,11 +778,33 @@ function iconeCeu(ceu) {
   return s;
 }
 
+/**
+ * Cartão "Risco X de temporal · Fonte". Fonte: INMET quando há aviso de tempestade para o local, senão Previsão.
+ * Ao tocar: horário de cada aviso do INMET do local (o mais grave primeiro), o motivo pela previsão e a orientação.
+ */
+function cartaoTemporal(risco) {
+  const avisos = avisosOrdenados();
+  const motivos = risco.motivos.filter((m) => !/aviso de tempestade do INMET/.test(m));
+  const abrir = () => mostrarInfo(`Risco ${risco.nivel} de temporal`,
+    avisos.length ? el('ul', { class: 'lt-avisos' }, ...avisos.map((x) => el('li', {},
+      el('b', { text: `${x.titulo}${x.severidade ? ` (${x.severidade.toLowerCase()})` : ''}` }), el('br'), periodoAviso(x) || 'horário não informado'))) : null,
+    motivos.length ? el('p', { text: `Pela previsão: ${motivos.join('; ')}.` }) : null,
+    el('p', { text: 'Durante o temporal, fique longe de árvores e áreas abertas. Emergência: Defesa Civil, 199.' }),
+    avisos.length ? linkExterno('https://alertas2.inmet.gov.br/', 'Avisos no INMET') : null);
+  return el('button', { type: 'button', class: `linha-temporal ${risco.nivel}`, onclick: abrir },
+    svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })),
+    el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal`, el('small', { text: `· ${risco.aviso ? 'INMET' : 'Previsão'}` })));
+}
+
+// Avisos do INMET válidos para o local, do mais grave ao menos grave.
+function avisosOrdenados() {
+  const grau = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
+  return alertasDoLocal().sort((x, y) => grau(y) - grau(x));
+}
+
 function linhaAlerta() {
   if (!estado.alertas || estado.alertas.indisponivel) return el('button', { type: 'button', class: 'alerta indisponivel', onclick: () => mostrarInfo('Alertas', el('p', { text: 'A consulta aos avisos do INMET falhou. Isso não significa que não há alertas.' }), linkExterno('https://alertas2.inmet.gov.br/', 'Avisos do INMET')) }, 'Alertas indisponíveis');
-  // o mais grave primeiro, para a linha concordar com o risco de temporal (que usa o aviso mais grave)
-  const grau = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
-  const meus = alertasDoLocal().sort((x, y) => grau(y) - grau(x));
+  const meus = avisosOrdenados();
   if (!meus.length) return el('p', { class: 'nota', style: { margin: '2px 0' } }, `Nenhum aviso do INMET encontrado para este local (consulta ${fmt.idade(estado.alertasEm)}).`);
   const a = meus[0];
   return el('button', { type: 'button', class: 'alerta', onclick: () => detalheAlertas(meus) },
@@ -947,8 +962,7 @@ function instrumentos() {
   for (const c of usadas) conta[c.fonte.id] = (conta[c.fonte.id] || 0) + 1;
   const principal = usadas.sort((x, y) => conta[y.fonte.id] - conta[x.fonte.id])[0];
   if (principal) {
-    const nome = principal.fonte.nome.replace(/\s*\((INMET|METAR)\)\s*$/i, '');
-    sub.textContent = `${principal.fonte.tipo === 'inmet' ? 'Estação do INMET' : 'Aeroporto'} ${nome.toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase())}, a ${fmt.n(principal.distancia, 0)} km · leitura ${fmt.idade(principal.ms)}`;
+    sub.textContent = `${nomeEstacao(principal.fonte)}, a ${fmt.n(principal.distancia, 0)} km · leitura ${fmt.idade(principal.ms)}`;
   } else sub.textContent = 'Nenhuma estação com leitura recente por perto.';
 
   const outra = (c) => (c && principal && c.fonte.id !== principal.fonte.id ? `${c.fonte.nome}, ${fmt.n(c.distancia, 0)} km` : null);
@@ -1057,14 +1071,14 @@ function avaliarRisco(a, chovendo, chegando) {
 
 /**
  * Período de um aviso do INMET ("AAAA-MM-DD HH:MM", horário de Brasília) em texto curto:
- * "das 10:00 às 23:59" no mesmo dia de hoje; com as datas quando o aviso passa de um dia ou não é de hoje.
+ * "hoje, das 10:00 às 23:59" ou "08/11, das 00:00 às 23:59" num dia só; com as duas datas quando passa de um dia.
  */
 function periodoAviso(av) {
   const ok = (s) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(s || ''));
   if (!ok(av?.inicio) || !ok(av?.fim)) return null;
   const hoje = partesLocais(Date.now(), -10800).data;
   const d = (s) => s.slice(0, 10), h = (s) => s.slice(11, 16), dm = (s) => `${s.slice(8, 10)}/${s.slice(5, 7)}`;
-  if (d(av.inicio) === d(av.fim) && d(av.inicio) === hoje) return `das ${h(av.inicio)} às ${h(av.fim)}`;
+  if (d(av.inicio) === d(av.fim)) return `${d(av.inicio) === hoje ? 'hoje' : dm(av.inicio)}, das ${h(av.inicio)} às ${h(av.fim)}`;
   return `das ${h(av.inicio)} de ${dm(av.inicio)} às ${h(av.fim)} de ${dm(av.fim)}`;
 }
 
@@ -1079,7 +1093,7 @@ function periodoAviso(av) {
  */
 function painelPressao(pr) {
   const R = REGRAS.pressao;
-  const { p, agora, i0, seriePrev, serieMed, v3, v24, origemTend, atual, ancora, varPrev, minimo24 } = dadosPressao(pr);
+  const { p, agora, i0, seriePrev, serieMed, v3, v24, atual, varPrev, minimo24 } = dadosPressao(pr);
   const cls = classeTendenciaPressao(v3?.delta);
   const av = avaliarPressao({ atual, d3: v3?.delta, d24: v24?.delta, prev: varPrev });
   const caixa = el('div', { class: 'pressao' });
@@ -1115,7 +1129,7 @@ function painelPressao(pr) {
     const med = x.map((ms) => { if (ms > agora) return null; const o = serieMed.find((q) => Math.abs(q.ms - ms) <= 30 * 60000); return o ? o.valor : null; });
     const prv = x.map((_, k) => seriePrev[ini + k].valor);
     criarGrafico(det, { x, noites: noitesDe(p.diario, x[0], x[x.length - 1]), fuso: p.fuso, emitirHora: false, titulo: 'Pressão: 24 h medidas e 24 h previstas', altura: 140,
-      fonte: `${pr ? `Medida: ${pr.fonte.nome} (${fmt.n(pr.distancia, 0)} km).` : 'Sem medição de pressão perto.'} Prevista: ECMWF${ancora ? ', ajustada à medição de agora' : ''}.${origemTend === 'prevista' ? ' Tendências pela previsão, sem série medida.' : ''}`,
+      fonte: pr ? notaFonte(pr, p.offset) : notaPrevisao(p.offset),
       series: [
         { rotulo: 'previsto', valores: prv, corCss: '--texto', dash: [6, 4], largura: 1.5, formato: (v) => fmt.hpa(v) },
         { rotulo: 'medido', valores: med, corCss: '--chuva', pontos: true, largura: 2.5, formato: (v) => fmt.hpa(v) },
@@ -1162,7 +1176,7 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
       abertos = abertos.includes(k) ? abertos.filter((a) => a !== k) : [...abertos, k];
       prefs.gravar('paineis-v2', abertos); desenhar();
     } }, nome)));
-    const fonte = `Previsão Open-Meteo (${mods.map((m) => MODELOS[m].curto).join(', ')}), ${fmt.horaMin(estado.prevEm, p.offset)}.`;
+    const fonte = notaPrevisao(p.offset);
     if (abertos.includes('chuva')) {
       const ch = C('precipitation'), pr = C('precipitation_probability');
       let acc = 0, falhou = false; const acum = ch.med.map((v) => { if (!valido(v)) { falhou = true; return null; } if (falhou) return null; acc += v; return acc; });
@@ -1178,7 +1192,7 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
     if (abertos.includes('vento')) {
       const v = C('wind_speed_10m'), g = C('wind_gusts_10m');
       const dirs = idx.map((i) => direcaoMedia(mods.map((m) => p.modelos[m].vars.wind_direction_10m?.[i])));
-      criarGrafico(area, { ...base, titulo: 'Vento médio, rajadas e direção', fonte: fonte + ' Setas apontam para onde o vento sopra.', setas: dirs, altura: 190,
+      criarGrafico(area, { ...base, titulo: 'Vento médio, rajadas e direção', fonte, setas: dirs, altura: 190,
         series: [
           { rotulo: 'rajada mín.', valores: g.lo, corCss: '--rajada', faixa: true, semLegenda: true },
           { rotulo: 'rajada máx.', valores: g.hi, corCss: '--rajada', faixa: true, semLegenda: true },
@@ -1254,7 +1268,7 @@ function previstoMedido(s) {
   const prevT = idx.map((i) => tempHora(p, 'temperature_2m', i, mods));
   const medT = medidoEm(fT, 'temperatura');
   criarGrafico(s, { x, noites: noitesDe(p.diario, x[0], x[x.length - 1]), fuso: p.fuso, sync: 'pm', emitirHora: false, titulo: 'Temperatura hoje', altura: 150,
-    fonte: fT ? `Medido: ${fT.fonte.nome} (${fmt.n(fT.distancia, 0)} km). Previsto: ECMWF (modelo europeu).` : 'Sem medição de temperatura.',
+    fonte: fT ? notaFonte(fT, p.offset) : 'Sem medição de temperatura',
     series: [
       { rotulo: 'previsto', valores: prevT, corCss: '--quente', dash: [6, 4], largura: 1.5, formato: (v) => fmt.c1(v) },
       { rotulo: 'medido', valores: medT, corCss: '--texto', pontos: true, largura: 2.5, formato: (v) => fmt.c1(v) },
@@ -1265,7 +1279,7 @@ function previstoMedido(s) {
   const medCh = medidoEm(fC, 'chuva'); let b = 0, quebrou = false;
   const medC = medCh.map((v) => { if (!valido(v)) { quebrou = true; return null; } if (quebrou) return null; b += v; return b; });
   criarGrafico(s, { x, fuso: p.fuso, sync: 'pm', emitirHora: false, titulo: 'Chuva acumulada hoje', altura: 140,
-    fonte: fC ? `Medido: ${fC.fonte.nome} (${fmt.n(fC.distancia, 0)} km). Hora sem leitura interrompe a linha medida.` : 'Sem medição de chuva perto (METAR não informa volume).',
+    fonte: fC ? notaFonte(fC, p.offset) : 'Sem medição de chuva perto',
     series: [
       { rotulo: 'previsto', valores: prevC, corCss: '--chuva', dash: [6, 4], largura: 1.5, formato: (v) => `${fmt.n(v, 1)} mm` },
       { rotulo: 'medido', valores: medC, corCss: '--texto', pontos: true, largura: 2.5, formato: (v) => `${fmt.n(v, 1)} mm` },
@@ -1273,13 +1287,21 @@ function previstoMedido(s) {
   const prevG = idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.wind_gusts_10m?.[i])));
   const medG = medidoEm(fR, fR?.fonte && escolha('rajada') ? 'rajada' : 'vento');
   criarGrafico(s, { x, fuso: p.fuso, sync: 'pm', emitirHora: false, titulo: 'Rajadas hoje', altura: 140,
-    fonte: fR ? `Medido: ${fR.fonte.nome}. METAR só informa rajada quando ela ocorre.` : 'Sem medição de vento.',
+    fonte: fR ? notaFonte(fR, p.offset) : 'Sem medição de vento',
     series: [
       { rotulo: 'previsto', valores: prevG, corCss: '--rajada', dash: [6, 4], largura: 1.5, formato: (v) => `${Math.round(v)} km/h` },
       { rotulo: 'medido', valores: medG, corCss: '--texto', pontos: true, largura: 2.5, formato: (v) => `${Math.round(v)} km/h` },
     ], escalas: { y: { range: (u, mi, ma) => [0, Math.max(40, ma + 5)] } }, eixos: [{ formato: (v) => `${v}`, rotulo: 'km/h' }] });
-  s.append(el('p', { class: 'nota', text: 'Linha tracejada é previsão; linha cheia com pontos é medição.' }));
 }
+
+// Nota de fonte dos gráficos, no formato "Fonte · Horário" (ex.: "INMET Campo Bom · 12:00").
+// `c` é a leitura escolhida por escolherFonte: o horário é o da última leitura usada daquela estação.
+function nomeEstacao(fonte) {
+  const nome = fonte.nome.replace(/\s*\((INMET|METAR)\)\s*$/i, '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
+  return `${fonte.tipo === 'inmet' ? 'INMET' : 'METAR'} ${nome}`;
+}
+function notaFonte(c, off) { return `${nomeEstacao(c.fonte)} · ${fmt.horaMin(c.ms, off)}`; }
+function notaPrevisao(off) { return `Open-Meteo · ${fmt.horaMin(estado.prevEm, off)}`; }
 
 // Fontes de dados, de forma enxuta: de onde vem cada dado e como é calculado, mais uma linha de situação.
 function estadoFontes() {
@@ -1322,7 +1344,7 @@ function renderAmanhaDetalhes(data) {
       el('div', { class: 'g', text: valido(g) ? `rajada ${Math.round(g)} km/h` : 'rajada sem dado' }),
       el('div', {}, el('span', { class: 'tmin', text: fmt.c(minimo(t)) || '–' }), ' a ', el('span', { class: 'tmax', text: fmt.c(maximo(t)) || '–' })));
   });
-  filhos.push(secao('Períodos', 'Temperatura: ECMWF (modelo europeu). Chuva e rajada: mediana dos modelos; chance é a maior chance horária do período.', el('div', { class: 'periodos' }, ...caixas)));
+  filhos.push(secao('Períodos', notaPrevisao(p.offset), el('div', { class: 'periodos' }, ...caixas)));
   const met = secao('Meteograma de amanhã', 'Previsão de 0h a 24h.');
   met.classList.add('largura-total');
   filhos.push(met);
@@ -1399,7 +1421,7 @@ function renderSemana() {
   const x = dias.map((a) => p.horas[a.idxTodo[0]] + 12 * 3600000);
   const fmtDia = (u, vals) => vals.map((v) => { const d = dataNoFuso(v, p.fuso); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()]; });
   const gChuva = secao('Chuva diária e acumulada', 'Previsão: mediana dos modelos se chover; acumulada soma as medianas.');
-  const gTemp = secao('Temperatura mínima e máxima', 'Linhas: ECMWF (modelo europeu), corrigido pelo aprendizado. Faixas: menor e maior valor entre modelos.');
+  const gTemp = secao('Temperatura mínima e máxima', notaPrevisao(estado.prev.offset));
   const gRaj = secao('Rajada máxima', 'Linha: valor mais provável; faixa: do menor ao maior provável.');
   const faixas = secao('Faixa provável', 'Do menor ao maior valor provável: cenários p10 a p90 quando há ensemble; senão, menor e maior modelo.', tabelaFaixas(dias));
   const probs = secao('Probabilidade por dia', dias[0]?.limites.origem === 'cenários do ensemble' ? 'Fração dos cenários do ensemble acima de cada limite.' : 'Sem ensemble: concordância entre modelos, não é probabilidade.', tabelaLimites(dias));
@@ -1620,7 +1642,7 @@ async function renderElNino() {
     const tempos = [...new Set([...rel, ...conv].map((r) => r.ms))].sort((a, b) => a - b).slice(-104);
     const mapa = (lista) => { const m = new Map(lista.map((r) => [r.ms, r.n34])); return tempos.map((t) => m.get(t) ?? null); };
     criarGrafico(gInd, { x: tempos, agora: false, emitirHora: false, sync: 'enso', formatoX: fmtMes, altura: 180, titulo: 'Niño 3.4 semanal, últimos 2 anos',
-      fonte: 'NOAA CPC, arquivos rel_wksst9120.txt e wksst9120.for. Valores em °C de anomalia.',
+      fonte: `NOAA CPC · semana de ${fmt.dataCurta(tempos[tempos.length - 1], 0)}`,
       series: [
         { rotulo: 'relativo', valores: mapa(rel), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
         { rotulo: 'convencional', valores: mapa(conv), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
@@ -1633,7 +1655,7 @@ async function renderElNino() {
     const tempos = [...new Set([...oni, ...roni].map(ms))].sort((a, b) => a - b);
     const mapa = (lista) => { const m = new Map(lista.map((r) => [ms(r), r.anom])); return tempos.map((t) => m.get(t) ?? null); };
     criarGrafico(gHist, { x: tempos, agora: false, emitirHora: false, sync: 'enso2', formatoX: (u, v) => v.map((s) => String(new Date(s * 1000).getUTCFullYear())), altura: 180,
-      titulo: 'ONI e RONI', fonte: 'NOAA CPC, oni.ascii.txt e RONI.ascii.txt. Arraste para ver desde 1950.' + (roni.length ? '' : ' RONI indisponível.'), horasVisiveis: 24 * 365 * 25, rolarFim: true,
+      titulo: 'ONI e RONI', fonte: `NOAA CPC · ${[...oni, ...roni].sort((a, b) => ms(a) - ms(b)).map((r) => `${r.seas} ${r.ano}`).pop()}`, horasVisiveis: 24 * 365 * 25, rolarFim: true,
       series: [
         { rotulo: 'ONI', valores: mapa(oni), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
         { rotulo: 'RONI (principal)', valores: mapa(roni), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
