@@ -7,6 +7,7 @@ export const CONFIG = {
   intervalos: {            // minutos
     medicoes: 10, alertas: 10, radar: 10, previsao: 15, cenarios: 15, enso: 360, acerto: 1440,
   },
+  atualizarTelaAbertaMin: 10, // com a tela aberta e sem toque em atualizar, atualiza tudo a cada 10 min
   idadeMaxMedicaoMin: 180, // leituras mais antigas são descartadas
   radarOficial: 'https://defesacivil.rs.gov.br/monitoramento-radar-meteorologico',
 };

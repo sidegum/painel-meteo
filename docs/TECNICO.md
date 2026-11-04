@@ -103,13 +103,14 @@ Controle de concorrência:
 
 ### 2.3 Quando os dados são buscados
 
-Só em três momentos:
+Em quatro momentos, todos por `atualizarTudo()`:
 
 1. Ao abrir o app.
 2. Ao voltar para ele, pelos eventos `visibilitychange` (página visível) e `pageshow` com `persisted`.
 3. No botão Atualizar ou no gesto de puxar para baixo.
+4. Com a tela aberta e visível, quando passam `CONFIG.atualizarTelaAbertaMin` (10) minutos desde o início da última rodada (`ultimaRodada`). Qualquer rodada, inclusive a do botão, reinicia essa contagem.
 
-Não há atualização periódica. O `setInterval` de 60 s só reescreve o cabeçalho, com o texto "Atualizado às HH:MM" e o sufixo ", desatualizado" depois de 45 min.
+O `setInterval` de 60 s reescreve o cabeçalho ("Atualizado às HH:MM", com ", desatualizado" depois de 45 min) e confere o item 4. Ele não busca nada com a página escondida (`document.hidden`) nem sem conexão (`navigator.onLine === false`).
 
 ### 2.4 Renderização
 
