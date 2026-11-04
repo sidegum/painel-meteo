@@ -437,7 +437,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const dataMs = p.horas[a.idxTodo[0]] ?? Date.now();
   const quando = diaIndice === 1
     ? `Amanhã, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}`
-    : `Hoje, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}, até 23h`;
+    : `Hoje, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}`;
 
   // céu: consenso horário entre modelos; hoje só as horas que faltam
   const mods = modelosAtivos();
