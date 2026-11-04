@@ -3,7 +3,7 @@
 Referência técnica do Painel Meteorológico: arquitetura, fluxo de dados, módulos, funções, algoritmos e infraestrutura.
 Este documento acompanha o código. Toda alteração no código deve atualizar a seção correspondente aqui.
 
-Versão do app documentada: **1.2.13**. Versão do Worker: **1.1.0**.
+Versão do app documentada: **1.2.14**. Versão do Worker: **1.1.0**.
 
 Documentos complementares:
 
@@ -269,6 +269,42 @@ Chuva e vento continuam usando a combinação ponderada dos três modelos.
   2. Classifica pelos limites de `REGRAS.ceu`.
   3. Combina com a probabilidade de chuva ("Nublado com chuva", "pode chover") e ajusta o texto para a noite.
 
+### 3.10 Pressão atmosférica
+
+Funções puras em `analise.js`, com limites em `REGRAS.pressao`:
+
+- `variacaoSerie(serie, horas, toleranciaMin)`: diferença entre a leitura mais recente e a leitura mais próxima de `horas` antes dela. Se nenhuma leitura estiver a até `toleranciaMin` do instante alvo (40 min para 3 h e 90 min para 24 h), devolve `null` e nada é estimado.
+- `classeTendenciaPressao(delta3h)`: termos de tendência de 3 h do Met Office e da OMM. Estável abaixo de 0,1 hPa; devagar de 0,1 a 1,5; sem adjetivo de 1,6 a 3,5; rápido de 3,6 a 6,0; muito rápido acima de 6,0.
+- `avaliarPressao({ atual, d3, d24, prev })`: soma pontos de sinal de chuva.
+
+  | Critério | Pontos |
+  |---|---|
+  | Queda acima de 3,5 hPa em 3 h | +2 |
+  | Queda de 1,6 a 3,5 hPa em 3 h | +1 |
+  | Subida de 1,6 hPa ou mais em 3 h | −1 |
+  | Queda de 6 hPa ou mais em 24 h | +1 |
+  | Variação prevista em 12 h ≤ −4 hPa / ≥ +4 hPa | +1 / −1 |
+  | Pressão abaixo de 1008 hPa / acima de 1020 hPa | +1 / −1 |
+
+  Os pontos viram o sinal: 3 ou mais = forte; 2 = moderado; 1 = fraco; 0 = nenhum; negativo = firme.
+- `leituraPressao(avPressao, prob)`: o texto final. **Regra de não conflito:** a referência é sempre a chance de chuva principal do dia (`analisarDia(...).av.prob`, a mesma da primeira tela, já calibrada). A pressão só confirma ou explica essa previsão.
+
+  | Pressão | Previsão principal | Leitura mostrada |
+  |---|---|---|
+  | Indica piora | Chuva possível ou provável (≥ 40%) | "Confirma a chuva prevista" |
+  | Indica piora | Sem chuva (< 40%) | "Mudança no tempo, sem chuva prevista" (mais nuvens ou vento) |
+  | Estável ou subindo | Chuva possível ou provável | "Pressão estável": a chuva prevista não depende de queda de pressão (por exemplo, pancadas de calor) |
+  | Subindo ou alta | Sem chuva | "Tempo firme" |
+
+  O teste `pressão nunca contradiz a chance de chuva principal` percorre combinações de pressão e de chance e garante que a pressão nunca anuncia chuva quando a previsão não tem chuva, nem tempo firme quando a previsão tem chuva.
+
+Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições agora":
+
+1. **Medição.** Usa a série da estação escolhida por `escolherFonte` para `pressao`. O INMET reduz a pressão da estação ao nível do mar pela fórmula barométrica (seção 9.2); o METAR informa a pressão ao nível do mar.
+2. **Previsão.** Usa `pressure_msl` do ECMWF IFS, ou a mediana dos modelos quando ele falta. A variável é a pressão reduzida ao nível do mar, em hPa, conforme a documentação da Open-Meteo. Se a leitura medida tiver até 2 h, a série prevista é **ancorada**: deslocada pela diferença entre a medição e o valor previsto para agora. Assim, a menor pressão prevista e o gráfico ficam na mesma referência da estação. As variações não mudam com isso.
+3. **Tendências.** As de 3 h e 24 h vêm da série medida. Sem série medida, vêm da previsão, e a tela avisa.
+4. **Exibição.** Mostra o valor e a tendência, a variação nas últimas 3 h e 24 h, a variação prevista nas próximas 12 h e a menor pressão nas próximas 24 h, com horário. Depois vem a leitura coerente com a previsão e os motivos. Por fim, um gráfico com as últimas 24 h medidas (linha cheia com pontos) e as próximas 24 h previstas (tracejada), e a explicação em "Como é calculado".
+
 ---
 
 ## 4. `js/dados.js`: rede e normalização
@@ -381,7 +417,7 @@ Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mí
 A ordem é:
 
 1. Próximas horas.
-2. Instrumentos (medições da estação principal, `instrumentos`).
+2. Medições agora (`instrumentos`), com a pressão atmosférica em destaque no topo (`painelPressao`, seção 3.10).
 3. **Previsto x medido.**
 4. Mapa.
 5. Meteograma.
@@ -537,7 +573,7 @@ Nenhuma chave contém a localização ou o IP do usuário.
   - Também estima o Niño 3.4 diário: a média da temperatura do mar em 18 pontos entre 5°N e 5°S, 170°W e 120°W (Open-Meteo Marine), menos a climatologia mensal de 1991 a 2020 derivada do `sstoi.indices` do CPC e interpolada entre os meios dos meses.
   - O resultado é gravado em `dados/enso.json`.
 - `scripts/configurar.mjs`: grava a URL do Worker em `js/config.js`.
-- `test/analise.test.mjs`: 17 testes das funções puras.
+- `test/analise.test.mjs`: 21 testes das funções puras.
 - `worker/test/worker.test.mjs`: 24 testes dos parsers e das regras do Worker, com fixtures reais.
 - O comando `npm test` roda os dois.
 
