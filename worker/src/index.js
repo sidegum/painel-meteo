@@ -447,11 +447,12 @@ export function parseSemanal(txt) {
     const m = l.trim().match(/^(\d{2})([A-Z]{3})(\d{4})\s+(.+)$/);
     if (!m || !(m[2] in MESES)) continue;
     const nums = (m[4].match(/-?\d+\.\d+/g) || []).map(Number);
-    let n34 = null;
-    if (nums.length === 8) n34 = nums[5];       // pares temperatura/anomalia: Niño1+2, 3, 3.4, 4
-    else if (nums.length === 4) n34 = nums[2];  // só anomalias
-    if (n34 === null || n34 < -5 || n34 > 5) continue;
-    out.push({ ms: Date.UTC(Number(m[3]), MESES[m[2]], Number(m[1])), n34 });
+    let an = null;
+    if (nums.length === 8) an = [nums[1], nums[3], nums[5], nums[7]]; // pares temperatura/anomalia: Niño1+2, 3, 3.4, 4
+    else if (nums.length === 4) an = nums;                             // só anomalias
+    if (!an || an[2] < -5 || an[2] > 5) continue;
+    const ok = (v) => (v >= -6 && v <= 6 ? v : null);
+    out.push({ ms: Date.UTC(Number(m[3]), MESES[m[2]], Number(m[1])), n12: ok(an[0]), n3: ok(an[1]), n34: an[2], n4: ok(an[3]) });
   }
   if (out.length < 20) throw new Error('índice semanal com estrutura inesperada');
   return out;

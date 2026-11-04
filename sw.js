@@ -1,6 +1,6 @@
 // Service worker simples: guarda só os arquivos do app para abrir sem internet.
 // Dados de previsão ficam no cache "painel-dados-v1", gravado pelo próprio app (dados públicos).
-const VERSAO = 'painel-app-v1.1.1';
+const VERSAO = 'painel-app-v1.2.0';
 const ARQUIVOS = [
   './', './index.html', './app.css', './manifest.json', './privacidade.html',
   './js/app.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js',
@@ -23,14 +23,18 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  // Rede primeiro para o HTML (pega versões novas), cache como reserva sem internet.
-  if (e.request.mode === 'navigate') {
-    e.respondWith(fetch(e.request).then((r) => {
-      const copia = r.clone();
-      if (r.ok) caches.open(VERSAO).then((c) => c.put('./index.html', copia));
+  // Rede primeiro para todos os arquivos do app (cada abertura já pega a versão publicada), sem usar o
+  // cache HTTP de 10 min do GitHub Pages; o cache local só entra sem internet ou se a rede demorar 4 s.
+  const pagina = e.request.mode === 'navigate';
+  e.respondWith((async () => {
+    const cache = await caches.open(VERSAO);
+    const daRede = fetch(e.request, { cache: 'no-cache' }).then((r) => {
+      if (r.ok) cache.put(pagina ? './index.html' : e.request, r.clone());
       return r;
-    }).catch(() => caches.match('./index.html')));
-    return;
-  }
-  e.respondWith(caches.match(e.request).then((c) => c || fetch(e.request)));
+    });
+    const guardado = await cache.match(pagina ? './index.html' : e.request);
+    if (!guardado) return daRede;
+    const espera = new Promise((ok) => setTimeout(() => ok(guardado), 4000));
+    return Promise.race([daRede.catch(() => guardado), espera]);
+  })());
 });
