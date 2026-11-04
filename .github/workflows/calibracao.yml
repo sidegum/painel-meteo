@@ -1,0 +1,51 @@
+name: Calibração com histórico
+
+# Baixa o histórico (INMET A884 + previsões passadas da Open-Meteo), recalcula dados/calibracao.json e publica
+# no mesmo branch. Roda todo mês (o INMET atualiza o arquivo do ano corrente), à mão, ou quando o método muda.
+on:
+  schedule:
+    - cron: '40 6 5 * *'   # dia 5 de cada mês, 03:40 em Brasília
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/historico.mjs'
+      - 'scripts/calibrar.mjs'
+      - 'scripts/lib/inmet.mjs'
+      - 'scripts/lib/calibracao.mjs'
+      - '.github/workflows/calibracao.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: calibracao-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  calibrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Arquivos anuais fechados do INMET não mudam: ficam em cache entre execuções.
+      - uses: actions/cache@v4
+        with:
+          path: .cache-inmet
+          key: inmet-zip-${{ github.run_id }}
+          restore-keys: inmet-zip-
+      - name: Coletar histórico (INMET e Open-Meteo Previous Runs)
+        run: node scripts/historico.mjs
+      - name: Calcular calibração
+        run: if [ -f scripts/calibrar.mjs ]; then node scripts/calibrar.mjs; fi
+      - name: Publicar se mudou
+        run: |
+          git add dados/historico dados/calibracao.json docs/calibracao-resultado.md 2>/dev/null || true
+          if git diff --cached --quiet; then echo "Sem mudança."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Atualiza histórico e calibração (A884 Campo Bom)"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
