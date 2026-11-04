@@ -22,6 +22,9 @@ export const MODELOS_CALIBRACAO = {
   dwd_icon_global: { nome: 'ICON', app: false },
 };
 export const LEADS = [1, 2, 3, 4, 5];
+// Modelos do painel cuja rajada também é buscada na Historical Forecast API (antecedência "0", primeiras horas
+// de cada rodada). Usada só quando a Previous Runs não tem rajada do modelo ou a tem inconsistente.
+export const MODELOS_RAJADA_CURTO_PRAZO = ['ecmwf_ifs', 'ecmwf_ifs025', 'ukmo_global_deterministic_10km', 'ncep_gfs_seamless', 'dwd_icon_global'];
 export const VARS_PREVISAO = ['precipitation', 'temperature_2m', 'wind_gusts_10m', 'wind_speed_10m'];
 // Ordem dos valores diários guardados por modelo e antecedência na tabela de histórico.
 export const CAMPOS = ['chuva', 'tmax', 'tmin', 'rajada', 'vento'];
@@ -33,6 +36,7 @@ export const PARAM = {
   fatorVento: [0.5, 1.6],  // limites do fator de rajada e vento
   chuvaDia: 1,             // dia com chuva: ≥ 1 mm (igual a REGRAS.chuvaMinimaMm do app)
   ganhoMinimo: 0.02,       // correção só é usada se reduzir o erro fora da amostra em pelo menos 2%
+  consistenciaFator: 1.3,  // fator anual que varia mais que 30% entre antecedências indica arquivo inconsistente
 };
 
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -73,6 +77,41 @@ export function prevDiaria(j) {
     if (Object.keys(dia).length) out[d] = dia;
   }
   return out;
+}
+
+/**
+ * Converte uma resposta da Historical Forecast API (um modelo, fuso local, só wind_gusts_10m) na rajada máxima
+ * diária, guardada como antecedência 0 no mesmo formato de CAMPOS.
+ * @returns {Record<string, {0: (number|null)[]}>}
+ */
+export function rajadaCurtoPrazo(j) {
+  const h = j?.hourly;
+  if (!h?.time || !Array.isArray(h.wind_gusts_10m)) return {};
+  const porDia = new Map();
+  h.time.forEach((t, i) => {
+    const v = h.wind_gusts_10m[i];
+    if (!num(v)) return;
+    const d = String(t).slice(0, 10);
+    if (!porDia.has(d)) porDia.set(d, []);
+    porDia.get(d).push(v);
+  });
+  const out = {};
+  for (const [d, vs] of porDia) if (vs.length >= 20) out[d] = { 0: [null, null, null, r2(Math.max(...vs), 1), null] };
+  return out;
+}
+
+/**
+ * Verifica se o fator anual de um modelo é coerente entre as antecedências. No arquivo do UKMO, por exemplo,
+ * a rajada das antecedências ímpares é cerca de 50% maior que a das pares (artefato do arquivo, não do tempo):
+ * um fator por antecedência copiaria o artefato para a previsão ao vivo.
+ * @param {Record<number, {fatorAnual: number}>} porLead
+ * @returns {{coerente: boolean, razao: number|null}}
+ */
+export function coerenciaFator(porLead) {
+  const fs = Object.values(porLead).map((x) => x?.fatorAnual).filter(num);
+  if (fs.length < 2) return { coerente: true, razao: null };
+  const razao = Math.max(...fs) / Math.min(...fs);
+  return { coerente: razao <= PARAM.consistenciaFator, razao };
 }
 
 // ------------------------------------------------------------------ pares e estações do ano
