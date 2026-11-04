@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.2.3';
+const VERSAO = '1.2.4';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -37,7 +37,7 @@ window.addEventListener('DOMContentLoaded', iniciar);
 
 async function iniciar() {
   aplicarTema();
-  $('#versao').textContent = `Versão ${VERSAO}. Regras de confiança em js/analise.js.`;
+  $('#versao').textContent = `Versão ${VERSAO}`;
   configurarNavegacao();
   configurarLocal();
   configurarRodape();
@@ -64,7 +64,7 @@ async function iniciar() {
   else {
     const antes = estado.local ? { lat: arredondaCoord(estado.local.lat), lon: arredondaCoord(estado.local.lon) } : null;
     const primeira = antes ? atualizar({ forcar: true }) : Promise.resolve();
-    await localizarGps(true);
+    await localizarGps(true, true);
     await primeira;
     const agora = { lat: arredondaCoord(estado.local.lat), lon: arredondaCoord(estado.local.lon) };
     if (!antes || antes.lat !== agora.lat || antes.lon !== agora.lon) await atualizar({ forcar: true, local: !!antes });
@@ -89,7 +89,7 @@ function mostrarCarregando() {
 
 // ------------------------------------------------------------------ localização
 
-function localizarGps(silencioso) {
+function localizarGps(silencioso, recente = false) {
   return new Promise((ok) => {
     const usarPadrao = (motivo) => {
       // sem GPS: o último local salvo (já arredondado); se não houver, o centro de Campo Bom
@@ -112,7 +112,7 @@ function localizarGps(silencioso) {
     }, (err) => {
       const m = { 1: 'Permissão de localização negada.', 2: 'GPS sem sinal.', 3: 'GPS demorou demais.' }[err.code] || 'GPS falhou.';
       usarPadrao(m);
-    }, { enableHighAccuracy: false, timeout: 9000, maximumAge: 10 * 60000 });
+    }, { enableHighAccuracy: false, timeout: 9000, maximumAge: recente ? 0 : 2 * 60000 });
   });
 }
 
@@ -190,7 +190,11 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     if (agora || venceu(estado.radarAgoraEm, 5)) tarefas.push(buscarChuvaRadar(lat, lon)
       .then((r) => { estado.radarAgora = r; estado.radarAgoraEm = Date.now(); })
       .catch(() => { estado.radarAgora = null; }));
-    if (w && venceu(estado.acertoEm, I.acerto) && !local) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); }));
+    // El Niño: arquivo do robô do GitHub ou Worker; no botão atualizar, busca de novo também
+    if (venceu(estado.ensoEm, I.enso)) tarefas.push(buscarEnso()
+      .then((e) => { estado.enso = e; estado.ensoEm = Date.now(); salvarCache('enso', e); delete estado.erros.enso; })
+      .catch((e) => { estado.erros.enso = e.message; }));
+    if (w && venceu(estado.acertoEm, I.acerto)) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); }));
     await Promise.all(tarefas);
     if (tarefas.length && estado.prev) renderTudo();
   } finally {
@@ -204,16 +208,27 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
 function agendar() {
   setInterval(() => { if (!document.hidden) atualizar(); atualizarCabecalho(); }, 60000);
   // ao voltar para o app: temperatura e chuva agora medidas de novo (estação e radar)
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizar({ agora: true }); });
+  // Toda vez que o app volta para a tela (inclusive pelo atalho na tela inicial, com o app ainda na memória),
+  // refaz tudo como o botão atualizar: posição, previsão, cenários, medições, radar, alertas e El Niño.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarTudo(); });
+  // página restaurada do cache de navegação (voltar/avançar ou reabrir a aba)
+  window.addEventListener('pageshow', (e) => { if (e.persisted) atualizarTudo(); });
   window.addEventListener('online', () => atualizar());
   window.addEventListener('offline', () => avisar('Sem conexão. Mostrando os últimos dados salvos, que podem estar desatualizados.', true));
-  $('#btn-atualizar').addEventListener('click', async () => {
-    // atualiza tudo: posição (se não houver cidade escolhida), previsão, cenários, medições, radar e alertas
-    let escolha = false;
-    try { escolha = sessionStorage.getItem('localEscolhido') === '1'; } catch {}
-    if (!(escolha && estado.local?.origem === 'cidade')) await localizarGps(true);
-    atualizar({ forcar: true });
-  });
+  $('#btn-atualizar').addEventListener('click', () => atualizarTudo());
+}
+
+// Atualiza tudo, sem exceção: posição atual (salvo cidade escolhida nesta sessão), previsão, cenários,
+// medições, radar, alertas, El Niño, acerto dos modelos, mapa e a própria versão do app.
+async function atualizarTudo() {
+  if (atualizando) return;
+  let escolha = false;
+  try { escolha = sessionStorage.getItem('localEscolhido') === '1'; } catch {}
+  const antes = estado.local ? `${arredondaCoord(estado.local.lat)},${arredondaCoord(estado.local.lon)}` : null;
+  if (!(escolha && estado.local?.origem === 'cidade')) await localizarGps(true, true);
+  const depois = estado.local ? `${arredondaCoord(estado.local.lat)},${arredondaCoord(estado.local.lon)}` : null;
+  await atualizar({ forcar: true, local: antes !== depois });
+  navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {});
 }
 
 function atualizarCabecalho() {
@@ -581,7 +596,7 @@ function graficoChance(iniMs, fimMs) {
     }));
   const eixo = el('div', { class: 'chance-eixo', 'aria-hidden': 'true' },
     ...pontos.map((x) => { const h = partesLocais(x.ms, p.offset).hora; return el('span', { text: h % 3 === 0 ? (h === 0 ? fmt.diaSemana(x.ms, p.offset) : `${h}h`) : '' }); }));
-  return el('div', { class: 'chance' }, barras, eixo, info, el('p', { class: 'chance-fonte', text: `Previsão: ${origem}. 50% e 100% marcados.` }));
+  return el('div', { class: 'chance', title: `Previsão: ${origem}` }, barras, eixo, info);
 }
 
 // Ícone de linha (SVG, sem emoji): sol ou lua, nuvem e gotas conforme o céu previsto.
@@ -685,7 +700,7 @@ function renderHojeDetalhes() {
   const filhos = [];
   filhos.push(proximasHoras());
   filhos.push(instrumentos());
-  const met = secao('Meteograma', 'Previsão: mediana dos modelos disponíveis, com a faixa entre o menor e o maior valor. Arraste para os lados para ver até 48 h; use dois dedos para aproximar.');
+  const met = secao('Meteograma', 'Previsão das próximas 48 horas. Arraste para os lados.');
   met.classList.add('largura-total');
   filhos.push(met);
   const pm = secao('Previsto x medido', null);
@@ -721,7 +736,7 @@ function proximasHoras() {
       el('div', {}, setaVento(dir), ' ', valido(vento[i]) ? Math.round(vento[i]) : '–'),
       el('div', { class: 'g', text: valido(raj[i]) ? `${Math.round(raj[i])}` : '–' })));
   }
-  return secao('Próximas horas', 'Previsão, mediana dos modelos. Linhas: hora, chuva, chance, volume, vento médio e rajada em km/h.', lista);
+  return secao('Próximas horas', 'Chance de chuva, volume, vento e rajada (km/h).', lista);
 }
 
 function apparente(t, rh, kmh) {
@@ -731,69 +746,72 @@ function apparente(t, rh, kmh) {
 }
 
 function instrumentos() {
-  const s = secao('Instrumentos', 'Medições de estações próximas. A distância é calculada no aparelho. Leituras antigas, vazias ou inválidas são descartadas.');
-  if (!workerConfigurado()) s.append(el('p', { class: 'nota', text: 'Sem o Worker: só a última leitura da estação INMET de Campo Bom. METAR, séries de chuva e tendência da pressão aguardam a configuração do Worker. O painel nunca usa previsão no lugar de medição.' }));
-  if (!estado.obs) { s.append(el('p', { text: estado.erros.medicoes ? `Medições indisponíveis (${estado.erros.medicoes}).` : 'Carregando medições…' })); return s; }
-  const st = estado.obs.status || {};
-  if (st.inmet && !st.inmet.ok) s.append(el('p', { class: 'nota', text: `INMET: ${st.inmet.erro}.` }));
-  if (st.inmet?.aviso) s.append(el('p', { class: 'nota', text: `INMET: ${st.inmet.aviso}.` }));
-  if (st.metar && !st.metar.ok) s.append(el('p', { class: 'nota', text: `METAR: ${st.metar.erro}.` }));
-  if (estado.obsEm && Date.now() - estado.obsEm > 30 * 60000) s.append(el('p', { class: 'nota', text: `Medições salvas ${fmt.idade(estado.obsEm)}; podem estar desatualizadas.` }));
+  const s = secao('Medições agora', ' ');
+  const sub = s.querySelector('.fonte');
+  if (!estado.obs) { s.append(el('p', { class: 'nota', text: estado.erros.medicoes ? 'Medições indisponíveis no momento.' : 'Carregando medições…' })); return s; }
   const fontes = fontesNormalizadas();
   const p = pontoExato();
   const agora = Date.now();
-  const lista = el('div', { class: 'instr' });
-  const linha = (nome, varKey, formato, extra) => {
-    const e = escolherFonte(fontes, varKey, p.lat, p.lon, agora, CONFIG.idadeMaxMedicaoMin);
-    const item = el('div', { class: 'item' }, el('span', { class: 'nome', text: nome }));
-    if (!e.escolhida) {
-      item.append(el('span', { class: 'sem', text: 'Sem medição' }));
-    } else {
-      const c = e.escolhida;
-      item.append(el('span', { class: 'v' }, formato(c.valor), el('span', { class: 'marca medido', text: 'medido' })));
-      item.append(el('span', { class: 'orig', text: `${c.fonte.tipo === 'inmet' ? 'INMET' : 'METAR'} ${c.fonte.nome}, ${fmt.n(c.distancia, 0)} km, ${fmt.idade(c.ms)}${extra ? extra(c) : ''}` }));
-    }
-    if (e.outras.length) {
-      item.append(el('details', {}, el('summary', { text: `Comparar com ${e.outras.length} outra${e.outras.length > 1 ? 's' : ''}` }),
-        el('ul', {}, ...e.outras.slice(0, 6).map((o) => el('li', { text: `${o.fonte.nome} (${fmt.n(o.distancia, 0)} km): ${o.ok ? formato(o.valor) : o.motivo}, ${fmt.idade(o.ms)}` })))));
-    }
-    lista.append(item);
-    return e.escolhida;
-  };
-  const t = linha('Temperatura', 'temperatura', (v) => fmt.c1(v));
-  const u = linha('Umidade relativa', 'umidade', (v) => `${Math.round(v)}%`);
-  // sensação: a do INMET (TEM_SEN) ou calculada com medições da mesma estação
+  const escolhas = {};
+  const pegar = (k) => (escolhas[k] ??= escolherFonte(fontes, k, p.lat, p.lon, agora, CONFIG.idadeMaxMedicaoMin));
+  const val = (k) => pegar(k).escolhida;
+
+  const t = val('temperatura'), u = val('umidade'), ve = val('vento');
   const sensInmet = linhaSilenciosa(fontes, 'sensacao', p, agora);
-  const ve = escolherFonte(fontes, 'vento', p.lat, p.lon, agora, CONFIG.idadeMaxMedicaoMin).escolhida;
   const sens = sensInmet ? sensInmet.valor : (t && u && ve && t.fonte.id === u.fonte.id && u.fonte.id === ve.fonte.id ? apparente(t.valor, u.valor, ve.valor) : null);
-  lista.append(el('div', { class: 'item' }, el('span', { class: 'nome', text: 'Sensação térmica' }),
-    valido(sens) ? el('span', { class: 'v' }, fmt.c1(sens), el('span', { class: 'marca medido', text: 'medido' })) : el('span', { class: 'sem', text: 'Sem medição' }),
-    el('span', { class: 'orig', text: sensInmet ? `calculada pelo INMET em ${sensInmet.fonte.nome}, ${fmt.n(sensInmet.distancia, 0)} km, ${fmt.idade(sensInmet.ms)}` : valido(sens) ? `calculada com temperatura, umidade e vento de ${t.fonte.nome}` : 'precisa de temperatura, umidade e vento da mesma estação' })));
-  linha('Ponto de orvalho', 'orvalho', (v) => fmt.c1(v));
-  const pr = linha('Pressão (nível do mar)', 'pressao', (v) => fmt.hpa(v), (c) => (c.fonte.tipo === 'inmet' ? '; reduzida ao nível do mar pelo Worker' : ''));
-  // tendência 3 h na mesma estação
+  const pr = val('pressao');
   let tend = null;
   if (pr) {
-    const serie = (estado.obs.fontes.find((f) => f.id === pr.fonte.id)?.serie || []).filter((x) => valido(x.pressao));
+    const serie = (estado.obs.fontes.find((x) => x.id === pr.fonte.id)?.serie || []).filter((x) => valido(x.pressao));
     const ult = serie[serie.length - 1];
-    const ant = ult && serie.reduce((b, x) => (Math.abs(x.ms - (ult.ms - 3 * 3600000)) < Math.abs((b?.ms ?? Infinity) - (ult.ms - 3 * 3600000)) ? x : b), null);
-    if (ult && ant && Math.abs(ant.ms - (ult.ms - 3 * 3600000)) <= 40 * 60000) tend = ult.pressao - ant.pressao;
+    const alvo = ult ? ult.ms - 3 * 3600000 : 0;
+    const ant = ult && serie.reduce((m, x) => (Math.abs(x.ms - alvo) < Math.abs((m?.ms ?? Infinity) - alvo) ? x : m), null);
+    if (ult && ant && Math.abs(ant.ms - alvo) <= 40 * 60000) tend = ult.pressao - ant.pressao;
   }
-  lista.append(el('div', { class: 'item' }, el('span', { class: 'nome', text: 'Tendência da pressão em 3 h' }),
-    valido(tend) ? el('span', { class: 'v', text: `${tend > 0 ? '+' : ''}${fmt.n(tend, 1)} hPa` }) : el('span', { class: 'sem', text: 'Sem medição' }),
-    el('span', { class: 'orig', text: valido(tend) ? (tend <= -3 ? 'queda forte: tempo pode mudar' : tend >= 3 ? 'subida forte' : 'variação pequena') : 'precisa de leituras de 3 h atrás na mesma estação' })));
-  linha('Vento médio', 'vento', (v) => fmt.kmh(v));
-  linha('Rajada', 'rajada', (v) => fmt.kmh(v), (c) => (c.fonte.tipo === 'metar' ? '; METAR só informa rajada quando ela ocorre' : ''));
-  linha('Direção do vento', 'direcao', (v) => `${direcaoTexto(v)} (${Math.round(v)}°)`);
-  linha('Chuva na última hora', 'chuva_h1', (v) => fmt.mm(v));
-  linha('Chuva em 24 h', 'chuva_h24', (v) => fmt.mm(v));
-  linha('Chuva em 72 h', 'chuva_h72', (v) => fmt.mm(v));
-  linha('Chuva em 7 dias', 'chuva_d7', (v) => fmt.mm(v));
-  s.append(lista);
-  // condição atual do modelo (não é medição)
-  const cod = estado.prev?.atual?.codigo;
-  if (valido(cod)) s.append(el('p', { class: 'nota' }, `Condição estimada pelo modelo agora: ${textoWmo(cod)}`, el('span', { class: 'marca previsao', text: 'previsão' })));
-  s.append(el('p', { class: 'nota', text: 'Pluviômetros do CEMADEN não são usados: não há acesso público e estável confirmado.' }));
+  const dir = val('direcao');
+
+  // estação principal: a que fornece a maior parte das leituras
+  const usadas = ['temperatura', 'umidade', 'vento', 'pressao', 'chuva_h1'].map((k) => val(k)).filter(Boolean);
+  const conta = {};
+  for (const c of usadas) conta[c.fonte.id] = (conta[c.fonte.id] || 0) + 1;
+  const principal = usadas.sort((x, y) => conta[y.fonte.id] - conta[x.fonte.id])[0];
+  if (principal) {
+    const nome = principal.fonte.nome.replace(/\s*\((INMET|METAR)\)\s*$/i, '');
+    sub.textContent = `${principal.fonte.tipo === 'inmet' ? 'Estação do INMET' : 'Aeroporto'} ${nome.toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase())}, a ${fmt.n(principal.distancia, 0)} km · leitura ${fmt.idade(principal.ms)}`;
+  } else sub.textContent = 'Nenhuma estação com leitura recente por perto.';
+
+  const outra = (c) => (c && principal && c.fonte.id !== principal.fonte.id ? `${c.fonte.nome}, ${fmt.n(c.distancia, 0)} km` : null);
+  const bloco = (nome, c, texto, nota) => el('div', { class: 'med' + (texto === null ? ' vazio' : '') },
+    el('span', { class: 'med-nome', text: nome }),
+    el('b', { class: 'med-v', text: texto ?? '–' }),
+    (nota || outra(c)) ? el('span', { class: 'med-nota', text: nota || outra(c) }) : null);
+
+  const grade = el('div', { class: 'medicoes' },
+    bloco('Temperatura', t, t ? fmt.c1(t.valor) : null),
+    bloco('Sensação', sensInmet || t, valido(sens) ? fmt.c1(sens) : null),
+    bloco('Umidade', u, u ? `${Math.round(u.valor)}%` : null),
+    bloco('Ponto de orvalho', val('orvalho'), val('orvalho') ? fmt.c1(val('orvalho').valor) : null),
+    bloco('Vento', ve, ve ? `${fmt.kmh(ve.valor)}${dir ? ' ' + direcaoTexto(dir.valor) : ''}` : null),
+    bloco('Rajada', val('rajada'), val('rajada') ? fmt.kmh(val('rajada').valor) : null),
+    bloco('Pressão', pr, pr ? fmt.hpa(pr.valor) : null,
+      valido(tend) ? `${tend > 0 ? '+' : ''}${fmt.n(tend, 1)} hPa em 3 h${tend <= -3 ? ', caindo rápido' : tend >= 3 ? ', subindo rápido' : ''}` : null));
+  const chuva = el('div', { class: 'medicoes chuvas' },
+    ...[['Última hora', 'chuva_h1'], ['24 h', 'chuva_h24'], ['72 h', 'chuva_h72'], ['7 dias', 'chuva_d7']]
+      .map(([n, k]) => { const c = val(k) || (k === 'chuva_h1' ? val('chuva') : null); return bloco(n, c, c ? fmt.mm(c.valor) : null); }));
+  s.append(grade);
+  if ([...chuva.children].some((b) => !b.classList.contains('vazio'))) s.append(el('h3', { class: 'med-tit', text: 'Chuva medida' }), chuva);
+
+  // detalhes para quem quiser conferir: outras estações e avisos técnicos
+  const det = el('details', { class: 'med-det' }, el('summary', { text: 'Comparar estações' }));
+  const nomes = { temperatura: ['Temperatura', (v) => fmt.c1(v)], umidade: ['Umidade', (v) => `${Math.round(v)}%`], vento: ['Vento', (v) => fmt.kmh(v)], pressao: ['Pressão', (v) => fmt.hpa(v)], chuva_h1: ['Chuva na última hora', (v) => fmt.mm(v)] };
+  for (const [k, [n, fm]] of Object.entries(nomes)) {
+    const e = pegar(k);
+    const linhas = [e.escolhida && { ...e.escolhida, ok: true }, ...e.outras].filter(Boolean).slice(0, 6);
+    if (!linhas.length) continue;
+    det.append(el('p', { class: 'med-det-t', text: n }), el('ul', {}, ...linhas.map((o) => el('li', { text: `${o.fonte.nome} (${fmt.n(o.distancia, 0)} km): ${o.ok ? fm(o.valor) : o.motivo}, ${fmt.idade(o.ms)}` }))));
+  }
+  det.append(el('p', { class: 'nota', text: 'Leituras com mais de 3 horas, vazias ou fora da faixa física são descartadas. A medição nunca é trocada por previsão.' }));
+  s.append(det);
   return s;
 }
 
@@ -905,12 +923,13 @@ function previstoMedido(s) {
   const p = estado.prev;
   const temSerie = (estado.obs?.fontes || []).some((f) => f.serie.length >= 3);
   if (!estado.obs || !temSerie) {
-    s.append(el('p', { text: estado.obs ? 'Sem medição horária suficiente: a comparação precisa do histórico do dia, que vem do Worker (METAR e INMET). A comparação nunca usa previsão como medição.' : 'Aguardando medições.' }));
+    // sem histórico de medições do dia, a seção não aparece (nunca compara com previsão no lugar de medição)
+    s.remove();
     return;
   }
   const hoje = datas()[0];
   const idx = indicesDoDia(p.horas, hoje, p.offset).filter((i) => p.horas[i] <= Date.now());
-  if (idx.length < 2) { s.append(el('p', { class: 'nota', text: 'Ainda é cedo: poucas horas de hoje para comparar.' })); return; }
+  if (idx.length < 2) { s.remove(); return; }
   const mods = modelosAtivos();
   const pt = pontoExato();
   const fontes = fontesNormalizadas();
@@ -960,10 +979,13 @@ function estadoFontes() {
   const w = workerConfigurado();
   add(w ? 'Medições (INMET, METAR)' : 'Medições (INMET Campo Bom, direto)', estado.obs && !estado.erros.medicoes, estado.obsEm, estado.erros.medicoes);
   add('Alertas INMET', estado.alertas && !estado.alertas.indisponivel, estado.alertasEm, estado.erros.alertas || 'indisponíveis');
-  add('Worker (METAR, El Niño, acerto)', w, null, 'não configurado');
-  add('Acerto local', w && Object.keys(estado.acerto).length, estado.acertoEm, w ? 'sem histórico' : 'Worker não configurado');
-  return secao('Estado das fontes', 'Se uma fonte falhar, as outras continuam. Previsão não substitui canais oficiais.',
-    el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Fonte' }), el('th', { text: 'Situação' }), el('th', { class: 'n', text: 'Idade' }))), el('tbody', {}, ...linhas)));
+  add('Servidor do painel (Worker)', w, null, 'não configurado');
+  add('Acerto local dos modelos', w && Object.keys(estado.acerto).length, estado.acertoEm, w ? 'juntando 30 dias' : 'Worker não configurado');
+  add('El Niño (NOAA, IRI)', !!estado.enso && !estado.erros.enso, estado.ensoEm, estado.erros.enso);
+  const falhas = linhas.length - linhas.filter((l) => l.children[1]?.textContent === 'ok').length;
+  return secao('Fontes', falhas ? `${falhas} fonte${falhas > 1 ? 's' : ''} com problema; as outras continuam funcionando.` : 'Todas as fontes respondendo.',
+    el('details', { class: 'med-det' }, el('summary', { text: 'Ver cada fonte' }),
+      el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Fonte' }), el('th', { text: 'Situação' }), el('th', { class: 'n', text: 'Atualizada' }))), el('tbody', {}, ...linhas))));
 }
 
 // ------------------------------------------------------------------ Amanhã: detalhes
@@ -1033,8 +1055,11 @@ function renderSemana() {
   const dias = ds.slice(0, 7).map((d, k) => analisarDia(d, k, k === 0));
   const extra = ds.slice(7).map((d, k) => analisarDia(d, k + 7, false)).filter((a) => a.modelosComDado.length);
   const abertos = new Set(prefs.ler('diasAbertos', []));
+  const chovendoAgora = !!medicaoChuvaAgora()?.chovendo;
+  const restoAgora = chovendoAgora ? chuvaRestante() : null;
   const item = (a, longe) => {
     const ms = p.horas[a.idxTodo[0]];
+    const agoraHoje = a.diaIndice === 0 && chovendoAgora;
     const exp = el('div', { class: 'exp', hidden: !abertos.has(a.data) }, tabelaModelosDia(a),
       el('p', { class: 'nota', text: a.av.confianca.motivos.join('; ') || 'modelos e cenários concordam' }));
     const btn = el('button', { type: 'button', 'aria-expanded': String(abertos.has(a.data)), onclick: () => {
@@ -1043,9 +1068,9 @@ function renderSemana() {
       try { abre ? sessionStorage.setItem('abaComDetalhe', 'semana') : sessionStorage.removeItem('abaComDetalhe'); } catch {}
     } },
       el('span', { class: 'dn' }, a.diaIndice === 0 ? 'Hoje' : fmt.diaSemana(ms, p.offset), el('small', { text: fmt.dataCurta(ms, p.offset) })),
-      el('span', { class: 'resumo', text: a.frase }),
+      el('span', { class: 'resumo', text: agoraHoje ? 'Chovendo agora' : a.frase }),
       el('span', { class: 'nums' },
-        el('span', { class: 'p', text: a.av.prob === null ? 'chuva –' : `${fmt.pct(a.av.prob)}${a.av.volume && a.av.prob >= 0.15 ? ' ' + fmt.mm(a.av.volume.mediana) : ''}` }),
+        el('span', { class: 'p', text: agoraHoje ? `agora${restoAgora && !restoAgora.fraca ? ' ≈ ' + fmt.mm(restoAgora.mm) : ''}` : a.av.prob === null ? 'chuva –' : `${fmt.pct(a.av.prob)}${a.av.volume && a.av.prob >= 0.15 ? ' ' + fmt.mm(a.av.volume.mediana) : ''}` }),
         el('span', { class: 'g', text: a.av.rajada ? `${Math.round(a.av.rajada.mediana)} km/h` : 'rajada –' }),
         el('span', { class: 't' }, el('span', { class: 'tmin', text: fmt.c(a.tmin) || '–' }), '/', el('span', { class: 'tmax', text: fmt.c(a.tmax) || '–' }))),
       el('span', { class: 'cf', text: `confiança ${a.av.confianca.geral}` }));
@@ -1062,7 +1087,7 @@ function renderSemana() {
   const fmtDia = (u, vals) => vals.map((v) => { const d = window.uPlot.tzDate(new Date(v * 1000), p.fuso || 'America/Sao_Paulo'); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()]; });
   const gChuva = secao('Chuva diária e acumulada', 'Previsão: mediana dos modelos se chover; acumulada soma as medianas.');
   const gTemp = secao('Temperatura mínima e máxima', 'Linhas: mediana dos modelos. Faixas: menor e maior valor entre modelos.');
-  const gRaj = secao('Rajada máxima', 'Barras: mediana; faixa: cenários (p10 a p90) ou modelos.');
+  const gRaj = secao('Rajada máxima', 'Linha: valor mais provável; faixa: do menor ao maior provável.');
   const faixas = secao('Faixa provável', 'Do menor ao maior valor provável: cenários p10 a p90 quando há ensemble; senão, menor e maior modelo.', tabelaFaixas(dias));
   const probs = secao('Probabilidade por dia', dias[0]?.limites.origem === 'cenários do ensemble' ? 'Fração dos cenários do ensemble acima de cada limite.' : 'Sem ensemble: concordância entre modelos, não é probabilidade.', tabelaLimites(dias));
   filhos.push(gChuva, gTemp, gRaj, faixas, probs);
@@ -1095,7 +1120,7 @@ function tabelaFaixas(dias) {
     el('thead', {}, el('tr', {}, el('th', { text: 'Dia' }), el('th', { class: 'n', text: 'Chuva' }), el('th', { class: 'n', text: 'Rajada' }), el('th', { class: 'n', text: 'Mín' }), el('th', { class: 'n', text: 'Máx' }))),
     el('tbody', {}, ...dias.map((a) => el('tr', {},
       el('td', { text: fmt.diaSemana(p.horas[a.idxTodo[0]], p.offset) }),
-      el('td', { class: 'n', text: a.av.volume ? `${fmt.n(a.av.volume.min, 0)}–${fmt.n(a.av.volume.max, 0)} mm` : '–' }),
+      el('td', { class: 'n', text: a.av.prob !== null && a.av.prob < REGRAS.ocorrencia.poucoProvavel ? 'sem chuva' : a.av.volume ? (Math.round(a.av.volume.min) === Math.round(a.av.volume.max) ? `${fmt.n(a.av.volume.max, 0)} mm` : `${fmt.n(a.av.volume.min, 0)}–${fmt.n(a.av.volume.max, 0)} mm`) : '–' }),
       el('td', { class: 'n', text: a.av.rajada ? `${Math.round(a.av.rajada.min)}–${Math.round(a.av.rajada.max)}` : '–' }),
       el('td', { class: 'n', text: valido(a.tminFaixa[0]) ? `${Math.round(a.tminFaixa[0])}–${Math.round(a.tminFaixa[1])}°` : '–' }),
       el('td', { class: 'n', text: valido(a.tmaxFaixa[0]) ? `${Math.round(a.tmaxFaixa[0])}–${Math.round(a.tmaxFaixa[1])}°` : '–' }))))),
@@ -1121,7 +1146,7 @@ function renderModelos() {
     el('tbody', {}, ...dias.map((a) => el('tr', {}, el('td', { text: fmt.diaSemana(p.horas[a.idxTodo[0]], p.offset) }),
       ...mods.map((m) => { const r = a.resumos.find((x) => x.modelo === m); return el('td', { class: 'n' },
         el('div', { class: 'p', style: { color: 'var(--chuva-txt)' }, text: valido(r.chuva) ? fmt.mm(r.chuva) : '–' }),
-        el('div', { style: { color: 'var(--rajada-txt)' }, text: valido(r.rajada?.valor) ? `${Math.round(r.rajada.valor)} km/h` : 'sem rajada' })); }))))));
+        el('div', { style: { color: 'var(--rajada-txt)' }, text: valido(r.rajada?.valor) ? `${Math.round(r.rajada.valor)} km/h` : '–' })); }))))));
   filhos.push(secao('Chuva e rajada de cada modelo', 'Previsão por dia. Traço indica dado ausente, não zero.', tab,
     ...ausencias.map((t) => el('p', { class: 'nota', text: t })), faltam.length ? el('p', { class: 'nota', text: `Sem dados agora: ${faltam.map((m) => MODELOS[m].nome).join(', ')}.` }) : null));
   const gC = secao('Chuva acumulada por modelo', 'Previsão, 7 dias. Faixa: cenários do ensemble (p10 a p90) e mediana.');

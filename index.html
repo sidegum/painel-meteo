@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://tile.openstreetmap.org https://tilecache.rainviewer.com; font-src 'self'; connect-src 'self' https://api.open-meteo.com https://ensemble-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.rainviewer.com https://tilecache.rainviewer.com https://apiprevmet3.inmet.gov.br https://painel-meteo.painel-566f64cc.workers.dev; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://a.basemaps.cartocdn.com https://b.basemaps.cartocdn.com https://c.basemaps.cartocdn.com https://d.basemaps.cartocdn.com https://tilecache.rainviewer.com; font-src 'self'; connect-src 'self' https://api.open-meteo.com https://ensemble-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.rainviewer.com https://tilecache.rainviewer.com https://apiprevmet3.inmet.gov.br https://painel-meteo.painel-566f64cc.workers.dev; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#111315">
@@ -21,6 +21,7 @@
 <body>
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 
+<div class="cabeca">
 <header class="topo">
   <button class="local" id="btn-local" type="button" aria-haspopup="dialog">
     <span class="local-hora" id="local-hora">aguardando dados</span>
@@ -29,6 +30,14 @@
   <div class="agora" id="agora" aria-live="polite"></div>
   <button class="atualizar" id="btn-atualizar" type="button" aria-label="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg></button>
 </header>
+<nav class="nav" aria-label="Seções">
+  <button type="button" data-ir="hoje" aria-current="page">Hoje</button>
+  <button type="button" data-ir="amanha">Amanhã</button>
+  <button type="button" data-ir="semana">Semana</button>
+  <button type="button" data-ir="modelos">Modelos</button>
+  <button type="button" data-ir="elnino">El Niño</button>
+</nav>
+</div>
 
 <div class="puxar" id="puxar" aria-hidden="true">Solte para atualizar</div>
 <div class="faixa-aviso" id="estado" role="status" aria-live="polite"></div>
@@ -59,7 +68,7 @@
 
   <footer class="rodape">
     <p class="oficial">Este painel é pessoal e não é fonte oficial. Em situação de risco, siga a <a href="https://www.defesacivil.rs.gov.br/" target="_blank" rel="noopener noreferrer">Defesa Civil RS</a> (telefone 199) e os avisos do <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener noreferrer">INMET</a>.</p>
-    <p class="atribuicao">Previsões: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>, licença <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, com dados de ECMWF, NOAA NCEP e DWD. Busca de cidades com dados de GeoNames. Radar: RainViewer. Mapa: © colaboradores do OpenStreetMap. Medições: INMET e METAR via AviationWeather (NOAA). El Niño: NOAA CPC e IRI.</p>
+    <p class="atribuicao">Previsões: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>, licença <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, com dados de ECMWF, NOAA NCEP e DWD. Busca de cidades com dados de GeoNames. Radar: RainViewer. Mapa: © colaboradores do OpenStreetMap e CARTO. Medições: INMET e METAR via AviationWeather (NOAA). El Niño: NOAA CPC e IRI.</p>
     <div class="acoes-rodape">
       <button type="button" id="btn-tema">Tema: automático</button>
       <a href="privacidade.html">Privacidade e dados</a>
@@ -69,13 +78,6 @@
   </footer>
 </main>
 
-<nav class="nav" aria-label="Seções">
-  <button type="button" data-ir="hoje" aria-current="page">Hoje</button>
-  <button type="button" data-ir="amanha">Amanhã</button>
-  <button type="button" data-ir="semana">Semana</button>
-  <button type="button" data-ir="modelos">Modelos</button>
-  <button type="button" data-ir="elnino">El Niño</button>
-</nav>
 
 <dialog id="dlg-local" aria-labelledby="dlg-local-t">
   <form method="dialog" class="dlg">

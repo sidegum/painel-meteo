@@ -43,7 +43,14 @@ export function secaoMapa(container, estado) {
       caixa.addEventListener('touchend', () => mapa.dragging.disable(), { passive: true });
     }
     mapa.setView([estado.local.lat, estado.local.lon], 8);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 12, attribution: '© OpenStreetMap' }).addTo(mapa);
+    // Mapa base da CARTO (dados do OpenStreetMap), no tom do tema. Os servidores do OpenStreetMap bloqueiam
+    // pedidos sem a origem do site, e o app não envia referência em nenhum pedido.
+    const tema = document.documentElement.getAttribute('data-tema');
+    const escuro = tema ? tema === 'escuro' : !matchMedia('(prefers-color-scheme: light)').matches;
+    L.tileLayer(`https://{s}.basemaps.cartocdn.com/${escuro ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, {
+      maxZoom: 12, subdomains: 'abcd', referrerPolicy: 'no-referrer',
+      attribution: '© <a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer" target="_blank">OpenStreetMap</a> © <a href="https://carto.com/attributions" rel="noopener noreferrer" target="_blank">CARTO</a>',
+    }).addTo(mapa);
     L.circleMarker([estado.local.lat, estado.local.lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#2457A6', fillOpacity: 1 }).addTo(mapa).bindTooltip('Você');
     for (const f of estado.obs?.fontes || []) {
       L.circleMarker([f.lat, f.lon], { radius: 6, color: '#17303B', weight: 2, fillColor: f.tipo === 'inmet' ? '#1E8F8A' : '#D9A21B', fillOpacity: 1 })
