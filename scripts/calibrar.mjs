@@ -11,6 +11,7 @@ import {
   MODELOS_CALIBRACAO, LEADS, PARAM, ESTACOES, pares, ajustarVies, corrigirVies, ajustarFator, corrigirFator,
   validar, metricas, contingenciaChuva, pesosRelativos, foraDaAmostra, coerenciaFator, arredondar as r,
 } from './lib/calibracao.mjs';
+import { paresChuva, ajustarChuva, validarChuva, tabelaFinal, corrigirChuva, PARAM_CHUVA } from './lib/chuva.mjs';
 import { MODELOS_HORARIO, LEADS_HORARIO, PARAM_HORARIO, diasHorarios, validarHorario, ajusteFinal } from './lib/temperatura-horaria.mjs';
 
 const ARQ_HIST = new URL('../dados/historico/A884-diario.json', import.meta.url);
@@ -67,6 +68,19 @@ for (const m of Object.keys(MODELOS_CALIBRACAO)) {
         acerto: r(c.acerto, 3), pod: r(c.pod, 3), far: r(c.far, 3), viesFrequencia: r(c.vies, 3), csi: r(c.csi, 3),
       };
     }
+  }
+  // Chuva: mapeamento de quantis do total diário (antecedências somadas), validado fora da amostra
+  const psChuva = paresChuva(tabela, m);
+  const vc = validarChuva(psChuva), ajc = ajustarChuva(psChuva);
+  if (vc && ajc) {
+    const fx = (x) => x && Object.fromEntries(Object.entries(x).map(([k, v]) => [k, r(v, 3)]));
+    res.chuvaQuantis = {
+      usar: vc.usar, n: ajc.n, tabela: tabelaFinal(ajc),
+      validacao: {
+        total: { antes: fx(vc.total.antes), depois: fx(vc.total.depois) },
+        porLead: Object.fromEntries(Object.entries(vc.porLead).filter(([, x]) => x).map(([L, x]) => [L, { n: x.n, antes: fx(x.antes), depois: fx(x.depois) }])),
+      },
+    };
   }
   // Rajada e vento: o fator precisa ser coerente entre antecedências (senão é artefato do arquivo, não erro do
   // modelo). Sem fator coerente de 1 a 5 dias, usa o da rajada de curto prazo (Historical Forecast), se validado:
@@ -147,6 +161,23 @@ function rajadaCorrigida(m, L) {
   return out;
 }
 
+/**
+ * Chuva diária de um modelo numa antecedência como o app mostra: mapeada pela tabela de quantis ajustada sem o
+ * mês do dia (fora da amostra) quando a correção foi aprovada; senão, a bruta.
+ * @returns {Map<string, number>} data → chuva (mm)
+ */
+function chuvaCorrigida(m, L) {
+  const ps = pares(tabela, m, L, 'chuva');
+  const out = new Map(ps.map((p) => [p.data, p.prev]));
+  if (!modelos[m].chuvaQuantis?.usar) return out;
+  const todos = paresChuva(tabela, m);
+  for (const mes of new Set(ps.map((p) => p.mes))) {
+    const aj = ajustarChuva(todos.filter((p) => p.mes !== mes));
+    for (const p of ps) if (p.mes === mes) out.set(p.data, corrigirChuva(aj, p));
+  }
+  return out;
+}
+
 const med = (xs) => { const s = [...xs].sort((a, b) => a - b); const k = s.length >> 1; return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2; };
 
 function resumoRajada() {
@@ -178,7 +209,8 @@ const PLACAR = { tempC: 2, rajadaKmh: 10, dias: 30 };
 
 /**
  * Placar de acerto da previsão da véspera (antecedência de 1 dia), do jeito que o painel mostra:
- * - chuva: consenso (mediana) dos modelos do painel com 1 mm ou mais × medição com 1 mm ou mais;
+ * - chuva: consenso (mediana) dos modelos do painel, já com a correção de chuva fora da amostra, com 1 mm ou
+ *   mais × medição com 1 mm ou mais;
  * - máxima e mínima: ECMWF IFS corrigido fora da amostra, acerto = erro de até ±2 °C;
  * - rajada: mediana dos modelos com rajada, corrigida fora da amostra, acerto = erro de até ±10 km/h.
  * Calculado para os últimos 30 dias com medição e para todo o período com os três modelos.
@@ -187,7 +219,7 @@ function placar() {
   const L = 1;
   const dia = new Map(); // data → { chuva: [...], tmax, tmin, raj: [...] , obs }
   const pega = (d) => { if (!dia.has(d)) dia.set(d, { chuva: [], raj: [], obs: tabela.dias[d].obs }); return dia.get(d); };
-  for (const m of modelosApp) for (const p of pares(tabela, m, L, 'chuva')) pega(p.data).chuva.push(p.prev);
+  for (const m of modelosApp) for (const [d, v] of chuvaCorrigida(m, L)) pega(d).chuva.push(v);
   for (const campo of ['tmax', 'tmin']) {
     const ps = pares(tabela, 'ecmwf_ifs', L, campo);
     const cor = modelos.ecmwf_ifs[campo][L]?.usar ? foraDaAmostra(ps, ajustarVies, corrigirVies) : ps.map((p) => p.prev);
@@ -357,7 +389,7 @@ function relatorio(c) {
     L.push(`| ${l} dia(s) | ${f(a?.maeAntes)} | ${f(a?.maeDepois)} | ${f(a?.viesAntes)} | ${f(a?.viesDepois)} | ${a?.n ?? '–'} |`);
   }
   const pl = c.placar;
-  L.push('', `## Placar de acerto da véspera`, '', `Chuva: consenso dos modelos do painel (1 mm ou mais). Máxima e mínima: ECMWF IFS corrigido, acerto = até ±${pl.limites.tempC} °C. Rajada: mediana corrigida, acerto = até ±${pl.limites.rajadaKmh} km/h.`, '');
+  L.push('', `## Placar de acerto da véspera`, '', `Chuva: consenso dos modelos do painel já corrigidos (1 mm ou mais). Máxima e mínima: ECMWF IFS corrigido, acerto = até ±${pl.limites.tempC} °C. Rajada: mediana corrigida, acerto = até ±${pl.limites.rajadaKmh} km/h.`, '');
   L.push('| Período | Chuva | Máxima | Mínima | Rajada |', '|---|---|---|---|---|');
   for (const [nome, x] of [[`últimos ${pl.limites.dias} dias (${pl.ultimos.ini} a ${pl.ultimos.fim})`, pl.ultimos], [`todo o período (${pl.completo.ini} a ${pl.completo.fim}, ${pl.completo.dias} dias)`, pl.completo]]) {
     L.push(`| ${nome} | ${pct(x.chuva.pct)} | ${pct(x.tmax.pct)} | ${pct(x.tmin.pct)} | ${pct(x.rajada.pct)} |`);
@@ -382,7 +414,15 @@ function relatorio(c) {
       L.push(`| ${x.nome} | ${campo} | ${ESTACOES.map((e) => f(y.fator[e], 2)).join(' | ')} | ${y.usar ? 'sim' : 'não'} |`);
     }
   }
-  L.push('', '## Chuva diária por modelo (dia com chuva = 1 mm ou mais)', '', '| Modelo | Antecedência | Acerto sim/não | Detecta | Alarme falso | Frequência prevista ÷ real | Volume previsto ÷ medido | Erro médio (mm) |', '|---|---|---|---|---|---|---|---|');
+  L.push('', '## Correção da chuva (mapeamento de quantis), fora da amostra', '',
+    `Antecedências de 1 a 5 dias somadas. Usada quando o acerto sim/não sobe pelo menos ${PARAM_CHUVA.ganhoAcerto * 100} ponto e o erro em mm não piora mais que ${PARAM_CHUVA.perdaMaxErro * 100}%.`, '');
+  L.push('| Modelo | Pares | Acerto sim/não | Alarme falso | Detecta | Frequência prevista ÷ real | Volume previsto ÷ medido | Erro médio (mm) | Em uso |', '|---|---|---|---|---|---|---|---|---|');
+  for (const [, x] of Object.entries(c.modelos)) {
+    const q = x.chuvaQuantis; if (!q) continue;
+    const a = q.validacao.total.antes, d = q.validacao.total.depois;
+    L.push(`| ${x.nome} | ${q.n} | ${pct(a.acerto)} → ${pct(d.acerto)} | ${pct(a.far)} → ${pct(d.far)} | ${pct(a.pod)} → ${pct(d.pod)} | ${f(a.viesFrequencia, 2)} → ${f(d.viesFrequencia, 2)} | ${f(a.razaoVolume, 2)} → ${f(d.razaoVolume, 2)} | ${f(a.mae)} → ${f(d.mae)} | ${q.usar ? 'sim' : 'não'} |`);
+  }
+  L.push('', '## Chuva diária por modelo, sem correção (dia com chuva = 1 mm ou mais)', '', '| Modelo | Antecedência | Acerto sim/não | Detecta | Alarme falso | Frequência prevista ÷ real | Volume previsto ÷ medido | Erro médio (mm) |', '|---|---|---|---|---|---|---|---|');
   for (const [, x] of Object.entries(c.modelos)) {
     for (const l of [1, 3, 5]) {
       const y = x.chuva[l]; if (!y) continue;

@@ -281,3 +281,42 @@ test('hora a hora no app: mesma conta do script, máxima do gráfico = máxima d
   assert.equal(r.tmax, Math.max(...nova));
   assert.equal(c.atual.temp.ecmwf_ifs, nova[15]);                           // "agora" com a mesma correção
 });
+
+// ------------------------------------------------------------------ chuva: mapeamento de quantis
+
+import { ajustarChuva, validarChuva, quantis } from '../scripts/lib/chuva.mjs';
+import { mapearChuva, calibrarChuvaSerie, tabelaChuva } from '../js/analise.js';
+
+test('chuva: mapeamento de quantis tira a garoa falsa e mantém a ordem', () => {
+  const tab = { p: [0, 0.5, 2, 10, 40], o: [0, 0, 1, 8, 30] };
+  assert.equal(mapearChuva(0.4, tab), 0);          // garoa prevista vira zero
+  assert.equal(mapearChuva(6, tab), 4.5);          // entre 2→1 e 10→8
+  assert.equal(mapearChuva(80, tab), 60);          // acima da tabela: mesma razão do topo
+  assert.equal(mapearChuva(0, tab), 0);
+  assert.ok(mapearChuva(5, tab) < mapearChuva(7, tab));
+  // série horária: horas escaladas na proporção do total do dia
+  const serie = [1, 2, 3, 0, 0.2, 0.2];
+  const idx = new Map([['2026-01-10', [0, 1, 2]], ['2026-01-11', [3, 4, 5]]]);
+  const nova = calibrarChuvaSerie(serie, idx, () => tab);
+  assert.deepEqual(nova.slice(0, 3), [0.75, 1.5, 2.25]); // 6 mm → 4,5 mm
+  assert.deepEqual(nova.slice(3), [0, 0, 0]);
+  const calib = { modelos: { ecmwf_ifs: { chuvaQuantis: { usar: true, tabela: { verao: tab } } }, ukmo_global_deterministic_10km: { chuvaQuantis: { usar: false, tabela: { verao: tab } } } } };
+  assert.equal(tabelaChuva(calib, 'ecmwf_ifs', 1), tab);
+  assert.equal(tabelaChuva(calib, 'ukmo_global_deterministic_10km', 1), null);
+});
+
+test('chuva: modelo que chove demais fica com a frequência certa fora da amostra', () => {
+  const ps = [];
+  for (let k = 0; k < 730; k++) {
+    const d = new Date(Date.UTC(2024, 0, 1) + k * 86400000).toISOString().slice(0, 10);
+    const obs = k % 4 === 0 ? 2 + (k % 13) : 0;                 // chove 1 dia em 4
+    const prev = obs ? obs * 1.3 : (k % 4 === 1 ? 1.5 : 0.2);     // mais um dia de chuva falsa a cada 4
+    ps.push({ data: d, mes: d.slice(0, 7), estacao: 'verao', lead: 1, prev, obs });
+  }
+  assert.equal(quantis([3, 1, 2], 3).join(), '1,2,3');
+  assert.ok(ajustarChuva(ps));
+  const v = validarChuva(ps);
+  assert.ok(v.total.antes.viesFrequencia > 1.9 && Math.abs(v.total.depois.viesFrequencia - 1) < 0.1);
+  assert.ok(v.total.depois.acerto > v.total.antes.acerto);
+  assert.equal(v.usar, true);
+});

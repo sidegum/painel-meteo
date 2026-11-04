@@ -761,6 +761,8 @@ export function ancorarTemperatura(prev, medida, modeloRef, agoraMs) {
  *   correção (hora a hora quando o histórico horário foi aprovado para o modelo; senão, só máxima e mínima) e
  *   prepararCorrecaoDia a aplica. A máxima do gráfico horário é exatamente a máxima corrigida do dia.
  * - Rajada e vento (wind_gusts_10m, wind_speed_10m): multiplicados pelo fator da antecedência e estação do ano.
+ * - Chuva (precipitation): o total de cada dia local passa pela tabela de quantis do modelo (mapearChuva) e as
+ *   horas do dia são escaladas na mesma proporção; a soma do dia no gráfico é o total corrigido.
  * A antecedência de um dia é a distância em dias do dia de referência (o dia em que a previsão foi buscada),
  * com mínimo 1, igual ao uso em analisarDia.
  *
@@ -779,7 +781,7 @@ export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs
   const indicesDia = new Map();
   datas.forEach((d, i) => { if (!indicesDia.has(d)) indicesDia.set(d, []); indicesDia.get(d).push(i); });
   const modelos = {};
-  const aplicado = { temperatura: [], temperaturaHoraria: [], vento: [] };
+  const aplicado = { temperatura: [], temperaturaHoraria: [], vento: [], chuva: [] };
   const atualTemp = { ...(prev.atual?.temp || {}) };
   const atualLocal = prev.atual?.ms ? partesLocais(prev.atual.ms, prev.offset) : null;
 
@@ -814,6 +816,10 @@ export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs
         });
       }
       if (mudou) aplicado.vento.push(m);
+      if (vars.precipitation) {
+        const nova = calibrarChuvaSerie(vars.precipitation, indicesDia, (d) => tabelaChuva(calib, m, Number(d.slice(5, 7))));
+        if (nova !== vars.precipitation) { vars.precipitation = nova; aplicado.chuva.push(m); }
+      }
     }
     modelos[m] = { ...dados, vars };
   }
@@ -879,16 +885,18 @@ export function prepararCorrecaoDia(valores, horas, viesHora, extremos) {
   };
 }
 
-// Cenários: cada sistema usa o fator do modelo determinístico mais próximo dele (mesma origem e grade parecida).
-// Suposição documentada em docs/CALIBRACAO.md: o erro de escala da rajada é do sistema, não do membro.
+// Cenários: cada sistema usa a correção (rajada e chuva) do modelo determinístico mais próximo dele (mesma origem e
+// grade parecida). Suposição documentada em docs/CALIBRACAO.md: o erro de escala é do sistema, não do membro.
+// O AIFS ENS fica sem correção: é treinado de outro jeito que o AIFS determinístico e não tem histórico próprio.
 export const CALIBRACAO_ENSEMBLE = {
   ecmwf_ifs025: 'ecmwf_ifs025',
   ukmo_global_ensemble_20km: 'ukmo_global_deterministic_10km',
 };
 
 /**
- * Aplica o fator de rajada aos membros dos cenários, com a mesma antecedência e estação do ano usadas em
- * calibrarPrevisao, para que a faixa de rajada dos cenários e a dos modelos falem a mesma língua.
+ * Aplica aos membros dos cenários a tabela de chuva e o fator de rajada do modelo determinístico de mesma origem,
+ * com a mesma antecedência e estação do ano usadas em calibrarPrevisao, para que a chance de chuva, a faixa de
+ * rajada dos cenários e as dos modelos falem a mesma língua.
  * @param {Object<string, {horas:number[], membros:{wind_gusts_10m:number[][]}}>|null} ens
  * @param {object|null} calib
  * @param {number} refMs
@@ -898,7 +906,16 @@ export function calibrarEnsemble(ens, calib, refMs, offsetSeg) {
   if (!ens || !calib) return ens;
   const hoje = Date.parse(partesLocais(refMs, offsetSeg).data + 'T00:00:00Z');
   const out = {};
-  for (const [sis, e] of Object.entries(ens)) {
+  for (const [sis, e0] of Object.entries(ens)) {
+    let e = e0;
+    const refChuva = CALIBRACAO_ENSEMBLE[sis];
+    if (refChuva && e.membros?.precipitation?.length) {
+      const locais = e.horas.map((ms) => partesLocais(ms, offsetSeg));
+      const indicesDia = new Map();
+      locais.forEach((p, i) => { if (!indicesDia.has(p.data)) indicesDia.set(p.data, []); indicesDia.get(p.data).push(i); });
+      const tab = (d) => tabelaChuva(calib, refChuva, Number(d.slice(5, 7)));
+      e = { ...e, membros: { ...e.membros, precipitation: e.membros.precipitation.map((s) => calibrarChuvaSerie(s, indicesDia, tab)) } };
+    }
     const ref = CALIBRACAO_ENSEMBLE[sis];
     if (!ref || !e.membros?.wind_gusts_10m?.length) { out[sis] = e; continue; }
     const fatores = e.horas.map((ms) => {
@@ -909,6 +926,57 @@ export function calibrarEnsemble(ens, calib, refMs, offsetSeg) {
     out[sis] = { ...e, membros: { ...e.membros, wind_gusts_10m: e.membros.wind_gusts_10m.map((s) => s.map((x, i) => (valido(x) ? Math.round(x * fatores[i] * 10) / 10 : x))) } };
   }
   return out;
+}
+
+// ---------- chuva: mapeamento de quantis (scripts/lib/chuva.mjs) ----------
+
+/**
+ * Mapeia um total diário de chuva previsto pela tabela de quantis: acha a posição do valor entre os quantis
+ * previstos (p) e devolve o valor na mesma posição entre os quantis medidos (o). Acima do maior quantil, mantém a
+ * razão do topo da tabela. Mesma função no app e em scripts/lib/chuva.mjs.
+ * @param {number|null} x total previsto (mm)
+ * @param {{p:number[], o:number[]}|null} tab quantis previstos e medidos, crescentes, do mesmo tamanho
+ * @returns {number|null}
+ */
+export function mapearChuva(x, tab) {
+  if (!valido(x) || x <= 0 || !tab?.p?.length || tab.p.length !== tab.o?.length) return x;
+  const { p, o } = tab, n = p.length;
+  if (x >= p[n - 1]) return p[n - 1] > 0 ? x * o[n - 1] / p[n - 1] : x;
+  let i = 0;
+  for (let k = 0; k < n; k++) if (p[k] <= x) i = k;
+  const j = i + 1, w = (x - p[i]) / (p[j] - p[i]);
+  return Math.max(0, o[i] + w * (o[j] - o[i]));
+}
+
+/**
+ * Tabela de chuva aprovada do histórico para um modelo e mês (calib.modelos[m].chuvaQuantis), ou null.
+ * @returns {{p:number[], o:number[]}|null}
+ */
+export function tabelaChuva(calib, modelo, mes) {
+  const q = calib?.modelos?.[modelo]?.chuvaQuantis;
+  return q?.usar ? q.tabela?.[estacaoDoAno(mes)] || null : null;
+}
+
+/**
+ * Corrige uma série horária de chuva dia a dia: total do dia mapeado (mapearChuva) e horas escaladas na mesma
+ * proporção. Devolve a própria série quando nada muda.
+ * @param {(number|null)[]} serie
+ * @param {Map<string, number[]>} indicesDia data local → índices da série
+ * @param {(data:string) => ({p:number[], o:number[]}|null)} tabelaDoDia
+ */
+export function calibrarChuvaSerie(serie, indicesDia, tabelaDoDia) {
+  let nova = null;
+  for (const [d, idx] of indicesDia) {
+    const tab = tabelaDoDia(d);
+    if (!tab) continue;
+    const total = idx.reduce((t, i) => t + (valido(serie[i]) ? serie[i] : 0), 0);
+    if (!(total > 0)) continue;
+    const f = mapearChuva(total, tab) / total;
+    if (Math.abs(f - 1) < 1e-6) continue;
+    nova ||= serie.slice();
+    for (const i of idx) if (valido(serie[i])) nova[i] = Math.round(serie[i] * f * 100) / 100;
+  }
+  return nova || serie;
 }
 
 // Chance de chuva calibrada pelo histórico: se, quando o painel disse 30%, choveu em 50% das vezes,
