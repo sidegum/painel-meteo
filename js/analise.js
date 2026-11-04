@@ -719,22 +719,6 @@ export function pesosHistoricos(calib) {
 }
 
 /**
- * Aplica a calibração às séries horárias de cada modelo, antes de qualquer análise, para que todas as telas
- * (primeira tela, gráficos, semana, comparação, pressão) usem os mesmos valores. Não altera o objeto original.
- *
- * - Temperatura (temperature_2m e a temperatura "current"): para cada dia local, a correção da hora é
- *   interpolada entre a correção da mínima e a da máxima conforme a posição da hora entre a mínima e a máxima
- *   do próprio modelo naquele dia. Assim a máxima do gráfico horário é exatamente a máxima corrigida do dia.
- * - Rajada e vento (wind_gusts_10m, wind_speed_10m): multiplicados pelo fator da antecedência e estação do ano.
- * A antecedência de um dia é a distância em dias do dia de referência (o dia em que a previsão foi buscada),
- * com mínimo 1, igual ao uso em analisarDia.
- *
- * @param {object} prev previsão normalizada (js/dados.js: normalizarPrevisao)
- * @param {{calib?:object|null, aprendizado?:object|null, refMs:number}} op calib: dados/calibracao.json (já
- *   verificada com calibracaoAplicavel); aprendizado: porModelo do Worker (modelo → lead → viés), ou null
- * @returns {object} nova previsão, com `calibracao` descrevendo o que foi aplicado
- */
-/**
  * Ancora a temperatura prevista das próximas horas na última medição (REGRAS.ancoragem).
  * delta = medido − previsto na hora da leitura (série de referência, normalmente o ECMWF). Cada hora futura
  * recebe delta × (1 − horas desde a leitura / REGRAS.ancoragem.horas), em todos os modelos, na temperatura e
@@ -769,43 +753,56 @@ export function ancorarTemperatura(prev, medida, modeloRef, agoraMs) {
   return { prev: { ...prev, modelos }, delta };
 }
 
+/**
+ * Aplica a calibração às séries horárias de cada modelo, antes de qualquer análise, para que todas as telas
+ * (primeira tela, gráficos, semana, comparação, pressão) usem os mesmos valores. Não altera o objeto original.
+ *
+ * - Temperatura (temperature_2m e a temperatura "current"): por dia local, correcaoTemperaturaDia decide a
+ *   correção (hora a hora quando o histórico horário foi aprovado para o modelo; senão, só máxima e mínima) e
+ *   prepararCorrecaoDia a aplica. A máxima do gráfico horário é exatamente a máxima corrigida do dia.
+ * - Rajada e vento (wind_gusts_10m, wind_speed_10m): multiplicados pelo fator da antecedência e estação do ano.
+ * - Chuva (precipitation): o total de cada dia local passa pela tabela de quantis do modelo (mapearChuva) e as
+ *   horas do dia são escaladas na mesma proporção; a soma do dia no gráfico é o total corrigido.
+ * A antecedência de um dia é a distância em dias do dia de referência (o dia em que a previsão foi buscada),
+ * com mínimo 1, igual ao uso em analisarDia.
+ *
+ * @param {object} prev previsão normalizada (js/dados.js: normalizarPrevisao)
+ * @param {{calib?:object|null, aprendizado?:object|null, refMs:number}} op calib: dados/calibracao.json (já
+ *   verificada com calibracaoAplicavel); aprendizado: porModelo do Worker (modelo → lead → viés), ou null
+ * @returns {object} nova previsão, com `calibracao` descrevendo o que foi aplicado
+ */
 export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs }) {
   if (!prev?.horas || (!calib && !aprendizado)) return prev;
   const hoje = partesLocais(refMs, prev.offset).data;
   const diaMs = (d) => Date.parse(d + 'T00:00:00Z');
   const leadDoDia = (d) => Math.max(1, Math.round((diaMs(d) - diaMs(hoje)) / 86400000));
-  const datas = prev.horas.map((ms) => partesLocais(ms, prev.offset).data);
+  const locais = prev.horas.map((ms) => partesLocais(ms, prev.offset));
+  const datas = locais.map((p) => p.data);
+  const indicesDia = new Map();
+  datas.forEach((d, i) => { if (!indicesDia.has(d)) indicesDia.set(d, []); indicesDia.get(d).push(i); });
   const modelos = {};
-  const aplicado = { temperatura: [], vento: [] };
+  const aplicado = { temperatura: [], temperaturaHoraria: [], vento: [], chuva: [] };
   const atualTemp = { ...(prev.atual?.temp || {}) };
-  const dataAtual = prev.atual?.ms ? partesLocais(prev.atual.ms, prev.offset).data : null;
+  const atualLocal = prev.atual?.ms ? partesLocais(prev.atual.ms, prev.offset) : null;
 
   for (const [m, dados] of Object.entries(prev.modelos)) {
     const vars = { ...dados.vars };
     const t = vars.temperature_2m;
     if (t) {
-      // mínima e máxima do modelo em cada dia local, na série bruta
-      const ext = new Map();
-      t.forEach((v, i) => {
-        if (!valido(v)) return;
-        const e = ext.get(datas[i]) || { min: v, max: v };
-        e.min = Math.min(e.min, v); e.max = Math.max(e.max, v); ext.set(datas[i], e);
-      });
-      const corr = new Map();
-      for (const d of ext.keys()) {
+      const nova = t.slice();
+      let mudou = false, horaria = false;
+      for (const [d, idx] of indicesDia) {
         const lead = leadDoDia(d), mes = Number(d.slice(5, 7));
-        const hist = calib ? viesHistorico(calib, m, lead, mes) : null;
-        corr.set(d, correcaoTemperatura(aprendizado?.[m]?.[leadDe(lead)], hist));
+        const c = correcaoTemperaturaDia(calib, aprendizado, m, lead, mes);
+        if (c.viesHora) horaria = true;
+        if (c.viesHora || c.extremos.tmax || c.extremos.tmin) mudou = true;
+        const corrigir = prepararCorrecaoDia(idx.map((i) => t[i]), idx.map((i) => locais[i].hora), c.viesHora, c.extremos);
+        idx.forEach((i) => { nova[i] = corrigir(t[i], locais[i].hora); });
+        if (atualLocal?.data === d && valido(atualTemp[m])) atualTemp[m] = corrigir(atualTemp[m], atualLocal.hora);
       }
-      const ajusta = (v, d) => {
-        const e = ext.get(d), c = corr.get(d);
-        if (!valido(v) || !e || !c) return v;
-        const w = e.max > e.min ? Math.min(1, Math.max(0, (v - e.min) / (e.max - e.min))) : 0.5;
-        return Math.round((v - (c.tmin + w * (c.tmax - c.tmin))) * 10) / 10;
-      };
-      vars.temperature_2m = t.map((v, i) => ajusta(v, datas[i]));
-      if (dataAtual && valido(atualTemp[m])) atualTemp[m] = ajusta(atualTemp[m], dataAtual);
-      if ([...corr.values()].some((c) => c.tmax || c.tmin)) aplicado.temperatura.push(m);
+      vars.temperature_2m = nova;
+      if (mudou) aplicado.temperatura.push(m);
+      if (horaria) aplicado.temperaturaHoraria.push(m);
     }
     if (calib) {
       let mudou = false;
@@ -813,12 +810,16 @@ export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs
         if (!vars[v]) continue;
         vars[v] = vars[v].map((x, i) => {
           if (!valido(x)) return x;
-          const f = fatorHistorico(calib, m, campo, leadDoDia(datas[i]), Number(datas[i].slice(5, 7)));
+          const f = fatorHistorico(calib, m, campo, leadDoDia(datas[i]), locais[i].mes);
           if (f !== 1) mudou = true;
           return Math.round(x * f * 10) / 10;
         });
       }
       if (mudou) aplicado.vento.push(m);
+      if (vars.precipitation) {
+        const nova = calibrarChuvaSerie(vars.precipitation, indicesDia, (d) => tabelaChuva(calib, m, Number(d.slice(5, 7))));
+        if (nova !== vars.precipitation) { vars.precipitation = nova; aplicado.chuva.push(m); }
+      }
     }
     modelos[m] = { ...dados, vars };
   }
@@ -828,16 +829,74 @@ export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs
   };
 }
 
-// Cenários: cada sistema usa o fator do modelo determinístico mais próximo dele (mesma origem e grade parecida).
-// Suposição documentada em docs/CALIBRACAO.md: o erro de escala da rajada é do sistema, não do membro.
+/**
+ * Correção horária aprovada do histórico (calib.temperaturaHoraria, gerada por scripts/calibrar.mjs) para um
+ * modelo, antecedência e mês: o viés de cada hora do dia (previsto − medido) e o ajuste residual da máxima e
+ * da mínima depois dele. null quando o modelo não tem correção horária ou a validação não a aprovou.
+ * @returns {{viesHora:number[], pico:{tmax:number, tmin:number}}|null}
+ */
+export function temperaturaHoraria(calib, modelo, lead, mes) {
+  const y = calib?.temperaturaHoraria?.modelos?.[modelo]?.leads?.[leadDe(lead)], est = estacaoDoAno(mes);
+  const vh = y?.usar ? y.vies?.[est] : null;
+  if (!Array.isArray(vh) || vh.length !== 24 || !vh.every(valido)) return null;
+  const p = (c) => (valido(y.pico?.[c]?.[est]) ? y.pico[c][est] : 0);
+  return { viesHora: vh, pico: { tmax: p('tmax'), tmin: p('tmin') } };
+}
+
+/**
+ * Correção de temperatura de um dia local de um modelo, juntando as três fontes numa só regra:
+ * 1. histórico hora a hora (temperaturaHoraria), quando aprovado: viés de cada hora + ajuste residual de
+ *    máxima e mínima; senão, histórico diário de máxima e mínima (viesHistorico);
+ * 2. aprendizado recente do Worker (viés da máxima e da mínima brutas), misturado ao histórico diário por
+ *    correcaoTemperatura; o que ele acrescenta ao histórico diário soma-se aos extremos.
+ * @returns {{viesHora:number[]|null, extremos:{tmax:number, tmin:number}}}
+ */
+export function correcaoTemperaturaDia(calib, aprendizado, modelo, lead, mes) {
+  const diario = calib ? viesHistorico(calib, modelo, lead, mes) : { tmax: null, tmin: null };
+  const misturado = correcaoTemperatura(aprendizado?.[modelo]?.[leadDe(lead)], calib ? diario : null);
+  const h = calib ? temperaturaHoraria(calib, modelo, lead, mes) : null;
+  if (!h) return { viesHora: null, extremos: misturado };
+  // parte do aprendizado recente que vai além do histórico diário (zero sem Worker)
+  const extra = (c) => (aprendizado ? misturado[c] - (valido(diario[c]) ? diario[c] : 0) : 0);
+  return { viesHora: h.viesHora, extremos: { tmax: h.pico.tmax + extra('tmax'), tmin: h.pico.tmin + extra('tmin') } };
+}
+
+/**
+ * Prepara a correção de temperatura de um dia local (mesma conta no app e em scripts/calibrar.mjs).
+ * 1. Cada hora perde o viés da sua hora do dia (viesHora[hora], ou 0).
+ * 2. Na série resultante, cada valor perde a correção interpolada entre a da mínima e a da máxima conforme
+ *    sua posição entre a mínima e a máxima do dia: a máxima do gráfico horário é exatamente a máxima corrigida.
+ * @param {(number|null)[]} valores temperaturas do dia (previsão bruta)
+ * @param {number[]} horas hora local (0 a 23) de cada valor
+ * @param {number[]|null} viesHora viés por hora do dia (24 valores) ou null
+ * @param {{tmax:number|null, tmin:number|null}} extremos correção da máxima e da mínima
+ * @returns {(v:number|null, hora:number) => number|null} corrige um valor do dia (inclusive a leitura "agora")
+ */
+export function prepararCorrecaoDia(valores, horas, viesHora, extremos) {
+  const vh = (hora) => (viesHora && valido(viesHora[hora]) ? viesHora[hora] : 0);
+  const ct = valido(extremos?.tmax) ? extremos.tmax : 0, cn = valido(extremos?.tmin) ? extremos.tmin : 0;
+  let min = Infinity, max = -Infinity;
+  valores.forEach((v, k) => { if (valido(v)) { const x = v - vh(horas[k]); min = Math.min(min, x); max = Math.max(max, x); } });
+  return (v, hora) => {
+    if (!valido(v) || min === Infinity) return v;
+    const x = v - vh(hora);
+    const w = max > min ? Math.min(1, Math.max(0, (x - min) / (max - min))) : 0.5;
+    return Math.round((x - (cn + w * (ct - cn))) * 10) / 10;
+  };
+}
+
+// Cenários: cada sistema usa a correção (rajada e chuva) do modelo determinístico mais próximo dele (mesma origem e
+// grade parecida). Suposição documentada em docs/CALIBRACAO.md: o erro de escala é do sistema, não do membro.
+// O AIFS ENS fica sem correção: é treinado de outro jeito que o AIFS determinístico e não tem histórico próprio.
 export const CALIBRACAO_ENSEMBLE = {
   ecmwf_ifs025: 'ecmwf_ifs025',
   ukmo_global_ensemble_20km: 'ukmo_global_deterministic_10km',
 };
 
 /**
- * Aplica o fator de rajada aos membros dos cenários, com a mesma antecedência e estação do ano usadas em
- * calibrarPrevisao, para que a faixa de rajada dos cenários e a dos modelos falem a mesma língua.
+ * Aplica aos membros dos cenários a tabela de chuva e o fator de rajada do modelo determinístico de mesma origem,
+ * com a mesma antecedência e estação do ano usadas em calibrarPrevisao, para que a chance de chuva, a faixa de
+ * rajada dos cenários e as dos modelos falem a mesma língua.
  * @param {Object<string, {horas:number[], membros:{wind_gusts_10m:number[][]}}>|null} ens
  * @param {object|null} calib
  * @param {number} refMs
@@ -847,7 +906,16 @@ export function calibrarEnsemble(ens, calib, refMs, offsetSeg) {
   if (!ens || !calib) return ens;
   const hoje = Date.parse(partesLocais(refMs, offsetSeg).data + 'T00:00:00Z');
   const out = {};
-  for (const [sis, e] of Object.entries(ens)) {
+  for (const [sis, e0] of Object.entries(ens)) {
+    let e = e0;
+    const refChuva = CALIBRACAO_ENSEMBLE[sis];
+    if (refChuva && e.membros?.precipitation?.length) {
+      const locais = e.horas.map((ms) => partesLocais(ms, offsetSeg));
+      const indicesDia = new Map();
+      locais.forEach((p, i) => { if (!indicesDia.has(p.data)) indicesDia.set(p.data, []); indicesDia.get(p.data).push(i); });
+      const tab = (d) => tabelaChuva(calib, refChuva, Number(d.slice(5, 7)));
+      e = { ...e, membros: { ...e.membros, precipitation: e.membros.precipitation.map((s) => calibrarChuvaSerie(s, indicesDia, tab)) } };
+    }
     const ref = CALIBRACAO_ENSEMBLE[sis];
     if (!ref || !e.membros?.wind_gusts_10m?.length) { out[sis] = e; continue; }
     const fatores = e.horas.map((ms) => {
@@ -858,6 +926,57 @@ export function calibrarEnsemble(ens, calib, refMs, offsetSeg) {
     out[sis] = { ...e, membros: { ...e.membros, wind_gusts_10m: e.membros.wind_gusts_10m.map((s) => s.map((x, i) => (valido(x) ? Math.round(x * fatores[i] * 10) / 10 : x))) } };
   }
   return out;
+}
+
+// ---------- chuva: mapeamento de quantis (scripts/lib/chuva.mjs) ----------
+
+/**
+ * Mapeia um total diário de chuva previsto pela tabela de quantis: acha a posição do valor entre os quantis
+ * previstos (p) e devolve o valor na mesma posição entre os quantis medidos (o). Acima do maior quantil, mantém a
+ * razão do topo da tabela. Mesma função no app e em scripts/lib/chuva.mjs.
+ * @param {number|null} x total previsto (mm)
+ * @param {{p:number[], o:number[]}|null} tab quantis previstos e medidos, crescentes, do mesmo tamanho
+ * @returns {number|null}
+ */
+export function mapearChuva(x, tab) {
+  if (!valido(x) || x <= 0 || !tab?.p?.length || tab.p.length !== tab.o?.length) return x;
+  const { p, o } = tab, n = p.length;
+  if (x >= p[n - 1]) return p[n - 1] > 0 ? x * o[n - 1] / p[n - 1] : x;
+  let i = 0;
+  for (let k = 0; k < n; k++) if (p[k] <= x) i = k;
+  const j = i + 1, w = (x - p[i]) / (p[j] - p[i]);
+  return Math.max(0, o[i] + w * (o[j] - o[i]));
+}
+
+/**
+ * Tabela de chuva aprovada do histórico para um modelo e mês (calib.modelos[m].chuvaQuantis), ou null.
+ * @returns {{p:number[], o:number[]}|null}
+ */
+export function tabelaChuva(calib, modelo, mes) {
+  const q = calib?.modelos?.[modelo]?.chuvaQuantis;
+  return q?.usar ? q.tabela?.[estacaoDoAno(mes)] || null : null;
+}
+
+/**
+ * Corrige uma série horária de chuva dia a dia: total do dia mapeado (mapearChuva) e horas escaladas na mesma
+ * proporção. Devolve a própria série quando nada muda.
+ * @param {(number|null)[]} serie
+ * @param {Map<string, number[]>} indicesDia data local → índices da série
+ * @param {(data:string) => ({p:number[], o:number[]}|null)} tabelaDoDia
+ */
+export function calibrarChuvaSerie(serie, indicesDia, tabelaDoDia) {
+  let nova = null;
+  for (const [d, idx] of indicesDia) {
+    const tab = tabelaDoDia(d);
+    if (!tab) continue;
+    const total = idx.reduce((t, i) => t + (valido(serie[i]) ? serie[i] : 0), 0);
+    if (!(total > 0)) continue;
+    const f = mapearChuva(total, tab) / total;
+    if (Math.abs(f - 1) < 1e-6) continue;
+    nova ||= serie.slice();
+    for (const i of idx) if (valido(serie[i])) nova[i] = Math.round(serie[i] * f * 100) / 100;
+  }
+  return nova || serie;
 }
 
 // Chance de chuva calibrada pelo histórico: se, quando o painel disse 30%, choveu em 50% das vezes,

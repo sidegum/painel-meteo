@@ -1,6 +1,6 @@
 name: Calibração com histórico
 
-# Baixa o histórico (INMET A884 e A801, METAR de Canoas e previsões passadas da Open-Meteo), recalcula
+# Baixa o histórico (INMET A884 e A801, METAR de Canoas e do aeroporto de Porto Alegre, temperatura hora a hora e previsões passadas da Open-Meteo), recalcula
 # dados/calibracao.json e publica no mesmo branch. Roda todo dia (só os dias novos são buscados), à mão, ou
 # quando o método muda. Com o segredo INMET_TOKEN, os dias recentes do INMET entram sem esperar o arquivo anual.
 on:
@@ -13,6 +13,8 @@ on:
       - 'scripts/calibrar.mjs'
       - 'scripts/lib/inmet.mjs'
       - 'scripts/lib/calibracao.mjs'
+      - 'scripts/lib/temperatura-horaria.mjs'
+      - 'scripts/lib/chuva.mjs'
       - '.github/workflows/calibracao.yml'
 
 permissions:

@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.23';
+const VERSAO = '1.2.24';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -32,6 +32,7 @@ const VERIFICACAO = [
   { id: 'A884', nome: 'Campo Bom (INMET)', lat: -29.674, lon: -51.064, chuva: true },
   { id: 'A801', nome: 'Porto Alegre Jardim Botânico (INMET)', lat: -30.054, lon: -51.175, chuva: true },
   { id: 'SBCO', nome: 'Canoas (METAR)', lat: -29.945, lon: -51.144, chuva: false },
+  { id: 'SBPA', nome: 'Porto Alegre aeroporto (METAR)', lat: -29.994, lon: -51.171, chuva: false },
 ];
 
 // ------------------------------------------------------------------ início
@@ -1430,7 +1431,7 @@ function linhaPlacar() {
     linha('Mínima', x.tmin, `com erro de até ${pl.limites.tempC} °C`),
     x.rajada?.n ? linha('Rajada', x.rajada, `com erro de até ${pl.limites.rajadaKmh} km/h`) : null)];
   const abrir = () => mostrarInfo('Acerto da véspera',
-    el('p', { text: 'Quanto a previsão feita no dia anterior acertou, comparada com a estação do INMET em Campo Bom. Temperatura e rajada já com a correção pelo histórico, medida em meses que a correção não viu.' }),
+    el('p', { text: 'Quanto a previsão feita no dia anterior acertou, comparada com a estação do INMET em Campo Bom. Chuva, temperatura e rajada já com a correção pelo histórico, medida em meses que a correção não viu.' }),
     ...bloco(`Últimos ${u.dias} dias (${dataBr(u.ini)} a ${dataBr(u.fim)})`, u),
     ...(pl.completo?.dias > u.dias ? bloco(`Todo o período (${pl.completo.dias} dias, desde ${dataBr(pl.completo.ini)}/${pl.completo.ini.slice(2, 4)})`, pl.completo) : []),
     el('p', { class: 'nota', text: 'O arquivo do INMET chega com um ou dois meses de atraso; o placar é recalculado sozinho quando ele chega.' }));
@@ -1718,7 +1719,12 @@ function tabelaAcerto() {
       const linhas = [];
       for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
         const x = k.modelos?.[m]; if (!x?.chuva?.[d]) continue;
-        linhas.push(linha(m, d, x.chuva[d].acerto, x.chuva[d].mae, erroUsado(x.rajada?.[d]), erroUsado(x.tmax?.[d]), x.chuva[d].n));
+        // chuva em uso no painel: corrigida (fora da amostra) quando a tabela de quantis foi aprovada
+        const q = x.chuvaQuantis?.usar ? x.chuvaQuantis.validacao?.porLead?.[d]?.depois : null;
+        // máxima em uso: a do método hora a hora quando ele foi aprovado, senão a do método diário
+        const h = k.temperaturaHoraria?.modelos?.[m]?.leads?.[d];
+        const tmax = h?.usar ? h.validacao?.tmax?.horaria?.mae : erroUsado(x.tmax?.[d]);
+        linhas.push(linha(m, d, q ? q.acerto : x.chuva[d].acerto, q ? q.mae : x.chuva[d].mae, erroUsado(x.rajada?.[d]), tmax, x.chuva[d].n));
       }
       blocos.push(el('p', { class: 'fonte', text: `INMET Campo Bom · histórico de ${dataBr(k.periodo.ini)} a ${dataBr(k.periodo.fim)}` }));
       if (linhas.length) blocos.push(tabela(linhas));
@@ -1736,7 +1742,7 @@ function tabelaAcerto() {
       blocos.push(el('p', { class: 'nota', text: workerConfigurado() ? 'Sem histórico importado; os dias passam a contar a partir de amanhã.' : 'Sem histórico importado.' }));
     }
   }
-  blocos.push(el('p', { class: 'nota', text: '"Acertou se chovia" conta os dias em que o modelo disse que ia chover e choveu, ou disse que não ia e não choveu. Os erros mostram, em média, quanto o modelo errou para mais ou para menos: quanto menor, melhor. Em Campo Bom, temperatura e rajada já com a correção que o painel aplica.' }));
+  blocos.push(el('p', { class: 'nota', text: '"Acertou se chovia" conta os dias em que o modelo disse que ia chover e choveu, ou disse que não ia e não choveu. Os erros mostram, em média, quanto o modelo errou para mais ou para menos: quanto menor, melhor. Em Campo Bom, chuva, temperatura e rajada já com a correção que o painel aplica.' }));
   return el('div', {}, ...blocos);
 }
 

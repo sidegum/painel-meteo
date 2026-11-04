@@ -1,6 +1,6 @@
 # Resultado da calibração (gerado automaticamente)
 
-Gerado em 2026-11-04 16:09 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
+Gerado em 2026-11-04 19:39 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
 
 Estação: INMET A884 Campo Bom. Medições de 2021-03-01 a 2026-08-31 (2010 dias válidos).
 
@@ -39,12 +39,12 @@ Todos os números de "depois" são **fora da amostra**: cada mês foi corrigido 
 
 ## Placar de acerto da véspera
 
-Chuva: consenso dos modelos do painel (1 mm ou mais). Máxima e mínima: ECMWF IFS corrigido, acerto = até ±2 °C. Rajada: mediana corrigida, acerto = até ±10 km/h.
+Chuva: consenso dos modelos do painel já corrigidos (1 mm ou mais). Máxima e mínima: ECMWF IFS corrigido, acerto = até ±2 °C. Rajada: mediana corrigida, acerto = até ±10 km/h.
 
 | Período | Chuva | Máxima | Mínima | Rajada |
 |---|---|---|---|---|
-| últimos 30 dias (2026-08-01 a 2026-08-30) | 67% | 73% | 87% | 87% |
-| todo o período (2025-10-16 a 2026-08-30, 257 dias) | 76% | 82% | 93% | 78% |
+| últimos 30 dias (2026-08-01 a 2026-08-30) | 80% | 73% | 87% | 87% |
+| todo o período (2025-10-16 a 2026-08-30, 257 dias) | 84% | 82% | 93% | 78% |
 
 ## Rajada de curto prazo (Historical Forecast) e coerência entre antecedências
 
@@ -89,7 +89,20 @@ Temperatura: previsto − medido, em °C (positivo = o modelo esquenta demais). 
 | ICON | rajada | 0,69 | 0,69 | 0,69 | 0,69 | sim |
 | ICON | vento | 0,65 | 0,73 | 0,80 | 0,68 | sim |
 
-## Chuva diária por modelo (dia com chuva = 1 mm ou mais)
+## Correção da chuva (mapeamento de quantis), fora da amostra
+
+Antecedências de 1 a 5 dias somadas. Usada quando o acerto sim/não sobe pelo menos 1 ponto e o erro em mm não piora mais que 2%.
+
+| Modelo | Pares | Acerto sim/não | Alarme falso | Detecta | Frequência prevista ÷ real | Volume previsto ÷ medido | Erro médio (mm) | Em uso |
+|---|---|---|---|---|---|---|---|---|
+| ECMWF IFS | 1302 | 74% → 80% | 47% → 36% | 82% → 65% | 1,56 → 1,01 | 1,23 → 1,03 | 4,0 → 3,7 | sim |
+| ECMWF AIFS | 1911 | 71% → 84% | 53% → 31% | 96% → 72% | 2,04 → 1,03 | 1,21 → 1,03 | 3,2 → 3,0 | sim |
+| UKMO 10 km | 2061 | 76% → 79% | 45% → 37% | 80% → 63% | 1,46 → 1,00 | 1,29 → 1,05 | 4,8 → 4,4 | sim |
+| ECMWF IFS 0,25° | 3814 | 79% → 82% | 39% → 29% | 84% → 69% | 1,37 → 0,98 | 1,04 → 0,99 | 4,4 → 4,5 | sim |
+| GFS | 3895 | 82% → 83% | 33% → 28% | 81% → 71% | 1,21 → 0,98 | 0,83 → 1,00 | 4,4 → 4,9 | não |
+| ICON | 3885 | 81% → 82% | 35% → 29% | 82% → 69% | 1,26 → 0,98 | 1,05 → 0,98 | 4,8 → 4,9 | sim |
+
+## Chuva diária por modelo, sem correção (dia com chuva = 1 mm ou mais)
 
 | Modelo | Antecedência | Acerto sim/não | Detecta | Alarme falso | Frequência prevista ÷ real | Volume previsto ÷ medido | Erro médio (mm) |
 |---|---|---|---|---|---|---|---|

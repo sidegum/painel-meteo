@@ -65,11 +65,15 @@ Multiplicativo, e não aditivo, porque o erro de rajada cresce com a força do v
 
 Ressalva medida, não suposta: a estação mede o vento num ponto, a 10 m, com o entorno dela; o modelo representa uma área de alguns quilômetros. O fator corrige para o que se mede **na estação de Campo Bom**, que é o mais próximo do que se sente na cidade.
 
-### 4.3 Chuva: só métricas, sem correção de volume
+### 4.3 Chuva: mapeamento de quantis (`scripts/lib/chuva.mjs`)
 
-O relatório traz, por modelo e antecedência: acerto sim/não (dia com 1 mm ou mais), detecção (dias de chuva que o modelo previu), alarme falso, frequência prevista ÷ real e volume previsto ÷ medido.
+Achado medido: os modelos do painel preveem dia com chuva (1 mm ou mais) **1,5 a 2 vezes** mais do que chove em Campo Bom (garoa prevista que não acontece) e somam 20 a 30% a mais de volume. Um fator único não resolve: garoa de 0,5 mm e temporal de 40 mm erram de jeitos diferentes.
 
-Por que não corrigir o volume: o erro de chuva diária é dominado por posição e horário (a célula de chuva cai 10 km ao lado, ou às 23 h em vez de 01 h), e não por um fator constante. Um multiplicador aplicado aos modelos não se aplicaria de forma coerente aos 120 cenários que dão a chance de chuva, e o painel passaria a mostrar volumes de uma fonte e chances de outra. A chance de chuva continua sendo calibrada pelo aprendizado diário do Worker, que compara a chance que o próprio painel deu com a chuva que caiu.
+Método: para cada modelo e estação do ano, com as antecedências de 1 a 5 dias somadas (a distribuição pouco muda com a antecedência), calcula 51 quantis do total diário previsto e 51 do medido nos mesmos dias. O total previsto é levado ao valor medido de mesma posição (`mapearChuva`, em js/analise.js, a mesma função no app e no script): o 70º percentil previsto vira o 70º percentil medido. A ordem não muda (dia mais chuvoso continua mais chuvoso); a garoa abaixo do limiar real vira zero e o volume fica na escala medida. Acima do maior quantil, mantém a razão do topo. A tabela da estação do ano encolhe para a anual com `K = 100` pares.
+
+Validação: um mês de fora, como o resto. Usada (`chuvaQuantis.usar`) só se o acerto sim/não subir pelo menos 1 ponto e o erro em mm não piorar mais que 2%. Resultado (fora da amostra, antecedências somadas): ECMWF IFS 74% → 80%, AIFS 71% → 84%, UKMO 76% → 79%; frequência prevista ÷ real cai para cerca de 1,0. A detecção cai (de cerca de 85% para 65 a 70%): o modelo para de "prever chuva sempre"; dias de chuva fraca que ele já previa com pouco volume passam a não contar. É o preço de parar com os alarmes falsos, e ele aparece no relatório.
+
+Onde entra no app: `calibrarPrevisao` mapeia o total de cada dia local de cada modelo e escala as horas do dia na mesma proporção; `calibrarEnsemble` faz o mesmo com cada membro dos cenários, usando a tabela do determinístico de mesma origem (ECMWF ENS → `ecmwf_ifs025`, MOGREPS-G → UKMO 10 km). Suposição, não testada: o viés de garoa é do sistema (física e grade), não do membro. O AIFS ENS fica sem correção, porque é treinado de outro jeito que o AIFS determinístico. Assim a chance de chuva (cenários), o volume e a comparação de modelos saem da mesma série corrigida.
 
 ### 4.4 Pesos dos modelos
 
@@ -90,6 +94,21 @@ Uma correção ajustada e testada nos mesmos dados sempre parece melhor do que �
 3. mede o erro desse mês.
 
 O erro "depois" do relatório é a média desses meses nunca vistos pela calibração. Uma correção só recebe `usar: true` (e só então é aplicada no app) se reduzir o erro absoluto médio em pelo menos 2% (`PARAM.ganhoMinimo`). O mês inteiro sai junto para que dias vizinhos, parecidos entre si, não vazem informação para o teste.
+
+### 4.6 Temperatura hora a hora (`scripts/lib/temperatura-horaria.mjs`)
+
+Por quê: o erro do modelo muda ao longo do dia (no verão, o ECMWF costuma esfriar demais a tarde e errar menos de madrugada). A correção só de máxima e mínima desloca a curva inteira; a correção por hora acerta também as 15 h, as 18 h e a noite.
+
+Dados (`dados/historico/A884-horario.json`): temperatura medida na hora cheia (INMET A884) e, para ECMWF IFS, AIFS e UKMO, a prevista hora a hora: `h0` = primeiras horas de cada rodada (Historical Forecast, desde 2022) e `p1…p5` = prevista 1 a 5 dias antes (Previous Runs; ECMWF IFS desde out/2025, os outros desde 2024).
+
+Ajuste em duas etapas, a mesma conta no app (`prepararCorrecaoDia`):
+
+1. **Viés por hora do dia e estação do ano.** Primeiro com `h0` (quatro anos: a base); depois, para cada antecedência, `(n·média + 20·base) / (n + 20)` por estação e hora. A base de curto prazo dá estabilidade; os dias de 1 a 5 dias antes ajustam o que muda com a antecedência.
+2. **Ajuste residual de máxima e mínima.** A hora cheia não pega o pico entre duas leituras; o INMET mede máxima e mínima da hora anterior. Depois da etapa 1, o viés diário (como em 4.1) entre o extremo da série corrigida e o extremo medido entra pela mesma interpolação do método diário.
+
+Validação: um mês de fora (inclusive da base) e três versões comparadas no mês deixado de fora: bruta, método diário (4.1) e horário. O horário só é usado (`temperaturaHoraria.modelos[m].leads[L].usar`) se reduzir o erro hora a hora em pelo menos 2% frente ao **método diário** sem piorar máxima e mínima em mais de 0,05 °C. Sem aprovação, vale o método diário. Números em `calibracao-resultado.md`.
+
+No app, `correcaoTemperaturaDia` decide por modelo, antecedência e mês: horário quando aprovado, senão diário. O aprendizado recente do Worker soma, aos extremos, o que acrescenta ao histórico diário. A ancoragem na medição de agora (`ancorarTemperatura`) vem depois, sobre a série já corrigida.
 
 ## 5. Arquivo `dados/calibracao.json`
 
@@ -114,8 +133,8 @@ Resumo (detalhes em [TECNICO.md](TECNICO.md), seção 3.7):
 
 - `buscarCalibracao` (js/dados.js) lê o arquivo do próprio GitHub Pages, uma vez por dia, e guarda no cache local.
 - `recalibrar` (js/app.js) é a **fonte única**: a partir das séries brutas, gera as séries calibradas que todas as telas usam. Nenhuma tela faz ajuste próprio, então primeira tela, gráficos, Semana, comparação de modelos e análise de pressão sempre mostram os mesmos números.
-- `calibrarPrevisao` (js/analise.js) corrige temperatura hora a hora (interpolando entre a correção da mínima e a da máxima), a temperatura atual prevista, rajada e vento.
-- `calibrarEnsemble` aplica o fator de rajada aos cenários (ECMWF ENS com o fator do `ecmwf_ifs025`; MOGREPS-G com o do UKMO 10 km). Suposição, não testada: o erro de escala da rajada é do sistema (física e grade), e não de cada membro. O AIFS não tem rajada.
+- `calibrarPrevisao` (js/analise.js) corrige a temperatura (hora a hora quando aprovada, seção 4.6; senão interpolando entre a correção da mínima e a da máxima), a temperatura atual prevista, rajada, vento e chuva (seção 4.3).
+- `calibrarEnsemble` aplica o fator de rajada e a tabela de chuva aos cenários (ECMWF ENS com os do `ecmwf_ifs025`; MOGREPS-G com os do UKMO 10 km). Suposição, não testada: o erro de escala é do sistema (física e grade), e não de cada membro. O AIFS não tem rajada, e o AIFS ENS fica sem correção de chuva.
 - `correcaoTemperatura` mistura o viés histórico com o aprendizado diário do Worker: `(n·recente + 20·histórico) / (n + 20)`. O histórico dá o ponto de partida no primeiro dia; o recente capta mudanças (atualização de modelo, mudança no entorno da estação).
 - Tudo só vale a até 50 km da A884 (`calibracaoAplicavel`). Fora disso, o painel mostra os modelos sem correção histórica.
 
@@ -126,13 +145,15 @@ Resumo (detalhes em [TECNICO.md](TECNICO.md), seção 3.7):
 | `scripts/lib/calibracao.mjs`, `PARAM` | `encolhimento` (20) | maior = estações do ano mais parecidas com o anual |
 | | `ganhoMinimo` (0,02) | ganho mínimo fora da amostra para usar uma correção |
 | | `fatorVento` ([0,5; 1,6]) | limites do fator de rajada e vento |
+| `scripts/lib/chuva.mjs`, `PARAM_CHUVA` | `encolhimento` (100), `ganhoAcerto` (0,01), `perdaMaxErro` (0,02) | tabela de chuva por estação do ano e critério de uso |
+| `scripts/lib/temperatura-horaria.mjs`, `PARAM_HORARIO` | `encolhimento` (20), `minDias` (60) | viés hora a hora e mínimo de dias |
 | `js/analise.js`, `REGRAS.calibracao` | `forcaHistorico` (20) | peso do histórico frente ao aprendizado diário |
 | | `leadMax` (5) | antecedência máxima medida; acima disso usa a de 5 dias |
 | `js/analise.js`, `REGRAS.aprendizado` | `viesMax` (3) | correção máxima de temperatura, em °C |
 
 ## 8. Como rodar
 
-- Automático: `.github/workflows/calibracao.yml`, todo dia 5, publica no mesmo branch.
+- Automático: `.github/workflows/calibracao.yml`, todo dia às 07:40 (Brasília), publica no mesmo branch.
 - À mão: na aba Actions do GitHub, "Calibração com histórico" → "Run workflow".
 - Local (com rede liberada para INMET e Open-Meteo): `node scripts/historico.mjs && node scripts/calibrar.mjs`.
 - Só recalcular, sem rede: `node scripts/calibrar.mjs`.
@@ -141,5 +162,7 @@ Resumo (detalhes em [TECNICO.md](TECNICO.md), seção 3.7):
 
 - Uma estação só. A calibração vale para Campo Bom e arredores (50 km); outras cidades usam os modelos sem correção histórica.
 - O histórico por antecedência começa em 2024 para os modelos do painel. Com cerca de dois anos, cada estação do ano tem perto de 180 dias por modelo e antecedência: suficiente para viés e fator, ainda pouco para casos raros (temporais fortes).
-- A chance de chuva não é calibrada pelo histórico, porque a Previous Runs não guarda os cenários.
+- A chance de chuva dos cenários não é medida diretamente pelo histórico, porque a Previous Runs não guarda os cenários: ela herda a correção de garoa do modelo de mesma origem (seção 4.3), e o aprendizado diário do Worker (`calibrarProb`) ajusta o resto.
+- A calibração por hora do dia e estação do ano da **chance** de chuva não é possível com o arquivo disponível (pelo mesmo motivo). A correção de volume é diária; a distribuição das horas dentro do dia segue o modelo.
+- Erro de situação (frente fria atrasada, nebulosidade que o modelo não viu, como em 04/11/2026 às 16 h, 4,5 °C abaixo do medido) não é viés fixo e nenhuma calibração estatística o remove. Para as próximas horas, quem corrige é a ancoragem na medição de agora.
 - O fator de rajada dos cenários é uma suposição (seção 6).
