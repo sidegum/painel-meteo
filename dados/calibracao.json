@@ -1,6 +1,6 @@
 {
  "versao": 1,
- "geradoEm": "2026-11-04T16:09:30.381Z",
+ "geradoEm": "2026-11-04T17:20:06.945Z",
  "estacao": {
   "id": "A884",
   "nome": "Campo Bom",
@@ -419,72 +419,72 @@
    "modelos": {
     "ecmwf_ifs": {
      "1": {
-      "n": 383,
+      "n": 382,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.28,
+      "maeTmax": 1.29,
       "maeRajada": null
      },
      "2": {
-      "n": 385,
+      "n": 384,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.43,
       "maeRajada": null
      },
      "3": {
-      "n": 379,
+      "n": 378,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.54,
       "maeRajada": null
      },
      "4": {
-      "n": 397,
+      "n": 396,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.7,
       "maeRajada": null
      },
      "5": {
-      "n": 375,
+      "n": 374,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.9,
+      "maeTmax": 1.91,
       "maeRajada": null
      }
     },
     "ecmwf_aifs025_single": {
      "1": {
-      "n": 623,
+      "n": 622,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.32,
       "maeRajada": null
      },
      "2": {
-      "n": 622,
+      "n": 621,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.37,
       "maeRajada": null
      },
      "3": {
-      "n": 621,
+      "n": 620,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.39,
       "maeRajada": null
      },
      "4": {
-      "n": 606,
+      "n": 605,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.51,
       "maeRajada": null
      },
      "5": {
-      "n": 605,
+      "n": 604,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.68,
@@ -493,39 +493,39 @@
     },
     "ukmo_global_deterministic_10km": {
      "1": {
-      "n": 623,
+      "n": 622,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.28,
-      "maeRajada": 22.05
+      "maeRajada": 22.07
      },
      "2": {
-      "n": 699,
+      "n": 698,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.43,
-      "maeRajada": 11.19
+      "maeRajada": 11.2
      },
      "3": {
-      "n": 659,
+      "n": 658,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.51,
-      "maeRajada": 25.2
+      "maeTmax": 1.5,
+      "maeRajada": 25.22
      },
      "4": {
-      "n": 607,
+      "n": 606,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.69,
       "maeRajada": 11.7
      },
      "5": {
-      "n": 653,
+      "n": 652,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.92,
-      "maeRajada": 21.96
+      "maeRajada": 21.98
      }
     }
    }
