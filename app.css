@@ -417,3 +417,12 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
   .detalhes .horas, .detalhes .rolar, .detalhes .tabela-rolar { margin: 0; padding: 0 0 6px; }
 }
 .mapa-escuro { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
+/* alertas discretos: só um ponto e o texto na cor do alerta, sem faixa preenchida */
+:root[data-visual] .alerta {
+  background: none; border: 0; border-radius: 0; padding: 0; min-height: 40px; gap: 8px;
+  font-size: 13px; font-weight: 550; color: var(--quente);
+}
+:root[data-visual] .alerta::before { content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--quente); }
+:root[data-visual] .alerta::after { content: '›'; margin-left: auto; color: var(--fraco); font-size: 16px; }
+:root[data-visual] .alerta.indisponivel { color: var(--fraco); font-weight: 500; }
+:root[data-visual] .alerta.indisponivel::before { background: var(--fraco); }
