@@ -1,0 +1,54 @@
+name: Calibração com histórico
+
+# Baixa o histórico (INMET A884 e A801, METAR de Canoas e previsões passadas da Open-Meteo), recalcula
+# dados/calibracao.json e publica no mesmo branch. Roda todo dia (só os dias novos são buscados), à mão, ou
+# quando o método muda. Com o segredo INMET_TOKEN, os dias recentes do INMET entram sem esperar o arquivo anual.
+on:
+  schedule:
+    - cron: '40 10 * * *'  # todo dia, 07:40 em Brasília (depois do fechamento do dia anterior)
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/historico.mjs'
+      - 'scripts/calibrar.mjs'
+      - 'scripts/lib/inmet.mjs'
+      - 'scripts/lib/calibracao.mjs'
+      - '.github/workflows/calibracao.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: calibracao-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  calibrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Arquivos anuais fechados do INMET não mudam: ficam em cache entre execuções.
+      - uses: actions/cache@v4
+        with:
+          path: .cache-inmet
+          key: inmet-zip-${{ github.run_id }}
+          restore-keys: inmet-zip-
+      - name: Coletar histórico (INMET e Open-Meteo Previous Runs)
+        run: node scripts/historico.mjs
+        env:
+          INMET_TOKEN: ${{ secrets.INMET_TOKEN }}
+      - name: Calcular calibração
+        run: if [ -f scripts/calibrar.mjs ]; then node scripts/calibrar.mjs; fi
+      - name: Publicar se mudou
+        run: |
+          for f in dados/historico dados/calibracao.json docs/calibracao-resultado.md; do [ -e "$f" ] && git add "$f"; done
+          if git diff --cached --quiet; then echo "Sem mudança."; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Atualiza histórico e calibração (A884 Campo Bom)"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

@@ -36,6 +36,12 @@ export const REGRAS = {
     calibMinPares: 30,         // calibração da chance só com 30 pares previsão x medição
     meiaCalib: 10,             // por faixa de chance: confiança de 50% com 10 casos
   },
+  // Calibração com o histórico (dados/calibracao.json, gerado por scripts/calibrar.mjs; método em docs/CALIBRACAO.md).
+  // O histórico é o ponto de partida; o aprendizado recente do Worker o refina aos poucos.
+  calibracao: {
+    forcaHistorico: 20,        // o histórico vale como 20 dias recentes ao se misturar com o aprendizado do Worker
+    leadMax: 5,                // além de 5 dias, usa a correção de 5 dias (a mais longa medida)
+  },
   acerto: {
     diasMinimos: 30,           // a taxa de acerto local só pesa na confiança com 30 dias
     pesoMin: 0.7, pesoMax: 1.3, // ajuste moderado depois disso
@@ -573,22 +579,31 @@ export function horizonteDivergencia(prev, modelos) {
   return null;
 }
 
-// acertoPorModelo: { modelo: { dias, maeChuva } }. Pesos iniciais (verificação global) até 30 dias de dados
-// locais; depois, peso inicial vezes o acerto local relativo (inverso do erro), limitado.
 /**
- * Pesos dos modelos: peso inicial ajustado pelo erro relativo local (chuva e máxima), com confiança
- * c = dias / (dias + meiaPesos), limitado a [pesoMin, pesoMax]. Ver docs/TECNICO.md, seção 3.7.
- * @param {Object<string, {dias:number, maeChuva?:number, maeTmax?:number}>|null} acertoPorModelo
+ * Pesos dos modelos, em duas camadas:
+ * 1. ponto de partida: peso inicial (verificação global, REGRAS.pesoInicial) ajustado pelo erro relativo medido no
+ *    histórico local (dados/calibracao.json), com confiança c = dias / (dias + meiaPesos);
+ * 2. aprendizado recente do Worker: erro relativo de chuva e máxima dos últimos dias, com a mesma confiança.
+ * O resultado fica limitado a [pesoMin, pesoMax]. Ver docs/TECNICO.md, seção 3.7, e docs/CALIBRACAO.md.
+ * @param {Object<string, {dias:number, maeChuva?:number, maeTmax?:number}>|null} acertoPorModelo aprendizado recente
  * @param {string[]} modelos
- * @returns {{pesos:Object<string, number>, ajustado:boolean}}
+ * @param {{pesos:Object<string, number>, dias:number}|null} [historico] pesos relativos do histórico (pesosHistoricos)
+ * @returns {{pesos:Object<string, number>, ajustado:boolean, historico:boolean}}
  */
-export function pesosModelos(acertoPorModelo, modelos) {
+export function pesosModelos(acertoPorModelo, modelos, historico = null) {
   const A = REGRAS.acerto, L = REGRAS.aprendizado;
-  const base = (m) => REGRAS.pesoInicial[m] ?? 1;
+  const lim = (w) => Math.min(A.pesoMax, Math.max(A.pesoMin, w));
+  const usaHist = !!historico && historico.dias >= L.diasInicio && modelos.filter((m) => valido(historico.pesos?.[m])).length >= 2;
+  const cHist = usaHist ? historico.dias / (historico.dias + L.meiaPesos) : 0;
+  const base = (m) => {
+    const ini = REGRAS.pesoInicial[m] ?? 1;
+    const r = usaHist ? historico.pesos[m] : null;
+    return valido(r) ? lim(ini * (1 + cHist * (r - 1))) : ini;
+  };
   const pesos = Object.fromEntries(modelos.map((m) => [m, base(m)]));
-  if (!acertoPorModelo) return { pesos, ajustado: false };
+  if (!acertoPorModelo) return { pesos, ajustado: false, historico: usaHist };
   const ok = modelos.filter((m) => acertoPorModelo[m]?.dias >= L.diasInicio && (valido(acertoPorModelo[m].maeChuva) || valido(acertoPorModelo[m].maeTmax)));
-  if (ok.length < 2) return { pesos, ajustado: false };
+  if (ok.length < 2) return { pesos, ajustado: false, historico: usaHist };
   // erro relativo de cada modelo em cada medida (chuva e temperatura máxima): média dos outros / o dele
   const rel = (campo, piso) => {
     const xs = ok.filter((m) => valido(acertoPorModelo[m][campo]));
@@ -602,27 +617,198 @@ export function pesosModelos(acertoPorModelo, modelos) {
     if (!rs.length) return;
     const r = rs.reduce((t, x) => t + x, 0) / rs.length;
     const c = acertoPorModelo[m].dias / (acertoPorModelo[m].dias + L.meiaPesos);
-    pesos[m] = Math.min(A.pesoMax, Math.max(A.pesoMin, base(m) * (1 + c * (r - 1))));
+    pesos[m] = lim(base(m) * (1 + c * (r - 1)));
   });
-  return { pesos, ajustado: true };
+  return { pesos, ajustado: true, historico: usaHist };
 }
 
-// Viés de temperatura aprendido para um modelo: quanto ele erra para cima (+) ou para baixo (-),
-// já reduzido pela confiança. Subtrair da previsão do modelo.
 /**
- * Correção de viés de temperatura (previsto - medido) reduzida pela confiança c = n / (n + meiaVies)
- * e limitada a ±viesMax. O valor deve ser subtraído da previsão.
+ * Correção de viés de temperatura (previsto − medido), a subtrair da previsão do modelo.
+ * Combina o histórico (prioritário quando existe) com o aprendizado recente do Worker, como uma média
+ * ponderada pelo número de dias: vies = (n · recente + K · histórico) / (n + K).
+ * - sem histórico: K = meiaVies e histórico = 0 (comportamento original: correção cresce com os dias);
+ * - com histórico: K = REGRAS.calibracao.forcaHistorico; antes de diasInicio dias recentes, vale só o histórico.
+ * Limitada a ±viesMax.
+ * @param {{viesTmax?:number, amostrasTmax?:number, viesTmin?:number, amostrasTmin?:number}|null} acertoModeloLead
+ * @param {{tmax:number|null, tmin:number|null}|null} [historico] viés histórico (viesHistorico)
  * @returns {{tmax:number, tmin:number}}
  */
-export function correcaoTemperatura(acertoModeloLead) {
+export function correcaoTemperatura(acertoModeloLead, historico = null) {
   const L = REGRAS.aprendizado;
-  const um = (vies, n) => {
-    if (!valido(vies) || !(n >= L.diasInicio)) return 0;
-    const c = n / (n + L.meiaVies);
-    return Math.max(-L.viesMax, Math.min(L.viesMax, vies * c));
+  const um = (vies, n, hist) => {
+    const temHist = valido(hist);
+    const K = temHist ? REGRAS.calibracao.forcaHistorico : L.meiaVies;
+    const prior = temHist ? hist : 0;
+    const recente = valido(vies) && n >= L.diasInicio;
+    const v = recente ? (n * vies + K * prior) / (n + K) : prior;
+    return Math.max(-L.viesMax, Math.min(L.viesMax, v));
   };
   const a = acertoModeloLead || {};
-  return { tmax: um(a.viesTmax, a.amostrasTmax), tmin: um(a.viesTmin, a.amostrasTmin) };
+  return { tmax: um(a.viesTmax, a.amostrasTmax, historico?.tmax), tmin: um(a.viesTmin, a.amostrasTmin, historico?.tmin) };
+}
+
+// ---------- calibração com o histórico (dados/calibracao.json) ----------
+
+const ESTACOES_ANO = ['verao', 'verao', 'outono', 'outono', 'outono', 'inverno', 'inverno', 'inverno', 'primavera', 'primavera', 'primavera', 'verao'];
+/** Estação do ano no hemisfério sul para um mês de 1 a 12 (mesma regra de scripts/lib/calibracao.mjs). */
+export const estacaoDoAno = (mes) => ESTACOES_ANO[mes - 1];
+
+/**
+ * A calibração só vale perto da estação onde foi medida (até REGRAS.acerto.distanciaMaxKm).
+ * @returns {boolean}
+ */
+export function calibracaoAplicavel(calib, lat, lon) {
+  const e = calib?.estacao;
+  if (!e || !valido(e.lat) || !valido(e.lon) || !calib.modelos) return false;
+  return distanciaKm(lat, lon, e.lat, e.lon) <= REGRAS.acerto.distanciaMaxKm;
+}
+
+const leadDe = (lead) => Math.min(REGRAS.calibracao.leadMax, Math.max(1, lead));
+
+/**
+ * Viés histórico de máxima e mínima (previsto − medido) de um modelo, para a antecedência e o mês.
+ * Só devolve valor quando a validação fora da amostra aprovou a correção ("usar": true).
+ * @param {object} calib dados/calibracao.json
+ * @param {string} modelo identificador Open-Meteo
+ * @param {number} lead antecedência em dias (1 a 5; acima de 5 usa 5)
+ * @param {number} mes 1 a 12
+ * @returns {{tmax:number|null, tmin:number|null}}
+ */
+export function viesHistorico(calib, modelo, lead, mes) {
+  const est = estacaoDoAno(mes), L = leadDe(lead);
+  const um = (campo) => {
+    const x = calib?.modelos?.[modelo]?.[campo]?.[L];
+    return x?.usar && valido(x.vies?.[est]) ? x.vies[est] : null;
+  };
+  return { tmax: um('tmax'), tmin: um('tmin') };
+}
+
+/**
+ * Fator histórico (medido ÷ previsto) de rajada ou vento de um modelo, para a antecedência e o mês.
+ * 1 quando não há calibração aprovada.
+ * @param {'rajada'|'vento'} campo
+ * @returns {number}
+ */
+export function fatorHistorico(calib, modelo, campo, lead, mes) {
+  const x = calib?.modelos?.[modelo]?.[campo]?.[leadDe(lead)];
+  const f = x?.usar ? x.fator?.[estacaoDoAno(mes)] : null;
+  return valido(f) ? f : 1;
+}
+
+/**
+ * Pesos relativos do histórico no formato aceito por pesosModelos.
+ * @returns {{pesos:Object<string, number>, dias:number}|null}
+ */
+export function pesosHistoricos(calib) {
+  if (!calib?.pesos || !(calib.diasComuns > 0)) return null;
+  return { pesos: calib.pesos, dias: calib.diasComuns };
+}
+
+/**
+ * Aplica a calibração às séries horárias de cada modelo, antes de qualquer análise, para que todas as telas
+ * (primeira tela, gráficos, semana, comparação, pressão) usem os mesmos valores. Não altera o objeto original.
+ *
+ * - Temperatura (temperature_2m e a temperatura "current"): para cada dia local, a correção da hora é
+ *   interpolada entre a correção da mínima e a da máxima conforme a posição da hora entre a mínima e a máxima
+ *   do próprio modelo naquele dia. Assim a máxima do gráfico horário é exatamente a máxima corrigida do dia.
+ * - Rajada e vento (wind_gusts_10m, wind_speed_10m): multiplicados pelo fator da antecedência e estação do ano.
+ * A antecedência de um dia é a distância em dias do dia de referência (o dia em que a previsão foi buscada),
+ * com mínimo 1, igual ao uso em analisarDia.
+ *
+ * @param {object} prev previsão normalizada (js/dados.js: normalizarPrevisao)
+ * @param {{calib?:object|null, aprendizado?:object|null, refMs:number}} op calib: dados/calibracao.json (já
+ *   verificada com calibracaoAplicavel); aprendizado: porModelo do Worker (modelo → lead → viés), ou null
+ * @returns {object} nova previsão, com `calibracao` descrevendo o que foi aplicado
+ */
+export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs }) {
+  if (!prev?.horas || (!calib && !aprendizado)) return prev;
+  const hoje = partesLocais(refMs, prev.offset).data;
+  const diaMs = (d) => Date.parse(d + 'T00:00:00Z');
+  const leadDoDia = (d) => Math.max(1, Math.round((diaMs(d) - diaMs(hoje)) / 86400000));
+  const datas = prev.horas.map((ms) => partesLocais(ms, prev.offset).data);
+  const modelos = {};
+  const aplicado = { temperatura: [], vento: [] };
+  const atualTemp = { ...(prev.atual?.temp || {}) };
+  const dataAtual = prev.atual?.ms ? partesLocais(prev.atual.ms, prev.offset).data : null;
+
+  for (const [m, dados] of Object.entries(prev.modelos)) {
+    const vars = { ...dados.vars };
+    const t = vars.temperature_2m;
+    if (t) {
+      // mínima e máxima do modelo em cada dia local, na série bruta
+      const ext = new Map();
+      t.forEach((v, i) => {
+        if (!valido(v)) return;
+        const e = ext.get(datas[i]) || { min: v, max: v };
+        e.min = Math.min(e.min, v); e.max = Math.max(e.max, v); ext.set(datas[i], e);
+      });
+      const corr = new Map();
+      for (const d of ext.keys()) {
+        const lead = leadDoDia(d), mes = Number(d.slice(5, 7));
+        const hist = calib ? viesHistorico(calib, m, lead, mes) : null;
+        corr.set(d, correcaoTemperatura(aprendizado?.[m]?.[leadDe(lead)], hist));
+      }
+      const ajusta = (v, d) => {
+        const e = ext.get(d), c = corr.get(d);
+        if (!valido(v) || !e || !c) return v;
+        const w = e.max > e.min ? Math.min(1, Math.max(0, (v - e.min) / (e.max - e.min))) : 0.5;
+        return Math.round((v - (c.tmin + w * (c.tmax - c.tmin))) * 10) / 10;
+      };
+      vars.temperature_2m = t.map((v, i) => ajusta(v, datas[i]));
+      if (dataAtual && valido(atualTemp[m])) atualTemp[m] = ajusta(atualTemp[m], dataAtual);
+      if ([...corr.values()].some((c) => c.tmax || c.tmin)) aplicado.temperatura.push(m);
+    }
+    if (calib) {
+      let mudou = false;
+      for (const [v, campo] of [['wind_gusts_10m', 'rajada'], ['wind_speed_10m', 'vento']]) {
+        if (!vars[v]) continue;
+        vars[v] = vars[v].map((x, i) => {
+          if (!valido(x)) return x;
+          const f = fatorHistorico(calib, m, campo, leadDoDia(datas[i]), Number(datas[i].slice(5, 7)));
+          if (f !== 1) mudou = true;
+          return Math.round(x * f * 10) / 10;
+        });
+      }
+      if (mudou) aplicado.vento.push(m);
+    }
+    modelos[m] = { ...dados, vars };
+  }
+  return {
+    ...prev, modelos, atual: prev.atual ? { ...prev.atual, temp: atualTemp } : prev.atual,
+    calibracao: { historico: !!calib, recente: !!aprendizado, ...aplicado },
+  };
+}
+
+// Cenários: cada sistema usa o fator do modelo determinístico mais próximo dele (mesma origem e grade parecida).
+// Suposição documentada em docs/CALIBRACAO.md: o erro de escala da rajada é do sistema, não do membro.
+export const CALIBRACAO_ENSEMBLE = {
+  ecmwf_ifs025: 'ecmwf_ifs025',
+  ukmo_global_ensemble_20km: 'ukmo_global_deterministic_10km',
+};
+
+/**
+ * Aplica o fator de rajada aos membros dos cenários, com a mesma antecedência e estação do ano usadas em
+ * calibrarPrevisao, para que a faixa de rajada dos cenários e a dos modelos falem a mesma língua.
+ * @param {Object<string, {horas:number[], membros:{wind_gusts_10m:number[][]}}>|null} ens
+ * @param {object|null} calib
+ * @param {number} refMs
+ * @param {number} offsetSeg
+ */
+export function calibrarEnsemble(ens, calib, refMs, offsetSeg) {
+  if (!ens || !calib) return ens;
+  const hoje = Date.parse(partesLocais(refMs, offsetSeg).data + 'T00:00:00Z');
+  const out = {};
+  for (const [sis, e] of Object.entries(ens)) {
+    const ref = CALIBRACAO_ENSEMBLE[sis];
+    if (!ref || !e.membros?.wind_gusts_10m?.length) { out[sis] = e; continue; }
+    const fatores = e.horas.map((ms) => {
+      const p = partesLocais(ms, offsetSeg);
+      const lead = Math.max(1, Math.round((Date.parse(p.data + 'T00:00:00Z') - hoje) / 86400000));
+      return fatorHistorico(calib, ref, 'rajada', lead, p.mes);
+    });
+    out[sis] = { ...e, membros: { ...e.membros, wind_gusts_10m: e.membros.wind_gusts_10m.map((s) => s.map((x, i) => (valido(x) ? Math.round(x * fatores[i] * 10) / 10 : x))) } };
+  }
+  return out;
 }
 
 // Chance de chuva calibrada pelo histórico: se, quando o painel disse 30%, choveu em 50% das vezes,

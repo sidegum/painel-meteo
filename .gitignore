@@ -13,3 +13,4 @@ worker/.wrangler/
 node_modules/
 test/capturas/
 .DS_Store
+.cache-inmet/

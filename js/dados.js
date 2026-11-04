@@ -295,6 +295,18 @@ export async function buscarEnso() {
   if (workerConfigurado()) { try { return await worker('enso'); } catch {} }
   return buscarJson('enso-arquivo', new URL('dados/enso.json', location.href).href, { timeout: 15000, maxBytes: 3e6 });
 }
+/**
+ * Calibração com o histórico (viés de temperatura, fatores de rajada e vento, pesos), gerada todo mês pelo
+ * GitHub Actions (scripts/calibrar.mjs) e publicada pelo GitHub Pages junto com o app: mesma origem, sem
+ * Worker e sem CORS. Método em docs/CALIBRACAO.md.
+ * @returns {Promise<object>} conteúdo de dados/calibracao.json
+ */
+export async function buscarCalibracao() {
+  const j = await buscarJson('calibracao', new URL('dados/calibracao.json', location.href).href, { timeout: 15000, maxBytes: 2e6 });
+  if (j?.versao !== 1 || !j.modelos || !j.estacao) throw new ErroFonte('calibracao', 'formato', 'arquivo de calibração em formato desconhecido');
+  return j;
+}
+
 export const buscarAcerto = (estacao) => worker('acerto', { estacao: String(estacao).replace(/[^A-Za-z0-9]/g, '').slice(0, 8) });
 
 // ---------- RainViewer ----------

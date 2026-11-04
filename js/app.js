@@ -5,22 +5,25 @@ import {
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
+  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico,
 } from './analise.js';
 import {
-  buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto,
+  buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
   salvarCache, lerCache, workerConfigurado, MODELOS_ENSEMBLE, buscarAlertasDireto, buscarObservacoesDireto, buscarChuvaRadar, buscarChegadaChuva,
 } from './dados.js';
 import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno } from './ui.js';
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.19';
+const VERSAO = '1.2.20';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
   local: null, aba: 'hoje',
   prev: null, prevEm: null, ens: null, ensEm: null, ensErros: [],
   obs: null, obsEm: null, alertas: null, alertasEm: null, enso: null, ensoEm: null, acerto: {}, acertoEm: null,
+  // séries como vieram da Open-Meteo; estado.prev e estado.ens são as versões calibradas (recalibrar)
+  prevBruta: null, ensBruto: null, calib: null, calibEm: null,
   erros: {}, cacheAntigo: false, faixas: [],
 };
 
@@ -49,8 +52,10 @@ async function iniciar() {
   // 1. mostra o que houver em cache imediatamente
   const c = await lerCache('previsao');
   if (c?.dados && estado.local) {
-    estado.prev = reidratar(c.dados); estado.prevEm = c.salvoEm; estado.cacheAntigo = true;
-    const e = await lerCache('ensemble'); if (e?.dados) { estado.ens = e.dados; estado.ensEm = e.salvoEm; }
+    estado.prevBruta = reidratar(c.dados); estado.prevEm = c.salvoEm; estado.cacheAntigo = true;
+    const e = await lerCache('ensemble'); if (e?.dados) { estado.ensBruto = e.dados; estado.ensEm = e.salvoEm; }
+    const k = await lerCache('calibracao'); if (k?.dados) { estado.calib = k.dados; estado.calibEm = k.salvoEm; }
+    recalibrar();
     const o = await lerCache('observacoes'); if (o?.dados) { estado.obs = o.dados; estado.obsEm = o.salvoEm; }
     renderTudo();
   } else {
@@ -182,16 +187,16 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
   const { lat, lon } = estado.local;
   try {
     // Todas as fontes saem ao mesmo tempo; a primeira tela é desenhada assim que a previsão chega.
-    if (local) { estado.ens = null; estado.obs = null; estado.alertas = null; }
+    if (local) { estado.ens = null; estado.ensBruto = null; estado.obs = null; estado.alertas = null; }
     const tarefas = [];
     let principal = Promise.resolve();
     if (venceu(estado.prevEm, I.previsao)) tarefas.push(principal = buscarPrevisao(lat, lon)
-      .then((pv) => { estado.prev = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao; salvarCache('previsao', pv); })
+      .then((pv) => { estado.prevBruta = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao; salvarCache('previsao', pv); recalibrar(); })
       .catch((e) => { estado.erros.previsao = e.message; })
       .then(() => renderTudo()));
     if (venceu(estado.ensEm, I.cenarios)) tarefas.push(buscarEnsemble(lat, lon).then(({ ens, erros }) => {
       estado.ensErros = erros;
-      if (ens) { estado.ens = ens; estado.ensEm = Date.now(); salvarCache('ensemble', ens); delete estado.erros.ensemble; }
+      if (ens) { estado.ensBruto = ens; estado.ensEm = Date.now(); salvarCache('ensemble', ens); delete estado.erros.ensemble; recalibrar(); }
       else estado.erros.ensemble = erros.join('; ') || 'sem dados';
     }));
     const w = workerConfigurado();
@@ -215,7 +220,11 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     if (venceu(estado.ensoEm, I.enso)) tarefas.push(buscarEnso()
       .then((e) => { estado.enso = e; estado.ensoEm = Date.now(); salvarCache('enso', e); delete estado.erros.enso; })
       .catch((e) => { estado.erros.enso = e.message; }));
-    if (w && venceu(estado.acertoEm, I.acerto)) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); }));
+    if (w && venceu(estado.acertoEm, I.acerto)) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); recalibrar(); }));
+    // Calibração com o histórico: arquivo mensal do robô do GitHub; sem ele, o painel segue sem correção histórica.
+    if (venceu(estado.calibEm, I.acerto)) tarefas.push(buscarCalibracao()
+      .then((k) => { estado.calib = k; estado.calibEm = Date.now(); salvarCache('calibracao', k); delete estado.erros.calibracao; recalibrar(); })
+      .catch((e) => { estado.erros.calibracao = e.message; }));
     // O botão para de girar quando a previsão chega. As outras fontes (medições, alertas, radar, El Niño)
     // continuam chegando e redesenham a tela sozinhas, com teto de 30 s: uma fonte lenta não segura o botão.
     const resto = Promise.race([Promise.all(tarefas), new Promise((r) => setTimeout(r, 30000))])
@@ -378,7 +387,29 @@ function pesosAtuais() {
     const l1 = a[m]?.[1] || {};
     mapa[m] = { dias: Math.max(l1.amostrasChuva ?? 0, l1.amostrasTmax ?? 0), maeChuva: l1.maeChuva, maeTmax: l1.maeTmax };
   }
-  return pesosModelos(a ? mapa : null, modelosAtivos());
+  return pesosModelos(a ? mapa : null, modelosAtivos(), calibracaoLocal() ? pesosHistoricos(estado.calib) : null);
+}
+
+// Calibração com o histórico: só vale perto da estação onde foi medida (até 50 km).
+function calibracaoLocal() {
+  const p = estado.prevBruta || estado.prev;
+  return estado.calib && p && calibracaoAplicavel(estado.calib, p.lat, p.lon) ? estado.calib : null;
+}
+
+/**
+ * Fonte única dos valores exibidos: recalcula estado.prev e estado.ens a partir das séries brutas sempre que
+ * chega previsão, cenários, calibração ou aprendizado novo. Todas as telas leem estado.prev/estado.ens, então
+ * herdam a mesma correção (temperatura, rajada e vento), sem ajustes separados por tela.
+ */
+function recalibrar() {
+  const bruta = estado.prevBruta;
+  if (!bruta) return;
+  const calib = calibracaoLocal();
+  const apr = aprendizadoLocal()?.porModelo || null;
+  const ref = estado.prevEm || Date.now();
+  estado.prev = calibrarPrevisao(bruta, { calib, aprendizado: apr, refMs: ref });
+  estado.ens = estado.ensBruto ? calibrarEnsemble(estado.ensBruto, calib, ref, bruta.offset) : null;
+  cacheDias.clear();
 }
 
 function acertoCtx(diaIndice) {
@@ -407,7 +438,7 @@ const cacheDias = new Map();
  * @param {boolean} desdeAgora considerar só as horas restantes
  */
 function analisarDia(data, diaIndice, desdeAgora) {
-  const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}|${estado.chegadaEm}|${estado.radarAgoraEm}`;
+  const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}|${estado.chegadaEm}|${estado.radarAgoraEm}|${estado.calibEm}`;
   if (cacheDias.has(chave)) return cacheDias.get(chave);
   const p = estado.prev, mods = modelosAtivos();
   const inicio = desdeAgora ? Date.now() : -Infinity;
@@ -416,14 +447,9 @@ function analisarDia(data, diaIndice, desdeAgora) {
   const usar = idx.length ? idx : idxTodo;
   const { pesos, ajustado } = pesosAtuais();
   const resumos = mods.map((m) => resumoModeloDia(p, m, usar));
-  // temperatura corrigida pelo viés que cada modelo mostrou nas medições locais
+  // A temperatura já vem corrigida nas séries horárias (recalibrar: histórico + aprendizado recente).
   const apr = aprendizadoLocal();
-  const lead = Math.min(5, Math.max(1, diaIndice));
-  const resumosTodo = mods.map((m) => {
-    const r = resumoModeloDia(p, m, idxTodo);
-    const c = correcaoTemperatura(apr?.porModelo?.[m]?.[lead]);
-    return { ...r, tmax: valido(r.tmax) ? r.tmax - c.tmax : r.tmax, tmin: valido(r.tmin) ? r.tmin - c.tmin : r.tmin, correcao: c };
-  });
+  const resumosTodo = mods.map((m) => resumoModeloDia(p, m, idxTodo));
   const membros = membrosDia(estado.ens, data, p.offset, inicio);
   const medAgora = diaIndice === 0 ? medicaoChuvaAgora() : null;
   const av = avaliarDia(resumos, membros, { diaIndice, acerto: acertoCtx(diaIndice), pesos, medicaoAgora: medAgora, calibracao: apr?.calibracao, chegando: diaIndice === 0 && !!chegandoAgora() });
@@ -1251,14 +1277,14 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
 function previstoMedido(s) {
   const p = estado.prev;
   const temSerie = (estado.obs?.fontes || []).some((f) => f.serie.length >= 3);
-  if (!estado.obs || !temSerie) {
-    // sem histórico de medições do dia, a seção não aparece (nunca compara com previsão no lugar de medição)
-    s.remove();
-    return;
-  }
+  const placar = linhaPlacar();
+  // sem medições do dia, os gráficos não aparecem (nunca compara com previsão no lugar de medição);
+  // o placar, que vem do histórico, continua sozinho na seção
+  const soPlacar = () => { if (placar) s.append(placar); else s.remove(); };
+  if (!estado.obs || !temSerie) { soPlacar(); return; }
   const hoje = datas()[0];
   const idx = indicesDoDia(p.horas, hoje, p.offset).filter((i) => p.horas[i] <= Date.now());
-  if (idx.length < 2) { s.remove(); return; }
+  if (idx.length < 2) { soPlacar(); return; }
   const mods = modelosAtivos();
   const pt = pontoExato();
   const fontes = fontesNormalizadas();
@@ -1297,6 +1323,37 @@ function previstoMedido(s) {
       { rotulo: 'previsto', valores: prevG, corCss: '--rajada', dash: [6, 4], largura: 1.5, formato: (v) => `${Math.round(v)} km/h` },
       { rotulo: 'medido', valores: medG, corCss: '--texto', pontos: true, largura: 2.5, formato: (v) => `${Math.round(v)} km/h` },
     ], escalas: { y: { range: (u, mi, ma) => [0, Math.max(40, ma + 5)] } }, eixos: [{ formato: (v) => `${v}`, rotulo: 'km/h' }] });
+  if (placar) s.append(placar);
+}
+
+/**
+ * Placar de acerto da previsão da véspera, calculado pelo GitHub Actions (dados/calibracao.json, campo placar):
+ * os últimos 30 dias com medição da estação. Uma linha "Acerto da véspera · chuva X% · máx. Y% · rajada Z%"
+ * com a fonte no formato "Fonte · Horário"; ao tocar, o detalhe com os critérios e o período completo.
+ * Só aparece perto da estação (calibracaoLocal), porque o placar mede o acerto ali.
+ */
+function linhaPlacar() {
+  const k = calibracaoLocal(), pl = k?.placar, u = pl?.ultimos;
+  if (!u?.dias) return null;
+  const pct = (x) => (valido(x?.pct) ? `${Math.round(x.pct * 100)}%` : '–');
+  const dataBr = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');
+  const fonte = `${pl.fonte.replace(/^INMET\s+A884$/, 'INMET Campo Bom')} · até ${dataBr(u.fim)}`;
+  const linha = (nome, x, crit) => el('li', {}, el('b', { text: `${nome}: ${pct(x)}` }), ` dos dias ${crit}${valido(x?.erroMedio) ? ` (erro médio ${fmt.n(x.erroMedio, 1)})` : ''}`);
+  const bloco = (titulo, x) => [el('h3', { text: titulo }), el('ul', { class: 'lt-avisos' },
+    linha('Chuva', x.chuva, 'em que chover ou não chover foi previsto certo (1 mm ou mais)'),
+    linha('Máxima', x.tmax, `com erro de até ${pl.limites.tempC} °C`),
+    linha('Mínima', x.tmin, `com erro de até ${pl.limites.tempC} °C`),
+    x.rajada?.n ? linha('Rajada', x.rajada, `com erro de até ${pl.limites.rajadaKmh} km/h`) : null)];
+  const abrir = () => mostrarInfo('Acerto da véspera',
+    el('p', { text: 'Quanto a previsão feita no dia anterior acertou, comparada com a estação do INMET em Campo Bom. Temperatura e rajada já com a correção pelo histórico, medida em meses que a correção não viu.' }),
+    ...bloco(`Últimos ${u.dias} dias (${dataBr(u.ini)} a ${dataBr(u.fim)})`, u),
+    ...(pl.completo?.dias > u.dias ? bloco(`Todo o período (${pl.completo.dias} dias, desde ${dataBr(pl.completo.ini)}/${pl.completo.ini.slice(2, 4)})`, pl.completo) : []),
+    el('p', { class: 'nota', text: 'O arquivo do INMET chega com um ou dois meses de atraso; o placar é recalculado sozinho quando ele chega.' }));
+  // linha visível em linguagem simples; percentuais, critérios e erros ficam no detalhe
+  const de = (x) => `${x.acertos} de ${x.n} dias`;
+  const texto = `A previsão da véspera acertou a chuva em ${de(u.chuva)} e a temperatura máxima em ${de(u.tmax)}`;
+  return el('button', { type: 'button', class: 'linha-placar', onclick: abrir },
+    el('span', { class: 'lt-txt' }, texto, el('small', { text: fonte })));
 }
 
 // Nota de fonte dos gráficos, no formato "Fonte · Horário" (ex.: "INMET Campo Bom · 12:00").
@@ -1493,7 +1550,6 @@ function renderModelos() {
   const gR = secao('Rajadas por modelo', 'Previsão, 7 dias. Faixa: cenários do ensemble (p10 a p90).');
   gC.classList.add('largura-total'); gR.classList.add('largura-total');
   filhos.push(gC, gR);
-  filhos.push(secao('Aprendizado do painel', 'Todo dia o painel guarda o que previu e compara com o que as estações mediram. Com isso, ajusta os pesos dos modelos, corrige a temperatura e calibra a chance de chuva.', resumoAprendizado()));
   filhos.push(secao('Acerto de cada modelo', null, tabelaAcerto()));
   filhos.push(secao('Regra de confiança', null, regraConfianca()));
   if (estado.ensErros?.length) filhos.push(el('p', { class: 'nota', text: `Ensemble: ${estado.ensErros.join('; ')}.` }));
@@ -1537,59 +1593,65 @@ function nomeVar(v) {
   return { precipitation_probability: 'probabilidade', wind_gusts_10m: 'rajadas', visibility: 'visibilidade', cape: 'CAPE', uv_index: 'UV', cloud_cover_low: 'nuvens baixas', cloud_cover_mid: 'nuvens médias', cloud_cover_high: 'nuvens altas', precipitation: 'chuva', pressure_msl: 'pressão', is_day: 'dia/noite', apparent_temperature: 'sensação', dew_point_2m: 'orvalho', relative_humidity_2m: 'umidade' }[v] || v;
 }
 
-function resumoAprendizado() {
-  if (!workerConfigurado()) return el('p', { class: 'nota', text: 'O aprendizado precisa do servidor do painel, que não está configurado.' });
-  const L = REGRAS.aprendizado;
-  const a = estacaoAcerto();
-  if (!a) return el('p', { class: 'nota', text: 'Começando: o primeiro dia verificado aparece amanhã de manhã.' });
-  const perto = aprendizadoLocal();
-  const dias = maximo(Object.values(a.porModelo || {}).map((m) => Math.max(m?.[1]?.amostrasChuva ?? 0, m?.[1]?.amostrasTmax ?? 0))) || 0;
-  const { pesos, ajustado } = pesosAtuais();
-  const linhas = [];
-  const item = (nome, estadoTxt, detalhe) => linhas.push(el('div', { class: 'med' },
-    el('span', { class: 'med-nome', text: nome }), el('b', { class: 'med-v', style: { 'font-size': '16px' }, text: estadoTxt }), detalhe ? el('span', { class: 'med-nota', text: detalhe }) : null));
-  const falta = Math.max(0, L.diasInicio - dias);
-  item('Dias verificados', `${dias} dia${dias === 1 ? '' : 's'}`, `${a.estacao.nome}${perto ? '' : ' (longe daqui: correções não aplicadas)'}`);
-  item('Pesos dos modelos', ajustado ? 'ajustando' : `começa em ${falta} dia${falta === 1 ? '' : 's'}`,
-    Object.entries(pesos).map(([m, w]) => `${MODELOS[m]?.curto || m} ${fmt.n(w, 2)}`).join(' · '));
-  const vieses = Object.keys(MODELOS).map((m) => {
-    const c = correcaoTemperatura(a.porModelo?.[m]?.[1]);
-    return c.tmax || c.tmin ? `${MODELOS[m].curto}: máx ${c.tmax > 0 ? '−' : '+'}${fmt.n(Math.abs(c.tmax), 1)}°, mín ${c.tmin > 0 ? '−' : '+'}${fmt.n(Math.abs(c.tmin), 1)}°` : null;
-  }).filter(Boolean);
-  item('Correção de temperatura', vieses.length ? 'aplicada' : `começa em ${falta} dia${falta === 1 ? '' : 's'}`, vieses.length ? vieses.join(' · ') : 'Mede quanto cada modelo erra para cima ou para baixo.');
-  const cal = a.calibracao;
-  const pares = cal?.pares ?? 0;
-  item('Calibração da chance de chuva', pares >= L.calibMinPares ? 'aplicada' : `${pares} de ${L.calibMinPares} casos`,
-    pares >= L.calibMinPares && valido(cal.brier) ? `Erro de Brier ${fmt.n(cal.brier, 2)} (0 é perfeito)` : 'Compara a chance que o painel deu com a chuva que caiu.');
-  return el('div', {}, el('div', { class: 'medicoes' }, ...linhas));
-}
-
+/**
+ * Acerto de cada modelo por estação de verificação, em até duas tabelas:
+ * 1. histórico importado (dados/calibracao.json): anos de previsões passadas x medições do INMET, com os erros
+ *    de temperatura e rajada já depois da correção (medidos fora da amostra), que é o que o painel mostra;
+ * 2. últimos dias registrados pelo servidor (Worker, /v1/acerto), quando houver.
+ */
 function tabelaAcerto() {
-  if (!workerConfigurado()) return el('p', { text: 'Requer o Worker: ele guarda, uma vez por dia, a previsão antiga (Previous Runs API) e a medição de estações públicas.' });
   const blocos = [];
+  const pt = pontoExato();
+  const dataBr = (d) => `${d.slice(5, 7)}/${d.slice(2, 4)}`;
+  const cabecalho = el('thead', {}, el('tr', {}, el('th', { text: 'Previsão feita' }), el('th', { class: 'n', text: 'Acertou se chovia' }), el('th', { class: 'n', text: 'Erro na chuva' }), el('th', { class: 'n', text: 'Erro na rajada' }), el('th', { class: 'n', text: 'Erro na máxima' }), el('th', { class: 'n', text: 'Dias' })));
+  const tabela = (linhas) => el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', {}, cabecalho.cloneNode(true), el('tbody', {}, ...linhas)));
+  const linha = (m, d, acerto, volume, rajada, tmax, n) => el('tr', {}, el('td', { text: `${MODELOS[m].curto}, ${d === 1 ? 'na véspera' : `${d} dias antes`}` }),
+    el('td', { class: 'n', text: valido(acerto) ? `${Math.round(acerto * 100)}%` : '–' }),
+    el('td', { class: 'n', text: valido(volume) ? `${fmt.n(volume, 1)} mm` : '–' }),
+    el('td', { class: 'n', text: valido(rajada) ? `${fmt.n(rajada, 0)} km/h` : '–' }),
+    el('td', { class: 'n', text: valido(tmax) ? `${fmt.n(tmax, 1)}°` : '–' }),
+    el('td', { class: 'n', text: valido(n) ? `${n}` : '–' }));
+  // erro em uso no painel: depois da correção quando ela foi aprovada, senão o bruto
+  const erroUsado = (x) => (x ? (x.usar && x.origem !== 'curto prazo' ? x.maeDepois : x.origem === 'curto prazo' ? null : x.maeAntes) : null);
+
   for (const v of VERIFICACAO) {
     const a = estado.acerto[v.id];
-    if (!a) { blocos.push(el('p', { class: 'nota', text: `${v.nome}: sem dados de acerto ainda.` })); continue; }
-    const pt = pontoExato();
-    blocos.push(el('h3', { text: `${a.estacao.nome}, ${fmt.n(distanciaKm(pt.lat, pt.lon, a.estacao.lat, a.estacao.lon), 0)} km` }));
-    blocos.push(el('p', { class: 'fonte', text: a.periodo ? `${a.dias} dias, de ${a.periodo.ini} a ${a.periodo.fim}.` : 'Ainda sem dias registrados.' }));
-    if (a.observacao) blocos.push(el('p', { class: 'nota', text: a.observacao }));
-    const linhas = [];
-    for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
-      const r = a.porModelo?.[m]?.[d]; if (!r) continue;
-      if (!r.amostrasChuva && !r.amostrasRajada && !r.amostrasTmax) continue;
-      linhas.push(el('tr', {}, el('td', { text: `${MODELOS[m].curto}, ${d} dia${d > 1 ? 's' : ''} antes` }),
-        el('td', { class: 'n', text: valido(r.taxaChuva) ? `${Math.round(r.taxaChuva * 100)}%` : '–' }),
-        el('td', { class: 'n', text: valido(r.maeChuva) ? `${fmt.n(r.maeChuva, 1)} mm` : '–' }),
-        el('td', { class: 'n', text: valido(r.maeRajada) ? `${fmt.n(r.maeRajada, 0)} km/h` : '–' }),
-        el('td', { class: 'n', text: valido(r.maeTmax) ? `${fmt.n(r.maeTmax, 1)}°` : '–' }),
-        el('td', { class: 'n', text: `${Math.max(r.amostrasChuva, r.amostrasRajada, r.amostrasTmax)}` })));
+    const k = estado.calib?.estacao?.id === v.id ? estado.calib : null;
+    const o = estado.calib?.outras?.[v.id];
+    blocos.push(el('h3', { text: `${v.nome}, ${fmt.n(distanciaKm(pt.lat, pt.lon, v.lat, v.lon), 0)} km` }));
+    if (!k && o) {
+      const linhas = [];
+      for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
+        const x = o.modelos?.[m]?.[d]; if (!x) continue;
+        linhas.push(linha(m, d, x.acertoChuva, x.maeChuva, x.maeRajada, x.maeTmax, x.n));
+      }
+      blocos.push(el('p', { class: 'fonte', text: `${v.chuva ? 'INMET' : 'METAR'} ${o.estacao.nome} · histórico de ${dataBr(o.periodo.ini)} a ${dataBr(o.periodo.fim)}` }));
+      if (!v.chuva) blocos.push(el('p', { class: 'nota', text: 'O aeroporto não mede a chuva, só temperatura e vento.' }));
+      if (linhas.length) blocos.push(tabela(linhas));
     }
-    blocos.push(linhas.length ? el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', {},
-      el('thead', {}, el('tr', {}, el('th', { text: 'Modelo e antecedência' }), el('th', { class: 'n', text: 'Acerto chuva' }), el('th', { class: 'n', text: 'Erro volume' }), el('th', { class: 'n', text: 'Erro rajada' }), el('th', { class: 'n', text: 'Erro máx.' }), el('th', { class: 'n', text: 'Amostras' }))),
-      el('tbody', {}, ...linhas))) : el('p', { class: 'nota', text: 'Ainda sem amostras.' }));
+    if (k) {
+      const linhas = [];
+      for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
+        const x = k.modelos?.[m]; if (!x?.chuva?.[d]) continue;
+        linhas.push(linha(m, d, x.chuva[d].acerto, x.chuva[d].mae, erroUsado(x.rajada?.[d]), erroUsado(x.tmax?.[d]), x.chuva[d].n));
+      }
+      blocos.push(el('p', { class: 'fonte', text: `INMET Campo Bom · histórico de ${dataBr(k.periodo.ini)} a ${dataBr(k.periodo.fim)}` }));
+      if (linhas.length) blocos.push(tabela(linhas));
+    }
+    if (a?.dias) {
+      const linhas = [];
+      for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
+        const r = a.porModelo?.[m]?.[d]; if (!r) continue;
+        if (!r.amostrasChuva && !r.amostrasRajada && !r.amostrasTmax) continue;
+        linhas.push(linha(m, d, r.taxaChuva, r.maeChuva, r.maeRajada, r.maeTmax, Math.max(r.amostrasChuva, r.amostrasRajada, r.amostrasTmax)));
+      }
+      blocos.push(el('p', { class: 'fonte', text: `${v.chuva ? 'INMET' : 'METAR'} · últimos ${a.dias} dias, até ${a.periodo.fim.slice(8, 10)}/${a.periodo.fim.slice(5, 7)}` }));
+      if (linhas.length) blocos.push(tabela(linhas));
+    } else if (!k && !o) {
+      blocos.push(el('p', { class: 'nota', text: workerConfigurado() ? 'Sem histórico importado; os dias passam a contar a partir de amanhã.' : 'Sem histórico importado.' }));
+    }
   }
-  blocos.push(el('p', { class: 'nota', text: `Acerto de chuva: o modelo previu chuva acima de 1 mm e choveu, ou previu seco e não choveu. Erros são a média do erro absoluto. Os pesos começam a mudar com ${REGRAS.aprendizado.diasInicio} dias, aos poucos, entre ${REGRAS.acerto.pesoMin} e ${REGRAS.acerto.pesoMax}.` }));
+  blocos.push(el('p', { class: 'nota', text: '"Acertou se chovia" conta os dias em que o modelo disse que ia chover e choveu, ou disse que não ia e não choveu. Os erros mostram, em média, quanto o modelo errou para mais ou para menos: quanto menor, melhor. Em Campo Bom, temperatura e rajada já com a correção que o painel aplica.' }));
   return el('div', {}, ...blocos);
 }
 
