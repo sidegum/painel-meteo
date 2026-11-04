@@ -217,6 +217,24 @@ test('radar: deslocamento por correlação de blocos e chegada estimada', async 
   assert.equal(deslocamentoRadar(new Float32Array(n * n), new Float32Array(n * n), n), null);
 });
 
+test('radar seco: janela sem chuva pela extrapolação ou pela chuva mais próxima', async () => {
+  const { secoPeloRadar, REGRAS } = await import('../js/analise.js');
+  const R = REGRAS.radar, n = 64;
+  const blob = (cx, cy) => { const g = new Float32Array(n * n); for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= 36) g[y * n + x] = 1; return g; };
+  // eco sobre o local: nenhuma janela seca
+  assert.equal(secoPeloRadar(blob(32, 32), n, 32, 32, { dx: 5, dy: 0 }, 8.5), 0);
+  // chuva indo embora (local a oeste, eco andando para leste): seco o horizonte inteiro
+  assert.equal(secoPeloRadar(blob(40, 32), n, 25, 32, { dx: 5, dy: 0 }, 8.5), R.horizonteMin);
+  // chuva vindo: seco só até a chegada
+  const t = secoPeloRadar(blob(25, 32), n, 35, 32, { dx: 5, dy: 0 }, 8.5);
+  assert.ok(t >= 30 && t <= 60, String(t));
+  // sem movimento medido e nenhuma chuva na grade: limitado pela borda da área conhecida
+  const vazio = new Float32Array(n * n);
+  assert.equal(secoPeloRadar(vazio, n, 32, 32, null, 8.5), R.horizonteMin); // 31 células x 8,5 km = 263 km > 200 km
+  // sem movimento e chuva a 10 células (85 km): 85 / 100 km/h = 51 min, arredondado para baixo a 50
+  assert.equal(secoPeloRadar(blob(42 + 6, 32), n, 32, 32, null, 8.5), 50);
+});
+
 test('risco de temporal: só com chuva prevista ou aviso, por pontos', async () => {
   const { riscoTemporal } = await import('../js/analise.js');
   // sem chuva prevista: nunca contradiz a previsão
