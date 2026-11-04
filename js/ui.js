@@ -83,7 +83,7 @@ export function mostrarInfo(titulo, ...conteudo) {
   const d = document.getElementById('dlg-info');
   document.getElementById('dlg-info-t').textContent = titulo;
   const c = document.getElementById('dlg-info-corpo');
-  c.replaceChildren(...conteudo);
+  c.replaceChildren(...conteudo.filter((x) => x !== null && x !== undefined && x !== false));
   d.showModal();
 }
 

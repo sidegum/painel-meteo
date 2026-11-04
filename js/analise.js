@@ -59,6 +59,30 @@ export const REGRAS = {
     baixa: 1008, alta: 1020,   // nível: abaixo de 1008 favorece chuva, acima de 1020 favorece tempo firme
     toleranciaMin: { h3: 40, h24: 90 }, // distância máxima da leitura de referência ao instante alvo
   },
+  // Chuva chegando: extrapolação do movimento dos ecos de radar (nowcasting por correlação de blocos).
+  radar: {
+    intervaloMin: 60,          // intervalo entre os dois quadros comparados
+    deslocMax: 12,             // busca de deslocamento: até 12 células em cada eixo no intervalo
+    ecoMin: 0.3,               // fração de pixels com eco para a célula contar como chuva (chegada)
+    limiarMovimento: 0.05,     // intensidade mínima para a célula entrar na medida do movimento
+    concordanciaKmh: 15,       // velocidades medidas em 30 e 60 min precisam concordar dentro disso
+    celulasMin: 40,            // mínimo de células com eco nos dois quadros para medir o movimento
+    melhoraMin: 0.01,          // o melhor deslocamento precisa ser melhor que "parado" (a confiabilidade vem da concordância 30 x 60 min)
+    raioCelulas: 2,            // vizinhança verificada no ponto de origem da chuva
+    horizonteMin: 120,         // só avisa chegada nas próximas 2 h
+    passoMin: 5,
+    probChegando: 0.7,         // chuva chegando pelo radar: a chance do dia passa a ser no mínimo "provável"
+  },
+  // Risco de temporal: só avaliado quando há chuva prevista, chegando ou ocorrendo, ou aviso do INMET.
+  temporal: {
+    cape: [1000, 2500],        // J/kg: energia moderada (+1) e forte (+2) para tempestades
+    chuvaHoraMm: [10, 25],     // mm/h: chuva forte (+1) e muito forte (+2)
+    rajada: [60, 80],          // km/h: rajadas fortes (+1) e muito fortes (+2), as mesmas classes de rajadaClasses
+    quedaPressao3h: 3.5,       // queda de pressão acima disso em 3 h: +1
+    // Aviso de tempestade do INMET em vigor: o nível oficial prevalece, para o painel nunca contradizer o aviso.
+    aviso: { 'perigo potencial': 'moderado', perigo: 'alto', 'grande perigo': 'alto' },
+    niveis: { moderado: 2, alto: 4 },
+  },
 };
 
 export const MODELOS = {
@@ -331,6 +355,12 @@ export function avaliarDia(resumos, membros, ctx = {}) {
   // calibração aprendida com o histórico local (quando houver casos suficientes)
   const probBruta = prob;
   if (prob !== null && ctx.calibracao) prob = calibrarProb(prob, ctx.calibracao);
+  // Chuva chegando pelo radar (só hoje): nas próximas 2 h a extrapolação do radar acerta mais que os modelos,
+  // então a chance do dia passa a ser no mínimo "provável", e todas as telas mostram o mesmo veredito.
+  if (ctx.chegando && (prob === null || prob < R.radar.probChegando)) {
+    prob = R.radar.probChegando;
+    fonteProb = `${fonteProb ? fonteProb + ' e ' : ''}radar mostrando chuva chegando`;
+  }
   const probModelos = mediana(resumos.map((r) => r.probMax));
 
   // volume se chover
@@ -767,4 +797,105 @@ export function leituraPressao(av, probChuva) {
   return av.sinal === 'firme'
     ? { titulo: 'Tempo firme', classe: 'firme', texto: 'A pressão está subindo ou alta, de acordo com a previsão sem chuva.' }
     : { titulo: 'Pressão estável', classe: 'neutra', texto: 'A pressão não mostra variação importante, de acordo com a previsão sem chuva.' };
+}
+
+// ---------- chuva chegando (radar) ----------
+
+/**
+ * Deslocamento dos ecos de radar entre dois quadros por correlação de blocos (block matching):
+ * procura o (dx, dy) que minimiza o erro absoluto médio entre o quadro novo e o antigo deslocado,
+ * contando só células com eco em algum dos dois. Recusa o resultado quando há pouco eco ou quando
+ * o melhor deslocamento não melhora o ajuste o bastante em relação a "parado".
+ * @param {ArrayLike<number>} antigo grade n x n, intensidade média do eco por célula (0 a 1)
+ * @param {ArrayLike<number>} novo grade n x n do quadro mais recente
+ * @param {number} n lado da grade
+ * @returns {{dx:number, dy:number, melhora:number}|null} deslocamento em células no intervalo
+ */
+export function deslocamentoRadar(antigo, novo, n) {
+  const R = REGRAS.radar, M = R.deslocMax, L = R.limiarMovimento;
+  let ca = 0, cn = 0;
+  for (let k = 0; k < n * n; k++) { if (antigo[k] >= L) ca++; if (novo[k] >= L) cn++; }
+  if (ca < R.celulasMin || cn < R.celulasMin) return null;
+  const erro = (dx, dy) => {
+    let soma = 0, cont = 0;
+    for (let y = M; y < n - M; y++) for (let x = M; x < n - M; x++) {
+      const b = novo[y * n + x], a = antigo[(y - dy) * n + (x - dx)];
+      if (a < L && b < L) continue;
+      soma += Math.abs(a - b); cont++;
+    }
+    return cont ? soma / cont : Infinity;
+  };
+  const e0 = erro(0, 0);
+  let melhor = { dx: 0, dy: 0, e: e0 };
+  for (let dy = -M; dy <= M; dy++) for (let dx = -M; dx <= M; dx++) {
+    const e = erro(dx, dy);
+    if (e < melhor.e) melhor = { dx, dy, e };
+  }
+  if (!Number.isFinite(e0) || !Number.isFinite(melhor.e)) return null;
+  const melhora = e0 > 0 ? 1 - melhor.e / e0 : 0;
+  if ((melhor.dx || melhor.dy) && melhora < R.melhoraMin) return null;
+  return { dx: melhor.dx, dy: melhor.dy, melhora };
+}
+
+/**
+ * Extrapolação: a cada passo de tempo, olha o ponto de onde a chuva viria (posição menos velocidade x tempo)
+ * no quadro mais recente. A primeira vez em que a vizinhança tem eco é a chegada estimada.
+ * @param {ArrayLike<number>} grade quadro mais recente, n x n
+ * @param {number} n
+ * @param {number} px coluna do local na grade
+ * @param {number} py linha do local na grade
+ * @param {{dx:number, dy:number}} desl deslocamento em células por REGRAS.radar.intervaloMin
+ * @returns {number|null} minutos até a chegada (0 = já sobre o local), ou null se nada chega no horizonte
+ */
+export function chegadaChuva(grade, n, px, py, desl) {
+  const R = REGRAS.radar;
+  const vx = desl.dx / R.intervaloMin, vy = desl.dy / R.intervaloMin;
+  const temEco = (cx, cy) => {
+    let soma = 0, cont = 0;
+    for (let y = Math.round(cy) - R.raioCelulas; y <= Math.round(cy) + R.raioCelulas; y++) {
+      for (let x = Math.round(cx) - R.raioCelulas; x <= Math.round(cx) + R.raioCelulas; x++) {
+        if (x < 0 || y < 0 || x >= n || y >= n) return null; // saiu da área conhecida: não afirma nada
+        soma += grade[y * n + x]; cont++;
+      }
+    }
+    return soma / cont >= R.ecoMin;
+  };
+  for (let t = 0; t <= R.horizonteMin; t += R.passoMin) {
+    const r = temEco(px - vx * t, py - vy * t);
+    if (r === null) return null;
+    if (r) return t;
+  }
+  return null;
+}
+
+// ---------- risco de temporal ----------
+
+/**
+ * Risco de temporal por pontos objetivos (limites em REGRAS.temporal). Com aviso de tempestade do INMET em
+ * vigor, o nível é o do aviso (perigo potencial = moderado; perigo ou grande perigo = alto). Só é avaliado quando a previsão
+ * principal tem chuva (possível ou provável), quando está chovendo ou chegando chuva, ou quando há
+ * aviso de tempestade do INMET; fora disso devolve null, para não contradizer a previsão sem chuva.
+ * @param {{prob?:number|null, chovendo?:boolean, chegando?:boolean, cape?:number|null, chuvaHora?:number|null,
+ *   rajada?:number|null, d3Pressao?:number|null, aviso?:string|null}} e
+ * @returns {{nivel:'baixo'|'moderado'|'alto', pontos:number, motivos:string[]}|null}
+ */
+export function riscoTemporal({ prob = null, chovendo = false, chegando = false, cape = null, chuvaHora = null, rajada = null, d3Pressao = null, aviso = null } = {}) {
+  const T = REGRAS.temporal;
+  const nivelAviso = aviso ? T.aviso[String(aviso).trim().toLowerCase()] ?? 'moderado' : null;
+  const chuva = chovendo || chegando || (valido(prob) && prob >= REGRAS.ocorrencia.possivel);
+  if (!chuva && !nivelAviso) return null;
+  let pontos = 0;
+  const motivos = [];
+  const faixa = (v, [a, b], nome, un) => {
+    if (!valido(v) || v < a) return;
+    pontos += v >= b ? 2 : 1;
+    motivos.push(`${nome} ${v >= b ? 'muito ' : ''}${nome === 'energia para tempestades' ? 'alta' : 'forte'} (${Math.round(v)} ${un})`);
+  };
+  faixa(cape, T.cape, 'energia para tempestades', 'J/kg');
+  faixa(chuvaHora, T.chuvaHoraMm, 'chuva', 'mm/h');
+  faixa(rajada, T.rajada, 'rajadas', 'km/h');
+  if (valido(d3Pressao) && d3Pressao < -T.quedaPressao3h) { pontos += 1; motivos.push('pressão caindo rápido'); }
+  let nivel = pontos >= T.niveis.alto ? 'alto' : pontos >= T.niveis.moderado ? 'moderado' : 'baixo';
+  if (nivelAviso) { nivel = nivelAviso; motivos.unshift(`aviso de tempestade do INMET em vigor (${String(aviso).toLowerCase()})`); }
+  return { nivel, pontos, motivos };
 }
