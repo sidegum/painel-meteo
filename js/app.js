@@ -4,7 +4,7 @@ import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, periodoDoDia, classeRajada,
-  condicaoCeu, respostaChuva,
+  condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao,
 } from './analise.js';
 import {
   buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto,
@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.13';
+const VERSAO = '1.2.14';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -898,14 +898,6 @@ function instrumentos() {
   const sensInmet = linhaSilenciosa(fontes, 'sensacao', p, agora);
   const sens = sensInmet ? sensInmet.valor : (t && u && ve && t.fonte.id === u.fonte.id && u.fonte.id === ve.fonte.id ? apparente(t.valor, u.valor, ve.valor) : null);
   const pr = val('pressao');
-  let tend = null;
-  if (pr) {
-    const serie = (estado.obs.fontes.find((x) => x.id === pr.fonte.id)?.serie || []).filter((x) => valido(x.pressao));
-    const ult = serie[serie.length - 1];
-    const alvo = ult ? ult.ms - 3 * 3600000 : 0;
-    const ant = ult && serie.reduce((m, x) => (Math.abs(x.ms - alvo) < Math.abs((m?.ms ?? Infinity) - alvo) ? x : m), null);
-    if (ult && ant && Math.abs(ant.ms - alvo) <= 40 * 60000) tend = ult.pressao - ant.pressao;
-  }
   const dir = val('direcao');
 
   // estação principal: a que fornece a maior parte das leituras
@@ -930,13 +922,11 @@ function instrumentos() {
     bloco('Umidade', u, u ? `${Math.round(u.valor)}%` : null),
     bloco('Ponto de orvalho', val('orvalho'), val('orvalho') ? fmt.c1(val('orvalho').valor) : null),
     bloco('Vento', ve, ve ? `${fmt.kmh(ve.valor)}${dir ? ' ' + direcaoTexto(dir.valor) : ''}` : null),
-    bloco('Rajada', val('rajada'), val('rajada') ? fmt.kmh(val('rajada').valor) : null),
-    bloco('Pressão', pr, pr ? fmt.hpa(pr.valor) : null,
-      valido(tend) ? `${tend > 0 ? '+' : ''}${fmt.n(tend, 1)} hPa em 3 h${tend <= -3 ? ', caindo rápido' : tend >= 3 ? ', subindo rápido' : ''}` : null));
+    bloco('Rajada', val('rajada'), val('rajada') ? fmt.kmh(val('rajada').valor) : null));
   const chuva = el('div', { class: 'medicoes chuvas' },
     ...[['Última hora', 'chuva_h1'], ['24 h', 'chuva_h24'], ['72 h', 'chuva_h72'], ['7 dias', 'chuva_d7']]
       .map(([n, k]) => { const c = val(k) || (k === 'chuva_h1' ? val('chuva') : null); return bloco(n, c, c ? fmt.mm(c.valor) : null); }));
-  s.append(grade);
+  s.append(painelPressao(pr), grade);
   if ([...chuva.children].some((b) => !b.classList.contains('vazio'))) s.append(el('h3', { class: 'med-tit', text: 'Chuva medida' }), chuva);
 
   // detalhes para quem quiser conferir: outras estações e avisos técnicos
@@ -951,6 +941,89 @@ function instrumentos() {
   det.append(el('p', { class: 'nota', text: 'Leituras com mais de 3 horas, vazias ou fora da faixa física são descartadas. A medição nunca é trocada por previsão.' }));
   s.append(det);
   return s;
+}
+
+/**
+ * Análise da pressão ao nível do mar, no topo do bloco "Medições agora".
+ * Medição: série da estação escolhida (INMET reduz a pressão da estação ao nível do mar; METAR informa SLP).
+ * Sem série medida, as tendências usam a previsão (ECMWF, ou mediana dos modelos) e isso é dito na tela.
+ * Previsão: variação nas próximas REGRAS.pressao.previsaoHoras horas e menor pressão nas próximas 24 h.
+ * O sinal de chuva vem de avaliarPressao (analise.js) e não altera a chance de chuva dos modelos.
+ * @param {object|null} pr leitura escolhida por escolherFonte para 'pressao'
+ * @returns {HTMLElement}
+ */
+function painelPressao(pr) {
+  const R = REGRAS.pressao, p = estado.prev, agora = Date.now();
+  const mods = modelosAtivos();
+  const prevHora = (i) => {
+    const v = p?.modelos[MODELO_TEMP]?.vars.pressure_msl?.[i];
+    return valido(v) ? v : mediana(mods.map((m) => p.modelos[m].vars.pressure_msl?.[i]));
+  };
+  let i0 = -1;
+  if (p) for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= agora) i0 = k;
+  const seriePrev = p ? p.horas.map((ms, i) => ({ ms, valor: prevHora(i) })) : [];
+
+  // medição: série da mesma estação da leitura escolhida
+  const serieMed = pr ? (estado.obs?.fontes.find((x) => x.id === pr.fonte.id)?.serie || [])
+    .filter((x) => valido(x.pressao)).map((x) => ({ ms: x.ms, valor: x.pressao })) : [];
+  let v3 = variacaoSerie(serieMed, 3, R.toleranciaMin.h3), v24 = variacaoSerie(serieMed, 24, R.toleranciaMin.h24);
+  let origemTend = 'medida';
+  if (!v3 && !v24 && i0 >= 0) {
+    const ate = seriePrev.slice(0, i0 + 1);
+    v3 = variacaoSerie(ate, 3, R.toleranciaMin.h3); v24 = variacaoSerie(ate, 24, R.toleranciaMin.h24);
+    origemTend = 'prevista';
+  }
+  const atual = pr ? pr.valor : (i0 >= 0 ? seriePrev[i0].valor : null);
+  // Ancoragem: a previsão é deslocada pela diferença entre a medição atual e o valor previsto para agora,
+  // para os valores previstos (menor pressão e gráfico) ficarem na mesma referência da estação.
+  // Variações não mudam com o deslocamento. Só com leitura de até 2 h.
+  const ancora = pr && i0 >= 0 && valido(seriePrev[i0].valor) && agora - pr.ms <= 2 * 3600000 ? pr.valor - seriePrev[i0].valor : 0;
+  if (ancora) for (const q of seriePrev) if (valido(q.valor)) q.valor += ancora;
+  // previsão: variação até daqui a N horas e menor valor nas próximas 24 h
+  let varPrev = null, minimo24 = null;
+  if (i0 >= 0) {
+    const iN = i0 + R.previsaoHoras;
+    if (iN < seriePrev.length && valido(seriePrev[i0].valor) && valido(seriePrev[iN].valor)) varPrev = seriePrev[iN].valor - seriePrev[i0].valor;
+    for (let k = i0 + 1; k <= i0 + 24 && k < seriePrev.length; k++) if (valido(seriePrev[k].valor) && (!minimo24 || seriePrev[k].valor < minimo24.valor)) minimo24 = seriePrev[k];
+  }
+  const cls = classeTendenciaPressao(v3?.delta);
+  const av = avaliarPressao({ atual, d3: v3?.delta, d24: v24?.delta, prev: varPrev });
+  const caixa = el('div', { class: 'pressao' });
+  const sinal = (d) => `${d > 0 ? '+' : ''}${fmt.n(d, 1)} hPa`;
+  caixa.append(el('div', { class: 'pr-topo' },
+    el('span', { class: 'med-nome', text: 'Pressão atmosférica' }),
+    el('b', { class: 'pr-v', text: valido(atual) ? fmt.hpa(atual) : '–' }),
+    cls ? el('span', { class: `pr-tend ${cls.sentido}`, text: `${cls.sentido === 'caindo' ? '▼' : cls.sentido === 'subindo' ? '▲' : '●'} ${cls.texto}` }) : null));
+  const linhas = [
+    ['Últimas 3 h', v3 ? sinal(v3.delta) : 'sem dado'],
+    ['Últimas 24 h', v24 ? sinal(v24.delta) : 'sem dado'],
+    [`Próximas ${R.previsaoHoras} h (previsão)`, valido(varPrev) ? sinal(varPrev) : 'sem dado'],
+    ['Menor nas próximas 24 h', minimo24 ? `${fmt.hpa(minimo24.valor)} às ${fmt.hora(minimo24.ms, p.offset)}` : 'sem dado'],
+  ];
+  caixa.append(el('dl', { class: 'pr-lista' }, ...linhas.flatMap(([a, b]) => [el('dt', { text: a }), el('dd', { text: b })])));
+  // A leitura parte da chance de chuva principal de hoje (a mesma da primeira tela), para nunca contradizê-la.
+  const hoje = datas()[0];
+  const lp = leituraPressao(av, p && hoje ? analisarDia(hoje, 0, true).av.prob : null);
+  if (lp) {
+    caixa.classList.add(`sinal-${lp.classe}`);
+    caixa.append(el('p', { class: 'pr-sinal' }, el('b', { text: lp.titulo + '. ' }), lp.texto));
+    if (av.motivos.length) caixa.append(el('p', { class: 'nota', text: `Pela pressão: ${av.motivos.join('; ')}.` }));
+  }
+  // gráfico: últimas 24 h medidas e próximas 24 h previstas
+  if (p && i0 >= 0) {
+    const ini = Math.max(0, i0 - 24), fim = Math.min(p.horas.length - 1, i0 + 24);
+    const x = p.horas.slice(ini, fim + 1);
+    const med = x.map((ms) => { if (ms > agora) return null; const o = serieMed.find((q) => Math.abs(q.ms - ms) <= 30 * 60000); return o ? o.valor : null; });
+    const prv = x.map((_, k) => seriePrev[ini + k].valor);
+    criarGrafico(caixa, { x, noites: noitesDe(p.diario, x[0], x[x.length - 1]), fuso: p.fuso, emitirHora: false, titulo: 'Pressão: 24 h medidas e 24 h previstas', altura: 140,
+      fonte: `${pr ? `Medida: ${pr.fonte.nome} (${fmt.n(pr.distancia, 0)} km).` : 'Sem medição de pressão perto.'} Prevista: ECMWF (modelo europeu)${ancora ? ', ajustada à medição de agora' : ''}.${origemTend === 'prevista' ? ' Tendências calculadas pela previsão, sem série medida.' : ''}`,
+      series: [
+        { rotulo: 'previsto', valores: prv, corCss: '--texto', dash: [6, 4], largura: 1.5, formato: (v) => fmt.hpa(v) },
+        { rotulo: 'medido', valores: med, corCss: '--chuva', pontos: true, largura: 2.5, formato: (v) => fmt.hpa(v) },
+      ], eixos: [{ formato: (v) => `${v}`, tamanho: 48, rotulo: 'hPa' }] });
+  }
+  caixa.append(el('details', { class: 'med-det' }, el('summary', { text: 'Como é calculado' }), el('p', { class: 'nota', text: `A tendência de 3 h segue os termos do Met Office e da OMM (estável abaixo de 0,1 hPa; devagar até 1,5; normal até 3,5; rápido até 6; muito rápido acima). O sinal de chuva soma pontos: queda em 3 h (+1, ou +2 se rápida), queda de ${R.queda24hForte} hPa em 24 h (+1), queda prevista de ${R.variacaoPrevForte} hPa em ${R.previsaoHoras} h (+1) e pressão abaixo de ${R.baixa} hPa (+1). Subidas e pressão acima de ${R.alta} hPa tiram pontos. A conclusão parte sempre da chance de chuva dos modelos, mostrada no topo: a pressão confirma ou explica essa previsão, nunca a contradiz.` })));
+  return caixa;
 }
 
 function linhaSilenciosa(fontes, v, p, agora) {

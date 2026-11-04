@@ -49,6 +49,16 @@ export const REGRAS = {
   ceu: {                       // cobertura média de nuvens (%) -> condição do céu
     limpo: 20, poucasNuvens: 45, parcial: 75,
   },
+  // Pressão ao nível do mar (hPa). Tendência de 3 h pelos termos do Met Office e da OMM:
+  // estável < 0,1; devagar 0,1 a 1,5; normal 1,6 a 3,5; rápido 3,6 a 6,0; muito rápido acima de 6,0.
+  pressao: {
+    tendencia3h: { estavel: 0.1, devagar: 1.5, normal: 3.5, rapido: 6.0 },
+    queda24hForte: 6,          // queda de 6 hPa ou mais em 24 h soma um ponto de sinal de chuva
+    previsaoHoras: 12,         // janela da variação prevista pelos modelos
+    variacaoPrevForte: 4,      // variação prevista de 4 hPa ou mais na janela soma (queda) ou tira (subida) um ponto
+    baixa: 1008, alta: 1020,   // nível: abaixo de 1008 favorece chuva, acima de 1020 favorece tempo firme
+    toleranciaMin: { h3: 40, h24: 90 }, // distância máxima da leitura de referência ao instante alvo
+  },
 };
 
 export const MODELOS = {
@@ -651,4 +661,110 @@ export function respostaChuva(prob) {
   if (!valido(prob)) return null;
   const p = palavraOcorrencia(prob);
   return { 'provável': 'Vai chover', 'possível': 'Pode chover', 'pouco provável': 'Chuva pouco provável', 'improvável': 'Não deve chover' }[p];
+}
+
+// ---------- pressão atmosférica ----------
+
+/**
+ * Variação de uma série entre a leitura mais recente e a leitura mais próxima de "horas" antes dela.
+ * @param {{ms:number, valor:number|null}[]} serie leituras (qualquer ordem; inválidas são ignoradas)
+ * @param {number} horas intervalo desejado, em horas
+ * @param {number} toleranciaMin distância máxima, em minutos, entre a leitura de referência e o instante alvo
+ * @returns {{delta:number, de:{ms:number, valor:number}, ate:{ms:number, valor:number}}|null}
+ */
+export function variacaoSerie(serie, horas, toleranciaMin) {
+  const pts = (serie || []).filter((x) => valido(x?.valor) && valido(x?.ms)).sort((a, b) => a.ms - b.ms);
+  if (pts.length < 2) return null;
+  const ate = pts[pts.length - 1];
+  const alvo = ate.ms - horas * 3600000;
+  let de = null;
+  for (const x of pts) if (x !== ate && (!de || Math.abs(x.ms - alvo) < Math.abs(de.ms - alvo))) de = x;
+  if (!de || Math.abs(de.ms - alvo) > toleranciaMin * 60000) return null;
+  return { delta: ate.valor - de.valor, de, ate };
+}
+
+/**
+ * Classifica a tendência de 3 h da pressão pelos termos do Met Office e da OMM (REGRAS.pressao.tendencia3h).
+ * @param {number|null} delta3h variação em hPa nas últimas 3 h
+ * @returns {{sentido:'subindo'|'caindo'|'estavel', intensidade:string, texto:string}|null}
+ */
+export function classeTendenciaPressao(delta3h) {
+  if (!valido(delta3h)) return null;
+  const T = REGRAS.pressao.tendencia3h, a = Math.abs(delta3h);
+  if (a < T.estavel) return { sentido: 'estavel', intensidade: '', texto: 'estável' };
+  const sentido = delta3h > 0 ? 'subindo' : 'caindo';
+  const intensidade = a <= T.devagar ? 'devagar' : a <= T.normal ? '' : a <= T.rapido ? 'rápido' : 'muito rápido';
+  return { sentido, intensidade, texto: intensidade ? `${sentido} ${intensidade}` : sentido };
+}
+
+/**
+ * Sinal de chuva pela pressão. Soma pontos objetivos e devolve o nível do sinal e os motivos:
+ *   tendência de 3 h: queda acima de 3,5 hPa +2; queda de 1,6 a 3,5 +1; subida de 1,6 ou mais -1;
+ *   queda de 6 hPa ou mais em 24 h +1;
+ *   variação prevista nas próximas 12 h: queda de 4 hPa ou mais +1; subida de 4 hPa ou mais -1;
+ *   nível: abaixo de 1008 hPa +1; acima de 1020 hPa -1.
+ * Pontos: 3 ou mais = forte; 2 = moderado; 1 = fraco; 0 = nenhum; negativo = tempo firme.
+ * É um indicador auxiliar: não altera a chance de chuva calculada pelos modelos.
+ * @param {{atual?:number|null, d3?:number|null, d24?:number|null, prev?:number|null}} p
+ * @returns {{pontos:number, sinal:'forte'|'moderado'|'fraco'|'nenhum'|'firme', motivos:string[]}|null}
+ */
+export function avaliarPressao({ atual = null, d3 = null, d24 = null, prev = null } = {}) {
+  const R = REGRAS.pressao, T = R.tendencia3h;
+  if (![atual, d3, d24, prev].some(valido)) return null;
+  let pontos = 0;
+  const motivos = [];
+  const n1 = (v) => `${(Math.round(Math.abs(v) * 10) / 10).toString().replace('.', ',')} hPa`;
+  if (valido(d3)) {
+    if (d3 < -T.normal) { pontos += 2; motivos.push(`queda rápida de ${n1(d3)} em 3 h`); }
+    else if (d3 < -T.devagar) { pontos += 1; motivos.push(`queda de ${n1(d3)} em 3 h`); }
+    else if (d3 > T.devagar) { pontos -= 1; motivos.push(`subida de ${n1(d3)} em 3 h`); }
+  }
+  if (valido(d24) && d24 <= -R.queda24hForte) { pontos += 1; motivos.push(`queda de ${n1(d24)} em 24 h`); }
+  if (valido(prev)) {
+    if (prev <= -R.variacaoPrevForte) { pontos += 1; motivos.push(`modelos preveem queda de ${n1(prev)} nas próximas ${R.previsaoHoras} h`); }
+    else if (prev >= R.variacaoPrevForte) { pontos -= 1; motivos.push(`modelos preveem subida de ${n1(prev)} nas próximas ${R.previsaoHoras} h`); }
+  }
+  if (valido(atual)) {
+    if (atual < R.baixa) { pontos += 1; motivos.push(`pressão baixa (abaixo de ${R.baixa} hPa)`); }
+    else if (atual > R.alta) { pontos -= 1; motivos.push(`pressão alta (acima de ${R.alta} hPa)`); }
+  }
+  const sinal = pontos >= 3 ? 'forte' : pontos === 2 ? 'moderado' : pontos === 1 ? 'fraco' : pontos === 0 ? 'nenhum' : 'firme';
+  return { pontos, sinal, motivos };
+}
+
+/**
+ * Leitura final da pressão, sempre coerente com a chance de chuva principal (que é a referência).
+ * A pressão nunca contradiz a previsão: quando ela indica piora e os modelos não mostram chuva,
+ * o texto fala em mudança no tempo sem chuva prevista; quando os modelos mostram chuva e a pressão
+ * não cai, explica que a chuva prevista não depende de queda de pressão.
+ * @param {{sinal:string}|null} av saída de avaliarPressao
+ * @param {number|null} probChuva chance de chuva principal do dia (0 a 1), já calibrada
+ * @returns {{titulo:string, texto:string, classe:string}|null}
+ */
+export function leituraPressao(av, probChuva) {
+  if (!av) return null;
+  const chuvaPrevista = valido(probChuva) && probChuva >= REGRAS.ocorrencia.possivel;
+  const piora = av.sinal === 'forte' || av.sinal === 'moderado' || av.sinal === 'fraco';
+  if (!valido(probChuva)) {
+    return piora
+      ? { titulo: 'Pressão caindo', texto: 'A queda costuma anteceder mudança no tempo. A previsão de chuva está indisponível agora para confirmar.', classe: 'mudanca' }
+      : { titulo: av.sinal === 'firme' ? 'Pressão subindo ou alta' : 'Pressão estável', texto: 'Sem indício de piora pela pressão.', classe: av.sinal === 'firme' ? 'firme' : 'neutra' };
+  }
+  if (piora && chuvaPrevista) {
+    return { titulo: 'Confirma a chuva prevista', classe: av.sinal === 'forte' ? 'forte' : 'confirma',
+      texto: av.sinal === 'fraco'
+        ? 'A pressão começa a cair, de acordo com a chuva prevista pelos modelos.'
+        : 'A pressão está caindo, como acontece antes de uma frente ou de um sistema de baixa pressão. Isso reforça a chuva prevista pelos modelos.' };
+  }
+  if (piora) {
+    return { titulo: 'Mudança no tempo, sem chuva prevista', classe: 'mudanca',
+      texto: 'A pressão está caindo, mas os modelos não mostram chuva para hoje. Por enquanto, a queda indica mais nuvens ou vento. Se ela continuar, a próxima atualização da previsão vai refletir isso.' };
+  }
+  if (chuvaPrevista) {
+    return { titulo: 'Pressão estável', classe: 'neutra',
+      texto: 'A pressão não mostra queda. Isso não muda a chuva prevista pelos modelos: pancadas de calor e umidade, por exemplo, acontecem sem queda de pressão.' };
+  }
+  return av.sinal === 'firme'
+    ? { titulo: 'Tempo firme', classe: 'firme', texto: 'A pressão está subindo ou alta, de acordo com a previsão sem chuva.' }
+    : { titulo: 'Pressão estável', classe: 'neutra', texto: 'A pressão não mostra variação importante, de acordo com a previsão sem chuva.' };
 }

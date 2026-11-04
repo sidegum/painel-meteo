@@ -474,3 +474,21 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .gb-barra.sel i { outline: 2px solid var(--texto); outline-offset: 1px; }
 .gb-x { display: flex; gap: 2px; margin-top: 6px; }
 .gb-x span { flex: 1; min-width: 0; font-size: 11px; color: var(--fraco); white-space: nowrap; overflow: visible; }
+
+/* Pressão atmosférica: destaque no topo de "Medições agora" */
+.pressao { background: var(--sup2); border-radius: 10px; padding: 12px 12px 6px; margin: 4px 0 12px; border-left: 4px solid var(--linha); }
+.pressao.sinal-forte { border-left-color: var(--quente); }
+.pressao.sinal-confirma { border-left-color: var(--chuva); }
+.pressao.sinal-mudanca { border-left-color: var(--rajada); }
+.pressao.sinal-firme { border-left-color: var(--fria); }
+.pr-topo { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.pr-topo .med-nome { flex-basis: 100%; }
+.pr-v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pr-tend { font-size: 14px; font-weight: 640; color: var(--fraco); }
+.pr-tend.caindo { color: var(--quente); }
+.pr-tend.subindo { color: var(--fria); }
+.pr-lista { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin: 10px 0 6px; font-size: 14px; }
+.pr-lista dt { color: var(--fraco); }
+.pr-lista dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.pr-sinal { margin: 8px 0 4px; font-size: 15px; line-height: 1.35; }
+.pressao .grafico { margin-top: 8px; }

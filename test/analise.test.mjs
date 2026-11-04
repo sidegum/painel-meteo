@@ -151,3 +151,50 @@ test('radar: pixel do ponto no quadro de zoom 7', async () => {
   assert.deepEqual([t.z, t.x, t.y], [7, 45, 75]);
   assert.ok(t.px >= 0 && t.px < 256 && t.py >= 0 && t.py < 256);
 });
+
+test('pressão: variação de 3 h e 24 h com tolerância', async () => {
+  const { variacaoSerie } = await import('../js/analise.js');
+  const h = 3600000, t0 = Date.UTC(2026, 10, 4, 12);
+  const serie = Array.from({ length: 25 }, (_, k) => ({ ms: t0 - (24 - k) * h, valor: 1015 - k * 0.5 }));
+  assert.equal(variacaoSerie(serie, 3, 40).delta, -1.5);
+  assert.equal(variacaoSerie(serie, 24, 90).delta, -12);
+  // sem leitura perto do alvo: nada é inventado
+  assert.equal(variacaoSerie([{ ms: t0 - 10 * h, valor: 1010 }, { ms: t0, valor: 1008 }], 3, 40), null);
+  assert.equal(variacaoSerie([{ ms: t0, valor: 1008 }], 3, 40), null);
+});
+
+test('pressão: termos de tendência do Met Office e da OMM', async () => {
+  const { classeTendenciaPressao } = await import('../js/analise.js');
+  assert.equal(classeTendenciaPressao(0.05).texto, 'estável');
+  assert.equal(classeTendenciaPressao(-1.0).texto, 'caindo devagar');
+  assert.equal(classeTendenciaPressao(2.0).texto, 'subindo');
+  assert.equal(classeTendenciaPressao(-4.2).texto, 'caindo rápido');
+  assert.equal(classeTendenciaPressao(-7).texto, 'caindo muito rápido');
+  assert.equal(classeTendenciaPressao(null), null);
+});
+
+test('pressão: sinal de chuva por pontos', async () => {
+  const { avaliarPressao } = await import('../js/analise.js');
+  // queda rápida + queda em 24 h + pressão baixa = sinal forte
+  const a = avaliarPressao({ atual: 1004, d3: -4, d24: -8, prev: -2 });
+  assert.equal(a.sinal, 'forte'); assert.equal(a.pontos, 4); assert.equal(a.motivos.length, 3);
+  // queda moderada só = fraco; subida com pressão alta = tempo firme
+  assert.equal(avaliarPressao({ atual: 1014, d3: -2 }).sinal, 'fraco');
+  assert.equal(avaliarPressao({ atual: 1024, d3: 2, prev: 5 }).sinal, 'firme');
+  assert.equal(avaliarPressao({ atual: 1014, d3: 0.3 }).sinal, 'nenhum');
+  assert.equal(avaliarPressao({}), null);
+});
+
+test('pressão nunca contradiz a chance de chuva principal', async () => {
+  const { leituraPressao, avaliarPressao, palavraOcorrencia } = await import('../js/analise.js');
+  const casos = [{ atual: 1003, d3: -5, d24: -9, prev: -5 }, { atual: 1012, d3: -2 }, { atual: 1014, d3: 0 }, { atual: 1024, d3: 2, prev: 5 }];
+  for (const c of casos) for (const prob of [0, 0.1, 0.3, 0.5, 0.8, 1, null]) {
+    const l = leituraPressao(avaliarPressao(c), prob);
+    const semChuva = prob !== null && ['improvável', 'pouco provável'].includes(palavraOcorrencia(prob));
+    const comChuva = prob !== null && !semChuva;
+    // previsão sem chuva: o texto da pressão não pode anunciar chuva
+    if (semChuva) assert.ok(!/reforça a chuva|confirma a chuva|chuva prevista pelos modelos\./i.test(l.titulo + l.texto) && l.classe !== 'forte' && l.classe !== 'confirma', `${JSON.stringify(c)} ${prob}`);
+    // previsão com chuva: o texto da pressão não pode anunciar tempo firme
+    if (comChuva) assert.ok(!/tempo firme/i.test(l.titulo + l.texto) && l.classe !== 'firme', `${JSON.stringify(c)} ${prob}`);
+  }
+});
