@@ -164,7 +164,8 @@ const extremosDe = (ext, est) => ({ tmax: ext.tmax?.porEstacao[est].vies ?? 0, t
  * @param {object[]} dias0 diasHorarios da antecedência 0 (base); pode ser vazio
  * @param {(treino: (mes: string) => boolean) => ((estacao: string) => {tmax:number, tmin:number})|null} metodoDiario
  *   recebe o filtro dos meses de treino e devolve a correção diária por estação do ano ajustada só com eles
- * @returns {{dias:number, meses:number, horaria:object, tarde:object, tmax:object, tmin:object, usar:boolean}|null}
+ * @returns {{porDia:Map<string, {tmax:number|null, tmin:number|null}>, dias:number, meses:number, horaria:object,
+ *   tarde:object, tmax:object, tmin:object, usar:boolean}|null}
  */
 export function validarHorario(dias, dias0, metodoDiario) {
   if (dias.length < PARAM_HORARIO.minDias) return null;
@@ -172,6 +173,7 @@ export function validarHorario(dias, dias0, metodoDiario) {
   const acum = () => ({ bruta: [], diaria: [], horaria: [] });
   const H = acum(), T = acum(), MX = acum(), MN = acum();
   const meses = [...new Set(dias.map((d) => d.mes))];
+  const porDia = new Map(); // data → máxima e mínima do método horário, fora da amostra
   for (const mes of meses) {
     const treino = dias.filter((d) => d.mes !== mes);
     const base = ajustarHorario(dias0.filter((d) => d.mes !== mes));
@@ -193,6 +195,7 @@ export function validarHorario(dias, dias0, metodoDiario) {
           if (h >= t0 && h <= t1) T[nome].push(par);
         }
         const mx = maxDe(s), mn = minDe(s);
+        if (nome === 'horaria') porDia.set(d.data, { tmax: mx, tmin: mn });
         if (num(mx) && num(d.tmax)) MX[nome].push({ prev: mx, obs: d.tmax });
         if (num(mn) && num(d.tmin)) MN[nome].push({ prev: mn, obs: d.tmin });
       }
@@ -202,7 +205,7 @@ export function validarHorario(dias, dias0, metodoDiario) {
     const m = metricas(ps);
     return [k, { n: m.n, mae: m.mae, vies: m.vies }];
   }));
-  const r = { dias: dias.length, meses: meses.length, horaria: resumo(H), tarde: resumo(T), tmax: resumo(MX), tmin: resumo(MN) };
+  const r = { porDia, dias: dias.length, meses: meses.length, horaria: resumo(H), tarde: resumo(T), tmax: resumo(MX), tmin: resumo(MN) };
   // Horário só entra se, fora da amostra, reduzir o erro hora a hora em relação ao método diário (ganho mínimo
   // igual ao da calibração diária) sem piorar a máxima e a mínima do dia.
   const g = (x) => x.horaria.mae <= (1 - PARAM.ganhoMinimo) * x.diaria.mae;

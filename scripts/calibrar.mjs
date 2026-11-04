@@ -223,7 +223,9 @@ function placar() {
   for (const campo of ['tmax', 'tmin']) {
     const ps = pares(tabela, 'ecmwf_ifs', L, campo);
     const cor = modelos.ecmwf_ifs[campo][L]?.usar ? foraDaAmostra(ps, ajustarVies, corrigirVies) : ps.map((p) => p.prev);
-    ps.forEach((p, i) => { pega(p.data)[campo] = cor[i]; });
+    // com o método hora a hora aprovado, o placar usa a máxima e a mínima dele (as que o painel mostra)
+    const hor = maximasHorarias.get(`ecmwf_ifs:${L}`);
+    ps.forEach((p, i) => { pega(p.data)[campo] = hor?.get(p.data)?.[campo] ?? cor[i]; });
   }
   const comRajada = modelosApp.filter((m) => pares(tabela, m, L, 'rajada').length);
   for (const m of comRajada) for (const [d, v] of rajadaCorrigida(m, L)) pega(d).raj.push(v);
@@ -258,6 +260,8 @@ function placar() {
  * (scripts/lib/temperatura-horaria.mjs), com a validação fora da amostra contra a previsão bruta e contra o
  * método diário (só máxima e mínima). null quando ainda não há a tabela horária.
  */
+// modelo:antecedência → (data → máxima e mínima corrigidas hora a hora, fora da amostra), para o placar
+const maximasHorarias = new Map();
 async function temperaturaHoraria() {
   let horario;
   try { horario = JSON.parse(await readFile(ARQ_HORARIO, 'utf8')); } catch { return null; }
@@ -281,6 +285,7 @@ async function temperaturaHoraria() {
       const fim = ajusteFinal(dias, dias0);
       if (!v || !fim) { out.leads[L] = { usar: false, dias: dias.length }; continue; }
       out.leads[L] = { usar: v.usar, ...fim, ini: dias[0].data, fim: dias.at(-1).data, validacao: resumo(v) };
+      if (v.usar) maximasHorarias.set(`${m}:${L}`, v.porDia);
       console.log(`Hora a hora ${m}, ${L} dia(s): ${dias.length} dias, erro por hora ${r(v.horaria.bruta.mae)} → diário ${r(v.horaria.diaria.mae)} → horário ${r(v.horaria.horaria.mae)} °C; ${v.usar ? 'em uso' : 'não usado'}`);
     }
     res.modelos[m] = out;
@@ -288,6 +293,7 @@ async function temperaturaHoraria() {
   return res;
 }
 
+const horaria = await temperaturaHoraria();
 const calib = {
   versao: 1,
   geradoEm: new Date().toISOString(),
@@ -305,7 +311,7 @@ const calib = {
   resumo: { temperaturaEcmwf: resumoTemperatura(), rajadaMediana: resumoRajada() },
   placar: placar(),
   outras: await outrasEstacoes(),
-  temperaturaHoraria: await temperaturaHoraria(),
+  temperaturaHoraria: horaria,
   modelos,
 };
 
