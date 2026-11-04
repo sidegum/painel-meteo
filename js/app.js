@@ -5,7 +5,7 @@ import {
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
-  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos,
+  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico,
 } from './analise.js';
 import {
   buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
@@ -1519,7 +1519,7 @@ function renderModelos() {
   const gR = secao('Rajadas por modelo', 'Previsão, 7 dias. Faixa: cenários do ensemble (p10 a p90).');
   gC.classList.add('largura-total'); gR.classList.add('largura-total');
   filhos.push(gC, gR);
-  filhos.push(secao('Aprendizado do painel', 'Todo dia o painel guarda o que previu e compara com o que as estações mediram. Com isso, ajusta os pesos dos modelos, corrige a temperatura e calibra a chance de chuva.', resumoAprendizado()));
+  filhos.push(secao('Aprendizado do painel', 'O painel parte de anos de comparação entre o que cada modelo previu e o que a estação do INMET de Campo Bom mediu, e todo dia refina isso com as medições mais recentes. Com isso, ajusta os pesos dos modelos, corrige temperatura e rajadas e calibra a chance de chuva.', resumoAprendizado()));
   filhos.push(secao('Acerto de cada modelo', null, tabelaAcerto()));
   filhos.push(secao('Regra de confiança', null, regraConfianca()));
   if (estado.ensErros?.length) filhos.push(el('p', { class: 'nota', text: `Ensemble: ${estado.ensErros.join('; ')}.` }));
@@ -1563,23 +1563,53 @@ function nomeVar(v) {
   return { precipitation_probability: 'probabilidade', wind_gusts_10m: 'rajadas', visibility: 'visibilidade', cape: 'CAPE', uv_index: 'UV', cloud_cover_low: 'nuvens baixas', cloud_cover_mid: 'nuvens médias', cloud_cover_high: 'nuvens altas', precipitation: 'chuva', pressure_msl: 'pressão', is_day: 'dia/noite', apparent_temperature: 'sensação', dew_point_2m: 'orvalho', relative_humidity_2m: 'umidade' }[v] || v;
 }
 
+/**
+ * Estado das duas camadas de aprendizado, na mesma lista de itens:
+ * 1. calibração com o histórico (dados/calibracao.json, INMET A884 x previsões passadas, validada fora da amostra);
+ * 2. aprendizado recente do Worker (dias verificados, pesos, viés de temperatura e calibração da chance).
+ */
 function resumoAprendizado() {
-  if (!workerConfigurado()) return el('p', { class: 'nota', text: 'O aprendizado precisa do servidor do painel, que não está configurado.' });
   const L = REGRAS.aprendizado;
-  const a = estacaoAcerto();
-  if (!a) return el('p', { class: 'nota', text: 'Começando: o primeiro dia verificado aparece amanhã de manhã.' });
-  const perto = aprendizadoLocal();
-  const dias = maximo(Object.values(a.porModelo || {}).map((m) => Math.max(m?.[1]?.amostrasChuva ?? 0, m?.[1]?.amostrasTmax ?? 0))) || 0;
-  const { pesos, ajustado } = pesosAtuais();
   const linhas = [];
   const item = (nome, estadoTxt, detalhe) => linhas.push(el('div', { class: 'med' },
     el('span', { class: 'med-nome', text: nome }), el('b', { class: 'med-v', style: { 'font-size': '16px' }, text: estadoTxt }), detalhe ? el('span', { class: 'med-nota', text: detalhe }) : null));
+  const { pesos, ajustado, historico } = pesosAtuais();
+  const textoPesos = Object.entries(pesos).map(([m, w]) => `${MODELOS[m]?.curto || m} ${fmt.n(w, 2)}`).join(' · ');
+
+  // 1. histórico
+  const k = estado.calib, kLocal = calibracaoLocal();
+  if (!k) item('Calibração com histórico', 'indisponível', estado.erros.calibracao ? `Arquivo não carregou: ${estado.erros.calibracao}` : 'Carregando o arquivo de calibração.');
+  else {
+    const t1 = k.resumo?.temperaturaEcmwf?.tmax?.[1], r1 = k.resumo?.rajadaMediana?.[1];
+    const ganhos = [];
+    if (t1?.usar) ganhos.push(`máxima de amanhã: erro de ${fmt.n(t1.maeAntes, 1)}° para ${fmt.n(t1.maeDepois, 1)}°`);
+    if (valido(r1?.maeAntes) && valido(r1?.maeDepois) && r1.maeDepois < r1.maeAntes) ganhos.push(`rajada: ${fmt.n(r1.maeAntes, 0)} para ${fmt.n(r1.maeDepois, 0)} km/h`);
+    item('Calibração com histórico', kLocal ? 'aplicada' : 'longe daqui',
+      `${k.periodo.diasComMedicao} dias medidos em ${k.estacao.nome || k.estacao.id} (${k.periodo.ini.slice(0, 7)} a ${k.periodo.fim.slice(0, 7)}).` +
+      (kLocal ? (ganhos.length ? ` Fora da amostra, ${ganhos.join('; ')}.` : '') : ' Fora de 50 km da estação, nenhuma correção é aplicada.'));
+  }
+
+  // 2. aprendizado recente (Worker)
+  if (!workerConfigurado()) {
+    item('Aprendizado diário', 'sem servidor', 'O ajuste diário com as medições mais recentes precisa do servidor do painel, que não está configurado.');
+    if (kLocal && historico) item('Pesos dos modelos', 'pelo histórico', textoPesos);
+    return el('div', {}, el('div', { class: 'medicoes' }, ...linhas));
+  }
+  const a = estacaoAcerto();
+  if (!a) {
+    item('Aprendizado diário', 'começando', 'O primeiro dia verificado aparece amanhã de manhã.');
+    if (kLocal && historico) item('Pesos dos modelos', 'pelo histórico', textoPesos);
+    return el('div', {}, el('div', { class: 'medicoes' }, ...linhas));
+  }
+  const perto = aprendizadoLocal();
+  const dias = maximo(Object.values(a.porModelo || {}).map((m) => Math.max(m?.[1]?.amostrasChuva ?? 0, m?.[1]?.amostrasTmax ?? 0))) || 0;
   const falta = Math.max(0, L.diasInicio - dias);
   item('Dias verificados', `${dias} dia${dias === 1 ? '' : 's'}`, `${a.estacao.nome}${perto ? '' : ' (longe daqui: correções não aplicadas)'}`);
-  item('Pesos dos modelos', ajustado ? 'ajustando' : `começa em ${falta} dia${falta === 1 ? '' : 's'}`,
-    Object.entries(pesos).map(([m, w]) => `${MODELOS[m]?.curto || m} ${fmt.n(w, 2)}`).join(' · '));
+  item('Pesos dos modelos', ajustado ? 'ajustando' : historico ? 'pelo histórico' : `começa em ${falta} dia${falta === 1 ? '' : 's'}`, textoPesos);
+  // correção efetiva de amanhã (histórico + recente), a mesma usada nas séries (calibrarPrevisao)
+  const mes = Number(partesLocais(Date.now() + 86400000, estado.prev?.offset ?? -10800).mes);
   const vieses = Object.keys(MODELOS).map((m) => {
-    const c = correcaoTemperatura(a.porModelo?.[m]?.[1]);
+    const c = correcaoTemperatura(perto ? a.porModelo?.[m]?.[1] : null, kLocal ? viesHistorico(kLocal, m, 1, mes) : null);
     return c.tmax || c.tmin ? `${MODELOS[m].curto}: máx ${c.tmax > 0 ? '−' : '+'}${fmt.n(Math.abs(c.tmax), 1)}°, mín ${c.tmin > 0 ? '−' : '+'}${fmt.n(Math.abs(c.tmin), 1)}°` : null;
   }).filter(Boolean);
   item('Correção de temperatura', vieses.length ? 'aplicada' : `começa em ${falta} dia${falta === 1 ? '' : 's'}`, vieses.length ? vieses.join(' · ') : 'Mede quanto cada modelo erra para cima ou para baixo.');

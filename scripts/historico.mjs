@@ -15,7 +15,9 @@ import { listarZip, extrairZip, lerCsvInmet, controleQualidade, diasLocais } fro
 import { MODELOS_CALIBRACAO, LEADS, VARS_PREVISAO, prevDiaria } from './lib/calibracao.mjs';
 
 const ESTACAO = { id: 'A884', nome: 'Campo Bom', lat: -29.674, lon: -51.064 };
-const INICIO = process.env.CALIB_INICIO || '2024-01-01'; // início do arquivo da Previous Runs (doc oficial)
+// Todo o histórico que a Previous Runs guarda: a maioria dos modelos desde jan/2024 e o GFS (temperatura)
+// desde mar/2021 (doc oficial). Antes do início de cada modelo a API devolve nulos, que não entram na tabela.
+const INICIO = process.env.CALIB_INICIO || '2021-03-01';
 const ARQ = new URL(`../dados/historico/${ESTACAO.id}-diario.json`, import.meta.url);
 const CACHE_ZIP = process.env.CALIB_CACHE || new URL('../.cache-inmet/', import.meta.url).pathname;
 const UA = { 'user-agent': 'painel-meteo-pessoal/1.0 (+https://github.com/sidegum/painel-meteo)' };
@@ -56,7 +58,9 @@ async function medicoesInmet(anos) {
     if (ano < new Date().getUTCFullYear()) { try { zip = await readFile(caminho); } catch {} }
     if (!zip) {
       try {
+        const t0 = Date.now();
         zip = await buscar(`https://portal.inmet.gov.br/uploads/dadoshistoricos/${ano}.zip`, 'buffer', 4);
+        console.log(`  ${ano}.zip: ${(zip.length / 1e6).toFixed(1)} MB em ${((Date.now() - t0) / 1000).toFixed(0)} s`);
         await writeFile(caminho, zip);
       } catch (e) { relatorio[ano] = `falha no download: ${e.message}`; continue; }
     }
@@ -93,6 +97,7 @@ async function previsoesPassadas(datas) {
       if (j.error) throw new Error(`Open-Meteo: ${j.reason}`);
       custo.chamadas++;
       Object.assign(porModelo[modelo], prevDiaria(j));
+      console.log(`  ${modelo} ${a} a ${b}: ${Object.keys(prevDiaria(j)).length} dias com dado`);
       await espera(1500); // bem abaixo de 600 chamadas por minuto
     }
   }
