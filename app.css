@@ -76,9 +76,9 @@ button { cursor: pointer; }
   flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 4px 0; min-height: 44px;
   display: flex; flex-direction: column; justify-content: center;
 }
-.local-nome { font-weight: 680; font-stretch: 108%; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.local-nome { font-weight: 660; font-stretch: 106%; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .local-nome::after { content: ''; display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-right: 2px solid var(--fraco); border-bottom: 2px solid var(--fraco); transform: translateY(-3px) rotate(45deg); }
-.local-hora { color: var(--fraco); font-size: 14px; }
+.local-hora { color: var(--fraco); font-size: 11px; line-height: 1.2; }
 .local-hora.atrasado { color: var(--quente); font-weight: 600; }
 .atualizar {
   min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 22px;
@@ -90,8 +90,8 @@ button { cursor: pointer; }
 .atualizar[aria-busy="true"] svg { animation: girar 1s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
 .agora { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; line-height: 1; flex: none; }
-.agora .rot-agora { font-size: 12px; font-weight: 600; color: var(--fraco); margin-bottom: 2px; }
-.agora b { font-size: 30px; font-weight: 650; letter-spacing: -.02em; }
+.agora .rot-agora { font-size: 11px; font-weight: 600; color: var(--fraco); margin-bottom: 2px; }
+.agora b { font-size: 26px; font-weight: 650; letter-spacing: -.02em; }
 .agora small { font-size: 12px; color: var(--fraco); margin-top: 3px; white-space: nowrap; }
 .topo { position: sticky; top: 0; z-index: 15; background: var(--fundo); }
 
@@ -142,28 +142,28 @@ button { cursor: pointer; }
 /* ---------- resumo do dia (primeira coisa da tela) ---------- */
 .resumo { padding: 6px 0 10px; }
 .resumo-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 4px; }
-.resumo-quando { margin: 0; font-size: 14px; color: var(--fraco); min-width: 0; }
-.resumo-topo .confianca { min-height: 36px; font-size: 13px; padding: 0 10px; gap: 6px; white-space: nowrap; flex: none; border-width: 1px; }
+.resumo-quando { margin: 0; font-size: 13px; color: var(--fraco); min-width: 0; }
+.resumo-topo .confianca { min-height: 32px; font-size: 12px; padding: 0 10px; gap: 6px; white-space: nowrap; flex: none; border-width: 1px; }
 .resumo-ceu { display: flex; align-items: center; gap: 10px; }
-.icone-ceu { width: 44px; height: 44px; flex: none; }
+.icone-ceu { width: 36px; height: 36px; flex: none; }
 .icone-ceu .tr { fill: none; stroke: var(--texto); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .icone-ceu .nuvem { fill: var(--fundo); }
 .icone-ceu .gota { stroke: var(--chuva); stroke-width: 2.6; stroke-linecap: round; }
-.resumo-ceu .cond { font-size: 22px; font-weight: 680; font-stretch: 104%; line-height: 1.15; }
+.resumo-ceu .cond { font-size: 19px; font-weight: 680; font-stretch: 104%; line-height: 1.15; }
 .resumo-temp { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 10px 0 8px; }
 .bloco-t { display: flex; flex-direction: column; }
-.bloco-t small { font-size: 13px; color: var(--fraco); font-weight: 560; }
-.bloco-t b { font-size: 34px; line-height: 1.05; font-weight: 640; letter-spacing: -.02em; }
+.bloco-t small { font-size: 12px; color: var(--fraco); font-weight: 560; }
+.bloco-t b { font-size: 29px; line-height: 1.05; font-weight: 640; letter-spacing: -.02em; }
 .bloco-t.chuva b { color: var(--chuva-txt); }
 .resumo-chuva { display: grid; grid-template-columns: 1fr; gap: 2px; }
-.resumo-chuva strong { font-size: 18px; font-weight: 680; }
-.resumo-chuva .det { font-size: 15px; color: var(--fraco); }
+.resumo-chuva strong { font-size: 16px; font-weight: 680; }
+.resumo-chuva .det { font-size: 14px; color: var(--fraco); }
 .medidor { display: block; height: 4px; border-radius: 2px; background: var(--sup2); overflow: hidden; margin: 0 0 6px; }
 .medidor i { display: block; height: 100%; background: var(--chuva); border-radius: 2px; }
 .linha-rajada { display: flex; align-items: center; gap: 8px; padding: 8px 0 4px; border-top: 1px solid var(--linha); }
-.linha-rajada .raj { font-size: 15px; }
+.linha-rajada .raj { font-size: 14px; }
 .linha-rajada .rot { color: var(--fraco); }
-.linha-rajada strong { color: var(--rajada-txt); font-weight: 680; font-size: 16px; }
+.linha-rajada strong { color: var(--rajada-txt); font-weight: 680; font-size: 15px; }
 .linha-rajada .raj-det { color: var(--fraco); }
 .linha-rajada .raj { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -354,7 +354,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 
 /* ---------- chance de chuva por hora (gráfico padrão da primeira tela) ---------- */
 .troca { display: flex; gap: 6px; margin: 10px 0 6px; }
-.troca button { min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--linha); background: none; font-size: 13px; color: var(--fraco); }
+.troca button { min-height: 36px; padding: 0 10px; border-radius: 18px; border: 1px solid var(--linha); background: none; font-size: 13px; color: var(--fraco); }
 .troca button[aria-pressed="true"] { color: var(--texto); border-color: var(--texto); font-weight: 600; }
 .chance-barras { position: relative; display: flex; align-items: flex-end; height: 96px; gap: 2px; padding-top: 14px; border-bottom: 1px solid var(--linha); }
 .chance-barras .guia { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--linha); pointer-events: none; }
@@ -393,3 +393,23 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .enso-diario i { flex: 1; display: block; border-radius: 2px 2px 0 0; }
 .enso-diario i.q { background: var(--quente); }
 .enso-diario i.f { background: var(--fria); }
+
+.enso-tri { margin-top: 12px; }
+.enso-tri td:first-child { font-weight: 650; }
+
+.troca-horas { margin-left: auto; display: inline-flex; border: 1px solid var(--linha); border-radius: 18px; overflow: hidden; }
+.troca-horas button { border: 0; border-radius: 0; padding: 0 10px; }
+.troca-horas button[aria-pressed="true"] { background: var(--sup2); }
+.troca { flex-wrap: nowrap; }
+.troca-horas button { font-size: 12px; padding: 0 8px; }
+
+@media (min-width: 720px) { .topo { max-width: 712px; } .faixa-aviso { max-width: 680px; } }
+
+/* temperatura agora no resumo de hoje (acima do céu); no topo só quando o resumo sai da tela */
+.resumo-agora { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 2px; }
+.resumo-agora b { font-size: 44px; font-weight: 640; letter-spacing: -.03em; line-height: 1; }
+.resumo-agora .rot-agora { font-size: 13px; color: var(--fraco); font-weight: 600; }
+.agora.oculto { visibility: hidden; }
+
+.resumo-ceu .ceu-mm { margin-left: auto; font-size: 14px; color: var(--fraco); white-space: nowrap; }
+.resumo-ceu .ceu-mm b { color: var(--chuva-txt); font-size: 18px; font-weight: 680; }

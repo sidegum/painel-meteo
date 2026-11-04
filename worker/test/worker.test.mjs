@@ -233,3 +233,15 @@ test('acerto: previsões antigas x observação', () => {
   assert.equal(res.ukmo_global_deterministic_10km[1].taxaChuva, 1);
   assert.equal(res.ecmwf_ifs[1].amostrasRajada, 0);
 });
+
+test('força do El Niño por trimestre (tabela real do CPC)', async () => {
+  const { parseForcas } = await import('../src/index.js');
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('./fixtures/cpc-forcas.html', import.meta.url), 'utf8');
+  const f = parseForcas(html);
+  assert.equal(f.length, 9);
+  assert.equal(f[0].tri, 'SON');
+  assert.equal(f[3].tri, 'DJF');
+  assert.deepEqual(f[3].elNino, { fraco: 0, moderado: 3, forte: 16, muitoForte: 81 });
+  assert.equal(f[8].neutro, 70);
+});

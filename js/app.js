@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.2.0';
+const VERSAO = '1.2.2';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -156,7 +156,7 @@ function configurarLocal() {
 // ------------------------------------------------------------------ atualização
 
 let atualizando = false;
-async function atualizar({ forcar = false, local = false } = {}) {
+async function atualizar({ forcar = false, local = false, agora = false } = {}) {
   if (atualizando || !estado.local || estado.apagado) return;
   atualizando = true;
   $('#btn-atualizar').setAttribute('aria-busy', 'true');
@@ -179,7 +179,7 @@ async function atualizar({ forcar = false, local = false } = {}) {
     }));
     const w = workerConfigurado();
     // Medições: Worker (INMET + METAR); sem ele, só a última leitura do INMET de Campo Bom direto.
-    if (venceu(estado.obsEm, I.medicoes)) tarefas.push((w ? buscarObservacoes(lat, lon).catch(() => buscarObservacoesDireto()) : buscarObservacoesDireto())
+    if (agora || venceu(estado.obsEm, I.medicoes)) tarefas.push((w ? buscarObservacoes(lat, lon).catch(() => buscarObservacoesDireto()) : buscarObservacoesDireto())
       .then((o) => { estado.obs = o; estado.obsEm = Date.now(); salvarCache('observacoes', o); delete estado.erros.medicoes; })
       .catch((e) => { estado.erros.medicoes = e.message; }));
     // Alertas: Worker (resposta enxuta) ou INMET direto. Falha vira "Alertas indisponíveis".
@@ -187,7 +187,7 @@ async function atualizar({ forcar = false, local = false } = {}) {
       .then((a) => { estado.alertas = a; estado.alertasEm = Date.now(); delete estado.erros.alertas; })
       .catch((e) => { estado.alertas = null; estado.erros.alertas = e.message; }));
     // Radar sobre o ponto: diz se está chovendo agora, mesmo entre as leituras horárias da estação.
-    if (venceu(estado.radarAgoraEm, 5)) tarefas.push(buscarChuvaRadar(lat, lon)
+    if (agora || venceu(estado.radarAgoraEm, 5)) tarefas.push(buscarChuvaRadar(lat, lon)
       .then((r) => { estado.radarAgora = r; estado.radarAgoraEm = Date.now(); })
       .catch(() => { estado.radarAgora = null; }));
     if (w && venceu(estado.acertoEm, I.acerto) && !local) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); }));
@@ -203,10 +203,17 @@ async function atualizar({ forcar = false, local = false } = {}) {
 
 function agendar() {
   setInterval(() => { if (!document.hidden) atualizar(); atualizarCabecalho(); }, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizar(); });
+  // ao voltar para o app: temperatura e chuva agora medidas de novo (estação e radar)
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizar({ agora: true }); });
   window.addEventListener('online', () => atualizar());
   window.addEventListener('offline', () => avisar('Sem conexão. Mostrando os últimos dados salvos, que podem estar desatualizados.', true));
-  $('#btn-atualizar').addEventListener('click', () => atualizar({ forcar: true }));
+  $('#btn-atualizar').addEventListener('click', async () => {
+    // atualiza tudo: posição (se não houver cidade escolhida), previsão, cenários, medições, radar e alertas
+    let escolha = false;
+    try { escolha = sessionStorage.getItem('localEscolhido') === '1'; } catch {}
+    if (!(escolha && estado.local?.origem === 'cidade')) await localizarGps(true);
+    atualizar({ forcar: true });
+  });
 }
 
 function atualizarCabecalho() {
@@ -217,7 +224,7 @@ function atualizarCabecalho() {
   const h = $('#local-hora');
   if (!estado.prevEm) { h.textContent = 'sem dados ainda'; return; }
   const atraso = Date.now() - estado.prevEm > 45 * 60000;
-  h.textContent = `Previsão de ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)} (${fmt.idade(estado.prevEm)})${atraso ? ', desatualizada' : ''}`;
+  h.textContent = `Atualizado ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)}${atraso ? ", desatualizado" : ""}`;
   h.classList.toggle('atrasado', atraso);
   renderAgora();
   const msgs = [];
@@ -232,12 +239,15 @@ function atualizarCabecalho() {
 // Temperatura agora: medição da estação mais próxima (até 25 km e 2 h); sem ela, a previsão para esta hora.
 function renderAgora() {
   const alvo = $('#agora');
+  const noResumo = document.getElementById('agora-hoje');
   const p = estado.prev;
   const pt = pontoExato();
   const med = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, Date.now(), 120).escolhida;
   if (med && med.distancia <= 25) {
-    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(med.valor) }), el('small', { text: `medido ${fmt.idade(med.ms)}` }));
-    alvo.title = `${med.fonte.nome}, ${fmt.n(med.distancia, 0)} km`;
+    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(med.valor) }));
+    alvo.title = `Medido em ${med.fonte.nome}, ${fmt.n(med.distancia, 0)} km, ${fmt.idade(med.ms)}`;
+    alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(med.valor)}, ${alvo.title}`);
+    if (noResumo) { noResumo.replaceChildren(el('b', { text: fmt.c(med.valor) }), el('span', { class: 'rot-agora', text: 'agora' })); noResumo.title = alvo.title; }
     return;
   }
   if (!p) { alvo.replaceChildren(); return; }
@@ -251,8 +261,20 @@ function renderAgora() {
     for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= Date.now()) i = k;
     v = i < 0 ? null : mediana(mods.map((m) => p.modelos[m].vars.temperature_2m?.[i]), mods.map((m) => pesos[m] ?? 1));
   }
-  alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(v) ?? '–' }), el('small', { text: valido(v) ? 'previsto' : 'sem dado' }));
+  alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(v) ?? '–' }));
   alvo.title = 'Sem medição recente perto daqui; valor previsto pelos modelos para esta hora.';
+  alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(v) ?? 'sem dado'}, prevista`);
+  if (noResumo) { noResumo.replaceChildren(el('b', { text: fmt.c(v) ?? '–' }), el('span', { class: 'rot-agora', text: 'agora (prevista)' })); noResumo.title = alvo.title; }
+}
+
+// No topo, a temperatura só aparece quando a de hoje (no resumo) não está visível.
+let obsAgora = null;
+function observarAgora() {
+  const alvo = document.getElementById('agora-hoje');
+  if (obsAgora) obsAgora.disconnect();
+  if (!alvo || !('IntersectionObserver' in window)) return;
+  obsAgora = new IntersectionObserver(([e]) => { $('#agora').classList.toggle('oculto', e.isIntersecting && estado.aba === 'hoje'); }, { threshold: 0.5 });
+  obsAgora.observe(alvo);
 }
 
 function avisar(texto, erro) {
@@ -383,6 +405,7 @@ function renderTudo() {
   limparGraficos();
   const ds = datas();
   renderPrimeira($('#hoje-primeira'), ds[0], 0, true);
+  renderAgora(); observarAgora();
   if (ds[1]) renderPrimeira($('#amanha-primeira'), ds[1], 1, false);
   // detalhes depois da primeira tela, sem travar a abertura
   const depois = window.requestIdleCallback || ((fn) => setTimeout(fn, 30));
@@ -426,6 +449,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const agoraChuva = diaIndice === 0 ? medicaoChuvaAgora() : null;
   const chovendo = !!agoraChuva?.chovendo;
   const resp = chovendo ? 'Chovendo agora' : respostaChuva(av.prob);
+  const resto = chovendo ? chuvaRestante() : null;
   if (chovendo && ceu) { ceu.chuva = 'provavel'; ceu.texto = ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'Pancadas de chuva' : 'Chuva'; }
   const temChuva = av.prob !== null && av.prob >= REGRAS.ocorrencia.poucoProvavel;
   const detalhe = [];
@@ -443,9 +467,12 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     el('span', { class: 'nivel', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), `Confiança ${av.confianca.geral}`);
   const resumo = el('div', { class: 'resumo', 'data-ceu': ceu?.nivel || 'sem', 'data-chuva': ceu?.chuva || (temChuva ? 'pouca' : 'nao') },
     el('div', { class: 'resumo-topo' }, el('p', { class: 'resumo-quando', text: quando }), botaoConf),
+    diaIndice === 0 ? el('div', { class: 'resumo-agora', id: 'agora-hoje', 'aria-hidden': 'true' }) : null,
     el('div', { class: 'resumo-ceu' },
       iconeCeu(ceu),
-      el('span', { class: 'cond' }, ceu ? ceu.texto : ausente('céu sem dado'))),
+      el('span', { class: 'cond' }, ceu ? ceu.texto : ausente('céu sem dado')),
+      resto ? el('span', { class: 'ceu-mm', title: 'Previsão: mediana ponderada dos modelos hora a hora, enquanto ela indicar chuva (até 12 h)' },
+        ...(resto.fraca ? ['chuva fraca'] : [el('b', { text: `≈ ${fmt.mm(resto.mm)}` }), resto.maisDe12h ? ' nas próximas 12 h' : ` até ${fmt.hora(resto.ate, p.offset)}`])) : null),
     el('div', { class: 'resumo-temp' },
       el('span', { class: 'bloco-t min' }, el('small', { text: 'mínima' }), el('b', { class: 'tmin', text: fmt.c(a.tmin) ?? '–' })),
       el('span', { class: 'bloco-t max' }, el('small', { text: 'máxima' }), el('b', { class: 'tmax', text: fmt.c(a.tmax) ?? '–' })),
@@ -471,16 +498,47 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const caixa = el('div', { class: 'grafico-primeira' });
   let modo = 'chance';
   const botoes = el('div', { class: 'troca', role: 'group', 'aria-label': 'Gráfico' });
+  const iniDia = p.horas[a.idxTodo[0]];
   const desenharModo = () => {
-    botoes.replaceChildren(...[['chance', 'Chance de chuva'], ['ceu', 'Faixa do Céu']].map(([k, nome]) =>
-      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome)));
+    // hoje: escolher entre as horas que faltam e o dia todo (a escolha fica salva no aparelho)
+    const todas = desdeAgora && prefs.ler('horasTodas', false);
+    const iniUsado = todas ? iniDia : ini;
+    botoes.replaceChildren(...[['chance', 'Chance de chuva'], ['ceu', 'Céu']].map(([k, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome)),
+    desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : '');
     caixa.replaceChildren();
-    if (modo === 'chance') caixa.append(graficoChance(ini, fim));
-    else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: ini, fimMs: fim, id: 'faixa-' + diaIndice }));
+    if (modo === 'chance') caixa.append(graficoChance(iniUsado, fim));
+    else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: iniUsado, fimMs: fim, id: 'faixa-' + diaIndice }));
   };
   filhos.push(botoes, caixa);
   alvo.replaceChildren(...filhos);
   desenharModo();
+}
+
+// Quanto ainda deve chover: soma a mediana ponderada dos modelos a partir de agora (só o que falta da hora
+// atual) até a primeira hora com menos de 0,1 mm e chance abaixo de 30%. Recalculado a cada atualização.
+function chuvaRestante() {
+  const p = estado.prev, mods = modelosAtivos();
+  const { pesos } = pesosAtuais();
+  const agora = Date.now();
+  let i0 = -1;
+  for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= agora) i0 = k;
+  if (i0 < 0) return null;
+  // Soma o episódio atual: para na primeira hora seguinte em que a mediana dos modelos fica abaixo de 0,1 mm.
+  // Janela máxima de 12 h, para não somar chuvas de outro sistema.
+  let mm = 0, fim = null;
+  for (let i = i0; i < p.horas.length && i < i0 + 12; i++) {
+    const v = mediana(mods.map((m) => p.modelos[m].vars.precipitation?.[i]), mods.map((m) => pesos[m] ?? 1));
+    if (i > i0 && (!valido(v) || v < 0.1)) break;
+    const frac = i === i0 ? Math.max(0, (p.horas[i] + 3600000 - agora) / 3600000) : 1;
+    if (valido(v)) mm += v * frac;
+    fim = p.horas[i] + 3600000;
+  }
+  if (fim === null) return null;
+  // Chovendo, mas os modelos não mostram volume: chuva fraca, sem prazo confiável.
+  if (mm < 0.2) return { fraca: true };
+  return { mm, ate: fim, maisDe12h: fim >= p.horas[i0] + 12 * 3600000 };
 }
 
 // Chance de chuva por hora: fração dos cenários do ensemble com pelo menos REGRAS.chuvaHoraMm (0,2 mm) na hora.
@@ -505,7 +563,8 @@ function graficoChance(iniMs, fimMs) {
   const pontos = [];
   p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, mm: mm[i], ...chanceHoraria(ms) }); });
   // hora atual: se está chovendo (estação ou radar), a barra vira 100% medido
-  const agoraM = medicaoChuvaAgora();
+  const temAgora = pontos.some((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
+  const agoraM = temAgora ? medicaoChuvaAgora() : null;
   for (const x of pontos) if (agoraM?.chovendo && Date.now() >= x.ms && Date.now() < x.ms + 3600000) { x.p = 1; x.origem = 'medido'; x.medido = true; }
   const info = el('p', { class: 'chance-info', 'aria-live': 'polite' });
   const validos = pontos.filter((x) => valido(x.p));
@@ -1233,7 +1292,20 @@ function painelEnso(P, disc, roniUlt) {
   const dataSem = (ms) => new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'UTC', day: 'numeric', month: 'short' });
   const rel = P.relativoSemanal?.dados?.at(-1), conv = P.convencionalSemanal?.dados?.at(-1);
   const dia = P.diario?.dados?.at(-1);
-  const prob = P.probCpc?.dados?.[0];
+  // trimestre atual (centrado no mês corrente) e os próximos, da NOAA CPC
+  const CENTRO = { DJF: 1, JFM: 2, FMA: 3, MAM: 4, AMJ: 5, MJJ: 6, JJA: 7, JAS: 8, ASO: 9, SON: 10, OND: 11, NDJ: 12 };
+  const mesAgora = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', month: 'numeric' }));
+  const probs = P.probCpc?.dados || [], forcas = P.forcaCpc?.dados || [];
+  const iAgora = Math.max(0, probs.findIndex((x) => CENTRO[x.tri] === mesAgora));
+  const prob = probs[iAgora];
+  const NOME_F = { fraco: 'fraco', moderado: 'moderado', forte: 'forte', muitoForte: 'muito forte' };
+  const forcaDe = (tri) => {
+    const f = forcas.find((x) => x.tri === tri)?.elNino;
+    if (!f) return null;
+    const [k, v] = Object.entries(f).sort((a, b) => b[1] - a[1])[0];
+    return v > 0 ? { nome: NOME_F[k], p: v, forteOuMais: f.forte + f.muitoForte } : null;
+  };
+  const fAgora = prob ? forcaDe(prob.tri) : null;
   const bloco = (rot, val, sub, marca, destaque) => el('div', { class: 'enso-bloco' + (destaque ? ' destaque' : '') },
     el('small', { text: rot }), el('b', { text: val }), el('span', { class: 'sub', text: sub }), marca ? el('span', { class: 'marca ' + marca[0], text: marca[1] }) : null);
   const filhos = [
@@ -1242,9 +1314,14 @@ function painelEnso(P, disc, roniUlt) {
     el('div', { class: 'enso-grade' },
       bloco('RONI, índice oficial', valido(roniUlt?.anom) ? `${roniUlt.anom > 0 ? '+' : ''}${fmt.n(roniUlt.anom, 2)} °C` : '–', roniUlt ? `trimestre ${roniUlt.seas} ${roniUlt.ano}` : 'indisponível', ['oficial', 'oficial'], true),
       bloco('Niño 3.4 da semana', sinal(rel?.n34), rel ? `relativo, semana de ${dataSem(rel.ms)}` : 'indisponível', ['medido', 'medido']),
-      bloco('Niño 3.4 convencional', sinal(conv?.n34), conv ? `semana de ${dataSem(conv.ms)}` : 'indisponível', ['medido', 'medido']),
-      dia ? bloco('Niño 3.4 de ontem', sinal(dia.anom), `${fmt.n(dia.sst, 1)} °C no mar, ${new Date(dia.data + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`, ['previsao', 'estimativa'])
-        : bloco('Chance de El Niño', prob ? `${prob.elNino}%` : '–', prob ? `trimestre ${prob.tri}, NOAA` : 'indisponível', ['oficial', 'oficial'])),
+      bloco('Chance de El Niño', prob ? `${prob.elNino}%` : '–', prob ? `trimestre ${prob.tri} (atual), NOAA` : 'indisponível', ['oficial', 'oficial'], true),
+      bloco('Força mais provável', fAgora ? fAgora.nome : '–', fAgora ? `${fAgora.p}% de chance; forte ou mais: ${fAgora.forteOuMais}%` : 'indisponível', ['oficial', 'oficial'], true),
+      dia ? bloco('Niño 3.4 de ontem', sinal(dia.anom), `${fmt.n(dia.sst, 1)} °C no mar, ${new Date(dia.data + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`, ['previsao', 'estimativa']) : null),
+    probs.length ? el('table', { class: 'enso-tri' },
+      el('thead', {}, el('tr', {}, el('th', { text: 'Trimestre' }), el('th', { class: 'n', text: 'El Niño' }), el('th', { text: 'Força mais provável' }))),
+      el('tbody', {}, ...probs.slice(iAgora).map((x) => { const f = forcaDe(x.tri); return el('tr', {},
+        el('td', { text: x.tri }), el('td', { class: 'n', text: `${x.elNino}%` }), el('td', { text: f ? `${f.nome} (${f.p}%)` : (x.neutro >= x.elNino ? `neutro mais provável (${x.neutro}%)` : '–') })); }))) : null,
+    probs.length ? el('p', { class: 'nota', text: 'Chance e força: previsão oficial da NOAA CPC, revisada na 2ª quinta-feira de cada mês. Força pelo RONI: fraco 0,5 a 1 °C, moderado 1 a 1,5, forte 1,5 a 2, muito forte 2 ou mais.' }) : null,
     conv && (valido(conv.n12) || valido(conv.n4)) ? el('div', { class: 'enso-regioes' },
       ...[['Niño 1+2', conv.n12, 'costa do Peru'], ['Niño 3', conv.n3, 'leste'], ['Niño 3.4', conv.n34, 'centro'], ['Niño 4', conv.n4, 'oeste']]
         .map(([n, v, onde]) => el('div', {}, el('small', { text: n }), el('b', { text: sinal(v) }), el('span', { text: onde })))) : null,
@@ -1308,6 +1385,7 @@ function irPara(aba, rolarTopo = true) {
   if (!ABAS.includes(aba)) return;
   estado.aba = aba;
   for (const s of document.querySelectorAll('.aba')) s.hidden = s.dataset.aba !== aba;
+  if (aba !== 'hoje') $('#agora').classList.remove('oculto'); else observarAgora();
   for (const b of document.querySelectorAll('.nav button')) b.toggleAttribute('aria-current', b.dataset.ir === aba) || b.removeAttribute('aria-current');
   document.querySelectorAll('.nav button').forEach((b) => { if (b.dataset.ir === aba) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (rolarTopo) window.scrollTo(0, 0);

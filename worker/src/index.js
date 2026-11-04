@@ -495,6 +495,23 @@ export function parseProbabilidades(html) {
   return linhas;
 }
 
+// Força por trimestre (página "ENSO Strength Probabilities" do CPC), conferida em 2026-11-04.
+// 9 colunas: La Niña muito forte, forte, moderada, fraca; neutro; El Niño fraco, moderado, forte, muito forte.
+export function parseForcas(html) {
+  const t = textoPuro(String(html).slice(0, 600000), 600000).replace(/\s+/g, ' ');
+  const ini = t.indexOf('Strength Probabilities Season');
+  const parte = ini >= 0 ? t.slice(ini) : t;
+  const linhas = [];
+  for (const m of parte.matchAll(/\b(DJF|JFM|FMA|MAM|AMJ|MJJ|JJA|JAS|ASO|SON|OND|NDJ)\b(?:\s+[A-Z][a-z]{2}){0,3}((?:\s+\d{1,3}){9})\b/g)) {
+    const v = m[2].trim().split(/\s+/).map(Number);
+    if (Math.abs(v.reduce((s, x) => s + x, 0) - 100) > 3) continue;
+    linhas.push({ tri: m[1], laNina: { muitoForte: v[0], forte: v[1], moderada: v[2], fraca: v[3] }, neutro: v[4], elNino: { fraco: v[5], moderado: v[6], forte: v[7], muitoForte: v[8] } });
+    if (linhas.length >= 9) break;
+  }
+  if (linhas.length < 4) throw new Error('tabela de força não encontrada');
+  return linhas;
+}
+
 // IRI: os números por modelo só existem em imagens; extraímos data e o resumo de força em texto.
 export function parseIri(html) {
   const t = textoPuro(String(html).slice(0, 600000), 600000).replace(/\s+/g, ' ');
@@ -519,6 +536,7 @@ export async function atualizarEnso(env) {
     roni: await tentar(async () => parseOni(await t(`${base}/data/indices/RONI.ascii.txt`))),
     discussao: await tentar(async () => parseDiscussao(await t(`${base}/products/analysis_monitoring/enso_advisory/ensodisc.shtml`))),
     probCpc: await tentar(async () => parseProbabilidades(await t(`${base}/products/analysis_monitoring/enso/roni/probabilities/`))),
+    forcaCpc: await tentar(async () => parseForcas(await t(`${base}/products/analysis_monitoring/enso/roni/strengths/`))),
     iri: await tentar(async () => parseIri(await t(iri))),
   };
   const anterior = env.KV ? await env.KV.get('enso:ultimo', 'json') : null;
