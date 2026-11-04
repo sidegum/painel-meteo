@@ -34,6 +34,11 @@ async function buscarJson(fonte, url, opcoes = {}) {
   }
 }
 
+/**
+ * Uma requisição JSON com tempo limite (AbortController), sem credenciais e sem referrer, com limite de tamanho.
+ * Em 429 ou 5xx aplica espera exponencial por fonte (2, 4, 8 ... 60 min), persistida em localStorage.
+ * @throws {ErroFonte} com tipo rede | tempo | limite | servidor | http | tamanho | formato | api | offline
+ */
 async function buscarJsonUmaVez(fonte, url, { timeout = 15000, maxBytes = 6e6 } = {}) {
   const ate = emEspera(fonte);
   if (ate) throw new ErroFonte(fonte, 'limite', `aguardando até ${new Date(ate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} após limite ou falha`);
@@ -106,6 +111,11 @@ export const MODELOS_AUXILIARES = ['ncep_gfs_seamless'];
 
 // Com vários modelos, cada chave vem com sufixo do modelo (testado em 2026-11-03).
 // Séries totalmente nulas significam variável ausente naquele modelo.
+/**
+ * Normaliza a resposta multimodelo da Open-Meteo: horários em epoch ms, séries por modelo (chaves com sufixo),
+ * variáveis totalmente nulas marcadas como ausentes, dados diários e temperatura "current" por modelo.
+ * @throws {ErroFonte} se a resposta não tiver horários
+ */
 export function normalizarPrevisao(j) {
   if (!j || !j.hourly || !Array.isArray(j.hourly.time)) throw new ErroFonte('open-meteo', 'formato', 'previsão sem horários');
   const off = Number(j.utc_offset_seconds) || 0;
@@ -169,6 +179,10 @@ export function urlEnsemble(lat, lon, modelo) {
   return 'https://ensemble-api.open-meteo.com/v1/ensemble?' + p;
 }
 
+/**
+ * Extrai as séries de cada membro (precipitation_memberNN, wind_gusts_10m_memberNN) de um sistema de cenários.
+ * @returns {{horas:number[], membros:{precipitation:number[][], wind_gusts_10m:number[][]}}|null}
+ */
 export function normalizarEnsemble(j) {
   if (!j?.hourly?.time) return null;
   const off = Number(j.utc_offset_seconds) || 0;
@@ -298,6 +312,9 @@ export async function buscarRadar() {
 // Chuva sobre o ponto pelo radar: lê o quadro mais recente do RainViewer (zoom 7, cerca de 1,2 km por
 // pixel) e conta os pixels com eco num quadrado de 5 x 5 em volta do ponto. A coordenada usada é a
 // arredondada; o pedido só revela o quadrado de cerca de 300 km do mapa, como o próprio mapa.
+/**
+ * Projeção Web Mercator: coordenada -> tile (z, x, y) e pixel (px, py) dentro do tile de 256 px.
+ */
 export function pixelDoPonto(lat, lon, z = 7) {
   const n = 2 ** z, rad = (lat * Math.PI) / 180;
   const fx = ((lon + 180) / 360) * n;
@@ -305,6 +322,11 @@ export function pixelDoPonto(lat, lon, z = 7) {
   const x = Math.floor(fx), y = Math.floor(fy);
   return { z, x, y, px: Math.floor((fx - x) * 256), py: Math.floor((fy - y) * 256) };
 }
+/**
+ * Chuva sobre o ponto pelo radar: lê o tile do quadro mais recente (zoom 7) e conta pixels com eco
+ * (alfa > 40) num quadrado 5 x 5 em volta do ponto arredondado. Chovendo com 3 ou mais pixels.
+ * @returns {Promise<{ms:number, eco:number, total:number, chuva:boolean}>}
+ */
 export async function buscarChuvaRadar(lat, lon) {
   const r = await buscarRadar();
   const q = r.quadros[r.quadros.length - 1];
@@ -332,6 +354,11 @@ export async function buscarChuvaRadar(lat, lon) {
 // 11 x 11 pontos a cada 0,4° (cerca de 40 km) em volta da posição arredondada, num só pedido à Open-Meteo.
 // Atual: temperatura, nuvens, vento e rajada. Próximas 24 h: chuva. Próximos 5 dias: máxima e mínima.
 export const GRADE = { n: 11, passo: 0.4 };
+/**
+ * Pontos da grade regional (GRADE.n x GRADE.n, passo GRADE.passo graus) centrada na coordenada arredondada.
+ * Ordem: linha 0 ao norte, coluna 0 a oeste.
+ * @returns {Array<[number, number]>} pares [lat, lon]
+ */
 export function pontosGrade(lat, lon) {
   const la0 = arredondaCoord(lat), lo0 = arredondaCoord(lon), m = (GRADE.n - 1) / 2, pts = [];
   for (let i = 0; i < GRADE.n; i++) for (let j = 0; j < GRADE.n; j++)
@@ -339,6 +366,10 @@ export function pontosGrade(lat, lon) {
   return pts; // linha 0 = norte, coluna 0 = oeste
 }
 const num = (v, a, b) => (valido(v) && v >= a && v <= b ? v : null);
+/**
+ * Busca a grade do mapa numa só chamada multiponto e devolve campos alinhados aos pontos, com filtro de faixa:
+ * temp, nuvens, vento, rajada, direcao (atuais), chuva24 (soma 24 h), tmax5 e tmin5 (extremos de 5 dias).
+ */
 export async function buscarGradeMapa(lat, lon) {
   const pts = pontosGrade(lat, lon);
   const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + pts.map((p) => p[0]).join(',') + '&longitude=' + pts.map((p) => p[1]).join(',')

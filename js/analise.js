@@ -61,6 +61,13 @@ export const MODELOS = {
 
 export const valido = (v) => typeof v === 'number' && Number.isFinite(v);
 
+/**
+ * Mediana ponderada. Ordena os pares (valor, peso) válidos e devolve o primeiro valor cujo peso acumulado
+ * passa da metade do total; no empate exato, a média dos dois vizinhos. Sem pesos, é a mediana comum.
+ * @param {Array<number|null>} arr valores (inválidos são ignorados)
+ * @param {number[]} [pesos] peso de cada posição de arr (padrão 1)
+ * @returns {number|null} null se não houver valor válido
+ */
 export function mediana(arr, pesos) {
   const xs = [];
   arr.forEach((v, i) => { if (valido(v)) xs.push([v, pesos ? (pesos[i] ?? 1) : 1]); });
@@ -76,6 +83,12 @@ export function mediana(arr, pesos) {
   return xs[xs.length - 1][0];
 }
 
+/**
+ * Quantil com interpolação linear entre as posições ordenadas (posição = (n - 1) * q).
+ * @param {Array<number|null>} arr
+ * @param {number} q entre 0 e 1
+ * @returns {number|null}
+ */
 export function quantil(arr, q) {
   const xs = arr.filter(valido).sort((a, b) => a - b);
   if (!xs.length) return null;
@@ -105,6 +118,13 @@ export function direcaoTexto(graus) {
 // ---------- tempo ----------
 
 // Open-Meteo devolve "2026-11-03T16:00" no fuso do local, mais utc_offset_seconds.
+/**
+ * Converte horário local ISO da Open-Meteo ("AAAA-MM-DDTHH:MM") em epoch ms usando o deslocamento do local,
+ * sem depender do fuso do aparelho.
+ * @param {string} iso
+ * @param {number} offsetSeg utc_offset_seconds da resposta
+ * @returns {number}
+ */
 export function isoLocalParaMs(iso, offsetSeg) {
   const [d, t = '00:00'] = iso.split('T');
   const [Y, M, D] = d.split('-').map(Number);
@@ -112,6 +132,12 @@ export function isoLocalParaMs(iso, offsetSeg) {
   return Date.UTC(Y, M - 1, D, h, m) - offsetSeg * 1000;
 }
 
+/**
+ * Decompõe um instante nas partes do calendário local do ponto (não do aparelho).
+ * @param {number} ms epoch ms
+ * @param {number} offsetSeg deslocamento UTC do local, em segundos
+ * @returns {{ano:number, mes:number, dia:number, hora:number, minuto:number, semana:number, data:string}}
+ */
 export function partesLocais(ms, offsetSeg) {
   const d = new Date(ms + offsetSeg * 1000);
   return {
@@ -145,6 +171,11 @@ export function leituraValida(variavel, valor) {
 
 // fontes: [{ id, nome, tipo, lat, lon, leituras: { temperatura: { valor, ms } } }]
 // Ordena por distância calculada no aparelho e devolve { escolhida, outras }.
+/**
+ * Escolhe a estação mais próxima com leitura válida e recente de uma variável.
+ * Distâncias calculadas no aparelho (haversine); leituras inválidas, antigas ou mais de 15 min no futuro são descartadas.
+ * @returns {{escolhida: object|null, outras: object[]}} outras inclui o motivo do descarte
+ */
 export function escolherFonte(fontes, variavel, lat, lon, agoraMs, idadeMaxMin) {
   const candidatas = [];
   for (const f of fontes) {
@@ -163,6 +194,14 @@ export function escolherFonte(fontes, variavel, lat, lon, agoraMs, idadeMaxMin) 
 
 // ---------- previsão: recortes por dia ----------
 
+/**
+ * Índices horários pertencentes a uma data local; com aPartirMs, exclui horas já encerradas.
+ * @param {number[]} horas epoch ms de cada hora
+ * @param {string} data "AAAA-MM-DD" no fuso do local
+ * @param {number} offsetSeg
+ * @param {number} [aPartirMs]
+ * @returns {number[]}
+ */
 export function indicesDoDia(horas, data, offsetSeg, aPartirMs = -Infinity) {
   const idx = [];
   horas.forEach((ms, i) => {
@@ -191,6 +230,10 @@ function maxComHora(serie, idx, horas, dir) {
   return melhor;
 }
 
+/**
+ * Resumo diário de um modelo determinístico: total de chuva (nulo se faltar mais de 25% das horas),
+ * probabilidade máxima, rajada máxima com hora e direção, vento máximo, mínima e máxima.
+ */
 export function resumoModeloDia(prev, modelo, idx) {
   const v = prev.modelos[modelo]?.vars || {};
   return {
@@ -205,6 +248,10 @@ export function resumoModeloDia(prev, modelo, idx) {
 }
 
 // Membros do ensemble: { precipitation: [[...horas], ...], wind_gusts_10m: [...] }
+/**
+ * Totais diários de chuva e rajada máxima de cada membro dos sistemas de cenários (ensemble).
+ * @returns {{chuva:number[], rajada:number[], modelos:string[], porModelo:Object<string, number[]>}|null}
+ */
 export function membrosDia(ens, data, offsetSeg, aPartirMs) {
   if (!ens) return null;
   const out = { chuva: [], rajada: [], modelos: [], porModelo: {} };
@@ -241,6 +288,14 @@ export function classeRajada(kmh) {
 }
 
 // resumos: saída de resumoModeloDia para cada modelo; membros: membrosDia; ctx: { diaIndice, acerto, medicaoAgora }
+/**
+ * Avaliação completa de um dia: probabilidade de chuva (cenários por sistema, depois cenários, depois modelos),
+ * calibração local, volume provável, concordância, faixa de rajada e nível de confiança com motivos.
+ * Ver docs/TECNICO.md, seção 3.6.
+ * @param {object[]} resumos saída de resumoModeloDia por modelo
+ * @param {object|null} membros saída de membrosDia
+ * @param {{diaIndice?:number, acerto?:object, pesos?:object, medicaoAgora?:object, calibracao?:object}} [ctx]
+ */
 export function avaliarDia(resumos, membros, ctx = {}) {
   const R = REGRAS;
   const pesos = ctx.pesos || {};
@@ -375,6 +430,9 @@ export function avaliarDia(resumos, membros, ctx = {}) {
 }
 
 // Probabilidades de passar limites, para a aba Semana.
+/**
+ * Fração de cenários (ou de modelos, sem ensemble) acima de cada limite de REGRAS.limitesSemana.
+ */
 export function probLimites(resumos, membros) {
   const L = REGRAS.limitesSemana;
   const usarEns = membros && membros.chuva.length >= 10;
@@ -391,6 +449,11 @@ export function probLimites(resumos, membros) {
 
 // ---------- frase principal ----------
 
+/**
+ * Probabilidade horária de chuva e janela mais provável: o maior bloco contínuo (pela soma das probabilidades)
+ * acima de max(0,4; 0,8 x pico). Sem janela se o pico for menor que 0,3.
+ * @returns {{pico:number|null, janela:{ini:number, fim:number, soma:number}|null, porHora:object[]}}
+ */
 export function horasProvaveisDeChuva(prev, idx, modelos) {
   // por hora: mediana da probabilidade; se não houver, fração de modelos com chuva
   const porHora = idx.map((i) => {
@@ -445,6 +508,10 @@ export function periodosTexto(iniMs, fimMs, offsetSeg) {
 
 // ---------- divergência e pesos ----------
 
+/**
+ * Primeiro bloco futuro de 6 h em que os modelos divergem em chuva ou rajada (limites em REGRAS.divergencia).
+ * @returns {{ms:number, motivo:string}|null}
+ */
 export function horizonteDivergencia(prev, modelos) {
   const D = REGRAS.divergencia;
   const ativos = modelos.filter((m) => prev.modelos[m]);
@@ -468,6 +535,13 @@ export function horizonteDivergencia(prev, modelos) {
 
 // acertoPorModelo: { modelo: { dias, maeChuva } }. Pesos iniciais (verificação global) até 30 dias de dados
 // locais; depois, peso inicial vezes o acerto local relativo (inverso do erro), limitado.
+/**
+ * Pesos dos modelos: peso inicial ajustado pelo erro relativo local (chuva e máxima), com confiança
+ * c = dias / (dias + meiaPesos), limitado a [pesoMin, pesoMax]. Ver docs/TECNICO.md, seção 3.7.
+ * @param {Object<string, {dias:number, maeChuva?:number, maeTmax?:number}>|null} acertoPorModelo
+ * @param {string[]} modelos
+ * @returns {{pesos:Object<string, number>, ajustado:boolean}}
+ */
 export function pesosModelos(acertoPorModelo, modelos) {
   const A = REGRAS.acerto, L = REGRAS.aprendizado;
   const base = (m) => REGRAS.pesoInicial[m] ?? 1;
@@ -495,6 +569,11 @@ export function pesosModelos(acertoPorModelo, modelos) {
 
 // Viés de temperatura aprendido para um modelo: quanto ele erra para cima (+) ou para baixo (-),
 // já reduzido pela confiança. Subtrair da previsão do modelo.
+/**
+ * Correção de viés de temperatura (previsto - medido) reduzida pela confiança c = n / (n + meiaVies)
+ * e limitada a ±viesMax. O valor deve ser subtraído da previsão.
+ * @returns {{tmax:number, tmin:number}}
+ */
 export function correcaoTemperatura(acertoModeloLead) {
   const L = REGRAS.aprendizado;
   const um = (vies, n) => {
@@ -508,6 +587,13 @@ export function correcaoTemperatura(acertoModeloLead) {
 
 // Chance de chuva calibrada pelo histórico: se, quando o painel disse 30%, choveu em 50% das vezes,
 // a chance sobe na direção de 50%, na medida da quantidade de casos naquela faixa.
+/**
+ * Calibração da chance pelo histórico: desloca p em direção à frequência observada na faixa de 10%
+ * correspondente, com peso c = n / (n + meiaCalib). Só com calibMinPares pares no total.
+ * @param {number} p probabilidade entre 0 e 1
+ * @param {{pares:number, bins:{n:number, freq:number|null}[]}|null} calib
+ * @returns {number}
+ */
 export function calibrarProb(p, calib) {
   const L = REGRAS.aprendizado;
   if (!valido(p) || !calib || !(calib.pares >= L.calibMinPares)) return p;
@@ -518,6 +604,10 @@ export function calibrarProb(p, calib) {
 }
 
 // Consenso por hora para gráficos: mediana, mínimo e máximo entre modelos.
+/**
+ * Séries horárias de mediana, mínimo e máximo de uma variável entre os modelos.
+ * @returns {{med:Array<number|null>, lo:Array<number|null>, hi:Array<number|null>}}
+ */
 export function consensoHorario(prev, variavel, modelos) {
   const med = [], lo = [], hi = [];
   for (let i = 0; i < prev.horas.length; i++) {
@@ -530,6 +620,10 @@ export function consensoHorario(prev, variavel, modelos) {
 // ---------- condição do céu ----------
 // cobertura: valores horários de cloud_cover (%) já em consenso entre modelos; dia: valores de is_day (0/1).
 // Usa as horas de dia quando houver; senão, todas as horas. Devolve null sem dado (nunca inventa).
+/**
+ * Condição do céu pela cobertura média (horas de dia, se houver) e pela probabilidade de chuva.
+ * @returns {{nivel:string, texto:string, noite:boolean, chuva:string|null, cobertura:number}|null}
+ */
 export function condicaoCeu(cobertura, dia, probChuva) {
   const C = REGRAS.ceu;
   const pares = (cobertura || []).map((c, i) => [c, dia?.[i]]).filter(([c]) => valido(c));
