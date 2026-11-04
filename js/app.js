@@ -12,9 +12,9 @@ import {
 } from './dados.js';
 import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno } from './ui.js';
 import { criarFaixa } from './faixa.js';
-import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
+import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.8';
+const VERSAO = '1.2.9';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -1120,7 +1120,7 @@ function renderSemana() {
     filhos.push(det);
   }
   const x = dias.map((a) => p.horas[a.idxTodo[0]] + 12 * 3600000);
-  const fmtDia = (u, vals) => vals.map((v) => { const d = window.uPlot.tzDate(new Date(v * 1000), p.fuso || 'America/Sao_Paulo'); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()]; });
+  const fmtDia = (u, vals) => vals.map((v) => { const d = dataNoFuso(v, p.fuso); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()]; });
   const gChuva = secao('Chuva diária e acumulada', 'Previsão: mediana dos modelos se chover; acumulada soma as medianas.');
   const gTemp = secao('Temperatura mínima e máxima', 'Linhas: mediana dos modelos. Faixas: menor e maior valor entre modelos.');
   const gRaj = secao('Rajada máxima', 'Linha: valor mais provável; faixa: do menor ao maior provável.');
@@ -1302,6 +1302,8 @@ async function renderElNino() {
     catch (e) { const c = await lerCache('enso'); if (c) { estado.enso = c.dados; estado.ensoEm = c.salvoEm; } else { alvo.replaceChildren(el('p', { text: `Dados do El Niño indisponíveis (${e.message}).` })); ensoCarregando = false; return; } }
     ensoCarregando = false;
   }
+  if (alvo.dataset.desenhadoEm === String(estado.ensoEm) && alvo.childElementCount) return; // nada mudou: só mostra
+  alvo.dataset.desenhadoEm = String(estado.ensoEm);
   const E = estado.enso, P = E.partes || {};
   limparGraficos(alvo);
   const filhos = [];
@@ -1466,56 +1468,85 @@ function comparacaoHistorica(oni) {
 // ------------------------------------------------------------------ navegação e gestos
 
 const ABAS = ['hoje', 'amanha', 'semana', 'modelos', 'elnino'];
-function irPara(aba, rolarTopo = true) {
+function irPara(aba, rolarTopo = true, direcao = 0) {
   if (!ABAS.includes(aba)) return;
+  const mudou = estado.aba !== aba;
   estado.aba = aba;
   for (const s of document.querySelectorAll('.aba')) s.hidden = s.dataset.aba !== aba;
   if (aba !== 'hoje') $('#agora').classList.remove('oculto'); else observarAgora();
-  for (const b of document.querySelectorAll('.nav button')) b.toggleAttribute('aria-current', b.dataset.ir === aba) || b.removeAttribute('aria-current');
   document.querySelectorAll('.nav button').forEach((b) => { if (b.dataset.ir === aba) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-  if (rolarTopo) window.scrollTo(0, 0);
+  if (rolarTopo) window.scrollTo({ top: 0, behavior: 'instant' });
   if (aba === 'elnino' && estado.prev !== undefined) renderElNino();
-  for (const f of estado.faixas) f.desenhar();
-  window.dispatchEvent(new Event('resize'));
+  // Entrada suave da aba (só transform e opacidade, que a placa de vídeo faz sem travar).
+  // Gráficos e faixas se ajustam sozinhos pelo ResizeObserver quando a aba aparece; nada é redesenhado à força.
+  if (mudou) {
+    const sec = $(`#aba-${aba}`);
+    sec.classList.remove('entra', 'entra-dir', 'entra-esq');
+    void sec.offsetWidth;
+    sec.classList.add(direcao > 0 ? 'entra-dir' : direcao < 0 ? 'entra-esq' : 'entra');
+  }
 }
 
 function configurarNavegacao() {
   for (const b of document.querySelectorAll('.nav button')) b.addEventListener('click', () => irPara(b.dataset.ir));
-  // deslizar entre Hoje, Amanhã e Semana, sem roubar gestos de listas e gráficos
-  let x0 = null, y0 = null, alvoH = false;
+  // Deslizar entre Hoje, Amanhã e Semana. Para não trocar de aba sem querer, o gesto só vale quando:
+  // é um único dedo, rápido (até 450 ms), claramente horizontal (80 px ou mais, e 3 vezes mais que o vertical),
+  // a página não rolou no meio, não começou na borda da tela (gesto de voltar do sistema)
+  // e não começou em nada que role para os lados (horas, gráficos, tabelas, camadas, mapa).
+  let ini = null;
   const main = $('#conteudo');
+  const rolaHorizontal = (alvo) => {
+    for (let n = alvo; n && n !== main; n = n.parentElement) {
+      if (n.matches?.('[data-hscroll], .mapa, .ceu, dialog, input, .rolar, .tabela-rolar, .camadas, .horas, .u-wrap')) return true;
+      if (n.scrollWidth > n.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(n).overflowX)) return true;
+    }
+    return false;
+  };
   main.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) { x0 = null; return; }
-    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
-    alvoH = !!e.target.closest('[data-hscroll], .mapa, .ceu, dialog');
+    const t = e.touches[0];
+    ini = e.touches.length === 1 && t.clientX > 24 && t.clientX < innerWidth - 24 && !rolaHorizontal(e.target)
+      ? { x: t.clientX, y: t.clientY, t: performance.now(), sy: window.scrollY } : null;
   }, { passive: true });
+  main.addEventListener('touchmove', (e) => { if (ini && e.touches.length !== 1) ini = null; }, { passive: true });
+  main.addEventListener('touchcancel', () => { ini = null; }, { passive: true });
   main.addEventListener('touchend', (e) => {
-    if (x0 === null || alvoH) return;
-    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
-    x0 = null;
-    if (Math.abs(dx) < 70 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+    if (!ini) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - ini.x, dy = t.clientY - ini.y, dt = performance.now() - ini.t, rolou = Math.abs(window.scrollY - ini.sy) > 4;
+    ini = null;
+    if (rolou || dt > 450 || Math.abs(dx) < 80 || Math.abs(dx) < 3 * Math.abs(dy)) return;
     const trio = ['hoje', 'amanha', 'semana'];
     const k = trio.indexOf(estado.aba);
     if (k < 0) return;
     const n = dx < 0 ? k + 1 : k - 1;
-    if (n >= 0 && n < trio.length) irPara(trio[n]);
+    if (n >= 0 && n < trio.length) irPara(trio[n], true, dx < 0 ? 1 : -1);
   }, { passive: true });
 }
 
 function configurarPuxar() {
+  // Puxar para atualizar: o aviso flutua sobre a página (transform), sem empurrar o conteúdo,
+  // e só dispara com o dedo puxando claramente para baixo a partir do topo.
   const ind = $('#puxar');
-  let y0 = null, dy = 0;
-  window.addEventListener('touchstart', (e) => { y0 = window.scrollY <= 0 && e.touches.length === 1 && !e.target.closest('.mapa, dialog') ? e.touches[0].clientY : null; dy = 0; }, { passive: true });
+  let y0 = null, x0 = 0, dy = 0;
+  const mostrar = (v) => { ind.style.transform = `translate(-50%, ${v}px)`; ind.style.opacity = v > 0 ? '1' : '0'; };
+  window.addEventListener('touchstart', (e) => {
+    y0 = window.scrollY <= 0 && e.touches.length === 1 && !e.target.closest('.mapa, dialog, .camadas, [data-hscroll]') ? e.touches[0].clientY : null;
+    x0 = e.touches[0]?.clientX ?? 0; dy = 0;
+  }, { passive: true });
   window.addEventListener('touchmove', (e) => {
     if (y0 === null) return;
+    if (e.touches.length !== 1 || window.scrollY > 0 || Math.abs(e.touches[0].clientX - x0) > 40) { y0 = null; mostrar(0); return; }
     dy = e.touches[0].clientY - y0;
-    ind.style.height = dy > 10 ? Math.min(44, dy / 2) + 'px' : '0';
-    ind.textContent = dy > 80 ? 'Solte para atualizar' : 'Puxe para atualizar';
+    const v = dy > 20 ? Math.min(56, (dy - 20) / 2) : 0;
+    ind.textContent = dy > 110 ? 'Solte para atualizar' : 'Puxe para atualizar';
+    mostrar(v);
   }, { passive: true });
-  window.addEventListener('touchend', () => {
-    if (y0 !== null && dy > 80) atualizar({ forcar: true });
-    y0 = null; ind.style.height = '0';
-  }, { passive: true });
+  const fim = () => {
+    if (y0 !== null && dy > 110 && window.scrollY <= 0) atualizarTudo();
+    y0 = null; dy = 0; mostrar(0);
+  };
+  window.addEventListener('touchend', fim, { passive: true });
+  window.addEventListener('touchcancel', () => { y0 = null; dy = 0; mostrar(0); }, { passive: true });
 }
 
 // ------------------------------------------------------------------ tema, rodapé, apagar dados

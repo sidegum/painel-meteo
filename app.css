@@ -95,7 +95,17 @@ button { cursor: pointer; }
 .agora small { font-size: 12px; color: var(--fraco); margin-top: 3px; white-space: nowrap; }
 .cabeca { position: sticky; top: 0; z-index: 20; background: var(--fundo); }
 
-.puxar { height: 0; overflow: hidden; text-align: center; color: var(--fraco); font-size: 14px; transition: height .15s; }
+.puxar { position: fixed; left: 50%; top: 64px; z-index: 30; transform: translate(-50%, 0); opacity: 0; pointer-events: none;
+  padding: 8px 14px; border-radius: 18px; background: var(--sup2, var(--sup)); color: var(--texto); font-size: 14px; transition: opacity .12s; will-change: transform; }
+.aba.entra { animation: aba-entra .16s ease-out; }
+.aba.entra-dir { animation: aba-dir .2s ease-out; }
+.aba.entra-esq { animation: aba-esq .2s ease-out; }
+@keyframes aba-entra { from { opacity: .4; } to { opacity: 1; } }
+@keyframes aba-dir { from { opacity: .5; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes aba-esq { from { opacity: .5; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+html { overscroll-behavior-y: none; }
+body { overflow-x: hidden; }
+button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 .faixa-aviso:empty { display: none; }
 .faixa-aviso { margin: 0 16px 6px; padding: 8px 12px; border-left: 4px solid var(--rajada); background: var(--sup); font-size: 14px; }
 .faixa-aviso.erro { border-left-color: var(--quente); }
@@ -434,3 +444,6 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 :root[data-visual] .alerta::after { content: '›'; margin-left: auto; color: var(--fraco); font-size: 16px; }
 :root[data-visual] .alerta.indisponivel { color: var(--fraco); font-weight: 500; }
 :root[data-visual] .alerta.indisponivel::before { background: var(--fraco); }
+
+/* Fluidez: seções fora da tela não são diagramadas nem pintadas até chegarem perto (o navegador guarda o tamanho). */
+.detalhes > .secao, #semana-conteudo > .secao, #modelos-conteudo > .secao, #elnino-conteudo > .secao { content-visibility: auto; contain-intrinsic-size: auto 420px; }

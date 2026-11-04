@@ -7,6 +7,16 @@
 import { el, bus, cor } from './ui.js';
 import { valido } from './analise.js';
 
+// Converter cada marca do eixo para o fuso local pelo uPlot.tzDate é lento (usa toLocaleString).
+// Guardamos o resultado por fuso e instante: os mesmos horários se repetem em todos os gráficos.
+const memoFuso = new Map();
+export function dataNoFuso(seg, fuso) {
+  const k = (fuso || 'America/Sao_Paulo') + seg;
+  let d = memoFuso.get(k);
+  if (!d) { if (memoFuso.size > 5000) memoFuso.clear(); d = window.uPlot.tzDate(new Date(seg * 1000), fuso || 'America/Sao_Paulo'); memoFuso.set(k, d); }
+  return d;
+}
+
 const graficos = new Set();
 
 export function limparGraficos(raiz) {
@@ -43,7 +53,7 @@ export function criarGrafico(container, cfg) {
   const texto = cor('--fraco'), grade = cor('--linha');
   const eixos = [{ stroke: texto, grid: { stroke: grade, width: 1 }, ticks: { stroke: grade }, font: '600 12px Archivo, sans-serif',
     values: cfg.formatoX || ((u, vals) => vals.map((v) => {
-      const d = uPlot.tzDate(new Date(v * 1000), cfg.fuso || 'America/Sao_Paulo');
+      const d = dataNoFuso(v, cfg.fuso);
       return d.getHours() === 0 ? ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()] + ' ' + d.getDate() : d.getHours() + 'h';
     })), space: 44 }];
   for (const e of cfg.eixos || [{}]) {
