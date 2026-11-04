@@ -56,7 +56,7 @@ body {
   margin: 0; background: var(--fundo); color: var(--texto);
   font-family: 'Archivo', system-ui, sans-serif; font-size: 16px; line-height: 1.4;
   font-variant-numeric: tabular-nums; overflow-x: hidden;
-  padding-bottom: calc(var(--nav-h) + var(--safe-b));
+  padding-bottom: var(--safe-b);
 }
 a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 button, input { font: inherit; color: inherit; }
@@ -93,7 +93,7 @@ button { cursor: pointer; }
 .agora .rot-agora { font-size: 11px; font-weight: 600; color: var(--fraco); margin-bottom: 2px; }
 .agora b { font-size: 26px; font-weight: 650; letter-spacing: -.02em; }
 .agora small { font-size: 12px; color: var(--fraco); margin-top: 3px; white-space: nowrap; }
-.topo { position: sticky; top: 0; z-index: 15; background: var(--fundo); }
+.cabeca { position: sticky; top: 0; z-index: 20; background: var(--fundo); }
 
 .puxar { height: 0; overflow: hidden; text-align: center; color: var(--fraco); font-size: 14px; transition: height .15s; }
 .faixa-aviso:empty { display: none; }
@@ -168,10 +168,10 @@ button { cursor: pointer; }
 .linha-rajada .raj { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* navegação discreta: sem barra colorida, ponto pequeno no item ativo */
-:root[data-visual] .nav { --nav-h: 56px; background: var(--fundo); border-top: 1px solid var(--linha); }
+:root[data-visual] .nav { background: var(--fundo); }
 :root[data-visual] .nav button { font-size: 13px; font-weight: 500; font-stretch: 95%; letter-spacing: .01em; }
 :root[data-visual] .nav button[aria-current="page"] { color: var(--texto); font-weight: 650; }
-:root[data-visual] .nav button[aria-current="page"]::before { top: auto; bottom: 9px; left: calc(50% - 2px); right: auto; width: 4px; height: 4px; border-radius: 50%; background: var(--ponto); }
+:root[data-visual] .nav button[aria-current="page"]::before { content: ''; position: absolute; top: auto; bottom: 5px; left: calc(50% - 2px); right: auto; width: 4px; height: 4px; border-radius: 50%; background: var(--ponto); }
 :root[data-visual] { --nav-h: 56px; }
 :root[data-visual] .atualizar { background: none; font-weight: 560; font-size: 15px; }
 :root[data-visual] .alerta { border-left-width: 3px; font-weight: 600; font-size: 14px; border-radius: 0 6px 6px 0; }
@@ -215,15 +215,21 @@ button { cursor: pointer; }
 .hora.noite { background: var(--noite); }
 .seta { display: inline-block; width: 18px; height: 18px; vertical-align: -4px; }
 
-/* instrumentos */
-.instr { display: grid; grid-template-columns: 1fr; }
-.instr .item { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding: 9px 0; border-bottom: 1px solid var(--linha); }
-.instr .nome { font-weight: 600; }
-.instr .v { font-size: 20px; font-weight: 650; text-align: right; }
-.instr .orig { grid-column: 1 / -1; font-size: 13px; color: var(--fraco); }
-.instr .sem { color: var(--fraco); font-size: 16px; font-style: italic; }
-.instr details { grid-column: 1 / -1; font-size: 14px; }
-.instr summary { min-height: 44px; display: flex; align-items: center; color: var(--fraco); }
+/* medições agora: grade de blocos */
+.medicoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.medicoes.chuvas { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.med { background: var(--sup); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.med-nome { font-size: 12px; color: var(--fraco); }
+.med-v { font-size: 22px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chuvas .med-v { font-size: 17px; }
+.med.vazio .med-v { color: var(--fraco); font-weight: 400; }
+.med-nota { font-size: 11.5px; color: var(--fraco); line-height: 1.3; }
+.med-tit { font-size: 14px; font-weight: 650; margin: 14px 0 0; }
+.med-det { margin-top: 10px; font-size: 14px; }
+.med-det summary { min-height: 44px; display: flex; align-items: center; color: var(--fraco); }
+.med-det-t { font-weight: 600; margin: 8px 0 2px; }
+.med-det ul { margin: 0; padding-left: 18px; color: var(--fraco); }
+@media (min-width: 720px) { .medicoes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* meteograma */
 .paineis { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
@@ -307,19 +313,16 @@ td.n, th.n { text-align: right; }
 .acoes-rodape > * { min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1.5px solid var(--linha); background: none; display: inline-flex; align-items: center; text-decoration: none; }
 .perigo { border-color: var(--quente) !important; color: var(--quente); }
 
-/* navegação inferior */
+/* navegação entre os dias: logo abaixo do topo, fixa junto com ele */
 .nav {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
   display: grid; grid-template-columns: repeat(5, 1fr);
-  background: var(--fundo); border-top: 1px solid var(--linha);
-  padding-bottom: var(--safe-b); height: calc(var(--nav-h) + var(--safe-b));
+  background: var(--fundo); border-bottom: 1px solid var(--linha); height: 44px;
 }
 .nav button {
   background: none; border: 0; min-height: 44px; font-size: 14px; font-weight: 560; font-stretch: 88%;
   color: var(--fraco); position: relative; padding: 0 2px;
 }
 .nav button[aria-current="page"] { color: var(--texto); font-weight: 720; }
-.nav button[aria-current="page"]::before { content: ''; position: absolute; top: 0; left: 22%; right: 22%; height: 4px; background: var(--chuva); }
 
 /* diálogos */
 dialog { border: 0; padding: 0; background: var(--fundo); color: var(--texto); width: min(520px, 100vw); max-width: 100vw; max-height: 92vh; margin: auto auto 0; }
@@ -345,11 +348,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
   .mapa { margin: 8px 0; height: 460px; }
 }
 @media (min-width: 1100px) {
-  body { padding-bottom: 0; padding-top: 0; }
-  .nav { position: sticky; top: 0; bottom: auto; height: 56px; padding: 0; max-width: 1180px; margin: 0 auto; border-top: 0; border-bottom: 1px solid var(--linha); }
-  .nav button[aria-current="page"]::before { top: auto; bottom: 0; }
-  body > .topo, main { max-width: 1180px; margin: 0 auto; }
-  .nav { order: -1; }
+  .cabeca > .topo, .nav, main { max-width: 1180px; margin: 0 auto; }
 }
 
 /* ---------- chance de chuva por hora (gráfico padrão da primeira tela) ---------- */
@@ -412,3 +411,8 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .agora.oculto { visibility: hidden; }
 
 .resumo-chuva .det.resto { font-size: 16px; font-weight: 600; color: var(--chuva-txt); }
+.detalhes > *, #semana-conteudo > *, #modelos-conteudo > *, #elnino-conteudo > * { min-width: 0; }
+/* no computador, a faixa de horas rola dentro da própria coluna, sem invadir a vizinha */
+@media (min-width: 720px) {
+  .detalhes .horas, .detalhes .rolar, .detalhes .tabela-rolar { margin: 0; padding: 0 0 6px; }
+}
