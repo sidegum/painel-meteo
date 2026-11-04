@@ -27,11 +27,11 @@ const hojeLocal = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0
 const somaDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
 
 /** fetch com nova tentativa e espera crescente (2, 4, 8, 16 s) para falhas de rede e limite por minuto. */
-async function buscar(url, tipo = 'json', tentativas = 5) {
+async function buscar(url, tipo = 'json', tentativas = 5, timeoutMs = 120000) {
   let ultimo;
   for (let k = 0; k < tentativas; k++) {
     try {
-      const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(180000) });
+      const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(timeoutMs) });
       if (r.status === 429 || r.status >= 500) throw new Error(`HTTP ${r.status}`);
       if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status} em ${url}`), { definitivo: true });
       return tipo === 'json' ? await r.json() : Buffer.from(await r.arrayBuffer());
@@ -59,7 +59,7 @@ async function medicoesInmet(anos) {
     if (!zip) {
       try {
         const t0 = Date.now();
-        zip = await buscar(`https://portal.inmet.gov.br/uploads/dadoshistoricos/${ano}.zip`, 'buffer', 4);
+        zip = await buscar(`https://portal.inmet.gov.br/uploads/dadoshistoricos/${ano}.zip`, 'buffer', 2, 300000);
         console.log(`  ${ano}.zip: ${(zip.length / 1e6).toFixed(1)} MB em ${((Date.now() - t0) / 1000).toFixed(0)} s`);
         await writeFile(caminho, zip);
       } catch (e) { relatorio[ano] = `falha no download: ${e.message}`; continue; }
@@ -117,7 +117,9 @@ console.log(`INMET ${ESTACAO.id}: anos ${anos.join(', ')}`);
 const obs = await medicoesInmet(anos);
 for (const [ano, txt] of Object.entries(obs.relatorio)) console.log(`  ${ano}: ${txt}`);
 console.log(`  descartes do controle de qualidade: ${JSON.stringify(obs.descartes)}`);
-if (!obs.dias.size) throw new Error('nenhuma medição do INMET; a tabela anterior foi mantida');
+// Sem INMET (servidor fora do ar ou bloqueando), as previsões passadas ainda são coletadas e as medições
+// já guardadas na tabela continuam valendo; a calibração usa o que houver.
+if (!obs.dias.size) console.log('  AVISO: nenhuma medição nova do INMET nesta execução.');
 
 // datas a buscar na Open-Meteo: as que faltam na tabela e os 10 dias mais recentes
 const recentes = somaDias(ontem, -10);
