@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.10';
+const VERSAO = '1.2.11';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -90,8 +90,14 @@ function mostrarCarregando() {
 // ------------------------------------------------------------------ localização
 
 function localizarGps(silencioso, recente = false) {
-  return new Promise((ok) => {
+  return new Promise((ok0) => {
+    // No iPhone (app na tela inicial), o GPS às vezes não chama nenhum dos retornos, nem o de tempo esgotado.
+    // Esta trava encerra a espera em 12 s mantendo o último local, para o botão nunca ficar girando.
+    let feito = false;
+    const ok = () => { if (!feito) { feito = true; clearTimeout(trava); ok0(); } };
+    const trava = setTimeout(() => { if (!feito) usarPadrao('GPS demorou demais.'); }, 12000);
     const usarPadrao = (motivo) => {
+      if (feito) return;
       // sem GPS: o último local salvo (já arredondado); se não houver, o centro de Campo Bom
       if (estado.local && estado.local.origem !== 'padrao') {
         estado.avisoGps = `${motivo} Mostrando o último local usado (${estado.local.nome}); toque no nome do local para trocar.`;
@@ -104,6 +110,7 @@ function localizarGps(silencioso, recente = false) {
     };
     if (!('geolocation' in navigator)) return usarPadrao('GPS não disponível neste navegador.');
     navigator.geolocation.getCurrentPosition((pos) => {
+      if (feito) return;
       // A coordenada exata fica só em memória, para distâncias no aparelho.
       estado.localExato = { lat: pos.coords.latitude, lon: pos.coords.longitude, precisao: pos.coords.accuracy };
       estado.avisoGps = null;
@@ -155,14 +162,13 @@ function configurarLocal() {
 
 // ------------------------------------------------------------------ atualização
 
-let atualizando = false;
+let atualizando = false, atualizandoDesde = 0;
 async function atualizar({ forcar = false, local = false, agora = false } = {}) {
   if (!estado.local || estado.apagado) return;
-  if (atualizando) {
-    if (!forcar && !agora) return;
-    while (atualizando) await new Promise((r) => setTimeout(r, 150)); // espera a busca em andamento e refaz tudo
-  }
-  atualizando = true;
+  if (atualizando && Date.now() - atualizandoDesde > 40000) atualizando = false; // busca presa (app suspenso no meio): recomeça
+  // Uma busca automática não repete outra em andamento; a pedida pelo botão sempre sai na hora, sem esperar.
+  if (atualizando && !forcar && !agora) return;
+  atualizando = true; atualizandoDesde = Date.now();
   $('#btn-atualizar').setAttribute('aria-busy', 'true');
   $('#btn-atualizar').setAttribute('aria-label', 'Atualizando');
   const venceu = (em, min) => forcar || local || !em || Date.now() - em > min * 60000;
@@ -172,7 +178,8 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     // Todas as fontes saem ao mesmo tempo; a primeira tela é desenhada assim que a previsão chega.
     if (local) { estado.ens = null; estado.obs = null; estado.alertas = null; }
     const tarefas = [];
-    if (venceu(estado.prevEm, I.previsao)) tarefas.push(buscarPrevisao(lat, lon)
+    let principal = Promise.resolve();
+    if (venceu(estado.prevEm, I.previsao)) tarefas.push(principal = buscarPrevisao(lat, lon)
       .then((pv) => { estado.prev = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao; salvarCache('previsao', pv); })
       .catch((e) => { estado.erros.previsao = e.message; })
       .then(() => renderTudo()));
@@ -199,10 +206,15 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
       .then((e) => { estado.enso = e; estado.ensoEm = Date.now(); salvarCache('enso', e); delete estado.erros.enso; })
       .catch((e) => { estado.erros.enso = e.message; }));
     if (w && venceu(estado.acertoEm, I.acerto)) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); }));
-    await Promise.all(tarefas);
-    if (tarefas.length && estado.prev) renderTudo();
-  } finally {
+    // O botão para de girar quando a previsão chega. As outras fontes (medições, alertas, radar, El Niño)
+    // continuam chegando e redesenham a tela sozinhas, com teto de 30 s: uma fonte lenta não segura o botão.
+    const resto = Promise.race([Promise.all(tarefas), new Promise((r) => setTimeout(r, 30000))])
+      .then(() => { if (tarefas.length && estado.prev) renderTudo(); })
+      .finally(() => { atualizando = false; atualizarCabecalho(); });
+    await Promise.race([principal, resto]);
+  } catch {
     atualizando = false;
+  } finally {
     if (!tudoRodando) { $('#btn-atualizar').removeAttribute('aria-busy'); $('#btn-atualizar').setAttribute('aria-label', 'Atualizar'); }
     atualizarCabecalho();
   }
@@ -223,10 +235,14 @@ function agendar() {
 
 // Atualiza tudo, sem exceção: posição atual (salvo cidade escolhida nesta sessão), previsão, cenários,
 // medições, radar, alertas, El Niño, acerto dos modelos, mapa e a própria versão do app.
-let tudoRodando = false, ultimaCompleta = 0;
+let tudoRodando = false, tudoDesde = 0, ultimaCompleta = 0, rodada = 0;
 async function atualizarTudo() {
-  if (tudoRodando) return; // já está atualizando tudo; o giro do botão mostra isso
-  tudoRodando = true;
+  // Já está atualizando tudo: o giro do botão mostra isso. Mas se a rodada passou de 45 s (o iPhone
+  // suspende o app no meio e as esperas nunca terminam), ela é abandonada e uma nova começa.
+  if (tudoRodando && Date.now() - tudoDesde < 45000) return;
+  const minha = ++rodada;
+  tudoRodando = true; tudoDesde = Date.now();
+  const vigia = setTimeout(() => { if (rodada === minha) pararGiro(); }, 50000);
   const btn = $('#btn-atualizar');
   btn.setAttribute('aria-busy', 'true'); btn.setAttribute('aria-label', 'Atualizando');
   try {
@@ -241,11 +257,17 @@ async function atualizarTudo() {
     if (chave() !== antes) await atualizar({ forcar: true, local: true });
     ultimaCompleta = Date.now();
   } finally {
-    tudoRodando = false;
-    btn.removeAttribute('aria-busy'); btn.setAttribute('aria-label', 'Atualizar');
-    atualizarCabecalho();
+    clearTimeout(vigia);
+    if (rodada === minha) pararGiro();
     navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {});
   }
+}
+
+function pararGiro() {
+  tudoRodando = false;
+  const btn = $('#btn-atualizar');
+  btn.removeAttribute('aria-busy'); btn.setAttribute('aria-label', 'Atualizar');
+  atualizarCabecalho();
 }
 
 function atualizarCabecalho() {
@@ -256,8 +278,7 @@ function atualizarCabecalho() {
   const h = $('#local-hora');
   if (!estado.prevEm) { h.textContent = 'sem dados ainda'; return; }
   const atraso = Date.now() - estado.prevEm > 45 * 60000;
-  const recente = Date.now() - Math.max(estado.prevEm, ultimaCompleta) < 60000;
-  h.textContent = recente ? 'Atualizado agora' : `Atualizado ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)}${atraso ? ', desatualizado' : ''}`;
+  h.textContent = `Atualizado às ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)}${atraso ? ', desatualizado' : ''}`;
   h.classList.toggle('atrasado', atraso);
   renderAgora();
   const msgs = [];
