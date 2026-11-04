@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.12';
+const VERSAO = '1.2.13';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -628,6 +628,7 @@ function chanceHoraria(ms) {
   return valido(v) ? { p: v / 100, origem: 'modelos' } : { p: null, origem: null };
 }
 
+const TETO_CHANCE = 115; // topo do eixo da chance de chuva, em %
 function graficoChance(iniMs, fimMs) {
   const p = estado.prev, mods = modelosAtivos();
   const mm = consensoHorario(p, 'precipitation', mods).med;
@@ -640,11 +641,14 @@ function graficoChance(iniMs, fimMs) {
   const validos = pontos.filter((x) => valido(x.p));
   const origem = validos.some((x) => x.origem === 'cenários') ? 'cenários do ensemble' : 'probabilidade dos modelos';
   const atual = pontos.find((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
+  // Escala vertical de 0 a TETO_CHANCE (115%): a folga acima de 100% evita que barras cheias encostem no topo.
+  // Marcas a cada 20%. pos() converte uma chance (0 a 1) em altura percentual dentro da área do gráfico.
+  const pos = (p) => (p * 100 / TETO_CHANCE) * 100;
   return barrasComEixo({
     pontos, classe: 'chuva', titulo: `Previsão: ${origem}`, nome: 'Chance de chuva por hora',
-    pct: (x) => (valido(x.p) ? x.p * 100 : null), medido: (x) => x.medido,
-    ticks: [[0, '0%'], [50, '50%'], [100, '100%']],
-    agoraPct: atual && valido(atual.p) ? atual.p * 100 : null,
+    pct: (x) => (valido(x.p) ? pos(x.p) : null), medido: (x) => x.medido,
+    ticks: [0, 20, 40, 60, 80, 100].map((v) => [pos(v / 100), `${v}%`]),
+    agoraPct: atual && valido(atual.p) ? pos(atual.p) : null,
     inicial: agoraM?.chovendo ? 'Chovendo agora. Toque num horário para ver a chance de chuva.' : 'Toque num horário para ver a chance de chuva.',
     detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' : 'sem dado'}${valido(x.mm) ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
   });
