@@ -52,5 +52,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Atualiza histórico e calibração (A884 Campo Bom)"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
+          # Os arquivos são gerados: se o branch mudou durante a coleta e eles conflitarem, vale a versão
+          # desta execução (a mais recente), e a calibração é recalculada sobre o resultado.
+          if ! git pull --rebase origin "${GITHUB_REF_NAME}"; then
+            git diff --name-only --diff-filter=U | xargs -r git checkout --theirs --
+            git diff --name-only --diff-filter=U | xargs -r git add --
+            GIT_EDITOR=true git rebase --continue
+            node scripts/calibrar.mjs
+            for f in dados/calibracao.json docs/calibracao-resultado.md; do [ -e "$f" ] && git add "$f"; done
+            git diff --cached --quiet || git commit -m "Recalcula a calibração após juntar com o branch"
+          fi
           git push origin "HEAD:${GITHUB_REF_NAME}"
