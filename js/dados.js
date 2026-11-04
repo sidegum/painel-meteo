@@ -327,3 +327,37 @@ export async function buscarChuvaRadar(lat, lon) {
   for (let i = 3; i < d.length; i += 4) { total++; if (d[i] > 40) eco++; }
   return { ms: q.ms, eco, total, chuva: eco >= 3 };
 }
+
+// ---------- Grade regional para as camadas do mapa ----------
+// 11 x 11 pontos a cada 0,4° (cerca de 40 km) em volta da posição arredondada, num só pedido à Open-Meteo.
+// Atual: temperatura, nuvens, vento e rajada. Próximas 24 h: chuva. Próximos 5 dias: máxima e mínima.
+export const GRADE = { n: 11, passo: 0.4 };
+export function pontosGrade(lat, lon) {
+  const la0 = arredondaCoord(lat), lo0 = arredondaCoord(lon), m = (GRADE.n - 1) / 2, pts = [];
+  for (let i = 0; i < GRADE.n; i++) for (let j = 0; j < GRADE.n; j++)
+    pts.push([Math.round((la0 + (m - i) * GRADE.passo) * 100) / 100, Math.round((lo0 + (j - m) * GRADE.passo) * 100) / 100]);
+  return pts; // linha 0 = norte, coluna 0 = oeste
+}
+const num = (v, a, b) => (valido(v) && v >= a && v <= b ? v : null);
+export async function buscarGradeMapa(lat, lon) {
+  const pts = pontosGrade(lat, lon);
+  const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + pts.map((p) => p[0]).join(',') + '&longitude=' + pts.map((p) => p[1]).join(',')
+    + '&current=temperature_2m,cloud_cover,wind_speed_10m,wind_gusts_10m,wind_direction_10m&hourly=precipitation&forecast_hours=24'
+    + '&daily=temperature_2m_max,temperature_2m_min&forecast_days=5&timezone=auto&wind_speed_unit=kmh';
+  const j = await buscarJson('open-meteo-grade', url, { timeout: 20000, maxBytes: 3e6 });
+  if (!Array.isArray(j) || j.length !== pts.length) throw new ErroFonte('open-meteo-grade', 'formato', 'grade em formato inesperado');
+  const soma = (l) => { const v = (Array.isArray(l) ? l : []).filter(valido); return v.length >= 20 ? v.reduce((a, b) => a + b, 0) : null; };
+  const ext = (l, f) => { const v = (Array.isArray(l) ? l : []).filter(valido); return v.length ? f(...v) : null; };
+  return {
+    geradoEm: Date.now(), n: GRADE.n, passo: GRADE.passo, pontos: pts,
+    hora: String(j[0]?.current?.time || '').slice(0, 16),
+    temp: j.map((r) => num(r?.current?.temperature_2m, -40, 55)),
+    nuvens: j.map((r) => num(r?.current?.cloud_cover, 0, 100)),
+    vento: j.map((r) => num(r?.current?.wind_speed_10m, 0, 300)),
+    rajada: j.map((r) => num(r?.current?.wind_gusts_10m, 0, 400)),
+    direcao: j.map((r) => num(r?.current?.wind_direction_10m, 0, 360)),
+    chuva24: j.map((r) => num(soma(r?.hourly?.precipitation), 0, 2000)),
+    tmax5: j.map((r) => num(ext(r?.daily?.temperature_2m_max, Math.max), -40, 55)),
+    tmin5: j.map((r) => num(ext(r?.daily?.temperature_2m_min, Math.min), -40, 55)),
+  };
+}

@@ -298,7 +298,15 @@ td.n, th.n { text-align: right; }
 .mini-tab td.g { color: var(--rajada-txt); font-weight: 600; text-align: right; }
 
 /* mapa */
-.mapa { height: 340px; margin: 8px -16px; background: var(--sup); touch-action: pan-y; position: relative; }
+.mapa { height: 340px; margin: 8px -16px; background: var(--sup); touch-action: none; position: relative; }
+.camadas { display: flex; gap: 6px; overflow-x: auto; margin: 4px -16px 8px; padding: 0 16px 4px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; scrollbar-width: none; }
+.camadas::-webkit-scrollbar { display: none; }
+.camadas button { flex: none; min-height: 38px; padding: 0 13px; border-radius: 19px; border: 1.5px solid var(--linha); background: none; font-size: 14px; color: var(--fraco); }
+.camadas button[aria-checked="true"] { background: var(--texto); color: var(--fundo); border-color: var(--texto); font-weight: 600; }
+.mapa-titulo { margin: 4px 0 6px; font-weight: 600; font-size: 15px; }
+.mapa-barra { height: 8px; border-radius: 4px; max-width: 360px; }
+.mapa-rotulos { display: flex; justify-content: space-between; max-width: 360px; font-size: 12px; color: var(--fraco); margin: 2px 0 4px; }
+.mapa-controles [hidden] { display: none; }
 .mapa-controles { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
 .mapa-controles button, .botao-link {
   min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1.5px solid var(--linha); background: var(--sup);
