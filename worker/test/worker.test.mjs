@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import w, {
   parseOni, parseSemanal, parseMensal, parseDiscussao, parseProbabilidades, parseIri, normalizarMetar,
-  normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia,
+  normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia, calibracao, probDiariaCenarios,
 } from '../src/index.js';
 
 const fx = (n) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
@@ -232,6 +232,22 @@ test('acerto: previsões antigas x observação', () => {
   const res = resumirAcerto([{ data: '2026-11-02', obs, prev }]);
   assert.equal(res.ukmo_global_deterministic_10km[1].taxaChuva, 1);
   assert.equal(res.ecmwf_ifs[1].amostrasRajada, 0);
+  // viés: previsão 20 °C contra máxima medida 23,75 e mínima 18 -> -3,75 e +2
+  assert.equal(res.ukmo_global_deterministic_10km[1].viesTmax, -3.75);
+  assert.equal(res.ukmo_global_deterministic_10km[1].viesTmin, 2);
+});
+
+test('aprendizado: chance diária dos cenários e calibração', () => {
+  const time = [...Array(24)].map((_, h) => `2026-11-05T${String(h).padStart(2, '0')}:00`);
+  const hourly = { time, precipitation: Array(24).fill(0.1) };
+  for (let k = 1; k <= 9; k++) hourly[`precipitation_member${String(k).padStart(2, '0')}`] = Array(24).fill(k <= 3 ? 0.1 : 0);
+  assert.ok(Math.abs(probDiariaCenarios({ hourly })['2026-11-05'] - 0.4) < 1e-9); // 4 de 10 com 2,4 mm
+  const cal = calibracao(
+    [{ data: '2026-11-05', prob: 0.35 }, { data: '2026-11-06', prob: 0.31 }, { data: '2026-11-09', prob: 0.9 }],
+    [{ data: '2026-11-05', obs: { chuva: 4 } }, { data: '2026-11-06', obs: { chuva: 0 } }]);
+  assert.equal(cal.pares, 2);
+  assert.equal(cal.bins[3].n, 2);
+  assert.equal(cal.bins[3].freq, 0.5);
 });
 
 test('força do El Niño por trimestre (tabela real do CPC)', async () => {

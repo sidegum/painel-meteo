@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
-  horizonteDivergencia, pesosModelos, consensoHorario, escolherFonte, periodoDoDia, classeRajada,
+  horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva,
 } from './analise.js';
 import {
@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.2.6';
+const VERSAO = '1.2.7';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -327,10 +327,21 @@ function estacaoAcerto() {
     .map((v) => estado.acerto[v.id])[0] || null;
 }
 
+// O que o painel aprendeu só vale perto da estação onde aprendeu (até 50 km).
+function aprendizadoLocal() {
+  const a = estacaoAcerto();
+  if (!a?.porModelo || !a.estacao) return null;
+  const p = pontoExato();
+  return distanciaKm(p.lat, p.lon, a.estacao.lat, a.estacao.lon) <= REGRAS.acerto.distanciaMaxKm ? a : null;
+}
+
 function pesosAtuais() {
-  const a = estacaoAcerto()?.porModelo;
+  const a = aprendizadoLocal()?.porModelo;
   const mapa = {};
-  if (a) for (const m of Object.keys(a)) mapa[m] = { dias: a[m]?.[1]?.amostrasChuva ?? 0, maeChuva: a[m]?.[1]?.maeChuva };
+  if (a) for (const m of Object.keys(a)) {
+    const l1 = a[m]?.[1] || {};
+    mapa[m] = { dias: Math.max(l1.amostrasChuva ?? 0, l1.amostrasTmax ?? 0), maeChuva: l1.maeChuva, maeTmax: l1.maeTmax };
+  }
   return pesosModelos(a ? mapa : null, modelosAtivos());
 }
 
@@ -361,10 +372,17 @@ function analisarDia(data, diaIndice, desdeAgora) {
   const usar = idx.length ? idx : idxTodo;
   const { pesos, ajustado } = pesosAtuais();
   const resumos = mods.map((m) => resumoModeloDia(p, m, usar));
-  const resumosTodo = mods.map((m) => resumoModeloDia(p, m, idxTodo));
+  // temperatura corrigida pelo viés que cada modelo mostrou nas medições locais
+  const apr = aprendizadoLocal();
+  const lead = Math.min(5, Math.max(1, diaIndice));
+  const resumosTodo = mods.map((m) => {
+    const r = resumoModeloDia(p, m, idxTodo);
+    const c = correcaoTemperatura(apr?.porModelo?.[m]?.[lead]);
+    return { ...r, tmax: valido(r.tmax) ? r.tmax - c.tmax : r.tmax, tmin: valido(r.tmin) ? r.tmin - c.tmin : r.tmin, correcao: c };
+  });
   const membros = membrosDia(estado.ens, data, p.offset, inicio);
   const medAgora = diaIndice === 0 ? medicaoChuvaAgora() : null;
-  const av = avaliarDia(resumos, membros, { diaIndice, acerto: acertoCtx(diaIndice), pesos, medicaoAgora: medAgora });
+  const av = avaliarDia(resumos, membros, { diaIndice, acerto: acertoCtx(diaIndice), pesos, medicaoAgora: medAgora, calibracao: apr?.calibracao });
   const horasChuva = horasProvaveisDeChuva(p, usar, mods);
   // rajada: pico da mediana horária entre modelos, com horário e direção
   const cons = consensoHorario(p, 'wind_gusts_10m', mods);
@@ -1171,7 +1189,8 @@ function renderModelos() {
   const gR = secao('Rajadas por modelo', 'Previsão, 7 dias. Faixa: cenários do ensemble (p10 a p90).');
   gC.classList.add('largura-total'); gR.classList.add('largura-total');
   filhos.push(gC, gR);
-  filhos.push(secao('Taxa de acerto local', null, tabelaAcerto()));
+  filhos.push(secao('Aprendizado do painel', 'Todo dia o painel guarda o que previu e compara com o que as estações mediram. Com isso, ajusta os pesos dos modelos, corrige a temperatura e calibra a chance de chuva.', resumoAprendizado()));
+  filhos.push(secao('Acerto de cada modelo', null, tabelaAcerto()));
   filhos.push(secao('Regra de confiança', null, regraConfianca()));
   if (estado.ensErros?.length) filhos.push(el('p', { class: 'nota', text: `Ensemble: ${estado.ensErros.join('; ')}.` }));
   alvo.replaceChildren(...filhos);
@@ -1214,6 +1233,33 @@ function nomeVar(v) {
   return { precipitation_probability: 'probabilidade', wind_gusts_10m: 'rajadas', visibility: 'visibilidade', cape: 'CAPE', uv_index: 'UV', cloud_cover_low: 'nuvens baixas', cloud_cover_mid: 'nuvens médias', cloud_cover_high: 'nuvens altas', precipitation: 'chuva', pressure_msl: 'pressão', is_day: 'dia/noite', apparent_temperature: 'sensação', dew_point_2m: 'orvalho', relative_humidity_2m: 'umidade' }[v] || v;
 }
 
+function resumoAprendizado() {
+  if (!workerConfigurado()) return el('p', { class: 'nota', text: 'O aprendizado precisa do servidor do painel, que não está configurado.' });
+  const L = REGRAS.aprendizado;
+  const a = estacaoAcerto();
+  if (!a) return el('p', { class: 'nota', text: 'Começando: o primeiro dia verificado aparece amanhã de manhã.' });
+  const perto = aprendizadoLocal();
+  const dias = maximo(Object.values(a.porModelo || {}).map((m) => Math.max(m?.[1]?.amostrasChuva ?? 0, m?.[1]?.amostrasTmax ?? 0))) || 0;
+  const { pesos, ajustado } = pesosAtuais();
+  const linhas = [];
+  const item = (nome, estadoTxt, detalhe) => linhas.push(el('div', { class: 'med' },
+    el('span', { class: 'med-nome', text: nome }), el('b', { class: 'med-v', style: { 'font-size': '16px' }, text: estadoTxt }), detalhe ? el('span', { class: 'med-nota', text: detalhe }) : null));
+  const falta = Math.max(0, L.diasInicio - dias);
+  item('Dias verificados', `${dias} dia${dias === 1 ? '' : 's'}`, `${a.estacao.nome}${perto ? '' : ' (longe daqui: correções não aplicadas)'}`);
+  item('Pesos dos modelos', ajustado ? 'ajustando' : `começa em ${falta} dia${falta === 1 ? '' : 's'}`,
+    Object.entries(pesos).map(([m, w]) => `${MODELOS[m]?.curto || m} ${fmt.n(w, 2)}`).join(' · '));
+  const vieses = Object.keys(MODELOS).map((m) => {
+    const c = correcaoTemperatura(a.porModelo?.[m]?.[1]);
+    return c.tmax || c.tmin ? `${MODELOS[m].curto}: máx ${c.tmax > 0 ? '−' : '+'}${fmt.n(Math.abs(c.tmax), 1)}°, mín ${c.tmin > 0 ? '−' : '+'}${fmt.n(Math.abs(c.tmin), 1)}°` : null;
+  }).filter(Boolean);
+  item('Correção de temperatura', vieses.length ? 'aplicada' : `começa em ${falta} dia${falta === 1 ? '' : 's'}`, vieses.length ? vieses.join(' · ') : 'Mede quanto cada modelo erra para cima ou para baixo.');
+  const cal = a.calibracao;
+  const pares = cal?.pares ?? 0;
+  item('Calibração da chance de chuva', pares >= L.calibMinPares ? 'aplicada' : `${pares} de ${L.calibMinPares} casos`,
+    pares >= L.calibMinPares && valido(cal.brier) ? `Erro de Brier ${fmt.n(cal.brier, 2)} (0 é perfeito)` : 'Compara a chance que o painel deu com a chuva que caiu.');
+  return el('div', {}, el('div', { class: 'medicoes' }, ...linhas));
+}
+
 function tabelaAcerto() {
   if (!workerConfigurado()) return el('p', { text: 'Requer o Worker: ele guarda, uma vez por dia, a previsão antiga (Previous Runs API) e a medição de estações públicas.' });
   const blocos = [];
@@ -1239,7 +1285,7 @@ function tabelaAcerto() {
       el('thead', {}, el('tr', {}, el('th', { text: 'Modelo e antecedência' }), el('th', { class: 'n', text: 'Acerto chuva' }), el('th', { class: 'n', text: 'Erro volume' }), el('th', { class: 'n', text: 'Erro rajada' }), el('th', { class: 'n', text: 'Erro máx.' }), el('th', { class: 'n', text: 'Amostras' }))),
       el('tbody', {}, ...linhas))) : el('p', { class: 'nota', text: 'Ainda sem amostras.' }));
   }
-  blocos.push(el('p', { class: 'nota', text: `Acerto de chuva: o modelo previu chuva acima de 1 mm e choveu, ou previu seco e não choveu. Erros são a média do erro absoluto. Pesos iguais até ${REGRAS.acerto.diasMinimos} dias; depois, ajuste entre ${REGRAS.acerto.pesoMin} e ${REGRAS.acerto.pesoMax}.` }));
+  blocos.push(el('p', { class: 'nota', text: `Acerto de chuva: o modelo previu chuva acima de 1 mm e choveu, ou previu seco e não choveu. Erros são a média do erro absoluto. Os pesos começam a mudar com ${REGRAS.aprendizado.diasInicio} dias, aos poucos, entre ${REGRAS.acerto.pesoMin} e ${REGRAS.acerto.pesoMax}.` }));
   return el('div', {}, ...blocos);
 }
 

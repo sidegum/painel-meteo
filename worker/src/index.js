@@ -10,7 +10,7 @@
 // - INMET_TOKEN nunca aparece em respostas, erros ou logs.
 // - Nenhuma localização ou IP é gravado no KV ou em logs.
 
-const VERSAO = '1.0.0';
+const VERSAO = '1.1.0';
 
 export const DESTINOS = new Set([
   'apitempo.inmet.gov.br',
@@ -19,6 +19,7 @@ export const DESTINOS = new Set([
   'www.cpc.ncep.noaa.gov',
   'iri.columbia.edu',
   'previous-runs-api.open-meteo.com',
+  'ensemble-api.open-meteo.com',
 ]);
 
 const USER_AGENT = 'painel-meteo-pessoal/1.0 (uso pessoal, nao comercial)';
@@ -634,7 +635,7 @@ export function resumirAcerto(hist) {
   for (const m of MODELOS) {
     res[m] = {};
     for (let d = 1; d <= 5; d++) {
-      let n = 0, acertos = 0, nChuva = 0, eChuva = 0, nRaj = 0, eRaj = 0, nT = 0, eT = 0;
+      let n = 0, acertos = 0, nChuva = 0, eChuva = 0, nRaj = 0, eRaj = 0, nT = 0, eT = 0, bT = 0, nTn = 0, eTn = 0, bTn = 0;
       for (const r of hist) {
         const p = r.prev?.[m]?.[d]; if (!p) continue;
         if (r.obs.chuva !== null && p.chuva !== null) {
@@ -642,15 +643,83 @@ export function resumirAcerto(hist) {
           if ((p.chuva >= 1) === (r.obs.chuva >= 1)) acertos++;
         }
         if (r.obs.rajada !== null && p.rajada !== null) { nRaj++; eRaj += Math.abs(p.rajada - r.obs.rajada); }
-        if (r.obs.tmax !== null && p.tmax !== null) { nT++; eT += Math.abs(p.tmax - r.obs.tmax); }
+        if (r.obs.tmax !== null && p.tmax !== null) { nT++; eT += Math.abs(p.tmax - r.obs.tmax); bT += p.tmax - r.obs.tmax; }
+        if (r.obs.tmin !== null && p.tmin !== null) { nTn++; eTn += Math.abs(p.tmin - r.obs.tmin); bTn += p.tmin - r.obs.tmin; }
       }
       res[m][d] = {
         amostrasChuva: nChuva, taxaChuva: n ? acertos / n : null, maeChuva: nChuva ? eChuva / nChuva : null,
         amostrasRajada: nRaj, maeRajada: nRaj ? eRaj / nRaj : null, amostrasTmax: nT, maeTmax: nT ? eT / nT : null,
+        // viés: previsão menos medição (positivo = o modelo erra para cima)
+        viesTmax: nT ? bT / nT : null, amostrasTmin: nTn, maeTmin: nTn ? eTn / nTn : null, viesTmin: nTn ? bTn / nTn : null,
       };
     }
   }
   return res;
+}
+
+// Previsão do próprio painel, guardada todo dia: a chance de chover (≥ 1 mm) que os sistemas de cenários
+// davam para os próximos 5 dias. Depois, comparada com a chuva medida, ensina o painel a calibrar a chance.
+const SISTEMAS_CENARIOS = ['ecmwf_ifs025', 'ecmwf_aifs025_ensemble', 'ukmo_global_ensemble_20km'];
+
+export function probDiariaCenarios(j) {
+  // j: resposta do ensemble-api com hourly.precipitation e precipitation_memberNN, fuso local
+  const h = j?.hourly; if (!h?.time) return {};
+  const chaves = Object.keys(h).filter((k) => /^precipitation(_member\d+)?$/.test(k));
+  const porDia = {};
+  h.time.forEach((t, i) => {
+    const d = String(t).slice(0, 10);
+    porDia[d] ??= Object.fromEntries(chaves.map((k) => [k, { s: 0, n: 0 }]));
+    for (const k of chaves) { const v = h[k][i]; if (typeof v === 'number' && Number.isFinite(v)) { porDia[d][k].s += v; porDia[d][k].n++; } }
+  });
+  const out = {};
+  for (const [d, m] of Object.entries(porDia)) {
+    const totais = Object.values(m).filter((x) => x.n >= 20).map((x) => x.s); // dia completo
+    const validos = Object.values(m).filter((x) => x.n >= 8).map((x) => x.s);
+    const usar = totais.length >= 10 ? totais : validos.length >= 10 ? validos : [];
+    if (usar.length >= 10) out[d] = usar.filter((x) => x >= 1).length / usar.length;
+  }
+  return out;
+}
+
+export async function registrarPrevisaoPainel(env) {
+  if (!env.KV) return;
+  const hoje = diaLocal(Date.now());
+  for (const est of ESTACOES_VERIFICACAO.filter((e) => e.tipo === 'inmet')) {
+    try {
+      const probs = [];
+      for (const m of SISTEMAS_CENARIOS) {
+        const p = new URLSearchParams({ latitude: est.lat.toFixed(2), longitude: est.lon.toFixed(2), hourly: 'precipitation', models: m, timezone: 'America/Sao_Paulo', forecast_days: '7' });
+        try { probs.push(probDiariaCenarios(await buscarExterno(`https://ensemble-api.open-meteo.com/v1/ensemble?${p}`, { timeoutMs: 20000, maxBytes: 4_000_000 }))); } catch { /* um sistema fora não impede os outros */ }
+      }
+      if (!probs.length) continue;
+      const chave = `painel:${est.id}`;
+      const hist = ((await env.KV.get(chave, 'json')) || []).filter((r) => r.emitido !== hoje);
+      for (let lead = 1; lead <= 5; lead++) {
+        const data = diaLocal(Date.now() + lead * 86400000);
+        const ps = probs.map((x) => x[data]).filter((x) => typeof x === 'number');
+        if (ps.length) hist.push({ emitido: hoje, data, lead, prob: Math.round((ps.reduce((a, b) => a + b, 0) / ps.length) * 1000) / 1000, sistemas: ps.length });
+      }
+      await env.KV.put(chave, JSON.stringify(hist.slice(-600)));
+    } catch { /* tenta de novo amanhã */ }
+  }
+}
+
+// Calibração: para cada faixa de 10% de chance prevista, com que frequência choveu de fato (≥ 1 mm).
+export function calibracao(previsoes, hist) {
+  const obsPorData = new Map(hist.filter((r) => r.obs?.chuva !== null && r.obs?.chuva !== undefined).map((r) => [r.data, r.obs.chuva]));
+  const bins = Array.from({ length: 10 }, () => ({ n: 0, choveu: 0, somaProb: 0 }));
+  let pares = 0, brier = 0;
+  for (const p of previsoes) {
+    if (!obsPorData.has(p.data)) continue;
+    const choveu = obsPorData.get(p.data) >= 1 ? 1 : 0;
+    const b = bins[Math.min(9, Math.floor(p.prob * 10))];
+    b.n++; b.choveu += choveu; b.somaProb += p.prob;
+    pares++; brier += (p.prob - choveu) ** 2;
+  }
+  return {
+    pares, brier: pares ? Math.round((brier / pares) * 1000) / 1000 : null,
+    bins: bins.map((b, i) => ({ de: i / 10, ate: (i + 1) / 10, n: b.n, freq: b.n ? b.choveu / b.n : null, previsto: b.n ? b.somaProb / b.n : null })),
+  };
 }
 
 async function rotaAcerto(url, env) {
@@ -658,10 +727,13 @@ async function rotaAcerto(url, env) {
   const est = ESTACOES_VERIFICACAO.find((e) => e.id === id);
   if (!est) throw new ErroParam('estação de verificação desconhecida');
   const hist = env.KV ? ((await env.KV.get(`acerto:${id}`, 'json')) || []) : [];
+  const previsoes = env.KV && est.tipo === 'inmet' ? ((await env.KV.get(`painel:${id}`, 'json')) || []) : [];
   return json({
     estacao: { id: est.id, nome: est.nome, tipo: est.tipo, lat: est.lat, lon: est.lon },
     dias: hist.length, periodo: hist.length ? { ini: hist[0].data, fim: hist[hist.length - 1].data } : null,
     porModelo: resumirAcerto(hist),
+    calibracao: est.tipo === 'inmet' ? calibracao(previsoes, hist) : null,
+    previsoesGuardadas: previsoes.length,
     observacao: est.tipo === 'metar' ? 'METAR não informa chuva acumulada: acerto de chuva só com estação INMET.' : null,
   });
 }
@@ -709,7 +781,7 @@ export default {
   },
   async scheduled(evento, env, ctx) {
     // "5 * * * *" -> séries horárias; "0 */6 * * *" -> El Niño; "15 9 * * *" -> acerto diário
-    if (evento.cron === '15 9 * * *') ctx.waitUntil(registrarAcerto(env));
+    if (evento.cron === '15 9 * * *') ctx.waitUntil(Promise.all([registrarAcerto(env), registrarPrevisaoPainel(env)]));
     else if (evento.cron === '0 */6 * * *') ctx.waitUntil(atualizarEnso(env));
     else ctx.waitUntil(registrarSeries(env));
   },
