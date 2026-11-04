@@ -14,7 +14,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe } from './graficos.js';
 
-const VERSAO = '1.2.2';
+const VERSAO = '1.2.3';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -437,7 +437,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const dataMs = p.horas[a.idxTodo[0]] ?? Date.now();
   const quando = diaIndice === 1
     ? `Amanhã, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}`
-    : `Hoje, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}, até 23h`;
+    : `Hoje, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}`;
 
   // céu: consenso horário entre modelos; hoje só as horas que faltam
   const mods = modelosAtivos();
@@ -453,15 +453,13 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   if (chovendo && ceu) { ceu.chuva = 'provavel'; ceu.texto = ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'Pancadas de chuva' : 'Chuva'; }
   const temChuva = av.prob !== null && av.prob >= REGRAS.ocorrencia.poucoProvavel;
   const detalhe = [];
-  if (chovendo) {
-    const es = agoraChuva.estacao, ra = agoraChuva.radar;
-    if (es && es.valor >= REGRAS.chuvaHoraMm) detalhe.push(`medido ${fmt.n(es.valor, 1)} mm na última hora (${es.fonte.nome}, ${fmt.idade(es.ms)})`);
-    if (ra?.chuva) detalhe.push(`radar mostra chuva aqui (${fmt.idade(ra.ms)})`);
-    detalhe.push(av.prob === null ? 'depois: previsão sem dado' : `depois: ${(respostaChuva(av.prob) || '').toLowerCase()}`);
-  }
-  if (temChuva && av.volume) detalhe.push(`cerca de ${fmt.mm(av.volume.mediana)}${av.volumeIncerto ? ` (provável entre ${fmt.n(av.volume.min, 0)} e ${fmt.n(av.volume.max, 0)} mm)` : ''}`);
+  // Chovendo: só a estimativa de quanto ainda cai e quando para. A origem (estação ou radar) fica no toque longo.
+  const textoResto = !resto ? null : resto.fraca ? 'chuva fraca, deve passar logo'
+    : `≈ ${fmt.mm(resto.mm)} ${resto.maisDe12h ? 'até pelo menos' : 'até'} ${fmt.hora(resto.ate, p.offset)}`;
+  const origemAgora = chovendo ? (agoraChuva.estacao?.valor >= REGRAS.chuvaHoraMm ? `medido pela estação ${agoraChuva.estacao.fonte.nome}` : 'visto pelo radar') : '';
+  if (!chovendo && temChuva && av.volume) detalhe.push(`cerca de ${fmt.mm(av.volume.mediana)}${av.volumeIncerto ? ` (provável entre ${fmt.n(av.volume.min, 0)} e ${fmt.n(av.volume.max, 0)} mm)` : ''}`);
   const jan = a.horasChuva.janela;
-  if (temChuva && jan) detalhe.push(`mais provável ${fmt.hora(jan.ini, p.offset)} a ${fmt.hora(jan.fim + 3600000, p.offset)}`);
+  if (!chovendo && temChuva && jan) detalhe.push(`mais provável ${fmt.hora(jan.ini, p.offset)} a ${fmt.hora(jan.fim + 3600000, p.offset)}`);
 
   const botaoConf = el('button', { type: 'button', class: 'confianca', 'data-n': av.confianca.geral, onclick: () => explicarConfianca(a) },
     el('span', { class: 'nivel', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), `Confiança ${av.confianca.geral}`);
@@ -470,16 +468,14 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     diaIndice === 0 ? el('div', { class: 'resumo-agora', id: 'agora-hoje', 'aria-hidden': 'true' }) : null,
     el('div', { class: 'resumo-ceu' },
       iconeCeu(ceu),
-      el('span', { class: 'cond' }, ceu ? ceu.texto : ausente('céu sem dado')),
-      resto ? el('span', { class: 'ceu-mm', title: 'Previsão: mediana ponderada dos modelos hora a hora, enquanto ela indicar chuva (até 12 h)' },
-        ...(resto.fraca ? ['chuva fraca'] : [el('b', { text: `≈ ${fmt.mm(resto.mm)}` }), resto.maisDe12h ? ' nas próximas 12 h' : ` até ${fmt.hora(resto.ate, p.offset)}`])) : null),
+      el('span', { class: 'cond' }, ceu ? ceu.texto : ausente('céu sem dado'))),
     el('div', { class: 'resumo-temp' },
       el('span', { class: 'bloco-t min' }, el('small', { text: 'mínima' }), el('b', { class: 'tmin', text: fmt.c(a.tmin) ?? '–' })),
       el('span', { class: 'bloco-t max' }, el('small', { text: 'máxima' }), el('b', { class: 'tmax', text: fmt.c(a.tmax) ?? '–' })),
       el('span', { class: 'bloco-t chuva' }, el('small', { text: 'chuva' }), el('b', { text: chovendo ? 'agora' : (av.prob === null ? '–' : fmt.pct(av.prob)) }))),
     el('div', { class: 'resumo-chuva' + (chovendo ? ' chovendo' : '') },
-      el('strong', {}, resp || 'Chuva sem dado', chovendo ? el('span', { class: 'marca medido', text: agoraChuva.estacao?.valor >= REGRAS.chuvaHoraMm ? 'medido' : 'radar' }) : null),
-      el('span', { class: 'det', text: detalhe.join(' · ') || ' ' })));
+      el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
+      el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
 
   const filhos = [resumo, linhaAlerta()];
 
