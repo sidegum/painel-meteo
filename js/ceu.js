@@ -457,7 +457,7 @@ export function proximosEventos(obs, t, dias = 60) {
     const alt = posicaoNoCeu('Moon', obs, pico).altura;
     if (alt > 0) {
       const nome = { penumbral: 'Eclipse lunar penumbral (sutil, a Lua escurece pouco)', partial: 'Eclipse lunar parcial', total: 'Eclipse lunar total (Lua avermelhada)' }[le.kind];
-      ev.push({ tipo: 'eclipse', ms: pico, titulo: nome, detalhe: `Máximo com a Lua a ${Math.round(alt)}° de altura, para o ${rumo(posicaoNoCeu('Moon', obs, pico).azimute)}. Dura cerca de ${Math.round(le.sd_penum * 2 / 60)} h (fase penumbral).`, kind: le.kind });
+      ev.push({ tipo: 'eclipse', ms: pico, titulo: nome, detalhe: `Máximo com a Lua a ${Math.round(alt)}° de altura, para o ${rumo(posicaoNoCeu('Moon', obs, pico).azimute)}. Dura cerca de ${Math.round(le.sd_penum * 2 / 60)} h (fase penumbral).`, kind: le.kind, corpo: 'Moon' });
       break;
     }
   }
@@ -466,7 +466,7 @@ export function proximosEventos(obs, t, dias = 60) {
     const se = A.SearchLocalSolarEclipse(data(t), obs);
     if (se && ms(se.peak.time) < t + 3 * 365 * 86400000) {
       const nome = { partial: 'Eclipse solar parcial', annular: 'Eclipse solar anular', total: 'Eclipse solar total' }[se.kind];
-      ev.push({ tipo: 'eclipse', ms: ms(se.peak.time), titulo: `${nome} visível daqui`, detalhe: `${Math.round(se.obscuration * 100)}% do Sol coberto no máximo, com o Sol a ${Math.round(se.peak.altitude)}° de altura. Nunca olhe para o Sol sem filtro próprio.`, kind: se.kind });
+      ev.push({ tipo: 'eclipse', ms: ms(se.peak.time), titulo: `${nome} visível daqui`, detalhe: `${Math.round(se.obscuration * 100)}% do Sol coberto no máximo, com o Sol a ${Math.round(se.peak.altitude)}° de altura. Nunca olhe para o Sol sem filtro próprio.`, kind: se.kind, corpo: 'Sun' });
     }
   } catch { /* sem eclipse solar visível no intervalo */ }
   for (const f of proximasFases(t)) if (f.ms <= fimMs) ev.push({ tipo: 'lua', ms: f.ms, titulo: f.nome });
@@ -505,6 +505,137 @@ export function fraseNuvens(cobertura) {
   return { nivel: 'nublado', texto: `Previsão de céu nublado (${Math.round(cobertura)}%): difícil ver.` };
 }
 
+// ------------------------------------------------------------------ onde olhar
+
+/**
+ * Estrelas e aglomerado de referência para achar algo no céu: as mais brilhantes e as figuras que todo mundo conhece
+ * (Cruzeiro do Sul, Três Marias, Plêiades). Posições do HYG v4.1 na época 2026,0 (o mesmo catálogo do Globo).
+ */
+export const REFERENCIAS = [
+  ['Sirius', 101.2831, -16.7249, -1.44], ['Canopo', 95.9882, -52.6955, -0.62], ['Arcturo', 213.9071, 19.168, -0.05],
+  ['Alfa do Centauro', 219.857, -60.8305, -0.01], ['Vega', 279.2365, 38.7858, 0.03], ['Capela', 79.173, 45.9949, 0.08],
+  ['Rigel', 78.6345, -8.2016, 0.18], ['Prócion', 114.8203, 5.2175, 0.4], ['Achernar', 24.4295, -57.237, 0.45],
+  ['Betelgeuse', 88.7931, 7.4071, 0.45], ['Hadar', 210.9554, -60.3732, 0.61], ['Altair', 297.6997, 8.8711, 0.76],
+  ['Cruzeiro do Sul', 186.6491, -63.0992, 0.77], ['Aldebarã', 68.9806, 16.5079, 0.87], ['Antares', 247.3518, -26.4322, 1.06],
+  ['Espiga', 201.2979, -11.1616, 0.98], ['Pólux', 116.324, 28.0259, 1.16], ['Fomalhaut', 344.4153, -29.6234, 1.17],
+  ['Deneb', 310.358, 45.2803, 1.25], ['Régulo', 152.0911, 11.9672, 1.36], ['Castor', 113.6478, 31.8872, 1.58],
+  ['Shaula', 263.4021, -37.104, 1.62], ['Três Marias', 84.0534, -1.2019, 1.69], ['Plêiades', 56.8713, 24.1048, 1.6],
+];
+
+const NOMES_CORPOS_REF = { Moon: 'Lua', Venus: 'Vênus', Jupiter: 'Júpiter', Mars: 'Marte', Saturn: 'Saturno', Mercury: 'Mercúrio' };
+
+/** Posição no céu (altura e azimute, com refração) de uma estrela J2000 para o instante, com precessão e nutação. */
+function posicaoEstrela(ra, dec, obs, t) {
+  A.DefineStar(A.Body.Star2, ra / 15, dec, 1000);
+  const d = data(t);
+  const eq = A.Equator(A.Body.Star2, d, obs, true, true);
+  const h = A.Horizon(d, obs, eq.ra, eq.dec, 'normal');
+  return { altura: h.altitude, azimute: h.azimuth };
+}
+
+/** Separação angular entre duas posições (altura, azimute), em graus. */
+function separacaoAltAz(a, b) {
+  const c = Math.sin(a.altura * RAD) * Math.sin(b.altura * RAD) + Math.cos(a.altura * RAD) * Math.cos(b.altura * RAD) * Math.cos((a.azimute - b.azimute) * RAD);
+  return Math.acos(Math.max(-1, Math.min(1, c))) / RAD;
+}
+
+/** Altura em "punhos" (um punho fechado com o braço esticado cobre uns 10° do céu). */
+export function alturaEmPunhos(alt) {
+  if (alt >= 70) return 'quase em cima da cabeça';
+  const p = Math.max(1, Math.round(alt / 10));
+  return `uns ${p === 1 ? 'um punho fechado' : `${p} punhos fechados`} acima do horizonte, com o braço esticado`;
+}
+
+/** Lado de b em relação a a, para quem olha para a: "acima", "à direita", "abaixo e à esquerda"... */
+function ladoDe(a, b) {
+  let daz = ((b.azimute - a.azimute + 540) % 360) - 180; // azimute cresce para a direita de quem olha
+  const dx = daz * Math.cos(((a.altura + b.altura) / 2) * RAD), dy = b.altura - a.altura;
+  const h = Math.abs(dx) > Math.abs(dy) * 0.5 ? (dx > 0 ? 'à direita' : 'à esquerda') : '';
+  const v = Math.abs(dy) > Math.abs(dx) * 0.5 ? (dy > 0 ? 'acima' : 'abaixo') : '';
+  return [v, h].filter(Boolean).join(' e ');
+}
+
+/**
+ * Referência mais útil perto de uma posição: a Lua ou um planeta brilhante, senão uma das estrelas de REFERENCIAS,
+ * acima de 5° e a menos de 30°. Devolve onde a referência está em relação ao alvo (para quem olha para o alvo).
+ */
+function referenciaPerto(alvo, obs, t, excluir) {
+  const cands = [];
+  for (const corpo of ['Moon', 'Venus', 'Jupiter', 'Mars', 'Saturn']) {
+    if (corpo === excluir) continue;
+    const p = posicaoNoCeu(corpo, obs, t);
+    const mag = corpo === 'Moon' ? -10 : A.Illumination(corpo, data(t)).mag;
+    if (mag <= 1.5) cands.push({ nome: NOMES_CORPOS_REF[corpo], ...p, mag, astro: true });
+  }
+  for (const [nome, ra, dec, mag] of REFERENCIAS) cands.push({ nome, ...posicaoEstrela(ra, dec, obs, t), mag });
+  let melhor = null;
+  for (const c of cands) {
+    if (c.altura < 5) continue;
+    const sep = separacaoAltAz(alvo, c);
+    if (sep < 0.8 || sep > 30) continue; // colado no alvo não ajuda a achar
+    const nota = sep + c.mag * 3; // perto e brilhante
+    if (!melhor || nota < melhor.nota) melhor = { ...c, sep, nota };
+  }
+  if (!melhor) return null;
+  return { nome: melhor.nome, altura: melhor.altura, azimute: melhor.azimute, sep: melhor.sep, lado: ladoDe(alvo, melhor), astro: !!melhor.astro };
+}
+
+/**
+ * Onde olhar para ver um item do "Céu de hoje", em linguagem simples, mais os pontos para o desenho do céu:
+ * direção, altura em graus e em punhos, horário, caminho no céu (planeta e Lua ao longo da noite, estação espacial
+ * durante a passagem) e uma referência próxima (Lua, planeta ou estrela brilhante).
+ * @param {object} it item de resumoDoCeu
+ * @param {{lat:number, lon:number, altitudeM?:number}} local observador em graus
+ * @param {number} agoraMs instante atual
+ * @param {number} offsetS fuso do local
+ * @returns {{ms:number, altura:number, azimute:number, caminho:{altura:number, azimute:number, ms:number}[], instrucao:string, referencia:object|null, aviso:string|null, rotuloAlvo:string}|null}
+ */
+export function ondeOlhar(it, local, agoraMs, offsetS) {
+  const obs = observador(local.lat, local.lon, local.altitudeM || 0);
+  const h = (t) => horaLocal(t, offsetS);
+  let t, pos, caminho = [], excluir = null, aviso = null, rotuloAlvo = it.titulo;
+  const corpoEm = (corpo, ms) => ({ ...posicaoNoCeu(corpo, obs, ms), ms });
+  if (it.tipo === 'planeta' || it.tipo === 'lua') {
+    const v = it.janela;
+    t = Math.min(Math.max(v.melhor.ms, agoraMs), v.fim);
+    pos = corpoEm(it.corpo, t); excluir = it.corpo;
+    for (let k = v.inicio; k <= v.fim; k += 30 * 60000) caminho.push(corpoEm(it.corpo, k));
+    if (it.tipo === 'lua') rotuloAlvo = 'Lua';
+  } else if (it.tipo === 'encontro') {
+    t = it.ms; pos = corpoEm(it.corpo, t); excluir = it.corpo; rotuloAlvo = NOMES_CORPOS_REF[it.corpo] || it.corpo;
+  } else if (it.tipo === 'satelite') {
+    const v = it.passagem.visivel;
+    t = v.max.ms; pos = { altura: v.max.elevacao, azimute: v.max.azimute, ms: t };
+    for (let k = v.inicio; k <= v.fim + 1; k += Math.max(10000, (v.fim - v.inicio) / 24)) {
+      const e = it.rec ? estadoSatelite(it.rec, local, k) : null;
+      if (e) caminho.push({ altura: e.elevacao, azimute: e.azimute, ms: k });
+    }
+    rotuloAlvo = it.id === 'iss' ? 'ISS' : 'Tiangong';
+  } else if (it.tipo === 'meteoros') {
+    const c = it.chuva;
+    t = c.melhor.ms; pos = { ...posicaoEstrela(c.ra, c.dec, obs, t), ms: t };
+    rotuloAlvo = 'radiante';
+  } else if (it.tipo === 'eclipse' && it.corpo) {
+    t = it.ms; pos = corpoEm(it.corpo, t); excluir = it.corpo; rotuloAlvo = it.corpo === 'Sun' ? 'Sol' : 'Lua';
+    if (it.corpo === 'Sun') aviso = 'Nunca olhe para o Sol sem filtro próprio para eclipse: óculos escuros não protegem.';
+  } else return null;
+  if (!pos || pos.altura < -1) return null;
+  const referencia = it.tipo === 'eclipse' && it.corpo === 'Sun' ? null : referenciaPerto(pos, obs, t, excluir);
+  const direcao = `para o ${rumo(pos.azimute)}`;
+  const altura = `${alturaTexto(pos.altura)} (${Math.round(pos.altura)}°, ${alturaEmPunhos(pos.altura)})`;
+  let instrucao;
+  if (it.tipo === 'satelite') {
+    const v = it.passagem.visivel;
+    instrucao = `Às ${h(v.inicio)}, fique de frente ${`para o ${rumo(v.azInicio)}`}: ela aparece ${alturaTexto(v.altInicio)} e cruza o céu. No ponto mais alto, às ${h(t)}, está ${direcao}, ${altura}. Some ${v.apaga ? 'no meio do céu' : `para o ${rumo(v.azFim)}`}.`;
+  } else if (it.tipo === 'meteoros') {
+    instrucao = `Às ${h(t)}, os rastros parecem sair de um ponto ${direcao}, ${altura}. Deite ou recline e olhe para o céu todo: os meteoros aparecem em qualquer lugar, longe desse ponto eles têm rastros mais longos.`;
+  } else {
+    const quando = t <= agoraMs + 5 * 60000 ? 'Agora' : `Às ${h(t)}`;
+    instrucao = `${quando}, olhe ${direcao}, ${altura}.`;
+  }
+  return { ms: t, altura: pos.altura, azimute: pos.azimute, caminho, instrucao, referencia, aviso, rotuloAlvo };
+}
+
 const NOMES_ESTACOES = { iss: 'Estação Espacial Internacional (ISS)', css: 'Estação espacial chinesa Tiangong' };
 
 /**
@@ -529,7 +660,7 @@ export function resumoDoCeu(local, agoraMs, { offsetS, estacoes = [], nuvemEm = 
     if (!p) continue;
     const v = p.visivel, n = nuvem(v.max.ms);
     itens.push({
-      tipo: 'satelite', id: e.id, titulo: NOMES_ESTACOES[e.id] || e.id, ms: v.inicio, destaque: v.max.elevacao >= 30, nuvem: n.nivel,
+      tipo: 'satelite', id: e.id, rec: e.rec, titulo: NOMES_ESTACOES[e.id] || e.id, ms: v.inicio, prefixo: 'às', destaque: v.max.elevacao >= 30, nuvem: n.nivel,
       quando: h(v.inicio),
       frase: `Passa às ${h(v.inicio)}, do ${rumo(v.azInicio)} para o ${rumo(v.azFim)}, ${alturaTexto(v.max.elevacao)} (${Math.round(v.max.elevacao)}°), por ${Math.max(1, Math.round(v.duracaoMin))} min.`
         + ` Parece uma estrela andando, sem piscar.${v.apaga ? ' Some no meio do céu ao entrar na sombra da Terra.' : ''} ${n.texto}`.trimEnd(),
@@ -553,7 +684,7 @@ export function resumoDoCeu(local, agoraMs, { offsetS, estacoes = [], nuvemEm = 
       if (poe && poe > v.inicio && poe < ate) partes.push(`se põe às ${h(poe)} a ${rumo(posicaoNoCeu('Moon', obs, poe).azimute)}`);
       frase = `${partes.join('; ').replace(/^./, (c) => c.toUpperCase())}. ${n.texto}`;
       const quando = nasce && nasce > agoraMs && nasce < ate && nasce < v.inicio ? nasce : v.inicio;
-      itens.push({ tipo: 'lua', corpo, titulo: `Lua ${f.nome} (${Math.round(f.fracao * 100)}% iluminada)`, ms: quando, quando: h(quando), frase: frase.trimEnd(), nuvem: n.nivel, janela: v, destaque: f.fracao > 0.9 });
+      itens.push({ tipo: 'lua', corpo, titulo: `Lua ${f.nome} (${Math.round(f.fracao * 100)}% iluminada)`, ms: quando, quando: h(quando), prefixo: quando === nasce ? 'nasce' : quando <= agoraMs + VIS.passoMin * 60000 ? 'agora' : 'desde', frase: frase.trimEnd(), nuvem: n.nivel, janela: v, destaque: f.fracao > 0.9 });
       continue;
     }
     const margem = 20 * 60000;
@@ -561,7 +692,7 @@ export function resumoDoCeu(local, agoraMs, { offsetS, estacoes = [], nuvemEm = 
     const subindo = v.fim - v.melhor.ms <= margem && v.melhor.ms - v.inicio > margem;
     frase = `Das ${h(v.inicio)} às ${h(v.fim)}, para o ${rumo(v.melhor.azimute)}; ${meio ? `mais alto às ${h(v.melhor.ms)} (${Math.round(v.melhor.altura)}°)` : subindo ? `sobe até ${Math.round(v.melhor.altura)}° antes de o céu clarear` : `${alturaTexto(v.melhor.altura)} (${Math.round(v.melhor.altura)}°)`}.`
       + ` ${brilhoTexto(v.mag).replace(/^./, (c) => c.toUpperCase())}. ${n.texto}`;
-    itens.push({ tipo: 'planeta', corpo, titulo: nome, ms: v.inicio, quando: h(v.inicio), frase: frase.trimEnd(), nuvem: n.nivel, janela: v, destaque: v.mag <= -1 });
+    itens.push({ tipo: 'planeta', corpo, titulo: nome, ms: v.inicio, quando: h(v.inicio), prefixo: v.inicio <= agoraMs + VIS.passoMin * 60000 ? 'agora' : 'desde', frase: frase.trimEnd(), nuvem: n.nivel, janela: v, destaque: v.mag <= -1 });
   }
 
   // Lua perto de um planeta (menos de 5°) no melhor horário do planeta: chama a atenção no céu
@@ -570,21 +701,21 @@ export function resumoDoCeu(local, agoraMs, { offsetS, estacoes = [], nuvemEm = 
     const t = p.janela.melhor.ms;
     if (posicaoNoCeu('Moon', obs, t).altura < VIS.alturaMinLua) continue;
     const sep = separacao('Moon', p.corpo, obs, t);
-    if (sep < 5) itens.push({ tipo: 'encontro', titulo: `Lua e ${p.titulo} juntos`, ms: t, quando: h(t), destaque: true, nuvem: p.nuvem,
+    if (sep < 5) itens.push({ tipo: 'encontro', corpo: p.corpo, titulo: `Lua e ${p.titulo} juntos`, ms: t, quando: h(t), prefixo: 'às', destaque: true, nuvem: p.nuvem,
       frase: `Às ${h(t)}, a Lua passa a ${sep < 1 ? 'menos de 1°' : `${Math.round(sep)}°`} de ${p.titulo}, para o ${rumo(p.janela.melhor.azimute)}. Fácil de achar: ${p.titulo} é o ponto brilhante ao lado da Lua.` });
   }
 
   for (const c of chuvasNaJanela(obs, janela)) {
     const n = nuvem(c.melhor.ms);
     const pico = c.diasDoPico !== null && Math.abs(c.diasDoPico) < 1 ? 'no pico' : c.diasDoPico < 0 ? `a ${Math.round(-c.diasDoPico)} dia${Math.round(-c.diasDoPico) > 1 ? 's' : ''} do pico` : `${Math.round(c.diasDoPico)} dia${Math.round(c.diasDoPico) > 1 ? 's' : ''} depois do pico`;
-    itens.push({ tipo: 'meteoros', titulo: `Chuva de meteoros ${c.nome}`, ms: c.melhor.ms, quando: h(c.melhor.ms), destaque: c.taxa >= 20, nuvem: n.nivel, chuva: c,
+    itens.push({ tipo: 'meteoros', titulo: `Chuva de meteoros ${c.nome}`, ms: c.melhor.ms, quando: h(c.melhor.ms), prefixo: 'melhor', destaque: c.taxa >= 20, nuvem: n.nivel, chuva: c,
       frase: `Melhor por volta das ${h(c.melhor.ms)}: até ${c.taxa} meteoros por hora longe das luzes da cidade (${pico}). Olhe para o céu todo, não só para o ${rumo(c.melhor.azimute)}.${c.luaAtrapalha ? ' A Lua clara apaga os mais fracos.' : ''} ${n.texto}`.trimEnd() });
   }
 
   // eclipse dentro da janela
   for (const e of proximosEventos(obs, agoraMs, 2)) {
     if (e.tipo !== 'eclipse' || e.ms > (janela.nasceSol ?? janela.fim) + 12 * 3600000) continue;
-    itens.push({ tipo: 'eclipse', titulo: e.titulo, ms: e.ms, quando: h(e.ms), destaque: true, frase: `Máximo às ${h(e.ms)}. ${e.detalhe} ${nuvem(e.ms).texto}`.trimEnd(), nuvem: nuvem(e.ms).nivel });
+    itens.push({ tipo: 'eclipse', corpo: e.corpo, titulo: e.titulo, ms: e.ms, quando: h(e.ms), prefixo: 'máximo', destaque: true, frase: `Máximo às ${h(e.ms)}. ${e.detalhe} ${nuvem(e.ms).texto}`.trimEnd(), nuvem: nuvem(e.ms).nivel });
   }
 
   itens.sort((a, b) => a.ms - b.ms);

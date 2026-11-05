@@ -393,14 +393,22 @@ export function criarBlocoCeu(pai, estadoApp, estacoes, aoMudarAltura) {
     if (!itens.length) lista.append(el('p', { class: 'ceu-hoje-vazio', text: 'Nada especial a olho nu até o amanhecer além das estrelas.' }));
     for (const it of itens) {
       lista.append(el('button', { type: 'button', role: 'listitem', class: `ceu-item${it.destaque ? ' destaque' : ''}${it.nuvem ? ` nuvem-${it.nuvem}` : ''}`, 'aria-label': `${it.quando}, ${it.titulo}. ${it.frase}`, onclick: () => abrirItem(it) },
-        el('b', { text: it.quando }), el('span', { text: tituloCurto(it) })));
+        el('span', { class: 'ceu-item-nome', text: tituloCurto(it) }), el('b', { text: it.prefixo === 'agora' ? 'agora' : `${it.prefixo} ${it.quando}` })));
     }
+    lista.scrollLeft = 0;
     aoMudarAltura?.();
   }
 
   function abrirItem(it) {
     const extra = it.tipo === 'satelite' && it.outras > 0 ? el('p', { class: 'nota', text: `Há mais ${it.outras} passagem${it.outras > 1 ? 's' : ''} visível${it.outras > 1 ? 'eis' : ''} esta noite; esta é a mais alta. Toque na estação no Globo (botão Espaço) para ver todas.` }) : null;
-    mostrarInfo(it.titulo, el('p', { class: 'ceu-frase', text: it.frase }), extra, notaFonte());
+    const o = C.ondeOlhar(it, ultimo.local, Date.now(), fusoS(estadoApp()));
+    const onde = o ? el('div', { class: 'ceu-onde' },
+      el('h3', { class: 'ceu-sub', text: 'Onde olhar' }),
+      desenhoCeu(o),
+      el('p', { class: 'ceu-frase', text: o.instrucao }),
+      o.referencia ? el('p', { class: 'ceu-frase', text: textoReferencia(o) }) : null,
+      o.aviso ? el('p', { class: 'ceu-aviso', text: o.aviso }) : null) : null;
+    mostrarInfo(it.titulo, el('p', { class: 'ceu-frase', text: it.frase }), onde, extra, notaFonte());
   }
 
   function abrirLista() {
@@ -422,6 +430,65 @@ export function criarBlocoCeu(pai, estadoApp, estacoes, aoMudarAltura) {
   }
 
   return { el: raiz, atualizar, desenhar };
+}
+
+/** Frase da referência para achar o alvo: "Júpiter fica logo à direita, a 4°". */
+function textoReferencia(o) {
+  const r = o.referencia;
+  const dist = r.sep < 6 ? `bem perto, a ${Math.round(r.sep)}°` : `a ${Math.round(r.sep)}° (${r.sep < 15 ? 'um a dois punhos' : 'dois a três punhos'})`;
+  const quem = r.astro ? r.nome : `a estrela ${r.nome}`.replace('a estrela Cruzeiro do Sul', 'o Cruzeiro do Sul').replace('a estrela Três Marias', 'as Três Marias').replace('a estrela Plêiades', 'as Plêiades');
+  const plural = /^as /.test(quem);
+  return `Para achar: ${quem} ${plural ? 'ficam' : 'fica'} ${dist}, ${r.lado} ${o.rotuloAlvo === 'radiante' ? 'desse ponto' : `de ${o.rotuloAlvo}`}.`;
+}
+
+const RUMOS_CURTOS = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
+
+/**
+ * Desenho do céu como quem está de pé olhando para o alvo: chão embaixo, 180° de horizonte com os pontos cardeais,
+ * linhas de 30° e 60° de altura, o caminho no céu (pontilhado), o alvo e a referência para achá-lo.
+ */
+function desenhoCeu(o) {
+  const L = 340, A0 = 150, ALT = 132, ns = 'http://www.w3.org/2000/svg';
+  const x = (az) => L / 2 + (((az - o.azimute + 540) % 360) - 180) * (L / 180);
+  const y = (alt) => A0 - Math.max(-2, alt) * ALT / 90;
+  const no = (tag, at, texto) => { const n = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(at)) n.setAttribute(k, v); if (texto) n.textContent = texto; return n; };
+  const svg = no('svg', { viewBox: `0 0 ${L} 172`, class: 'ceu-desenho', role: 'img', 'aria-label': o.instrucao });
+  const grad = no('linearGradient', { id: 'ceuGrad', x1: 0, y1: 0, x2: 0, y2: 1 });
+  grad.append(no('stop', { offset: '0', 'stop-color': '#050a18' }), no('stop', { offset: '1', 'stop-color': '#1b2a4a' }));
+  const defs = no('defs', {}); defs.append(grad); svg.append(defs);
+  svg.append(no('rect', { x: 0, y: 0, width: L, height: A0, fill: 'url(#ceuGrad)' }), no('rect', { x: 0, y: A0, width: L, height: 22, fill: '#16181c' }));
+  for (const a of [30, 60]) {
+    svg.append(no('line', { x1: 0, x2: L, y1: y(a), y2: y(a), stroke: 'rgba(255,255,255,.12)', 'stroke-dasharray': '2 4' }));
+    svg.append(no('text', { x: 4, y: y(a) - 3, class: 'ceu-desenho-grau' }, `${a}°`));
+  }
+  svg.append(no('line', { x1: 0, x2: L, y1: A0, y2: A0, stroke: 'rgba(255,255,255,.35)' }));
+  for (let k = 0; k < 8; k++) {
+    const xx = x(k * 45);
+    if (xx < 8 || xx > L - 8) continue;
+    svg.append(no('text', { x: xx, y: A0 + 16, 'text-anchor': 'middle', class: `ceu-desenho-rumo${k % 2 ? '' : ' cardeal'}` }, RUMOS_CURTOS[k]));
+  }
+  // caminho: quebra onde o azimute dá a volta por trás de quem olha
+  let pts = [];
+  const fechar = () => { if (pts.length > 1) svg.append(no('polyline', { points: pts.join(' '), fill: 'none', stroke: 'rgba(255,214,120,.55)', 'stroke-width': 1.5, 'stroke-dasharray': '3 4' })); pts = []; };
+  let ant = null;
+  for (const p of o.caminho) {
+    const xx = x(p.azimute);
+    if (ant !== null && Math.abs(xx - ant) > L / 2) fechar();
+    if (p.altura > -1) pts.push(`${xx.toFixed(1)},${y(p.altura).toFixed(1)}`); else fechar();
+    ant = xx;
+  }
+  fechar();
+  if (o.referencia) {
+    const r = o.referencia, rx = x(r.azimute), ry = y(r.altura);
+    svg.append(no('circle', { cx: rx, cy: ry, r: 2.6, fill: '#cfe0ff' }));
+    const direita = rx >= x(o.azimute); // nome do lado de fora, sem cobrir o alvo
+    svg.append(no('text', { x: rx + (direita ? 6 : -6), y: ry + 3.5, 'text-anchor': direita ? 'start' : 'end', class: 'ceu-desenho-ref' }, r.nome));
+  }
+  const tx = x(o.azimute), ty = y(o.altura);
+  svg.append(no('circle', { cx: tx, cy: ty, r: 9, fill: 'none', stroke: '#ffd166', 'stroke-width': 1.5 }));
+  svg.append(no('circle', { cx: tx, cy: ty, r: 3.6, fill: '#ffe1a0' }));
+  svg.append(no('text', { x: Math.min(L - 30, Math.max(30, tx)), y: ty + 22 > A0 - 2 ? ty - 14 : ty + 22, 'text-anchor': 'middle', class: 'ceu-desenho-alvo' }, o.rotuloAlvo));
+  return svg;
 }
 
 function tituloCurto(it) {

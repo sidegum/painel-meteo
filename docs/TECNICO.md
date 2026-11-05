@@ -636,7 +636,7 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `globo.js` | cena Three.js, shaders da Terra (dia, noite com luzes das cidades, luar, nuvens, atmosfera), camadas, gestos, painel de toque, laço e qualidade adaptativa |
 | `globo-dados.js` | leitura dos arquivos do branch `globo-dados` (manifest, campos GFS, satélite, elementos orbitais, sondas) com validação |
 | `globo-regiao.js`, `globo-cidades.js` | mapa detalhado sob a câmera e rótulos de cidades |
-| `ceu.js` | cálculo puro do céu (sem DOM, testado): Sol, Lua, planetas e estrelas pelo Astronomy Engine; satélites pelo SGP4; passagens visíveis, chuvas de meteoros (IMO, por longitude solar), eclipses, fases, estações e o resumo "Céu de hoje" |
+| `ceu.js` | cálculo puro do céu (sem DOM, testado): Sol, Lua, planetas e estrelas pelo Astronomy Engine; satélites pelo SGP4; passagens visíveis, chuvas de meteoros (IMO, por longitude solar), eclipses, fases, estações, o resumo "Céu de hoje" e `ondeOlhar` (direção, altura em graus e em punhos, caminho no céu e a referência mais útil por perto: Lua, planeta brilhante ou uma das 24 estrelas e figuras de `REFERENCIAS`) |
 | `globo-ceu.js` | textos: bloco "Céu de hoje" e cartões de Sol, Lua, planetas, estrelas, satélites e sondas |
 | `globo-astro.js` | pontos subsolar e sublunar e posições para o sistema solar |
 | `globo-estrelas.js` | céu: 119.625 estrelas do HYG v4.1 (8.920 até magnitude 6,5 e 110.705 mais fracas, carregadas depois em partes), Via Láctea, 121 galáxias, nebulosas e aglomerados e linhas das 88 constelações; precessão e nutação para a data, giro pelo tempo sideral, tamanho e brilho pela magnitude e cor pelo B−V em shader próprio; no sistema solar, estrelas em 3D na distância real |
@@ -644,6 +644,11 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra, filtros e o sistema solar navegável (planetas, luas, corpos menores, cinturões reais e sondas) |
 | `globo-sondas.js` | fichas das missões e interpolação de Hermite dos vetores do JPL Horizons |
 | `globo-texturas.js` | texturas procedurais dos astros |
+
+Iluminação da Terra (1.8.1): sempre a real, sem camada própria. Terminador entre o Sol 3° acima e 3° abaixo do
+horizonte, faixa quente estreita no nascer e no pôr, luzes das cidades acesas até o fim do crepúsculo civil (−6°) e
+apagadas pelas nuvens, noite quase preta com luar pela fase, nuvens noturnas só como sombra escura e reflexo do Sol
+no mar discreto.
 
 Referencial da cena: fixo na Terra, raio 1 = 6.371 km, `latLonVec(lat, lon) = (cos·cos, sen, −cos·sen)`. Sol, Lua e
 planetas entram pelo ponto sob o astro (ascensão reta menos o tempo sideral, do Astronomy Engine), as estrelas pelo

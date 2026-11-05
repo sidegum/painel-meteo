@@ -44,3 +44,23 @@ test('rumos em português', () => {
   assert.equal(C.rumo(359), 'norte');
   assert.equal(Object.keys(C.CONSTELACOES).length, 88);
 });
+
+test('onde olhar: direção e altura batem com a posição do planeta no horário indicado', () => {
+  const local = { lat: -29.67, lon: -51.06 };
+  const agora = Date.parse('2026-11-05T21:00:00Z');
+  const r = C.resumoDoCeu(local, agora, { offsetS: -10800 });
+  const planeta = r.itens.find((i) => i.tipo === 'planeta');
+  assert.ok(planeta, 'algum planeta visível na noite');
+  const o = C.ondeOlhar(planeta, local, agora, -10800);
+  const p = C.posicaoNoCeu(planeta.corpo, CAMPO_BOM, o.ms);
+  perto(o.altura, p.altura, 0.01, 'altura');
+  perto(o.azimute, p.azimute, 0.01, 'azimute');
+  assert.match(o.instrucao, new RegExp(`para o ${C.rumo(p.azimute)}`));
+  if (o.referencia) assert.ok(o.referencia.sep <= 30 && o.referencia.altura >= 5, 'referência perto e acima do horizonte');
+});
+
+test('referências: Sirius e Ácrux nas posições do catálogo (Sirius cruza o meridiano de Campo Bom a ~77°)', () => {
+  const s = C.REFERENCIAS.find((r) => r[0] === 'Sirius');
+  perto(C.infoEstrela(s[1], s[2], CAMPO_BOM, Date.parse('2026-01-01T00:00:00Z')).culmina.altura, 77.06, 0.1, 'altura de Sirius no meridiano');
+  assert.ok(C.REFERENCIAS.some((r) => r[0] === 'Cruzeiro do Sul'));
+});

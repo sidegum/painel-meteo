@@ -592,10 +592,10 @@ button.globo-rotulo { cursor: pointer; }
 .ceu-hoje-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ceu-hoje-titulo { font-size: 13px; font-weight: 650; color: #dfe4ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ceu-hoje-tudo { flex: none; min-height: 32px; padding: 0 10px; border: 0; background: none; color: #9cc3ff; font-size: 13px; font-weight: 600; }
-.ceu-hoje-lista { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 0; touch-action: pan-x; }
+.ceu-hoje-lista { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 2px -12px 0; padding: 0 12px; scroll-padding: 0 12px; scroll-snap-type: x proximity; touch-action: pan-x; }
 .ceu-hoje-lista::-webkit-scrollbar { display: none; }
-.ceu-item { flex: none; display: flex; align-items: baseline; gap: 6px; min-height: 36px; padding: 0 11px; border-radius: 18px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.04); color: #eceef0; font-size: 13px; font-weight: 560; }
-.ceu-item b { font-variant-numeric: tabular-nums; font-weight: 700; color: #ffe1a0; }
+.ceu-item { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; margin: 0; padding: 0 12px; border-radius: 18px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.04); color: #eceef0; font: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; scroll-snap-align: start; }
+.ceu-item b { font-variant-numeric: tabular-nums; font-weight: 600; color: #ffe1a0; }
 .ceu-item.destaque { border-color: rgba(255,209,102,.6); }
 .ceu-item.nuvem-nublado { opacity: .55; }
 .ceu-item.nuvem-nublado::after { content: '☁'; font-size: 12px; }
@@ -606,6 +606,13 @@ button.globo-rotulo { cursor: pointer; }
 .ceu-lista li p { margin: 2px 0 0; color: var(--fraco); font-size: 14px; }
 .ceu-lista li.fraco { opacity: .65; }
 .ceu-sub { font-size: 15px; margin: 14px 0 4px; }
+.ceu-desenho { display: block; width: 100%; height: auto; border-radius: 10px; margin: 6px 0 8px; }
+.ceu-desenho-grau { font-size: 9px; fill: rgba(255,255,255,.45); }
+.ceu-desenho-rumo { font-size: 10px; fill: rgba(255,255,255,.55); }
+.ceu-desenho-rumo.cardeal { font-size: 12px; font-weight: 700; fill: #fff; }
+.ceu-desenho-ref { font-size: 10px; fill: #cfe0ff; }
+.ceu-desenho-alvo { font-size: 12px; font-weight: 700; fill: #ffe1a0; }
+.ceu-aviso { font-size: 14px; font-weight: 600; color: var(--quente); }
 .globo-cidades { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .globo-cidade { position: absolute; left: 0; top: 0; margin: -7px 0 0 6px; padding-left: 8px; font-size: 12px; font-weight: 600; color: #f3f5f8; text-shadow: 0 0 3px #000, 0 1px 2px #000; white-space: nowrap; }
 .globo-cidade::before { content: ''; position: absolute; left: 0; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
