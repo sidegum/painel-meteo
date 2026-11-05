@@ -215,7 +215,7 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .nota { font-size: 14px; color: var(--fraco); }
 
 /* lista por hora: rolagem horizontal só aqui */
-.horas { display: flex; overflow-x: auto; gap: 0; margin: 0 -16px; padding: 0 16px 6px; scroll-snap-type: x proximity; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
+.horas { display: flex; overflow-x: auto; gap: 0; margin: 0 -16px; padding: 0 16px 6px; scroll-snap-type: x proximity; scroll-padding-left: 16px; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
 .hora { flex: 0 0 64px; scroll-snap-align: start; padding: 6px 4px; border-right: 1px solid var(--linha); text-align: center; font-size: 15px; }
 .hora .h { font-weight: 650; }
 .hora .p { color: var(--chuva-txt); font-weight: 600; }
