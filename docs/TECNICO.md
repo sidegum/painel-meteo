@@ -482,6 +482,7 @@ A ordem é:
   - Recolhe quando a página rola mais de 6 px para baixo depois da altura da barra. No Globo, recolhe também depois de 4 s sem toque na barra (`OCIOSO_GLOBO_MS`).
   - Volta ao rolar para cima, ao chegar ao topo ou ao trocar de aba (`cabecalho.aoMudarAba`).
   - A alça `#alca-cabeca`, centrada na borda de baixo da barra, mostra e oculta a qualquer momento. Mostrada pela alça, a barra não se recolhe sozinha no Globo até a próxima troca de aba.
+  - No Globo (desde a 1.8.6), a página não rola: `body[data-aba=globo]` fica fixo do tamanho da janela, sem rodapé nem faixa de estado. Lá a barra só muda pela alça ou pelo tempo sem uso; o ouvinte de rolagem ignora essa aba.
   - Fora da tela, a barra perde a altura (`data-recolhida`). No Globo, o `body` deixa de reservar o espaço (`body[data-aba=globo][data-cab=oculta]`) e um evento `resize` avisa o globo para ocupar a tela.
 - Filtros com muitas opções usam `seletor()` (`js/ui.js`): um único botão com a opção atual, que abre a lista nativa do sistema. Hoje isso vale para a camada do mapa e para o gráfico "Hora a hora", que mostra um gráfico por vez (`prefs 'paineis-v2'` guarda o escolhido).
 - Ordem de Hoje: Próximas horas (com legenda chance, chuva, vento e rajada), Mapa, Medições agora, Previsto x medido, Hora a hora e Fontes de dados. Os títulos das telas são os mesmos das abas (Semana, não "Próximos 7 dias"). Na Amanhã, o bloco "Confiança" não tem mais a tabela de modelos, que fica na aba Modelos.

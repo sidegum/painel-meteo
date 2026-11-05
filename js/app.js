@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.8.5';
+const VERSAO = '1.8.6';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -2283,7 +2283,7 @@ function configurarCabecalho() {
   alca.addEventListener('click', () => { fixa = oculta; aplicar(!oculta); });
   cab.addEventListener('pointerdown', armarOcioso, { passive: true });
   window.addEventListener('scroll', () => {
-    if (quadro) return;
+    if (quadro || estado.aba === 'globo') return; // no Globo a página não rola: a barra só muda pela alça ou pelo tempo
     quadro = requestAnimationFrame(() => {
       quadro = 0;
       const y = window.scrollY, dy = y - ultimoY;
