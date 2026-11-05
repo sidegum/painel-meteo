@@ -152,7 +152,7 @@ function corDaTemperatura(T) {
 }
 // tabela de cor por B−V (−0,40 a 2,50 em passos de 0,01): evita 120 mil potências e logaritmos na montagem
 const COR_BV = Array.from({ length: 291 }, (_, k) => corDaTemperatura(temperaturaCor(-0.4 + k / 100)));
-const corBV = (bv) => COR_BV[Math.round((Math.max(-0.4, Math.min(2.5, Number.isFinite(bv) ? bv : 0.6)) + 0.4) * 100)];
+export const corBV = (bv) => COR_BV[Math.round((Math.max(-0.4, Math.min(2.5, Number.isFinite(bv) ? bv : 0.6)) + 0.4) * 100)];
 
 /** Cede a vez ao navegador entre as partes da montagem. */
 const pausa = () => new Promise((ok) => (globalThis.requestIdleCallback ? requestIdleCallback(ok, { timeout: 300 }) : setTimeout(ok, 16)));

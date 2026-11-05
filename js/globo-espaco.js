@@ -957,9 +957,10 @@ function montarControlesSistema() {
   const hoje = el('button', { type: 'button', class: 'globo-hoje', text: 'Hoje', hidden: true, 'aria-label': 'Voltar para hoje', onclick: () => { SIS.desloc = 0; definirVelocidade(0); } });
   const geral = el('button', { type: 'button', class: 'globo-visao-geral', text: 'Visão geral', hidden: true, onclick: visaoGeral });
   const livre = el('button', { type: 'button', class: 'globo-livre', text: 'Navegação livre', 'aria-pressed': 'false', onclick: () => alternarLivre(!E.G.livre) });
+  const galaxia = el('button', { type: 'button', class: 'globo-ir-galaxia', text: 'Via Láctea', title: 'Sair do sistema solar e ver a Via Láctea de fora', onclick: () => E.G.abrirGalaxia() });
   const dica = el('p', { class: 'globo-dica', hidden: true, text: 'Arraste para olhar em volta · afaste os dedos para avançar · dois toques para ir até algo' });
   const data = el('p', { class: 'globo-data-sistema' });
-  const topo = el('div', { class: 'globo-sistema-topo' }, tempo, hoje, geral, livre);
+  const topo = el('div', { class: 'globo-sistema-topo' }, tempo, hoje, geral, galaxia, livre);
   // fontes e data dos dados ficam no "?" (ajuda), fora da cena
   const raiz = el('div', { class: 'globo-sistema-controles globo-recolhivel', hidden: true }, dica, data, topo);
   E.G.dom.raiz.append(raiz);
