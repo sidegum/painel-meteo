@@ -518,7 +518,12 @@ def horizons_elementos(alvo, centro, agora):
 
 def sbdb_corpo(sstr):
     """Elementos e diâmetro de um corpo menor pelo SBDB (valores em UA, graus e dias; época em JD TDB)."""
-    j = json.loads(baixar(SBDB + '?' + urllib.parse.urlencode({'sstr': sstr, 'phys-par': '1'}), timeout=60, binario=False))
+    q = {'sstr': sstr, 'phys-par': '1', 'full-prec': '1'}  # full-prec: elementos com todos os dígitos (o padrão arredonda)
+    try:
+        j = json.loads(baixar(SBDB + '?' + urllib.parse.urlencode(q), timeout=60, binario=False))
+    except Exception:
+        del q['full-prec']
+        j = json.loads(baixar(SBDB + '?' + urllib.parse.urlencode(q), timeout=60, binario=False))
     if 'orbit' not in j:
         raise RuntimeError(f"SBDB {sstr}: {str(j)[:200]}")
     el = {e['name']: e['value'] for e in j['orbit']['elements']}
