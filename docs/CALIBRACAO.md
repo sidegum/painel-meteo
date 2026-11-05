@@ -154,7 +154,7 @@ Conferência: para a véspera, a sensação prevista (bruta e corrigida como o p
 
 Resumo (detalhes em [TECNICO.md](TECNICO.md), seção 3.7):
 
-- `buscarCalibracao` (js/dados.js) lê o arquivo do próprio GitHub Pages, uma vez por dia, e guarda no cache local.
+- `buscarCalibracao` (js/dados.js) lê o arquivo do próprio site (Cloudflare Pages), uma vez por dia, e guarda no cache local.
 - `recalibrar` (js/app.js) é a **fonte única**: a partir das séries brutas, gera as séries calibradas que todas as telas usam. Nenhuma tela faz ajuste próprio, então primeira tela, gráficos, Semana, comparação de modelos e análise de pressão sempre mostram os mesmos números.
 - `calibrarPrevisao` (js/analise.js) corrige a temperatura (hora a hora quando aprovada, seção 4.6; senão interpolando entre a correção da mínima e a da máxima), a temperatura atual prevista, rajada, vento e chuva (seção 4.3), e refaz orvalho, umidade e sensação térmica com os valores corrigidos (seção 4.7).
 - `calibrarEnsemble` aplica o fator de rajada e a tabela de chuva aos cenários (ECMWF ENS com os do `ecmwf_ifs025`; MOGREPS-G com os do UKMO 10 km). Suposição, não testada: o erro de escala é do sistema (física e grade), e não de cada membro. O AIFS não tem rajada, e o AIFS ENS fica sem correção de chuva.

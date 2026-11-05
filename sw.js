@@ -1,11 +1,10 @@
 // Service worker simples: guarda só os arquivos do app para abrir sem internet.
 // Dados de previsão ficam no cache "painel-dados-v1", gravado pelo próprio app (dados públicos).
-// Funciona em qualquer endereço base (subpasta do GitHub Pages ou raiz do domínio no Cloudflare Pages): todos os
-// caminhos são relativos à pasta do próprio sw.js.
+// Todos os caminhos são relativos à pasta do próprio sw.js (o app funciona em qualquer endereço base).
 const VERSAO = 'painel-app-v1.9.0';
 const ARQUIVOS = [
   './', './index.html', './app.css', './manifest.json', './privacidade.html',
-  './js/app.js', './js/mudanca.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js',
+  './js/app.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js',
   './vendor/uplot/uPlot.iife.min.js', './vendor/uplot/uPlot.min.css',
   './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css',
   './vendor/fontes/archivo-latin-standard-normal.woff2', './vendor/fontes/archivo-latin-ext-standard-normal.woff2',
@@ -45,7 +44,7 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   // Rede primeiro para todos os arquivos do app (cada abertura já pega a versão publicada), sem usar o
-  // cache HTTP do servidor (10 min no GitHub Pages); o cache local só entra sem internet ou se a rede demorar 4 s.
+  // cache HTTP do servidor; o cache local só entra sem internet ou se a rede demorar 4 s.
   // Navegações: cada página tem a sua entrada (o app em index.html; a política de privacidade na dela),
   // seja qual for a URL pedida (raiz, ?parametros, #aba).
   const pagina = e.request.mode === 'navigate';

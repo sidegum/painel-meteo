@@ -1219,7 +1219,9 @@ function proximasHoras() {
   }
   // A faixa não tem rótulos por linha: a legenda é necessária para ler os números.
   const legenda = el('p', { class: 'legenda-horas' }, el('span', { class: 'p', text: 'chance' }), ' · ', el('span', { class: 'mm', text: 'chuva' }), ' · vento · ', el('span', { class: 'g', text: 'rajada' }), ' (km/h)');
-  return secao('Próximas horas', null, legenda, lista);
+  const sec = secao('Próximas horas', null, legenda, lista);
+  sec.classList.add('largura-total'); // no computador, a faixa de horas usa a largura toda
+  return sec;
 }
 
 // Sensação medida: a mesma fórmula da prevista (js/analise.js, sensacaoTermica). Vapor pela umidade ou,

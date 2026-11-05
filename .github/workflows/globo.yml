@@ -2,8 +2,7 @@ name: Dados do globo
 
 # Gera os campos globais da aba Globo (GFS 0,5°, mosaico infravermelho do GIBS, ciclones e elementos orbitais) e
 # publica tudo no branch "globo-dados", sempre com um único commit (sem histórico), para o repositório não crescer.
-# O app lê os arquivos em https://raw.githubusercontent.com/<repo>/globo-dados/ no GitHub Pages (CORS liberado, cache de
-# 5 min) e na pasta globo-dados/ do próprio site no Cloudflare Pages, publicada ao fim deste job.
+# O app lê os arquivos na pasta globo-dados/ do próprio site no Cloudflare Pages, publicada ao fim deste job.
 on:
   schedule:
     - cron: '25 */3 * * *'   # a cada 3 h (o GFS novo entra a cada 6 h; repositório privado: limite de 2.000 min/mês do Actions)

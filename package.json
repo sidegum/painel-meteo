@@ -2,7 +2,7 @@
   "name": "painel-meteo",
   "version": "1.0.0",
   "private": true,
-  "description": "Painel meteorológico pessoal: frontend estático (GitHub Pages) e Cloudflare Worker.",
+  "description": "Painel meteorológico pessoal: frontend estático (Cloudflare Pages) e Cloudflare Worker.",
   "type": "module",
   "scripts": {
     "test": "node --test test/analise.test.mjs test/ceu.test.mjs test/corpos.test.mjs test/calibracao.test.mjs worker/test/worker.test.mjs",

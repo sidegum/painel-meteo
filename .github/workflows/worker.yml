@@ -77,7 +77,7 @@ jobs:
           fi
           echo "url=https://painel-meteo.$sub.workers.dev" >> "$GITHUB_OUTPUT"
 
-      # Origens aceitas pelo CORS: as do wrangler.toml (GitHub Pages) mais o site do Cloudflare Pages, montadas a partir
+      # Origens aceitas pelo CORS: as do wrangler.toml mais o site do Cloudflare Pages, montadas a partir
       # das variáveis do repositório PAINEL_DOMINIO (ex.: tempo.seudominio.com.br) e PAGES_PROJETO (padrão tempo-rs).
       - name: Publicar
         if: steps.seg.outputs.ok == 'true'
@@ -100,7 +100,7 @@ jobs:
             fi
             origens="$origens,https://$dominio"
           else
-            echo "::notice::Variável PAINEL_DOMINIO vazia: o Worker aceita só o GitHub Pages e o endereço pages.dev."
+            echo "::notice::Variável PAINEL_DOMINIO vazia: o Worker aceita só o endereço pages.dev."
           fi
           echo "Origens aceitas: $origens"
           npx --yes wrangler@4 deploy --var "ALLOWED_ORIGIN:$origens"
@@ -121,7 +121,7 @@ jobs:
       - name: Conferir medições
         if: steps.seg.outputs.ok == 'true'
         run: |
-          curl -s -H "Origin: https://sidegum.github.io" "${{ steps.cf.outputs.url }}/v1/observacoes?lat=-29.68&lon=-51.05" -o /tmp/obs.json || true
+          curl -s -H "Origin: https://tempo-rs.pages.dev" "${{ steps.cf.outputs.url }}/v1/observacoes?lat=-29.68&lon=-51.05" -o /tmp/obs.json || true
           jq -c '.status' /tmp/obs.json || cat /tmp/obs.json
           jq -c '.fontes[] | select(.tipo == "inmet") | {id, modo, leituras26h: (.serie | length), primeira: (.serie[0].ms / 1000 | todate), ultima: (.serie[-1].ms / 1000 | todate), acumulados}' /tmp/obs.json || true
 
