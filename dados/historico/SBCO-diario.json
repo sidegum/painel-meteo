@@ -6,7 +6,7 @@
     "lat": -29.945,
     "lon": -51.144
   },
-  "atualizadoEm": "2026-11-04T20:19:23.724Z",
+  "atualizadoEm": "2026-11-05T01:45:50.108Z",
   "fontes": {
     "medicoes": "METAR SBCO Canoas, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
     "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
