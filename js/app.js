@@ -15,11 +15,11 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.8.2';
+const VERSAO = '1.8.3';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
-  local: null, aba: 'hoje',
+  local: null, aba: 'hoje', diaAberto: null,
   prev: null, prevEm: null, ens: null, ensEm: null, ensErros: [],
   obs: null, obsEm: null, alertas: null, alertasEm: null, enso: null, ensoEm: null, acerto: {}, acertoEm: null,
   // séries como vieram da Open-Meteo; estado.prev e estado.ens são as versões calibradas (recalibrar)
@@ -684,8 +684,8 @@ function renderTudo() {
   if (ds[1]) renderPrimeira($('#amanha-primeira'), ds[1], 1, false);
   // Detalhes de todas as abas depois da primeira tela, uma aba por vez em momentos ociosos:
   // tudo fica pronto antes de ser aberto, sem uma tarefa longa que trave toque e rolagem.
-  const tarefas = { hoje: renderHojeDetalhes, amanha: () => ds[1] && renderAmanhaDetalhes(ds[1]), semana: renderSemana, modelos: renderModelos, elnino: renderElNino };
-  filaRender.pendentes = new Map([estado.aba, 'hoje', 'amanha', 'semana', 'modelos', 'elnino'].filter((n) => tarefas[n]).map((n) => [n, tarefas[n]]));
+  const tarefas = { dia: estado.diaAberto ? renderDia : null, hoje: renderHojeDetalhes, amanha: () => ds[1] && renderAmanhaDetalhes(ds[1]), semana: renderSemana, modelos: renderModelos, elnino: renderElNino };
+  filaRender.pendentes = new Map([estado.aba, 'hoje', 'amanha', 'semana', 'modelos', 'elnino', 'dia'].filter((n) => tarefas[n]).map((n) => [n, tarefas[n]]));
   const geracao = ++filaRender.geracao;
   const passo = () => {
     if (geracao !== filaRender.geracao) return; // uma atualização mais nova assumiu a fila
@@ -733,9 +733,10 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const a = analisarDia(data, diaIndice, desdeAgora);
   const av = a.av;
   const dataMs = p.horas[a.idxTodo[0]] ?? Date.now();
-  const quando = diaIndice === 1
-    ? `Amanhã, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}`
-    : `Hoje, ${fmt.diaSemana(dataMs, p.offset)} ${fmt.dataCurta(dataMs, p.offset)}`;
+  const nomeDia = fmt.diaSemana(dataMs, p.offset);
+  const quando = diaIndice === 0 ? `Hoje, ${nomeDia} ${fmt.dataCurta(dataMs, p.offset)}`
+    : diaIndice === 1 ? `Amanhã, ${nomeDia} ${fmt.dataCurta(dataMs, p.offset)}`
+      : `${nomeDia[0].toUpperCase()}${nomeDia.slice(1)}, ${fmt.dataCurta(dataMs, p.offset)}`;
 
   // céu: hoje é o céu de agora (ao lado da temperatura de agora); amanhã, o resumo do dia pelos modelos
   const ceu = diaIndice === 0 ? ceuAgora() : ceuDoDia(a);
@@ -1639,10 +1640,12 @@ function estadoFontes() {
 
 // ------------------------------------------------------------------ Amanhã: detalhes
 
-function renderAmanhaDetalhes(data) {
-  const alvo = $('#amanha-detalhes');
+// Detalhes de um dia inteiro: Amanhã e qualquer dia aberto pela Semana (o mesmo painel; a imprecisão aparece na confiança).
+function renderAmanhaDetalhes(data) { renderDiaDetalhes($('#amanha-detalhes'), data, 1, 'amanha'); }
+
+function renderDiaDetalhes(alvo, data, diaIndice, id) {
   const p = estado.prev, mods = modelosAtivos();
-  const a = analisarDia(data, 1, false);
+  const a = analisarDia(data, diaIndice, false);
   const filhos = [];
   // períodos
   const per = { madrugada: [], 'manhã': [], tarde: [], noite: [] };
@@ -1672,7 +1675,7 @@ function renderAmanhaDetalhes(data) {
   filhos.push(secao('Confiança', null, el('ul', {}, ...(a.av.confianca.motivos.length ? a.av.confianca.motivos : ['modelos e cenários concordam']).map((m) => el('li', { text: m }))),
     el('button', { type: 'button', class: 'chip', onclick: () => explicarConfianca(a) }, 'Como a confiança é calculada')));
   alvo.replaceChildren(...filhos);
-  meteograma(met, p.horas[a.idxTodo[0]], p.horas[a.idxTodo[a.idxTodo.length - 1]], null, 'amanha');
+  meteograma(met, p.horas[a.idxTodo[0]], p.horas[a.idxTodo[a.idxTodo.length - 1]], null, id);
 }
 
 // Sem ensemble, a fração de modelos acima do limite é concordância, não probabilidade: isso precisa ficar dito.
@@ -1690,6 +1693,27 @@ function tabelaLimites(dias) {
   return el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', { class: 'mini-tab' }, el('thead', {}, cab), el('tbody', {}, ...linhas)));
 }
 
+// ------------------------------------------------------------------ Dia (aberto pela Semana)
+
+// Tocar num dia da Semana abre o painel completo dele. Hoje e Amanhã vão para as próprias abas.
+function abrirDia(data) {
+  const k = datas().indexOf(data);
+  if (k === 0) return irPara('hoje');
+  if (k === 1) return irPara('amanha');
+  if (k < 0) return irPara('semana');
+  estado.diaAberto = data;
+  renderDia();
+  irPara('dia');
+}
+
+function renderDia() {
+  const k = datas().indexOf(estado.diaAberto);
+  if (k < 2) { estado.diaAberto = null; if (estado.aba === 'dia') irPara('semana'); return; } // o dia passou
+  limparGraficos($('#aba-dia')); // o dia anterior sai da memória antes de desenhar o novo
+  renderPrimeira($('#dia-primeira'), estado.diaAberto, k, false);
+  renderDiaDetalhes($('#dia-detalhes'), estado.diaAberto, k, 'dia');
+}
+
 // ------------------------------------------------------------------ Semana
 
 function renderSemana() {
@@ -1703,7 +1727,7 @@ function renderSemana() {
   const item = (a, longe) => {
     const ms = p.horas[a.idxTodo[0]];
     const agoraHoje = a.diaIndice === 0 && chovendoAgora;
-    const cab = el('div', { class: 'cab' },
+    const cab = el('button', { type: 'button', class: 'cab', onclick: () => abrirDia(a.data) },
       el('span', { class: 'dn' }, a.diaIndice === 0 ? 'Hoje' : fmt.diaSemana(ms, p.offset), el('small', { text: fmt.dataCurta(ms, p.offset) })),
       el('span', { class: 'resumo', text: agoraHoje ? 'Chovendo agora' : a.frase }),
       el('span', { class: 'nums' },
@@ -2078,7 +2102,7 @@ function comparacaoHistorica(oni) {
 
 // ------------------------------------------------------------------ navegação e gestos
 
-const ABAS = ['hoje', 'amanha', 'semana', 'avisos', 'globo', 'elnino', 'modelos'];
+const ABAS = ['hoje', 'amanha', 'semana', 'dia', 'avisos', 'globo', 'elnino', 'modelos'];
 const ABAS_MAIS = ['avisos', 'globo', 'elnino', 'modelos']; // fora da barra, no menu "Ver mais"
 function irPara(aba, rolarTopo = true, direcao = 0) {
   if (!ABAS.includes(aba)) return;
@@ -2087,7 +2111,7 @@ function irPara(aba, rolarTopo = true, direcao = 0) {
   for (const s of document.querySelectorAll('.aba')) s.hidden = s.dataset.aba !== aba;
   if (aba !== 'hoje') $('#agora').classList.remove('oculto'); else observarAgora();
   document.querySelectorAll('.nav button, .mais-item').forEach((b) => {
-    const atual = b.dataset.ir ? b.dataset.ir === aba : ABAS_MAIS.includes(aba); // botão "Ver mais" fica marcado nas abas do menu
+    const atual = b.dataset.ir ? b.dataset.ir === (aba === 'dia' ? 'semana' : aba) : ABAS_MAIS.includes(aba); // dia aberto marca Semana; abas do menu marcam "Ver mais"
     if (atual) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   if (rolarTopo) window.scrollTo({ top: 0, behavior: 'instant' });
@@ -2123,6 +2147,7 @@ function configurarNavegacao() {
   const mais = $('#dlg-mais');
   $('#btn-mais').addEventListener('click', () => mais.showModal());
   for (const b of document.querySelectorAll('[data-voltar-mais]')) b.addEventListener('click', () => mais.showModal()); // caminho de volta das telas do menu
+  $('[data-voltar-semana]').addEventListener('click', () => irPara('semana'));
   for (const b of mais.querySelectorAll('.mais-item')) b.addEventListener('click', () => { mais.close(); irPara(b.dataset.ir); });
   // Deslizar entre Hoje, Amanhã e Semana. Para não trocar de aba sem querer, o gesto só vale quando:
   // é um único dedo, rápido (até 450 ms), claramente horizontal (80 px ou mais, e 3 vezes mais que o vertical),
@@ -2150,6 +2175,12 @@ function configurarNavegacao() {
     const dx = t.clientX - ini.x, dy = t.clientY - ini.y, dt = performance.now() - ini.t, rolou = Math.abs(window.scrollY - ini.sy) > 4;
     ini = null;
     if (rolou || dt > 450 || Math.abs(dx) < 80 || Math.abs(dx) < 3 * Math.abs(dy)) return;
+    if (estado.aba === 'dia') { // no dia aberto, deslizar passa para o dia seguinte ou anterior
+      const ds = datas(), j = ds.indexOf(estado.diaAberto) + (dx < 0 ? 1 : -1);
+      if (j >= 2 && j < ds.length) { estado.diaAberto = ds[j]; renderDia(); irPara('dia', true, dx < 0 ? 1 : -1); return; }
+      if (j === 1) { irPara('amanha', true, -1); return; }
+      return;
+    }
     const trio = ['hoje', 'amanha', 'semana'];
     const k = trio.indexOf(estado.aba);
     if (k < 0) return;
