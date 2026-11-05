@@ -118,6 +118,13 @@ test('leituras inválidas e 9999 são descartadas', () => {
   assert.equal(s.temperatura, null); assert.equal(s.umidade, null); assert.equal(s.chuva, null); assert.equal(s.vento, null);
 });
 
+test('sem altitude da estação a pressão ao nível do mar fica nula (nunca a pressão da estação)', () => {
+  const j = JSON.parse(fx('inmet-proxima-4303905.json'));
+  const s = normalizarInmet({ id: 'A884', nome: 'CAMPO BOM', lat: -29.674, lon: -51.064, alt: null }, [j.dados]).serie[0];
+  assert.ok(s.pressaoEstacao > 900);
+  assert.equal(s.pressao, null);
+});
+
 test('acumulados exigem horas completas', () => {
   const agora = Date.UTC(2026, 10, 3, 12);
   const serie = Array.from({ length: 24 }, (_, k) => ({ ms: agora - k * 3600000, chuva: k === 5 ? null : 1 }));

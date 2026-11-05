@@ -25,7 +25,7 @@ export class ErroFonte extends Error {
 
 // Uma nova tentativa em falha de rede ou tempo esgotado (comum no celular trocando de rede).
 // Limite de uso (429) e erro do servidor não são repetidos: respeitam a espera.
-async function buscarJson(fonte, url, opcoes = {}) {
+export async function buscarJson(fonte, url, opcoes = {}) {
   try { return await buscarJsonUmaVez(fonte, url, opcoes); }
   catch (e) {
     if (!(e instanceof ErroFonte) || !['rede', 'tempo'].includes(e.tipo)) throw e;
@@ -355,15 +355,7 @@ export async function buscarChuvaRadar(lat, lon) {
   const q = r.quadros[r.quadros.length - 1];
   const t = pixelDoPonto(arredondaCoord(lat), arredondaCoord(lon));
   const url = `${r.host}${q.path}/256/${t.z}/${t.x}/${t.y}/2/0_0.png`;
-  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 10000);
-  let blob;
-  try {
-    const resp = await fetch(url, { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
-    if (!resp.ok) throw new ErroFonte('rainviewer', 'http', `erro ${resp.status}`);
-    blob = await resp.blob();
-  } catch (e) { throw e instanceof ErroFonte ? e : new ErroFonte('rainviewer', 'rede', 'falha ao ler o radar'); }
-  finally { clearTimeout(to); }
-  const img = await createImageBitmap(blob);
+  const img = await tileRadar(url);
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(256, 256) : Object.assign(document.createElement('canvas'), { width: 256, height: 256 });
   const c = cv.getContext('2d'); c.drawImage(img, 0, 0);
   const x0 = Math.max(0, t.px - 2), y0 = Math.max(0, t.py - 2);

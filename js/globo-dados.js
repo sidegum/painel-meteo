@@ -5,7 +5,7 @@
 // PNG RGB em que cada canal guarda um inteiro de 0 a 255 que volta ao valor físico pela faixa [min, max] do manifest.
 // O dado de um ponto tocado vem direto da Open-Meteo (CORS liberado, testado em 2026-11-03).
 import { CONFIG } from './config.js';
-import { ErroFonte, salvarCache, lerCache } from './dados.js';
+import { ErroFonte, buscarJson, salvarCache, lerCache } from './dados.js';
 import { arredondaCoord, valido } from './analise.js';
 
 const BASE = CONFIG.globoDados;
@@ -76,7 +76,15 @@ async function fetchComTempo(url, timeout = 20000) {
 
 // ---------- campos em PNG ----------
 
-const campos = new Map(); // url -> Promise<Campo>
+const campos = new Map(); // url -> Promise<Campo>, na ordem de uso
+const MAX_CAMPOS = 14; // cada campo guarda cerca de 1 MB de pixels mais a imagem: limita a memória ao animar a linha do tempo
+
+/** Memoriza um campo e descarta os usados há mais tempo (o mais recente sempre fica). */
+function memorizarCampo(url, promessa) {
+  campos.delete(url); campos.set(url, promessa);
+  for (const k of campos.keys()) { if (campos.size <= MAX_CAMPOS) break; campos.get(k).then((c) => c.imagem?.close?.(), () => {}); campos.delete(k); }
+  return promessa;
+}
 
 /**
  * Um campo global decodificado: pixels RGB (Uint8ClampedArray) mais a imagem para virar textura.
@@ -93,18 +101,16 @@ const campos = new Map(); // url -> Promise<Campo>
 export function buscarCampo(manifest, tipo, hora) {
   if (!manifest?.gfs?.horas?.includes(hora)) return Promise.reject(new ErroFonte(FONTE, 'formato', `hora +${hora} não publicada`));
   const url = BASE + manifest.gfs.arquivos[tipo].replace('{h}', String(hora).padStart(2, '0')) + '?r=' + encodeURIComponent(manifest.gfs.rodada);
-  if (!campos.has(url)) {
-    campos.set(url, lerImagemCampo(url, manifest.grade.largura, manifest.grade.altura).then((c) => ({ ...c, canais: manifest.canais[tipo] })).catch((e) => { campos.delete(url); throw e; }));
-  }
-  return campos.get(url);
+  if (campos.has(url)) return memorizarCampo(url, campos.get(url));
+  return memorizarCampo(url, lerImagemCampo(url, manifest.grade.largura, manifest.grade.altura).then((c) => ({ ...c, canais: manifest.canais[tipo] })).catch((e) => { campos.delete(url); throw e; }));
 }
 
 /** Mosaico infravermelho dos satélites (R = brilho, G = 255 onde há cobertura), 2048 x 1024. */
 export function buscarSatelite(manifest) {
   if (!manifest?.satelite) return Promise.reject(new ErroFonte(FONTE, 'formato', 'sem imagem de satélite'));
   const url = BASE + manifest.satelite.arquivo + '?t=' + encodeURIComponent(manifest.satelite.instante);
-  if (!campos.has(url)) campos.set(url, lerImagemCampo(url, manifest.satelite.largura, manifest.satelite.altura).catch((e) => { campos.delete(url); throw e; }));
-  return campos.get(url);
+  if (campos.has(url)) return memorizarCampo(url, campos.get(url));
+  return memorizarCampo(url, lerImagemCampo(url, manifest.satelite.largura, manifest.satelite.altura).catch((e) => { campos.delete(url); throw e; }));
 }
 
 async function lerImagemCampo(url, largura, altura) {
@@ -176,8 +182,8 @@ export function lerPontoGfs({ vento, campo, nuvens }, lat, lon) {
   }
   if (campo) { r.temp = amostrar(campo, 0, lat, lon); r.pressao = amostrar(campo, 1, lat, lon); r.chuvaMmH = amostrar(campo, 2, lat, lon); }
   if (nuvens) {
-    const b = amostrar(nuvens, 0, lat, lon) / 100, m = amostrar(nuvens, 1, lat, lon) / 100, a = amostrar(nuvens, 2, lat, lon) / 100;
-    r.nuvens = Math.round((1 - (1 - b) * (1 - m) * (1 - a)) * 100); // cobertura total por sobreposição aleatória
+    const b = amostrar(nuvens, 0, lat, lon), m = amostrar(nuvens, 1, lat, lon), a = amostrar(nuvens, 2, lat, lon);
+    if (valido(b) && valido(m) && valido(a)) r.nuvens = Math.round((1 - (1 - b / 100) * (1 - m / 100) * (1 - a / 100)) * 100); // cobertura total por sobreposição aleatória
   }
   return r;
 }
@@ -202,9 +208,8 @@ export async function buscarPonto(lat, lon) {
     current: VARS_ATUAL.join(','), hourly: VARS_HORA.join(','), forecast_days: '2', timeformat: 'unixtime',
     wind_speed_unit: 'kmh', precipitation_unit: 'mm', temperature_unit: 'celsius',
   });
-  const r = await fetchComTempo('https://api.open-meteo.com/v1/forecast?' + p, 15000);
-  const j = await r.json();
-  if (j?.error) throw new ErroFonte('open-meteo', 'api', String(j.reason || 'erro').slice(0, 120));
+  // Mesma rota das previsões do painel: respeita a espera após limite de uso (429) da Open-Meteo e trata o formato.
+  const j = await buscarJson('open-meteo', 'https://api.open-meteo.com/v1/forecast?' + p, { timeout: 15000, maxBytes: 1e6 });
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   const atual = {};
   for (const k of VARS_ATUAL) atual[k] = num(j?.current?.[k]);

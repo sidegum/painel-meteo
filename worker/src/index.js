@@ -222,11 +222,11 @@ export function normalizarInmet(est, linhas) {
     const ms = Date.parse(`${d}T${h.slice(0, 2)}:${h.slice(2)}:00Z`); // INMET publica em UTC
     const temp = faixa(num(l.TEM_INS), -30, 50);
     const pEst = faixa(num(l.PRE_INS), 700, 1085);
-    const alt = num(est.alt) ?? 0;
+    const alt = num(est.alt); // sem a altitude não há como reduzir ao nível do mar: pressao fica nula (nunca a da estação)
     serie.push({
       ms, temperatura: temp, umidade: faixa(num(l.UMD_INS), 0, 100), orvalho: faixa(num(l.PTO_INS), -40, 40),
       pressaoEstacao: pEst,
-      pressao: pEst !== null && temp !== null ? Math.round(10 * pEst * Math.pow(1 - (0.0065 * alt) / (temp + 0.0065 * alt + 273.15), -5.257)) / 10 : null,
+      pressao: pEst !== null && temp !== null && alt !== null ? Math.round(10 * pEst * Math.pow(1 - (0.0065 * alt) / (temp + 0.0065 * alt + 273.15), -5.257)) / 10 : null,
       vento: faixa(num(l.VEN_VEL), 0, 100) !== null ? Math.round(num(l.VEN_VEL) * ms2kmh) : null,
       rajada: faixa(num(l.VEN_RAJ), 0, 120) !== null ? Math.round(num(l.VEN_RAJ) * ms2kmh) : null,
       direcao: faixa(num(l.VEN_DIR), 0, 360), chuva: faixa(num(l.CHUVA), 0, 200),
@@ -539,17 +539,19 @@ export async function atualizarEnso(env) {
   const base = 'https://www.cpc.ncep.noaa.gov';
   const iri = 'https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/';
   const t = (u, o) => buscarExterno(u, { tipo: 'texto', timeoutMs: 12000, maxBytes: 2_500_000, ...o });
-  const partes = {
-    relativoSemanal: await tentar(async () => parseSemanal(await t(`${base}/data/indices/rel_wksst9120.txt`)).slice(-260)),
-    convencionalSemanal: await tentar(async () => parseSemanal(await t(`${base}/data/indices/wksst9120.for`)).slice(-260)),
-    convencionalMensal: await tentar(async () => parseMensal(await t(`${base}/data/indices/sstoi.indices`))),
-    oni: await tentar(async () => parseOni(await t(`${base}/data/indices/oni.ascii.txt`))),
-    roni: await tentar(async () => parseOni(await t(`${base}/data/indices/RONI.ascii.txt`))),
-    discussao: await tentar(async () => parseDiscussao(await t(`${base}/products/analysis_monitoring/enso_advisory/ensodisc.shtml`))),
-    probCpc: await tentar(async () => parseProbabilidades(await t(`${base}/products/analysis_monitoring/enso/roni/probabilities/`))),
-    forcaCpc: await tentar(async () => parseForcas(await t(`${base}/products/analysis_monitoring/enso/roni/strengths/`))),
-    iri: await tentar(async () => parseIri(await t(iri))),
+  // As nove fontes são independentes: buscadas em paralelo, o total fica limitado à mais lenta (12 s), não à soma.
+  const tarefas = {
+    relativoSemanal: tentar(async () => parseSemanal(await t(`${base}/data/indices/rel_wksst9120.txt`)).slice(-260)),
+    convencionalSemanal: tentar(async () => parseSemanal(await t(`${base}/data/indices/wksst9120.for`)).slice(-260)),
+    convencionalMensal: tentar(async () => parseMensal(await t(`${base}/data/indices/sstoi.indices`))),
+    oni: tentar(async () => parseOni(await t(`${base}/data/indices/oni.ascii.txt`))),
+    roni: tentar(async () => parseOni(await t(`${base}/data/indices/RONI.ascii.txt`))),
+    discussao: tentar(async () => parseDiscussao(await t(`${base}/products/analysis_monitoring/enso_advisory/ensodisc.shtml`))),
+    probCpc: tentar(async () => parseProbabilidades(await t(`${base}/products/analysis_monitoring/enso/roni/probabilities/`))),
+    forcaCpc: tentar(async () => parseForcas(await t(`${base}/products/analysis_monitoring/enso/roni/strengths/`))),
+    iri: tentar(async () => parseIri(await t(iri))),
   };
+  const partes = Object.fromEntries(await Promise.all(Object.entries(tarefas).map(async ([k, p]) => [k, await p])));
   const anterior = env.KV ? await env.KV.get('enso:ultimo', 'json') : null;
   const final = { verificadoEm: Date.now(), partes: {} };
   for (const [k, v] of Object.entries(partes)) {
