@@ -4,15 +4,19 @@ O app vai para o Cloudflare Pages pelo GitHub Actions, sem passo de compilação
 
 O nome do subdomínio fica num lugar só: a variável `PAINEL_DOMINIO` do repositório. Nos exemplos, ele aparece como `tempo.seudominio.com.br`.
 
+## Situação em 05/11/2026
+
+O projeto `painel-meteo` já foi criado e publicado pelo workflow (o token atual já tinha a permissão do Pages). O site está em `https://painel-meteo.pages.dev/`. Falta só o subdomínio: passos 2, 4, 5 e 6.
+
 ## O que você faz (uma vez só)
 
-**1. Dar ao token a permissão do Pages.** O token que já publica o Worker precisa de mais uma permissão. No painel da Cloudflare, abra a página **API Tokens** (em **My Profile > API Tokens**), edite o token e acrescente **Account > Cloudflare Pages > Edit**. Se preferir criar um token novo, inclua as permissões antigas e troque o segredo `CLOUDFLARE_API_TOKEN` no GitHub.
+**1. Dar ao token a permissão do Pages (já feito).** O token que já publica o Worker precisa de mais uma permissão. No painel da Cloudflare, abra a página **API Tokens** (em **My Profile > API Tokens**), edite o token e acrescente **Account > Cloudflare Pages > Edit**. Se preferir criar um token novo, inclua as permissões antigas e troque o segredo `CLOUDFLARE_API_TOKEN` no GitHub.
 
 **2. Informar o subdomínio ao GitHub.** No repositório, vá em **Settings > Secrets and variables > Actions > aba Variables > New repository variable**.
 - `PAINEL_DOMINIO` = `tempo.seudominio.com.br` (só o nome, sem `https://`).
 - `PAGES_PROJETO` é opcional. O padrão é `painel-meteo`, e o endereço fica `painel-meteo.pages.dev`.
 
-**3. Fazer a primeira publicação.** Em **Actions > Publicar no Cloudflare Pages > Run workflow**. Na primeira vez, o workflow cria o projeto no Pages. O endereço `*.pages.dev` aparece no fim do log e em **Workers & Pages** no painel da Cloudflare.
+**3. Fazer a primeira publicação (já feito).** Em **Actions > Publicar no Cloudflare Pages > Run workflow**. Na primeira vez, o workflow cria o projeto no Pages. O endereço `*.pages.dev` aparece no fim do log e em **Workers & Pages** no painel da Cloudflare.
 
 **4. Apontar o subdomínio.** No painel da Cloudflare, vá em **Workers & Pages >** projeto **painel-meteo > Custom domains > Set up a domain**. Digite `tempo.seudominio.com.br`, toque em **Continue** e confirme o registro DNS na tela seguinte. Como o domínio já está na Cloudflare, o registro CNAME é criado sozinho. Não crie esse CNAME à mão antes: segundo a documentação, isso dá erro 522. O certificado HTTPS leva de alguns minutos a algumas horas.
 
