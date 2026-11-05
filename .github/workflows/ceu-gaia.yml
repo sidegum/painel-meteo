@@ -1,8 +1,8 @@
 name: Céu do Gaia
 
 # Gera vendor/ceu/estrelas-gaia.bin (estrelas do Gaia DR3 fora do Hipparcos, com distâncias de Bailer-Jones) pelo
-# serviço TAP do Gaia Archive e grava no próprio branch em que rodou. Roda sob demanda ou quando o script muda: o
-# catálogo é fixo.
+# serviço TAP do Gaia Archive e grava no próprio branch em que rodou. Só sob demanda (sem gatilho de push, para não
+# gravar em branches de outras mudanças): o catálogo é fixo.
 on:
   workflow_dispatch:
     inputs:
@@ -10,10 +10,6 @@ on:
         description: 'Magnitude G máxima'
         required: false
         default: '10.5'
-  push:
-    paths:
-      - 'scripts/globo/montar-ceu-gaia.py'
-      - '.github/workflows/ceu-gaia.yml'
 
 permissions:
   contents: write

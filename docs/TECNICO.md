@@ -670,6 +670,26 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra, filtros e o sistema solar navegável (planetas, luas, corpos menores, cinturões reais e sondas) |
 | `globo-sondas.js` | fichas das missões e interpolação de Hermite dos vetores do JPL Horizons |
 | `globo-texturas.js` | texturas procedurais dos astros |
+| `globo-galaxia.js` | escala de galáxias (1.9.0): cena própria em kpc, Via Láctea vista de fora, estrelas reais em volta do Sol, galáxias do NGC/IC e aglomerados de galáxias, cartões e "Salvar imagem" |
+
+Escala de galáxias (1.9.0, `globo-galaxia.js`): botão "Via Láctea" no Sistema solar. Cena e câmera próprias em kpc,
+galactocêntricas (X = Yg, Y = Zg para o polo norte galáctico, Z = Xg; Sol em (0; 0,0208; −8,15)); direções J2000 viram
+galácticas pela matriz do Hipparcos. `globo.js` só repassa: `posicionarCamera`, `definirDist` (de 0,002 a 1,2 milhão
+de kpc), toques e o render do laço vão para o módulo enquanto `G.galaxia` existe; a órbita usa o mesmo `G.cam`.
+- Via Láctea: modelo de `scripts/globo/montar-via-lactea.py` (determinístico, semente fixa): braços de Reid et al. 2019
+  (tabela 2, espirais logarítmicas com dobra; trechos fora da faixa medida extrapolados e ditos assim no cartão), barra
+  de Wegg et al. 2015, disco de Bland-Hawthorn & Gerhard 2016, poeira no lado côncavo dos braços. Saídas: imagem de frente
+  (`via-lactea-4096.jpg` no computador e ao salvar; `via-lactea-2048.jpg` no celular) e 200 mil partículas 3D com
+  espessura do disco (`via-lactea.bin`, formato em `via-lactea.json`) mais 30 mil de poeira. A imagem some quando a
+  Galáxia fica de lado (`face`) e as partículas tomam o lugar.
+- Perto do Sol (até ~3 kpc) entram as estrelas do céu (HYG e Gaia DR3) na distância medida, e o modelo se apaga.
+- Galáxias do OpenNGC com distância (diâmetro real pelo tamanho aparente), aglomerados de Virgem e Fornax (distâncias
+  medidas) e de Centauro, Hidra, Norma, Perseu e Coma (desvio para o vermelho, H0 = 70).
+- `salvarImagem`: renderiza a vista com o lado maior em até 4.096 px (ou o limite da GPU), desenha nomes, escala e
+  créditos num canvas 2D e entrega PNG (folha de compartilhar no celular, download no computador).
+
+Tempo na Terra (1.9.0): um botão com o instante ("Agora · 19:03" ou "sex 00h · previsão"); ao tocar, abre a linha do
+tempo (faixa com os dias e botão de animar). Fora de agora, "Agora" volta ao tempo real.
 
 Iluminação da Terra (1.8.1): sempre a real, sem camada própria. Terminador entre o Sol 3° acima e 3° abaixo do
 horizonte, faixa quente estreita no nascer e no pôr, luzes das cidades acesas até o fim do crepúsculo civil (−6°) e

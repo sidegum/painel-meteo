@@ -160,9 +160,45 @@ async function estacoesDoCeu() {
 function prepararEspacoAntes() {
   const ir = () => {
     if (!G.espacoModulo) G.espacoModulo = import('./globo-espaco.js').catch(() => null);
-    G.espacoModulo.then((m) => { if (m) { G.espaco = m; m.prepararEspaco(G, THREE); } });
+    G.espacoModulo.then((m) => { if (m) { G.espaco = m; m.prepararEspaco(G, THREE).then?.(prepararGalaxiaAntes); } });
   };
   if (window.requestIdleCallback) requestIdleCallback(ir, { timeout: 2500 }); else setTimeout(ir, 600);
+}
+
+/** Escala de galáxias: módulo e dados (imagem do modelo, partículas, catálogos) preparados depois do sistema solar, sem pressa. */
+function prepararGalaxiaAntes() {
+  const ir = () => {
+    if (!G.galaxiaModulo) G.galaxiaModulo = import('./globo-galaxia.js').catch(() => null);
+    G.galaxiaModulo.then((m) => m?.prepararGalaxia(G, THREE).catch(() => { G.galaxiaModulo = null; }));
+  };
+  if (window.requestIdleCallback) requestIdleCallback(ir, { timeout: 4000 }); else setTimeout(ir, 1500);
+}
+
+/** Abre a Via Láctea vista de fora a partir do sistema solar (sai da navegação livre; a órbita da câmera passa a ser em kpc). */
+async function abrirGalaxia() {
+  if (!G.galaxiaModulo) G.galaxiaModulo = import('./globo-galaxia.js').catch(() => null);
+  const m = await G.galaxiaModulo;
+  if (!m || !G.sistema) return;
+  mostrarAviso('Preparando a Via Láctea…', false);
+  try { await m.prepararGalaxia(G, THREE); } catch (e) { G.galaxiaModulo = null; mostrarAviso(`Não foi possível carregar a Via Láctea (${e.message}).`, false); return; }
+  esconderAviso();
+  if (G.livre) navegacaoLivre(false);
+  fecharPainel();
+  G.camAntesGalaxia = { ...G.cam, foco: G.foco.clone() };
+  G.animFoco = null; G.animCam = null;
+  G.galaxia = m;
+  G.dom.raiz.classList.add('com-galaxia');
+  m.abrirGalaxia();
+}
+
+function fecharGalaxia() {
+  if (!G.galaxia) return;
+  G.galaxia.fecharGalaxia();
+  G.galaxia = null;
+  G.dom.raiz.classList.remove('com-galaxia');
+  fecharPainel();
+  const a = G.camAntesGalaxia;
+  if (a) { G.cam.lat = a.lat; G.cam.lon = a.lon; G.cam.dist = a.dist; G.cam.vLat = G.cam.vLon = 0; G.foco.copy(a.foco); }
 }
 
 /** Lê o manifest do branch globo-dados e carrega a hora mais próxima de agora. */
@@ -483,6 +519,7 @@ function instanteMostrado() {
 
 function posicionarCamera() {
   const c = G.cam;
+  if (G.galaxia) { G.galaxia.posicionar(c); return; } // escala de galáxias: cena e câmera próprias, em kpc
   if (G.livre) { // navegação livre: câmera solta no espaço, apontada por guinada e arfagem
     const L = G.livre;
     const near = Math.max(1e-6, Math.min(0.05, L.escala * 0.1)), far = Math.max(200, Math.min(1e5, L.pos.length() * 3));
@@ -582,7 +619,7 @@ function configurarGestos() {
     if (ponteiros.size > 0) { ancorar(); historico = []; return; } // de dois dedos para um: recomeça a âncora sem pular
     if (G.revelou) { G.revelou = false; toque = null; } // só trouxe os controles de volta
     if (toque && toque.moveu < 8 && agora - toque.t < 400 && e.type === 'pointerup') {
-      if (agora - ultimoToque < 320) { if (G.livre) irLivre(e.clientX, e.clientY); else if (G.sistema) G.espaco?.focarNoToque(e.clientX, e.clientY); else aproximar(e.clientX, e.clientY); ultimoToque = 0; }
+      if (agora - ultimoToque < 320) { if (G.galaxia) G.galaxia.focarNoToque(e.clientX, e.clientY); else if (G.livre) irLivre(e.clientX, e.clientY); else if (G.sistema) G.espaco?.focarNoToque(e.clientX, e.clientY); else aproximar(e.clientX, e.clientY); ultimoToque = 0; }
       else { ultimoToque = agora; tocarPonto(e.clientX, e.clientY); }
     } else if (historico.length >= 2 && agora - historico[historico.length - 1].t < 60) {
       const a = historico[0], b = historico[historico.length - 1], dt = Math.max(16, b.t - a.t);
@@ -648,7 +685,9 @@ function distanciaQueCabe() {
   return Math.min(DIST.max, 1 / Math.sin(Math.min(fovV, fovH) / 2 * 0.86));
 }
 
-function definirDist(d) { G.cam.dist = G.sistema ? Math.max(G.focoDistMin || 0.3, Math.min(40, d)) : Math.max(DIST.min, Math.min(DIST.max, d)); } // no sistema solar, de rente ao corpo em foco até além das Voyager
+function definirDist(d) {
+  if (G.galaxia) { const [min, max] = G.galaxia.limitesDistancia(); G.cam.dist = Math.max(min, Math.min(max, d)); return; }
+  G.cam.dist = G.sistema ? Math.max(G.focoDistMin || 0.3, Math.min(40, d)) : Math.max(DIST.min, Math.min(DIST.max, d)); } // no sistema solar, de rente ao corpo em foco até além das Voyager
 
 /**
  * Sistema solar: leva o foco da câmera até um corpo e passa a segui-lo (ele se move com o tempo).
@@ -849,8 +888,36 @@ function montarLinhaDoTempo() {
   const r = G.dom.faixa;
   r.min = '0'; r.max = String(horas.length - 1); r.step = '1'; r.value = String(horas.indexOf(G.hora));
   r.disabled = false;
-  G.dom.linha.hidden = false;
+  G.dom.rotuloHora.hidden = false;
+  // nomes dos dias sob a faixa, onde cada dia começa
+  const off = -new Date().getTimezoneOffset() * 60, hoje = partesLocais(Date.now(), off);
+  const base = Date.parse(G.manifest.gfs.rodada);
+  let ultimo = null;
+  G.dom.dias.replaceChildren(...horas.flatMap((h, i) => {
+    const p = partesLocais(base + h * 3600000, off), chave = `${p.ano}-${p.mes}-${p.dia}`;
+    if (chave === ultimo) return [];
+    ultimo = chave;
+    const dif = Math.round((Date.UTC(p.ano, p.mes - 1, p.dia) - Date.UTC(hoje.ano, hoje.mes - 1, hoje.dia)) / 86400000);
+    const nome = dif === 0 ? 'hoje' : dif === 1 ? 'amanhã' : ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][p.semana];
+    return [el('span', { text: nome, style: { left: `${(i / Math.max(1, horas.length - 1) * 100).toFixed(2)}%` } })];
+  }));
   atualizarRotuloHora();
+}
+
+/** Abre ou fecha a linha do tempo da previsão (o botão do instante continua sempre à vista). */
+function alternarPainelTempo() {
+  const abrir = G.dom.linha.hidden;
+  G.dom.linha.hidden = !abrir;
+  G.dom.rotuloHora.setAttribute('aria-expanded', String(abrir));
+  if (!abrir) pararLinhaDoTempo();
+}
+
+/** Ícone do botão de animar: triângulo (tocar) ou duas barras (pausar). */
+function desenharTocar(tocando) {
+  const b = G.dom.tocar;
+  b.replaceChildren(svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: tocando ? 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z' : 'M8 5.5v13l10.5-6.5z', class: 'cheio' })));
+  b.setAttribute('aria-pressed', String(tocando));
+  b.setAttribute('aria-label', tocando ? 'Pausar a animação' : 'Animar a previsão');
 }
 
 function atualizarRotuloHora() {
@@ -858,8 +925,12 @@ function atualizarRotuloHora() {
   const ms = instanteMostrado();
   const p = partesLocais(ms, off);
   const dia = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][p.semana];
-  G.dom.rotuloHora.textContent = G.hora === G.horaAgora ? 'Agora' : `${dia} ${String(p.hora).padStart(2, '0')}h`;
-  G.dom.faixa.setAttribute('aria-valuetext', G.dom.rotuloHora.textContent);
+  const agora = G.hora === G.horaAgora;
+  G.rotuloHora = agora ? 'agora' : `${dia} ${String(p.hora).padStart(2, '0')}h`;
+  G.dom.rotuloHora.classList.toggle('previsao', !agora);
+  G.dom.voltarAgora.hidden = agora;
+  atualizarRelogio();
+  G.dom.faixa.setAttribute('aria-valuetext', agora ? 'Agora' : G.rotuloHora);
   if (G.manifest?.gfs?.horas) G.dom.faixa.value = String(G.manifest.gfs.horas.indexOf(G.hora));
 }
 
@@ -867,7 +938,7 @@ function alternarLinhaDoTempo() {
   if (G.tempoLinha.tocando) { pararLinhaDoTempo(); return; }
   G.tempoLinha.tocando = true;
   const serie = (G.tempoLinha.serie = (G.tempoLinha.serie || 0) + 1); // identifica esta animação: pausar e animar de novo não duplica o passo
-  G.dom.tocar.textContent = 'Pausar'; G.dom.tocar.setAttribute('aria-pressed', 'true');
+  desenharTocar(true);
   const passo = async () => {
     if (!G.tempoLinha.tocando || G.tempoLinha.serie !== serie) return;
     const horas = G.manifest.gfs.horas;
@@ -880,7 +951,7 @@ function alternarLinhaDoTempo() {
 }
 function pararLinhaDoTempo() {
   G.tempoLinha.tocando = false; clearTimeout(G.tempoLinha.timer);
-  if (G.dom) { G.dom.tocar.textContent = 'Animar'; G.dom.tocar.setAttribute('aria-pressed', 'false'); }
+  if (G.dom) desenharTocar(false);
 }
 
 // ------------------------------------------------------------------ 7. partículas de vento
@@ -985,9 +1056,13 @@ function montarDom(secao) {
   const ciclones = el('p', { class: 'globo-ciclones' });
   const faixa = el('input', { type: 'range', class: 'globo-faixa', min: '0', max: '0', value: '0', disabled: true, 'aria-label': 'Hora da previsão' });
   faixa.addEventListener('input', () => { pararLinhaDoTempo(); definirHora(G.manifest.gfs.horas[Number(faixa.value)]); });
-  const rotuloHora = el('span', { class: 'globo-hora', text: 'Agora' });
-  const tocar = el('button', { type: 'button', class: 'globo-tocar', text: 'Animar', 'aria-pressed': 'false', onclick: alternarLinhaDoTempo });
-  const linha = el('div', { class: 'globo-linha', hidden: true }, rotuloHora, faixa, tocar);
+  // Tempo: um botão só com o instante mostrado ("Agora · 19:21"); ao tocar, abre a linha do tempo da previsão (arrastar e
+  // animar). Fora de "agora", um botão "Agora" ao lado volta para o tempo real.
+  const rotuloHora = el('button', { type: 'button', class: 'globo-instante', hidden: true, 'aria-expanded': 'false', 'aria-label': 'Escolher a hora da previsão', onclick: alternarPainelTempo });
+  const voltarAgora = el('button', { type: 'button', class: 'globo-agora', text: 'Agora', hidden: true, 'aria-label': 'Voltar para agora', onclick: () => { pararLinhaDoTempo(); definirHora(G.horaAgora); } });
+  const tocar = el('button', { type: 'button', class: 'globo-tocar', 'aria-label': 'Animar a previsão', 'aria-pressed': 'false', onclick: alternarLinhaDoTempo });
+  const dias = el('div', { class: 'globo-dias', 'aria-hidden': 'true' });
+  const linha = el('div', { class: 'globo-linha', hidden: true }, tocar, el('div', { class: 'globo-faixa-caixa' }, faixa, dias));
   const painel = el('div', { class: 'globo-painel', hidden: true, role: 'dialog', 'aria-label': 'Tempo no ponto tocado' });
   // Controles discretos: só ícones, numa coluna estreita. Aproximar e afastar ficam nos gestos (pinça, dois toques, roda).
   const icone = (...filhos) => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, ...filhos);
@@ -998,14 +1073,15 @@ function montarDom(secao) {
       icone(svg('circle', { cx: 12, cy: 12, r: 5 }), svg('ellipse', { cx: 12, cy: 12, rx: 10, ry: 3.4, transform: 'rotate(-20 12 12)' }))),
     el('button', { type: 'button', title: 'Ajuda', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda },
       icone(svg('path', { d: 'M9.2 9a2.9 2.9 0 1 1 4.3 2.5c-.9.5-1.5 1.1-1.5 2.1v.6' }), svg('circle', { cx: 12, cy: 17.6, r: 1.1, class: 'cheio' }))));
-  const relogio = el('p', { class: 'globo-relogio', 'aria-live': 'off' });
-  const rodape = el('div', { class: 'globo-rodape globo-recolhivel' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, relogio, ciclones));
+  const rodape = el('div', { class: 'globo-rodape globo-recolhivel' }, legenda, linha, el('div', { class: 'globo-tempo-terra' }, rotuloHora, voltarAgora), el('div', { class: 'globo-notas' }, fonte, ciclones));
   const cidades = el('div', { class: 'globo-cidades', 'aria-hidden': 'true' });
   const raiz = el('div', { class: 'globo' }, canvas, cidades, el('div', { class: 'globo-topo globo-recolhivel' }, chips), botoes, aviso, painel, rodape);
   secao.append(raiz);
-  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
+  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, ciclones, faixa, rotuloHora, voltarAgora, tocar, dias, linha, painel, rodape, botoes, cidades };
+  desenharTocar(false);
   montarCidades();
   G.mostrarPainel = mostrarPainelTexto; G.fecharPainel = fecharPainel; G.modoSistema = modoSistema; G.focarSistema = focarSistema; G.distanciaVisaoGeral = distanciaVisaoGeral; G.navegacaoLivre = navegacaoLivre; G.voarLivreAte = voarLivreAte;
+  G.abrirGalaxia = abrirGalaxia; G.fecharGalaxia = fecharGalaxia; G.mostrarAviso = mostrarAviso;
   window.__globo = G; G.pontoNaTela = pontoNaTela; G.pontoDesenhado = pontoDesenhado; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
   // a barra de cima do app se recolhe sozinha: o globo cresce para ocupar a altura liberada
@@ -1096,8 +1172,9 @@ const VERIFICA_MS = 60000; // a cada minuto: hora "agora" da linha do tempo; a c
 
 function atualizarRelogio() {
   const agora = new Date();
-  const hh = String(agora.getHours()).padStart(2, '0'), mm = String(agora.getMinutes()).padStart(2, '0'), ss = String(agora.getSeconds()).padStart(2, '0');
-  G.dom.relogio.textContent = G.hora === G.horaAgora || G.hora === null ? `Tempo real · ${hh}:${mm}:${ss}` : '';
+  const hh = String(agora.getHours()).padStart(2, '0'), mm = String(agora.getMinutes()).padStart(2, '0');
+  // o botão do instante mostra a hora certa em tempo real ou a hora da previsão escolhida
+  G.dom.rotuloHora.textContent = G.hora === G.horaAgora || G.hora === null ? `Agora · ${hh}:${mm}` : `${G.rotuloHora} · previsão`;
 }
 
 function horaMaisProxima(manifest) {
@@ -1181,6 +1258,7 @@ const fmtLon = (v) => `${fmt.n(Math.abs(v), 1)}°${v < 0 ? 'O' : 'L'}`;
 
 /** Toque num ponto: marca, mostra o que o GFS diz na hora (instantâneo) e completa com a Open-Meteo. */
 function tocarPonto(cx, cy) {
+  if (G.galaxia) { G.galaxia.tocarGalaxia(cx, cy); return; }
   if (G.espaco && G.espacoAberto && G.espaco.tocarEspaco(cx, cy)) { G.marcadorToque.visible = false; G.tocado = null; return; }
   if (G.sistema) { fecharPainel(); return; }
   const astro = astroSob(cx, cy);
@@ -1231,7 +1309,7 @@ async function mostrarPontoTocado(lat, lon, soGfs) {
     el('button', { type: 'button', class: 'globo-fechar', 'aria-label': 'Fechar', text: '×', onclick: fecharPainel }));
   const frase = el('p', { class: 'globo-frase', text: fraseSimples(gfs, null, cic) });
   const linha = el('p', { class: 'globo-numeros', text: numerosSimples(gfs) });
-  const quando = el('p', { class: 'globo-quando', text: G.hora === G.horaAgora ? 'Previsão do modelo para agora.' : `Previsão do modelo para ${G.dom.rotuloHora.textContent}.` });
+  const quando = el('p', { class: 'globo-quando', text: G.hora === G.horaAgora ? 'Previsão do modelo para agora.' : `Previsão do modelo para ${G.rotuloHora}.` });
   const detalhe = el('button', { type: 'button', class: 'globo-detalhe', text: 'Ver detalhes', onclick: () => detalhesPonto(lat, lon, gfs, P.dadosOm, cic) });
   P.replaceChildren(titulo, frase, linha, quando, detalhe);
   P.hidden = false;
@@ -1315,15 +1393,16 @@ function detalhesPonto(lat, lon, gfs, om, cic) {
 function mostrarAjuda() {
   const m = G.manifest;
   mostrarInfo('Globo',
-    el('p', { text: 'Arraste para girar, pince ou use a roda para aproximar, toque duas vezes para chegar perto. Toque num ponto da Terra para ver o tempo lá; toque no Sol, na Lua, num satélite, num planeta ou numa sonda para ver o que é, onde está e quando dá para ver daqui.' }),
+    el('p', { text: 'Arraste para girar, pince ou use a roda para aproximar, toque duas vezes para chegar perto. O botão “Agora” embaixo abre a linha do tempo da previsão. Toque num ponto da Terra para ver o tempo lá; toque no Sol, na Lua, num satélite, num planeta ou numa sonda para ver o que é, onde está e quando dá para ver daqui.' }),
     el('ul', {},
       el('li', {}, 'Dia e noite (sempre ligado): o lado iluminado e o escuro pela posição real do Sol agora; a Lua clareia a noite conforme a fase e as luzes das cidades (NASA Black Marble) acendem no escuro. Ao mudar a hora na linha do tempo, o Sol acompanha.'),
       el('li', {}, 'Nuvens: imagem infravermelha dos satélites GOES-Leste, GOES-Oeste e Himawari (NASA GIBS), onde há cobertura; no resto, nuvens previstas pelo GFS.'),
       el('li', {}, 'Vento (linhas mostram para onde ele sopra, a 10 m), chuva (mm/h), temperatura (a 2 m) e pressão ao nível do mar (isóbaras a cada 4 hPa ao aproximar): modelo GFS 0,5° da NOAA, a cada 3 h até 48 h.'),
       el('li', {}, 'Ponto tocado: ECMWF IFS pela Open-Meteo, com fuso horário local. Ciclones: NHC e GDACS.'),
       el('li', {}, 'Céu de hoje: o que dá para ver a olho nu do seu local até o amanhecer, com horário, direção e altura, já com as nuvens previstas.'),
-      el('li', {}, 'Espaço: ISS, Tiangong e satélites (CelesTrak, SGP4) em escala real de altura; planetas na direção real. Sistema solar com posições reais (Astronomy Engine), sondas pelo JPL Horizons e distâncias comprimidas para caber na tela.')),
-    el('p', { class: 'nota', text: `Nesta tela: ${[G.dom.fonte.textContent, ...(G.espaco?.notasFontes?.() || [])].filter(Boolean).join(' · ')}.` }),
+      el('li', {}, 'Espaço: ISS, Tiangong e satélites (CelesTrak, SGP4) em escala real de altura; planetas na direção real. Sistema solar com posições reais (Astronomy Engine), sondas pelo JPL Horizons e distâncias comprimidas para caber na tela.'),
+      el('li', {}, 'Via Láctea (no Sistema solar): a Galáxia vista de fora é um modelo calculado pelos braços medidos por paralaxe (Reid et al. 2019), a barra (Wegg et al. 2015) e o disco (Bland-Hawthorn & Gerhard 2016); ninguém a fotografou de fora. Perto do Sol aparecem as 800 mil estrelas do céu na distância medida; longe, as galáxias do NGC/IC e os grandes aglomerados de galáxias. "Salvar imagem" gera um PNG de até 4.096 px com os nomes e a escala.')),
+    el('p', { class: 'nota', text: `Nesta tela: ${(G.galaxia ? G.galaxia.notasFontes() : [G.dom.fonte.textContent, ...(G.espaco?.notasFontes?.() || [])]).filter(Boolean).join(' · ')}.` }),
     el('p', { class: 'nota', text: `Texturas: NASA Visible Earth (Blue Marble e Black Marble, domínio público). Dados gerados ${m?.gerado ? fmt.idade(Date.parse(m.gerado)) : '–'}. Este globo é um painel pessoal, não uma fonte oficial. Em situação de risco, siga a Defesa Civil e o INMET.` }));
 }
 
@@ -1384,6 +1463,7 @@ function distanciaVisaoGeral() {
 
 /** Troca entre a Terra e o sistema solar: esconde a Terra, as nuvens, os marcadores e a interface do tempo. */
 function modoSistema(ligar) {
+  if (!ligar) fecharGalaxia();
   G.sistema = ligar;
   for (const o of [G.terra, G.nuvens, G.atmosfera, G.lua, G.solBrilho, G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) o.visible = !ligar;
   G.dom.cidades.hidden = ligar;
@@ -1429,7 +1509,8 @@ function laco(agora) {
   if (G.quadro % 30 === 0 && !G.sistema) atualizarAstros();
   if (G.quadro % 4 === 0) posicionarCidades();
   if (G.quadro % 30 === 0) atualizarRelogio();
-  if (G.espaco && G.espacoAberto) G.espaco.atualizarEspaco(agora);
+  if (G.galaxia) G.galaxia.atualizarGalaxia(agora);
+  else if (G.espaco && G.espacoAberto) G.espaco.atualizarEspaco(agora);
   if (G.camada === 'pressao') G.terra.material.uniforms.isobaras.value = Math.max(0, Math.min(1, (2.6 - c.dist) / 0.8));
   if (!G.sistema) {
     const antes = G.regiao.estado.ativa;
@@ -1439,7 +1520,7 @@ function laco(agora) {
     const base = opacidadeNuvens();
     G.nuvens.material.uniforms.opacNuvem.value = base * Math.max(0, Math.min(1, (c.dist - 1.03) / 0.15));
   }
-  if (G.livre) moverLivre(agora); else if (G.sistema) moverFoco(agora);
+  if (G.galaxia) { /* a viagem da câmera na galáxia é do próprio módulo */ } else if (G.livre) moverLivre(agora); else if (G.sistema) moverFoco(agora);
   posicionarCamera();
   G.estrelas.acompanharCamera(G.camera, G.dom.canvas.clientHeight * G.pixelRatio);
   const pulso = (Math.sin(agora / 500) + 1) / 2;
@@ -1448,7 +1529,8 @@ function laco(agora) {
     for (const m of [G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) { m.scale.setScalar(esc); const p = m.getObjectByName('pulso'); if (p) { p.scale.setScalar(1 + pulso * 1.6); p.material.opacity = 0.6 * (1 - pulso); } }
   }
   if (G.particulas) animarParticulas(dt);
-  G.renderer.render(G.cena, G.camera);
+  if (G.galaxia) G.renderer.render(G.galaxia.estado().cena, G.galaxia.estado().camera);
+  else G.renderer.render(G.cena, G.camera);
   G.quadro++;
 }
 

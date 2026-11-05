@@ -555,11 +555,23 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .globo-rotulos { display: flex; justify-content: space-between; max-width: 420px; font-size: 11px; color: #b7c0c9; margin-top: 2px; }
 .globo-unidade { font-size: 11px; color: #b7c0c9; }
 .globo-rotulos .globo-unidade { margin-left: 4px; }
-.globo-linha { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; }
-.globo-hora { min-width: 64px; font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.globo-faixa { flex: 1; min-width: 0; accent-color: #eceef0; height: 28px; margin: 0; }
-.globo-tocar { min-height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.6); color: #eceef0; font-size: 13px; font-weight: 600; }
+/* tempo na Terra: o instante mostrado num botão; ao tocar, a linha do tempo da previsão (arrastar e animar) */
+.globo-linha { display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; }
+.globo-linha[hidden] { display: none; }
+.globo-faixa-caixa { position: relative; flex: 1; min-width: 0; padding-bottom: 14px; }
+.globo-faixa { width: 100%; accent-color: #eceef0; height: 28px; margin: 0; display: block; }
+.globo-dias { position: absolute; left: 8px; right: 8px; bottom: 0; height: 13px; }
+.globo-dias span { position: absolute; transform: translateX(-2px); font-size: 10.5px; color: #aab3bd; white-space: nowrap; }
+.globo-dias span:last-child:not(:first-child) { transform: translateX(-100%); }
+.globo-tocar { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.6); color: #eceef0; display: grid; place-items: center; }
+.globo-tocar svg { width: 16px; height: 16px; fill: currentColor; }
 .globo-tocar[aria-pressed="true"] { background: #eceef0; color: #0b0f16; }
+.globo-tempo-terra { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; }
+.globo-instante { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.28); background: rgba(10,14,22,.62); color: #eceef0; font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; }
+.globo-instante[hidden], .globo-agora[hidden] { display: none; }
+.globo-instante[aria-expanded="true"] { border-color: rgba(255,255,255,.6); }
+.globo-instante.previsao { border-color: #ffd166; color: #ffe1a0; }
+.globo-agora { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.3); background: rgba(236,238,240,.92); color: #0b0f16; font-size: 13px; font-weight: 680; }
 .globo-notas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
 .globo-notas p { margin: 0; font-size: 11.5px; color: #aab3bd; }
 .globo-ciclones { color: #ff9a8a !important; font-weight: 600; }
@@ -632,7 +644,6 @@ button.globo-rotulo { cursor: pointer; }
 .globo-cidades { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .globo-cidade { position: absolute; left: 0; top: 0; margin: -7px 0 0 6px; padding-left: 8px; font-size: 12px; font-weight: 600; color: #f3f5f8; text-shadow: 0 0 3px #000, 0 1px 2px #000; white-space: nowrap; }
 .globo-cidade::before { content: ''; position: absolute; left: 0; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
-.globo-relogio { font-size: 12px; color: #b7c0c9; font-variant-numeric: tabular-nums; margin: 2px 0 0; }
 .globo-sistema-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; pointer-events: none; }
 .globo-sistema-controles > * { pointer-events: auto; }
 .globo-recolhivel { transition: opacity .45s ease; }
@@ -727,3 +738,17 @@ button.globo-rotulo { cursor: pointer; }
 .mudanca-abrir { display: block; width: 100%; font: inherit; margin-top: 8px; padding: 14px; border-radius: 12px; background: var(--sup2); color: var(--texto);
   text-align: center; font-weight: 600; text-decoration: none; border: 1px solid var(--linha); }
 .mudanca-depois { padding: 12px; border: 0; background: none; color: var(--fraco); font: inherit; }
+
+/* Escala de galáxias (Via Láctea vista de fora): esconde o sistema solar e mostra só os controles dela */
+.globo.com-galaxia .globo-sistema-controles, .globo.com-galaxia .globo-espaco, .globo.com-galaxia .globo-rotulo:not(.galaxia-rotulo) { display: none !important; }
+.globo-galaxia-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none; }
+.globo-galaxia-controles[hidden] { display: none; }
+.globo-galaxia-controles > * { pointer-events: auto; }
+.globo-galaxia-voltar, .globo-ir-galaxia, .globo-salvar { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
+.globo-salvar { margin-left: auto; }
+.globo-salvar:disabled { opacity: .6; }
+.globo-escala { display: flex; flex-direction: column-reverse; gap: 4px; pointer-events: none; }
+.globo-escala-barra { display: block; height: 2px; min-width: 20px; background: rgba(230,236,244,.9); box-shadow: 0 1px 2px #000; }
+.globo-escala-texto { font-size: 12px; font-weight: 600; color: #e6ecf4; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
+.galaxia-rotulo.faixa { color: #b9c8dc; font-style: italic; }
+.galaxia-rotulo.galaxia-sol { color: #ffe9a8; border-color: rgba(255,209,102,.5); }

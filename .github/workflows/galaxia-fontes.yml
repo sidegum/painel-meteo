@@ -1,13 +1,10 @@
 name: Fontes da escala de galáxias
 
 # Baixa os catálogos brutos da escala de galáxias (scripts/globo/baixar-fontes-galaxia.sh) e grava em
-# scripts/globo/fontes/ no branch em que rodou. Sob demanda ou quando o script muda: os catálogos são fixos.
+# scripts/globo/fontes/ no branch em que rodou. Só sob demanda (Actions > Run workflow): sem gatilho de push, para
+# não gravar em branches de outras mudanças; os catálogos são fixos.
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'scripts/globo/baixar-fontes-galaxia.sh'
-      - '.github/workflows/galaxia-fontes.yml'
 
 permissions:
   contents: write
