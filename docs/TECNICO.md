@@ -639,8 +639,9 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `ceu.js` | cálculo puro do céu (sem DOM, testado): Sol, Lua, planetas e estrelas pelo Astronomy Engine; satélites pelo SGP4; passagens visíveis, chuvas de meteoros (IMO, por longitude solar), eclipses, fases, estações e o resumo "Céu de hoje" |
 | `globo-ceu.js` | textos: bloco "Céu de hoje" e cartões de Sol, Lua, planetas, estrelas, satélites e sondas |
 | `globo-astro.js` | pontos subsolar e sublunar e posições para o sistema solar |
-| `globo-estrelas.js` | céu de fundo com o catálogo real (precessão para a data, giro pelo tempo sideral, cor pelo B−V) e linhas das constelações |
-| `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra e o sistema solar com as sondas |
+| `globo-estrelas.js` | céu de fundo com as 8.920 estrelas do HYG v4.1 até magnitude 6,5 (precessão e nutação para a data, giro pelo tempo sideral, tamanho e brilho pela magnitude e cor pelo B−V em shader próprio) e linhas das 88 constelações |
+| `globo-corpos.js` | cálculo puro (testado em `test/corpos.test.mjs`): luas, corpos menores, propagação kepleriana, polos e rotação da IAU (WGCCRE 2015), raios e planetas anões oficiais |
+| `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra, filtros e o sistema solar navegável (planetas, luas, corpos menores, cinturões reais e sondas) |
 | `globo-sondas.js` | fichas das missões e interpolação de Hermite dos vetores do JPL Horizons |
 | `globo-texturas.js` | texturas procedurais dos astros |
 
@@ -648,6 +649,26 @@ Referencial da cena: fixo na Terra, raio 1 = 6.371 km, `latLonVec(lat, lon) = (c
 planetas entram pelo ponto sob o astro (ascensão reta menos o tempo sideral, do Astronomy Engine), as estrelas pelo
 grupo girado de −GST. No sistema solar, coordenadas heliocêntricas da eclíptica J2000 com distância comprimida
 (`1,25·UA^0,45`) e direção real.
+
+Sistema solar (1.7.0):
+- Planetas pelo Astronomy Engine (VSOP87); a órbita desenhada é uma volta pela própria efeméride, centrada em agora.
+  Cada malha é orientada a cada quadro pelo polo e pelo meridiano principal da IAU (`orientacao`): eixo inclinado
+  correto (Urano deitado, rotação retrógrada de Vênus) e, na Terra, Greenwich no lugar do tempo sideral.
+- Luas: Lua (ELP/MPP02) e galileanas (L1.2) pelo Astronomy Engine; as outras 16 por elementos osculantes do JPL
+  Horizons no dia (`corpos.json`). Em volta do planeta, distância `r·(1 + ln(d/R))` (r raio na tela, R raio real) e
+  direção real. Anéis de Saturno nos raios reais (C, B, Cassini, A, Encke) na mesma escala. As luas aparecem quando a
+  câmera chega a 40 raios do planeta; a Lua, sempre.
+- Corpos menores: 28 do JPL SBDB (planetas anões e candidatos, asteroides visitados por sondas, cometas periódicos),
+  órbita kepleriana em volta do Sol; a órbita dos anões fica à mostra, a dos outros ao tocar.
+- Cinturões: 6.000 asteroides do cinturão principal, 1.500 troianos de Júpiter e os transnetunianos numerados, com a
+  equação de Kepler resolvida no vertex shader (`VERTEX_POP`): atributos P·a, Q·b e (e, M, n); a CPU só passa os
+  dias. Sem `corpos.json`, anéis ilustrativos avisados no cartão.
+- Navegação: câmera em volta de um foco (`G.foco`); "Ir até" no cartão ou dois toques levam a câmera ao corpo e o
+  seguem; planetas com luas enquadram o sistema de luas (16 raios). "Visão geral" volta ao Sol. Zoom multiplicativo.
+- Filtros (`prefs` `globo:filtrosEspaco`): estrelas por magnitude (6,5, 4,5, 2,5, nenhuma, via `setDrawRange` no
+  catálogo ordenado), nomes, linhas e nomes das constelações, planetas no céu, trilhas, órbitas, luas, corpos menores,
+  cinturões, sondas, rotas e nomes.
+- Montagem em partes (`pausa` entre planetas, populações e sondas): nenhuma tarefa longa enquanto o Globo abre.
 
 Regras de visibilidade (constantes `VIS` em `ceu.js`): céu escuro com Sol a −6° ou menos (planetas muito brilhantes a
 partir de −1° a −4°, pela magnitude); pelo menos 10° de altura; satélite visível só iluminado pelo Sol (sombra
@@ -658,7 +679,9 @@ Dados gerados pelo `globo.yml` (`scripts/globo/atualizar.py`): GFS 0,5° (NOMADS
 ciclones (GDACS e NHC), elementos orbitais (CelesTrak) e, uma vez por dia, os vetores das 16 sondas pelo JPL Horizons
 (`sondas.json`: rota desde o lançamento até 2 anos à frente, trecho recente de 200 dias para cada lado com passo de 1
 dia, ou 12 h para a Parker, e trecho fino de 6 h em volta de agora; para o James Webb, também os vetores em relação à
-Terra no último ano). `workflow_dispatch` com `so=sondas` força a regeração.
+Terra no último ano). Uma vez por dia, também `corpos.json`: elementos das luas (Horizons, centro no planeta), dos 28
+corpos menores (`sbdb.api` com `full-prec`) e das populações dos cinturões (`sbdb_query.api`, classes MBA, TJN e
+TNO). `workflow_dispatch` com `so=sondas` ou `so=corpos` força a regeração.
 
 Pré-carregamento: assim que a Terra aparece, `prepararEspaco` monta em tempo ocioso os satélites, os planetas no céu e
 o sistema solar com as sondas, tudo escondido; abrir Espaço ou Sistema solar só torna visível.

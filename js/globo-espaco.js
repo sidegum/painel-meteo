@@ -103,7 +103,7 @@ export function prepararEspaco(G, THREE) {
     else E.notaSat = `Satélites indisponíveis agora (${sats.reason?.message || 'falha'}).`;
     E.sondas = sondas.status === 'fulfilled' ? sondas.value : null;
     E.corpos = corpos.status === 'fulfilled' ? corpos.value : null;
-    E.sistema = montarSistema();
+    E.sistema = await montarSistema();
     E.dom.nota.textContent = E.notaSat;
   })();
   return E.preparo;
@@ -545,7 +545,10 @@ const FRAGMENT_POP = /* glsl */`
   }`;
 const JD_UNIX = 2440587.5;
 
-function montarSistema() {
+/** Cede a vez ao navegador entre as partes da montagem (nenhuma tarefa longa trava a tela). */
+const pausa = () => new Promise((ok) => (window.requestIdleCallback ? requestIdleCallback(ok, { timeout: 250 }) : setTimeout(ok, 16)));
+
+async function montarSistema() {
   const { THREE, G } = E;
   const grupo = new THREE.Group(); grupo.name = 'sistema'; grupo.visible = false;
   const tocaveis = [];
@@ -633,6 +636,7 @@ function montarSistema() {
     const dias = K.PERIODO_DIAS[p.corpo], pts = [], v = new THREE.Vector3(), n = p.corpo === 'Mercury' ? 160 : 220;
     for (let k = 0; k <= n; k++) { const q = C.helioEcliptica(p.corpo, agora + (k / n - 0.5) * dias * 86400000); pts.push(paraCena(q.x, q.y, q.z, v).clone()); }
     grupo.add(linha(pts, p.cor, p.corpo === 'Pluto' ? 0.2 : 0.3, 'orbita'));
+    await pausa();
   }
 
   // planetas anões, asteroides e cometas com nome (SBDB): ponto, nome e órbita (anões sempre; os outros ao tocar)
@@ -651,6 +655,7 @@ function montarSistema() {
     tocaveis.push({ objeto: marca, acao: () => mostrarPequeno(item), prioridade: 1 });
   }
 
+  await pausa();
   // cinturões: populações reais (SBDB) com Kepler na GPU; sem os dados, desenho ilustrativo avisado no cartão
   const pops = corpos?.populacoes || {};
   const ref = agora;
@@ -681,6 +686,7 @@ function montarSistema() {
     pontos.userData.tipo = 'populacao'; pontos.frustumCulled = false;
     grupo.add(pontos);
     SIS.populacoes.push({ chave, pontos, n: emn.length / 3 });
+    await pausa();
   }
   const temPop = (k) => SIS.populacoes.some((x) => x.chave === k);
   const anel = (n, de, ate, espessura, cor, tamanho, opac, semente) => {
@@ -758,6 +764,7 @@ function montarSistema() {
     rotulo(marcador, m.curto, chave === 'jwst' || chave.startsWith('voyager') ? 40 : 30, 'sonda', -14);
     SIS.sondas.push({ chave, dados, marcador, rastro, rotaInteira });
     tocaveis.push({ objeto: marcador, acao: () => mostrarSonda(chave), prioridade: 1 });
+    await pausa();
   }
 
   montarControlesSistema();
