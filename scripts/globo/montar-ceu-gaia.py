@@ -33,6 +33,7 @@ import urllib.request
 from pathlib import Path
 
 TAP = 'https://gea.esac.esa.int/tap-server/tap'
+MAXREC = 3000000  # sem isso o serviço corta em 50 mil linhas sem avisar
 
 
 def consulta(gmax):
@@ -46,7 +47,7 @@ WHERE g.phot_g_mean_mag < {gmax} AND h.source_id IS NULL
 
 
 def tap_async(adql):
-    dados = urllib.parse.urlencode({'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': 'csv', 'PHASE': 'RUN', 'QUERY': adql}).encode()
+    dados = urllib.parse.urlencode({'REQUEST': 'doQuery', 'LANG': 'ADQL', 'FORMAT': 'csv', 'PHASE': 'RUN', 'MAXREC': str(MAXREC), 'QUERY': adql}).encode()
     req = urllib.request.Request(f'{TAP}/async', data=dados, method='POST')
     with urllib.request.urlopen(req, timeout=120) as r:
         job = r.geturl()
@@ -84,6 +85,8 @@ def main():
         c = float(r['bp_rp']) if r['bp_rp'] else None
         d = float(r['r_med_geo']) if r['r_med_geo'] else None
         linhas.append((v_de_g(g, c), float(r['ra']), float(r['dec']), d, c))
+    if len(linhas) in (2000, 50000, MAXREC):
+        raise RuntimeError(f'resultado cortado no limite do serviço ({len(linhas)} linhas)')
     linhas.sort(key=lambda x: x[0])
     n = len(linhas)
     ra = [int(round(x[1] / 360 * 65536)) % 65536 for x in linhas]
