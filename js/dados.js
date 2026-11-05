@@ -242,7 +242,10 @@ export const buscarAlertas = () => worker('alertas');
 // de Campo Bom, que é público.
 export const GEOCODE_PADRAO = '4303905';
 
+// Listas do INMET: hoje chegam como array JSON; versões antigas mandavam texto no formato "['a', 'b']".
+// Mesma regra do Worker (listaPython em worker/src/index.js).
 function listaPython(v) {
+  if (Array.isArray(v)) return v.map((x) => String(x ?? '').trim().slice(0, 400)).filter(Boolean).slice(0, 8);
   const s = String(v ?? '').slice(0, 4000);
   if (!s.trim()) return [];
   return s.replace(/^\s*\[\s*/, '').replace(/\s*\]\s*$/, '').split(/['"]\s*,\s*['"]/)
@@ -310,8 +313,17 @@ export async function buscarCalibracao() {
 export const buscarAcerto = (estacao) => worker('acerto', { estacao: String(estacao).replace(/[^A-Za-z0-9]/g, '').slice(0, 8) });
 
 // ---------- RainViewer ----------
-// Lê sempre weather-maps.json para descobrir host e caminhos dos quadros.
-export async function buscarRadar() {
+// Lê weather-maps.json para descobrir host e caminhos dos quadros. A mesma resposta serve por 60 s:
+// chuva sobre o ponto, chegada da chuva e mapa pedem a lista na mesma rodada e dividem uma só requisição.
+let radarRecente = null; // { em: ms, promessa }
+export function buscarRadar() {
+  if (radarRecente && Date.now() - radarRecente.em < 60000) return radarRecente.promessa;
+  const promessa = lerListaRadar();
+  radarRecente = { em: Date.now(), promessa };
+  promessa.catch(() => { if (radarRecente?.promessa === promessa) radarRecente = null; });
+  return promessa;
+}
+async function lerListaRadar() {
   const j = await buscarJson('rainviewer', 'https://api.rainviewer.com/public/weather-maps.json', { timeout: 10000, maxBytes: 2e5 });
   const host = String(j.host || '');
   if (!/^https:\/\/[a-z0-9.-]+\.rainviewer\.com$/i.test(host)) throw new ErroFonte('rainviewer', 'formato', 'host de radar inesperado');

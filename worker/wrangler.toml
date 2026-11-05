@@ -15,8 +15,8 @@ binding = "KV"
 id = "COLE_AQUI_O_ID_DO_KV"
 
 [triggers]
-# Séries horárias das estações de verificação, El Niño a cada 6 h e acerto diário às 06:15 de Brasília.
-crons = ["5 * * * *", "0 */6 * * *", "15 9 * * *"]
+# Séries horárias das estações (três buscas por hora, ver registrarSeries) de verificação, El Niño a cada 6 h e acerto diário às 06:15 de Brasília.
+crons = ["5,25,45 * * * *", "0 */6 * * *", "15 9 * * *"]
 
 [observability]
 enabled = false   # sem logs persistentes: evita guardar IPs e parâmetros

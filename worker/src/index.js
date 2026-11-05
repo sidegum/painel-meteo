@@ -10,7 +10,7 @@
 // - INMET_TOKEN nunca aparece em respostas, erros ou logs.
 // - Nenhuma localização ou IP é gravado no KV ou em logs.
 
-const VERSAO = '1.1.0';
+const VERSAO = '1.1.1';
 
 export const DESTINOS = new Set([
   'apitempo.inmet.gov.br',
@@ -237,14 +237,19 @@ export function normalizarInmet(est, linhas) {
   return { id: est.id, tipo: 'inmet', nome: est.nome, lat: est.lat, lon: est.lon, alt: est.alt, serie };
 }
 
+/**
+ * Chuva acumulada em 1 h, 24 h, 72 h e 7 dias a partir da série horária (INMET).
+ * valor: soma só com pelo menos 90% das horas registradas (senão null, nunca zero por falta de dado).
+ * soma: total das horas que existem, sempre presente; com horas faltando é um mínimo garantido.
+ * @returns {{h1:object, h24:object, h72:object, d7:object}} cada um {valor, soma, horas, esperado}
+ */
 export function acumulados(serie, agoraMs) {
   const somaAte = (h) => {
     const ini = agoraMs - h * 3600000;
-    const pts = serie.filter((p) => p.ms > ini && p.ms <= agoraMs);
+    const validos = serie.filter((p) => p.ms > ini && p.ms <= agoraMs && p.chuva !== null);
     const esperado = h; // INMET é horário
-    const validos = pts.filter((p) => p.chuva !== null);
-    if (validos.length < esperado * 0.9) return { valor: null, horas: validos.length, esperado };
-    return { valor: Math.round(validos.reduce((s, p) => s + p.chuva, 0) * 10) / 10, horas: validos.length, esperado };
+    const soma = Math.round(validos.reduce((s, p) => s + p.chuva, 0) * 10) / 10;
+    return { valor: validos.length >= esperado * 0.9 ? soma : null, soma, horas: validos.length, esperado };
   };
   return { h1: somaAte(1), h24: somaAte(24), h72: somaAte(72), d7: somaAte(168) };
 }
@@ -300,8 +305,11 @@ async function serieKv(env, id) {
   return (await env.KV.get(`serie:${id}`, 'json')) || [];
 }
 
-// Executado a cada hora: guarda a última leitura das estações de verificação.
-// Assim temos chuva de 24 h, 72 h e 7 dias e a tendência da pressão mesmo sem token.
+// Executado três vezes por hora (:05, :25 e :45): guarda a última leitura das estações de verificação.
+// Assim temos chuva de 24 h, 72 h e 7 dias e a tendência da pressão mesmo sem token. A API só entrega a
+// leitura mais recente e o INMET a publica com 40 a 70 min de atraso; com uma busca só por hora, uma
+// publicação atrasada fazia perder aquela hora para sempre (20 de 24 h registradas em 2026-11-05).
+// Leitura já guardada não é gravada de novo (poupa escritas no KV).
 export async function registrarSeries(env) {
   if (!env.KV) return;
   const lista = await estacoesInmet(env).catch(() => []);
@@ -312,7 +320,9 @@ export async function registrarSeries(env) {
       if (est.id !== v.id) continue;
       const ponto = normalizarInmet({ ...est, alt: meta?.alt ?? null }, [linha])?.serie?.[0];
       if (!ponto) continue;
-      const serie = (await serieKv(env, v.id)).filter((p) => p.ms !== ponto.ms && p.ms > Date.now() - 8 * 86400000);
+      const guardada = await serieKv(env, v.id);
+      if (guardada.some((p) => p.ms === ponto.ms)) continue;
+      const serie = guardada.filter((p) => p.ms > Date.now() - 8 * 86400000);
       serie.push(ponto);
       serie.sort((a, b) => a.ms - b.ms);
       await env.KV.put(`serie:${v.id}`, JSON.stringify(serie));
@@ -792,7 +802,7 @@ export default {
     }
   },
   async scheduled(evento, env, ctx) {
-    // "5 * * * *" -> séries horárias; "0 */6 * * *" -> El Niño; "15 9 * * *" -> acerto diário
+    // "5,25,45 * * * *" -> séries horárias; "0 */6 * * *" -> El Niño; "15 9 * * *" -> acerto diário
     if (evento.cron === '15 9 * * *') ctx.waitUntil(Promise.all([registrarAcerto(env), registrarPrevisaoPainel(env)]));
     else if (evento.cron === '0 */6 * * *') ctx.waitUntil(atualizarEnso(env));
     else ctx.waitUntil(registrarSeries(env));

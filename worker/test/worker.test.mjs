@@ -132,6 +132,7 @@ test('acumulados exigem horas completas', () => {
   assert.equal(a.h1.valor, 1);
   assert.equal(a.h24.valor, 23);
   assert.equal(a.h72.valor, null); // faltam horas: não vira zero
+  assert.deepEqual([a.h72.soma, a.h72.horas, a.h72.esperado], [23, 23, 72]); // mínimo garantido com as horas que existem
 });
 
 test('avisos do INMET: polígono, município padrão, listas', () => {

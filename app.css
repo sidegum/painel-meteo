@@ -338,7 +338,7 @@ td.n, th.n { text-align: right; }
 
 /* navegação entre os dias: logo abaixo do topo, fixa junto com ele */
 .nav {
-  display: grid; grid-template-columns: repeat(6, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   background: var(--fundo); border-bottom: 1px solid var(--linha); height: 44px;
 }
 .nav button {
@@ -574,3 +574,26 @@ button.globo-rotulo { cursor: pointer; }
 .globo-velocidades button { font-size: 12px; }
 .globo-data-sistema { margin: 0; font-size: 13px; color: #dfe4ea; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
 .globo.com-espaco .globo-botoes { top: 108px; }
+
+/* menu "Ver mais": seções fora da barra principal (Avisos, Globo, El Niño, Modelos) */
+.nav #btn-mais[data-avisos]::after { content: ''; position: absolute; top: 11px; right: calc(50% - 38px); width: 7px; height: 7px; border-radius: 50%; background: var(--quente); }
+.mais-lista { display: flex; flex-direction: column; gap: 8px; }
+.mais-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 56px; padding: 10px 14px; border: 1.5px solid var(--linha); border-radius: 10px; background: var(--sup); color: var(--texto); text-align: left; }
+.mais-item b { font-size: 16px; font-weight: 680; }
+.mais-item span { font-size: 13px; color: var(--fraco); }
+.mais-item[aria-current="page"] { border-color: var(--texto); }
+.mais-item.com-aviso span { color: var(--quente); font-weight: 600; }
+
+/* aba Avisos */
+#avisos-conteudo { padding: 0 16px 8px; }
+.aviso-card { border-left: 3px solid var(--quente); background: var(--sup); border-radius: 0 8px 8px 0; padding: 12px 14px; margin: 10px 0; }
+.aviso-card.grave { background: var(--alerta-fundo); }
+.aviso-card h2 { font-size: 17px; margin: 0 0 4px; font-weight: 700; }
+.aviso-card .quando { margin: 0; color: var(--fraco); font-size: 14px; }
+.aviso-card details { margin-top: 8px; }
+.aviso-card summary { color: var(--fraco); font-size: 14px; min-height: 32px; display: flex; align-items: center; cursor: pointer; }
+.aviso-card details p { margin: 6px 0; }
+.avisos-vazio { font-size: 17px; font-weight: 600; margin: 12px 0 4px; }
+.avisos-outros { margin-top: 14px; }
+.avisos-outros summary { color: var(--fraco); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.avisos-outros li { margin: 6px 0; }
