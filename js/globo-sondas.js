@@ -39,13 +39,21 @@ export const MISSOES = {
 };
 
 /**
- * Posição e velocidade no instante t por interpolação: no trecho fino (6 h) com Hermite cúbica (usa a velocidade),
- * fora dele na rota (passo de dias). Devolve null fora da cobertura.
- * @param {{rota:number[][], perto:number[][]}} s pontos [ms, x, y, z, vx, vy, vz]
+ * Posição e velocidade no instante t por Hermite cúbica (usa a velocidade): no trecho fino (6 h), senão no recente
+ * (1 dia), senão na rota longa (passo de dias). Devolve null fora da cobertura.
+ * @param {{rota:number[][], recente?:number[][], perto:number[][]}} s pontos [ms, x, y, z, vx, vy, vz]
  * @returns {{x:number, y:number, z:number, vx:number, vy:number, vz:number}|null}
  */
 export function estadoSonda(s, t) {
-  return interpolar(s.perto, t) || interpolar(s.rota, t);
+  return interpolar(s.perto, t) || interpolar(s.recente, t) || interpolar(s.rota, t);
+}
+
+/** Rota inteira para desenho: a rota longa com o trecho recente (passo curto) no lugar do mesmo intervalo. */
+export function rotaCompleta(s) {
+  const r = s.recente;
+  if (!r?.length) return s.rota;
+  const ini = r[0][0], fim = r[r.length - 1][0];
+  return [...s.rota.filter((p) => p[0] < ini), ...r, ...s.rota.filter((p) => p[0] > fim)];
 }
 
 /** Interpolação de Hermite entre os dois pontos que cercam t (posição em UA, velocidade em UA/dia). */

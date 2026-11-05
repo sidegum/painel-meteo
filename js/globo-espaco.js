@@ -12,8 +12,8 @@ import { el, fmt } from './ui.js';
 import { buscarSatelites, buscarSondas } from './globo-dados.js';
 import { PLANETAS, posicaoPlaneta, posicaoLua, pontoOrbita } from './globo-astro.js';
 import * as C from './ceu.js';
-import { cartaoAstro, cartaoSatelite, cartaoSonda, fusoS } from './globo-ceu.js';
-import { MISSOES, estadoSonda } from './globo-sondas.js';
+import { cartaoAstro, cartaoEstrela, cartaoSatelite, cartaoSonda, fusoS } from './globo-ceu.js';
+import { MISSOES, estadoSonda, interpolar, rotaCompleta } from './globo-sondas.js';
 import { texturaPlaneta, texturaSol, texturaAnel, texturaPonto, texturaBrilho, texturaAnelSelecao } from './globo-texturas.js';
 
 const RAD = Math.PI / 180;
@@ -32,8 +32,9 @@ const COR_CEU = { Mercury: '#c9c4bb', Venus: '#fff3cf', Mars: '#ff9a6a', Jupiter
 const E = {
   THREE: null, G: null, preparo: null, grupo: null, dom: null, modo: 'terra', aberto: false,
   sats: {}, pontos: {}, ativos: new Set(['estacoes']), rotulos: [], notaSat: '', geradoSat: null, ultimo: 0,
-  selecao: null, ceu: [], sistema: null, sondas: null,
+  selecao: null, ceu: [], estrelas: [], sistema: null, sondas: null,
 };
+const MAG_ROTULO_ESTRELA = 1.6; // estrelas com nome que ganham rótulo no espaço (as ~25 mais brilhantes)
 
 // ------------------------------------------------------------------ preparo, abrir e fechar
 
@@ -65,6 +66,7 @@ export async function abrirEspaco(G, THREE) {
   prepararEspaco(G, THREE);
   E.grupo.visible = true;
   E.dom.raiz.hidden = false;
+  G.estrelas?.pronto.then((ceu) => { if (E.aberto && ceu.linhas) ceu.linhas.visible = E.modo !== 'sistema'; }).catch(() => {});
   if (!E.sistema) { E.dom.nota.textContent = 'Carregando órbitas…'; await E.preparo; }
   if (!E.aberto) return;
   E.grupo.visible = true;
@@ -78,6 +80,8 @@ export function fecharEspaco() {
   if (E.dom) E.dom.raiz.hidden = true;
   for (const r of E.rotulos) r.el.hidden = true;
   for (const c of E.ceu) c.rotulo.hidden = true;
+  for (const s of E.estrelas) if (s.rotulo) s.rotulo.hidden = true;
+  if (E.G?.estrelas?.linhas) E.G.estrelas.linhas.visible = false;
   limparSelecao();
 }
 
@@ -208,6 +212,21 @@ function montarCeu() {
     E.ceu.push({ corpo, sprite, rotulo });
   }
   atualizarCeu();
+  G.estrelas?.pronto.then((ceu) => {
+    for (const e of ceu.nomeadas) {
+      const rotulo = e.nome && e.mag <= MAG_ROTULO_ESTRELA ? el('span', { class: 'globo-rotulo globo-rotulo-planeta globo-rotulo-estrela', text: e.nome, hidden: true }) : null;
+      if (rotulo) G.dom.raiz.append(rotulo);
+      E.estrelas.push({ e, rotulo, mundo: new THREE.Vector3() });
+    }
+  }).catch(() => {});
+}
+
+/** Posição atual (na cena) de uma estrela com nome: o grupo das estrelas gira com o tempo sideral. */
+const estrelaNaCena = (s) => s.mundo.copy(s.e.posicao).applyMatrix4(E.G.estrelas.grupo.matrixWorld);
+
+function mostrarEstrela(e) {
+  const c = cartaoEstrela(e, E.G.estrelas.constelacoes[e.sigla], E.G.estadoApp);
+  E.G.mostrarPainel(c.titulo, c.frase, c.numeros, c.fonte, [{ texto: 'Ver detalhes', onclick: c.detalhes }]);
 }
 
 function atualizarCeu() {
@@ -254,6 +273,12 @@ export function atualizarEspaco(agora) {
     const tela = naTela(c.sprite.position, rect);
     c.rotulo.hidden = !tela || tela.y < 110;
     if (tela) c.rotulo.style.transform = `translate(${tela.x.toFixed(0)}px, ${tela.y.toFixed(0)}px)`;
+  }
+  for (const s of E.estrelas) {
+    if (!s.rotulo) continue;
+    const tela = naTela(estrelaNaCena(s), rect);
+    s.rotulo.hidden = !tela || tela.y < 110;
+    if (tela) s.rotulo.style.transform = `translate(${tela.x.toFixed(0)}px, ${tela.y.toFixed(0)}px)`;
   }
   if (E.selecao) {
     if (posicaoCena(E.selecao.s.rec, data, v)) E.selecao.anel.position.copy(v);
@@ -309,6 +334,7 @@ export function tocarEspaco(cx, cy) {
       for (const s of E.sats[g.id]) if (posicaoCena(s.rec, data, v)) considerar(naTela(v, rect), 0, () => selecionarSatelite(s), s.destaque ? 6 : s.acopladoA ? -2 : 0);
     }
     for (const c of E.ceu) considerar(naTela(c.sprite.position, rect), 0, () => mostrarAstro(c.corpo), -4);
+    for (const s of E.estrelas) considerar(naTela(estrelaNaCena(s), rect), 0, () => mostrarEstrela(s.e), -8);
   }
   if (!melhor) return false;
   melhor.acao();
@@ -355,6 +381,8 @@ function alternarSistema(ligar) {
   for (const g of GRUPOS) if (E.pontos[g.id]) E.pontos[g.id].visible = !ligar && E.ativos.has(g.id);
   for (const r of E.rotulos) { r.el.hidden = true; if (r.s.trilha) r.s.trilha.visible = !ligar; }
   for (const c of E.ceu) { c.sprite.visible = !ligar; c.rotulo.hidden = true; }
+  for (const s of E.estrelas) if (s.rotulo) s.rotulo.hidden = true;
+  if (E.G.estrelas?.linhas) E.G.estrelas.linhas.visible = !ligar;
   for (const r of SIS.rotulos) r.el.hidden = true;
   SIS.dom.raiz.hidden = !ligar;
   if (!ligar) { SIS.desloc = 0; definirVelocidade(0); }
@@ -448,15 +476,33 @@ function montarSistema() {
     tocaveis.push({ objeto: o, acao: () => G.mostrarPainel(nome, texto, numeros, 'Desenho ilustrativo: os pontos não são objetos reais', []) });
   }
 
-  // sondas: rota passada (traço firme), rota futura (traço fraco) e marcador
+  // sondas: rota passada (traço firme), rota futura (traço fraco) e marcador. Para não embolar o sistema interno,
+  // aparece só o último meio ano da rota de cada sonda; a rota inteira desde o lançamento aparece ao tocar nela.
+  // As que estão saindo do sistema solar (Voyager, Pioneer, New Horizons) mostram sempre a rota inteira.
   SIS.sondas = [];
+  const RECENTE_MS = 180 * 86400000;
+  const SAINDO = new Set(['voyager1', 'voyager2', 'newhorizons', 'pioneer10', 'pioneer11']);
   for (const [chave, dados] of Object.entries(E.sondas?.sondas || {})) {
     const m = MISSOES[chave]; if (!m) continue;
     const cor = new THREE.Color(m.cor);
     const agora = Date.now();
-    const pts = (lista) => lista.map((p) => paraCena(p[1], p[2], p[3], new THREE.Vector3()));
-    const passado = dados.rota.filter((p) => p[0] <= agora), futuro = dados.rota.filter((p) => p[0] >= agora - 86400000 * 30);
-    if (passado.length > 1) grupo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts(passado)), new THREE.LineBasicMaterial({ color: cor, transparent: true, opacity: 0.42, depthWrite: false })));
+    const pts = (lista) => { // entre dois pontos da efeméride, 6 subpassos pela Hermite (posição e velocidade): curva lisa no periélio
+      const saida = [];
+      for (let i = 0; i < lista.length; i++) {
+        const p = lista[i];
+        saida.push(paraCena(p[1], p[2], p[3], new THREE.Vector3()));
+        if (i === lista.length - 1) break;
+        for (let k = 1; k < 6; k++) { const q = interpolar([p, lista[i + 1]], p[0] + (lista[i + 1][0] - p[0]) * k / 6); saida.push(paraCena(q.x, q.y, q.z, new THREE.Vector3())); }
+      }
+      return saida;
+    };
+    const rota = rotaCompleta(dados);
+    const passado = rota.filter((p) => p[0] <= agora), futuro = rota.slice(Math.max(0, passado.length - 1)); // emendadas no último ponto passado
+    const linhaPassada = (lista, opacidade) => (lista.length > 1 ? new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts(lista)), new THREE.LineBasicMaterial({ color: cor, transparent: true, opacity: opacidade, depthWrite: false })) : null);
+    const recente = SAINDO.has(chave) ? passado : passado.filter((p) => p[0] >= agora - RECENTE_MS);
+    const rastro = linhaPassada(recente, 0.42), rotaInteira = SAINDO.has(chave) ? null : linhaPassada(passado, 0.6);
+    if (rastro) grupo.add(rastro);
+    if (rotaInteira) { rotaInteira.visible = false; grupo.add(rotaInteira); }
     if (futuro.length > 1) {
       const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts(futuro)), new THREE.LineDashedMaterial({ color: cor, dashSize: 0.05, gapSize: 0.05, transparent: true, opacity: 0.35, depthWrite: false }));
       l.computeLineDistances(); grupo.add(l);
@@ -465,7 +511,7 @@ function montarSistema() {
     marcador.scale.setScalar(0.014);
     marcador.userData = { rotulo: rotulo(m.curto, chave === 'jwst' || chave.startsWith('voyager') ? 40 : 30, 'sonda'), deslocY: -14 };
     grupo.add(marcador);
-    SIS.sondas.push({ chave, dados, marcador });
+    SIS.sondas.push({ chave, dados, marcador, rastro, rotaInteira });
     tocaveis.push({ objeto: marcador, acao: () => mostrarSonda(chave), prioridade: 1 });
   }
 
@@ -482,7 +528,9 @@ function mostrarTerra() {
 function mostrarSonda(chave) {
   const s = SIS.sondas.find((x) => x.chave === chave);
   const c = cartaoSonda(chave, s.dados, E.sondas?.gerado, E.G.estadoApp, instanteSistema());
-  E.G.mostrarPainel(c.titulo, c.frase, c.numeros, c.fonte, c.detalhes ? [{ texto: 'Ver detalhes', onclick: c.detalhes }] : []);
+  const destacar = (ligar) => { if (s.rotaInteira) { s.rotaInteira.visible = ligar; if (s.rastro) s.rastro.visible = !ligar; } };
+  E.G.mostrarPainel(c.titulo, c.frase, c.numeros, c.fonte, c.detalhes ? [{ texto: 'Ver detalhes', onclick: c.detalhes }] : [], () => destacar(false));
+  destacar(true);
 }
 
 function montarControlesSistema() {

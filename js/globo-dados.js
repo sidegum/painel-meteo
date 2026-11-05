@@ -153,7 +153,7 @@ async function lerSatelites(manifest) {
 /**
  * Trajetórias das sondas (JPL Horizons, gerado uma vez por dia). Só entram listas de números finitos com 7 colunas.
  * O arquivo é lido mesmo sem entrada no manifest (o workflow antigo da main pode ter regravado o manifest sem ela).
- * @returns {Promise<{gerado:string, sondas:Object<string,{alvo:string, rota:number[][], perto:number[][], geo?:number[][]}>}>}
+ * @returns {Promise<{gerado:string, sondas:Object<string,{alvo:string, rota:number[][], recente:number[][], perto:number[][], geo?:number[][]}>}>}
  */
 export async function buscarSondas(manifest) {
   const versao = manifest?.sondas?.gerado || new Date().toISOString().slice(0, 10);
@@ -165,7 +165,7 @@ export async function buscarSondas(manifest) {
     if (!/^[a-z0-9]{2,20}$/.test(k) || !s || typeof s !== 'object') continue;
     const rota = pontos(s.rota), perto = pontos(s.perto);
     if (!rota.length && !perto.length) continue;
-    sondas[k] = { alvo: String(s.alvo || k).slice(0, 80), rota, perto, geo: pontos(s.geo) };
+    sondas[k] = { alvo: String(s.alvo || k).slice(0, 80), rota, recente: pontos(s.recente), perto, geo: pontos(s.geo) };
   }
   if (!Object.keys(sondas).length) throw new ErroFonte(FONTE, 'formato', 'sem sondas');
   return { gerado: String(j?.gerado || '').slice(0, 30), sondas };

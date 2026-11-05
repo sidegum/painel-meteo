@@ -413,8 +413,9 @@ def horizons_vetores(alvo, inicio, fim, passo, centro='500@10'):
 
 
 def gerar_sondas(agora):
-    """Trajetória desde o lançamento até 2 anos à frente (até ~600 pontos) e um trecho fino em volta de agora
-    (de 6 em 6 h, 3 dias antes e 4 depois), para o app interpolar a posição do instante com precisão."""
+    """Trajetória desde o lançamento até 2 anos à frente (até ~600 pontos), o trecho recente de 200 dias para cada
+    lado com passo de 1 dia (12 h para a Parker) e um trecho fino em volta de agora (de 6 em 6 h, 3 dias antes e 4
+    depois), para o app desenhar curvas lisas e interpolar a posição do instante com precisão."""
     sondas = {}
     hoje = agora.replace(hour=0, minute=0, second=0, microsecond=0)
     for s in SONDAS:
@@ -428,13 +429,22 @@ def gerar_sondas(agora):
             _, perto = horizons_vetores(s['id'], hoje - timedelta(days=3), hoje + timedelta(days=4), '6 h')
             time.sleep(1)
             arred = lambda p: [p[0]] + [round(v, 7) for v in p[1:]]
-            item = {'alvo': nome, 'id': s['id'], 'rota': [arred(p) for p in rota], 'perto': [arred(p) for p in perto]}
+            # trecho recente (meio ano para trás e para a frente) com passo curto: no periélio a Parker dá meia volta no
+            # Sol em poucos dias, e a rota longa (passo de dias) não desenha essa curva
+            ini_r = max(de, hoje - timedelta(days=200))
+            try:
+                _, recente = horizons_vetores(s['id'], ini_r, hoje + timedelta(days=200), '12 h' if s['chave'] == 'parker' else '1 d')
+            except Exception as e:  # sem o trecho recente o app desenha pela rota longa
+                log(f"Horizons {s['id']}: trecho recente indisponível ({e})")
+                recente = []
+            time.sleep(1)
+            item = {'alvo': nome, 'id': s['id'], 'rota': [arred(p) for p in rota], 'recente': [arred(p) for p in recente], 'perto': [arred(p) for p in perto]}
             if s['chave'] == 'jwst':  # em volta da Terra: distância e órbita de halo em torno de L2, no último ano
                 _, geo = horizons_vetores(s['id'], hoje - timedelta(days=365), hoje + timedelta(days=4), '2 d', centro='500@399')
                 item['geo'] = [arred(p) for p in geo]
                 time.sleep(1)
             sondas[s['chave']] = item
-            log(f"Horizons {s['id']} ({nome}): {len(rota)} pontos de rota, {len(perto)} perto de agora")
+            log(f"Horizons {s['id']} ({nome}): {len(rota)} pontos de rota, {len(recente)} recentes, {len(perto)} perto de agora")
         except Exception as e:
             log(f"Horizons {s['id']} falhou: {e}")
     return sondas

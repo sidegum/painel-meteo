@@ -65,11 +65,21 @@ export const CHUVAS = [
   { nome: 'Úrsidas', pico: 270.7, zhr: 10, ra: 217, dec: 76, de: 266, ate: 273, vel: 33, largura: 1 },
 ];
 
-/** Nomes em português das constelações por onde passam Sol, Lua e planetas (as demais ficam com o nome latino). */
-const CONSTELACOES = {
-  Ari: 'Áries', Tau: 'Touro', Gem: 'Gêmeos', Cnc: 'Câncer', Leo: 'Leão', Vir: 'Virgem', Lib: 'Libra', Sco: 'Escorpião',
-  Oph: 'Serpentário', Sgr: 'Sagitário', Cap: 'Capricórnio', Aqr: 'Aquário', Psc: 'Peixes', Cet: 'Baleia', Ori: 'Órion',
-  Sex: 'Sextante', Crt: 'Taça', Crv: 'Corvo', Hya: 'Hidra', Aur: 'Cocheiro', Peg: 'Pégaso', Sct: 'Escudo', Ser: 'Serpente',
+/** Nomes em português das 88 constelações da IAU, pela sigla oficial. */
+export const CONSTELACOES = {
+  And: 'Andrômeda', Ant: 'Máquina Pneumática', Aps: 'Ave do Paraíso', Aqr: 'Aquário', Aql: 'Águia', Ara: 'Altar', Ari: 'Áries',
+  Aur: 'Cocheiro', Boo: 'Boieiro', Cae: 'Buril', Cam: 'Girafa', Cnc: 'Câncer', CVn: 'Cães de Caça', CMa: 'Cão Maior',
+  CMi: 'Cão Menor', Cap: 'Capricórnio', Car: 'Quilha', Cas: 'Cassiopeia', Cen: 'Centauro', Cep: 'Cefeu', Cet: 'Baleia',
+  Cha: 'Camaleão', Cir: 'Compasso', Col: 'Pomba', Com: 'Cabeleira de Berenice', CrA: 'Coroa Austral', CrB: 'Coroa Boreal',
+  Crv: 'Corvo', Crt: 'Taça', Cru: 'Cruzeiro do Sul', Cyg: 'Cisne', Del: 'Golfinho', Dor: 'Dourado', Dra: 'Dragão',
+  Equ: 'Cavalo Menor', Eri: 'Erídano', For: 'Fornalha', Gem: 'Gêmeos', Gru: 'Grou', Her: 'Hércules', Hor: 'Relógio',
+  Hya: 'Hidra', Hyi: 'Hidra Macho', Ind: 'Índio', Lac: 'Lagarto', Leo: 'Leão', LMi: 'Leão Menor', Lep: 'Lebre', Lib: 'Libra',
+  Lup: 'Lobo', Lyn: 'Lince', Lyr: 'Lira', Men: 'Mesa', Mic: 'Microscópio', Mon: 'Unicórnio', Mus: 'Mosca', Nor: 'Esquadro',
+  Oct: 'Oitante', Oph: 'Serpentário', Ori: 'Órion', Pav: 'Pavão', Peg: 'Pégaso', Per: 'Perseu', Phe: 'Fênix', Pic: 'Pintor',
+  Psc: 'Peixes', PsA: 'Peixe Austral', Pup: 'Popa', Pyx: 'Bússola', Ret: 'Retículo', Sge: 'Flecha', Sgr: 'Sagitário',
+  Sco: 'Escorpião', Scl: 'Escultor', Sct: 'Escudo', Ser: 'Serpente', Sex: 'Sextante', Tau: 'Touro', Tel: 'Telescópio',
+  Tri: 'Triângulo', TrA: 'Triângulo Austral', Tuc: 'Tucano', UMa: 'Ursa Maior', UMi: 'Ursa Menor', Vel: 'Vela', Vir: 'Virgem',
+  Vol: 'Peixe Voador', Vul: 'Raposa',
 };
 
 // ------------------------------------------------------------------ utilidades
@@ -117,6 +127,33 @@ export function pontoSob(corpo, t) {
   lon = ((lon + 540) % 360) - 180;
   return { lat: eq.dec, lon, distKm: eq.dist * UA_KM };
 }
+
+// ------------------------------------------------------------------ estrelas
+
+/**
+ * Estrela do catálogo vista do observador: posição agora (com precessão, aberração e refração), nascer, pôr e
+ * passagem pelo meridiano nas próximas 24 h. Uma estrela que nunca se põe (ou nunca nasce) neste local fica com
+ * nasce e poe nulos e o campo sempre indica qual dos dois casos.
+ * @param {number} ra ascensão reta J2000 em graus
+ * @param {number} dec declinação J2000 em graus
+ */
+export function infoEstrela(ra, dec, obs, t) {
+  A.DefineStar(A.Body.Star1, ra / 15, dec, 1000);
+  const d = data(t);
+  const eq = A.Equator(A.Body.Star1, d, obs, true, true);
+  const h = A.Horizon(d, obs, eq.ra, eq.dec, 'normal');
+  const lat = obs.latitude;
+  const sempre = Math.abs(dec) > 90 - Math.abs(lat) ? (Math.sign(dec) === Math.sign(lat) ? 'acima' : 'abaixo') : null;
+  const busca = (dir) => (sempre ? null : ms(A.SearchRiseSet(A.Body.Star1, obs, dir, d, 1)));
+  const c = A.SearchHourAngle(A.Body.Star1, obs, 0, d);
+  return {
+    altura: h.altitude, azimute: h.azimuth, nasce: busca(+1), poe: busca(-1), sempre,
+    culmina: { ms: c.time.date.getTime(), altura: c.hor.altitude },
+  };
+}
+
+/** Temperatura da superfície estimada pelo índice de cor B−V (fórmula de Ballesteros, 2012), em kelvin. */
+export const temperaturaCor = (bv) => 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62));
 
 // ------------------------------------------------------------------ Sol e noite
 

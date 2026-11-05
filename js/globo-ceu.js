@@ -111,6 +111,50 @@ export function cartaoAstro(corpo, estadoApp, t = Date.now()) {
   };
 }
 
+// ------------------------------------------------------------------ estrelas
+
+const LETRAS_GREGAS = { 'α': 'alfa', 'β': 'beta', 'γ': 'gama', 'δ': 'delta', 'ε': 'épsilon', 'ζ': 'zeta', 'η': 'eta', 'θ': 'teta', 'ι': 'iota', 'κ': 'capa', 'λ': 'lambda', 'σ': 'sigma' };
+const corEstrela = (T) => (T >= 10000 ? 'branco-azulada' : T >= 7300 ? 'branca' : T >= 6000 ? 'branco-amarelada' : T >= 5000 ? 'amarelada' : T >= 3900 ? 'alaranjada' : 'avermelhada');
+const horasMin = (raGraus) => { const h = raGraus / 15, m = (h % 1) * 60; return `${Math.floor(h)}h ${fmt.n(m, 1)}min`; };
+
+/**
+ * Cartão de uma estrela com nome (catálogo do céu de fundo), vista do local do usuário.
+ * @param {{nome:string, letra:string, sigla:string, ra:number, dec:number, mag:number, bv:number, hip:number}} e
+ * @param {{nome:string, genitivo:string}} constelacao nomes latinos da constelação
+ */
+export function cartaoEstrela(e, constelacao, estadoApp, t = Date.now()) {
+  const local = localDoObservador(estadoApp), off = fusoS(estadoApp);
+  const obs = C.observador(local.lat, local.lon, 0);
+  const i = C.infoEstrela(e.ra, e.dec, obs, t);
+  const designacao = `${e.letra} ${constelacao?.genitivo || e.sigla}`;
+  const titulo = e.nome || designacao;
+  const nomeConst = C.CONSTELACOES[e.sigla] || constelacao?.nome || e.sigla;
+  const acima = i.altura > 0;
+  let frase = acima ? `Está ${C.alturaTexto(i.altura)} para o ${C.rumo(i.azimute)} (${Math.round(i.altura)}°).`
+    : i.sempre === 'abaixo' ? 'Daqui ela nunca aparece: fica sempre abaixo do horizonte.'
+    : `Agora está abaixo do horizonte${i.nasce ? `; nasce às ${hora(i.nasce, off)}` : ''}.`;
+  if (i.sempre === 'acima') frase += ' Daqui ela nunca se põe.';
+  const T = Number.isFinite(e.bv) ? C.temperaturaCor(e.bv) : null;
+  const numeros = `Constelação de ${nomeConst} · magnitude ${fmt.n(e.mag, 1)}`;
+  const fonte = `Hipparcos · ${hora(t, off)} · visto de ${local.nome}`;
+  const letraLonga = LETRAS_GREGAS[e.letra?.[0]];
+  const linhas = [
+    linha('Designação', `${designacao}${letraLonga ? ` (${letraLonga})` : ''} · HIP ${e.hip}`),
+    linha('Constelação', `${nomeConst} (${constelacao?.nome || e.sigla})`),
+    linha('Brilho', `magnitude ${fmt.n(e.mag, 2)}: ${C.brilhoTexto(e.mag)}`),
+    linha('Cor', T ? `${corEstrela(T)}; superfície a cerca de ${fmt.n(Math.round(T / 100) * 100)} K (estimada pelo índice de cor B−V ${fmt.n(e.bv, 2)})` : null),
+    linha('Agora', `${fmt.n(i.altura, 1)}° de altura, azimute ${fmt.n(i.azimute, 0)}° (${C.rumo(i.azimute)})`),
+    linha('Nasce e se põe', i.sempre === 'acima' ? 'nunca se põe neste local' : i.sempre === 'abaixo' ? 'nunca nasce neste local' : [i.nasce && `nasce ${diaHora(i.nasce, off, t)}`, i.poe && `se põe ${diaHora(i.poe, off, t)}`].filter(Boolean).join('; ')),
+    linha('Ponto mais alto', i.culmina.altura > 0 ? `${diaHora(i.culmina.ms, off, t)}, a ${fmt.n(i.culmina.altura, 1)}° de altura` : null),
+    linha('Coordenadas (J2000)', `ascensão reta ${horasMin(e.ra)}, declinação ${e.dec >= 0 ? '+' : '−'}${fmt.n(Math.abs(e.dec), 2)}°`),
+  ];
+  return {
+    titulo, frase, numeros, fonte,
+    detalhes: () => mostrarInfo(titulo, el('table', { class: 'tabela-detalhe' }, el('tbody', {}, ...linhas)),
+      el('p', { class: 'nota', text: `Catálogo Hipparcos e Yale Bright Star (via d3-celestial); posição de hoje com precessão, aberração e refração pelo Astronomy Engine 2.1.19, vista de ${local.nome}. Horários no fuso do local.` })),
+  };
+}
+
 // ------------------------------------------------------------------ satélites: identificação
 
 /** Operador e função por padrões de nome do CelesTrak (a fonte não informa o dono; sem padrão, fica "não informado"). */

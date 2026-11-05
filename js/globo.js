@@ -18,6 +18,7 @@ import { pontoSubsolar, pontoSublunar } from './globo-astro.js';
 import { faseLua, registroSatelite } from './ceu.js';
 import { cartaoAstro, criarBlocoCeu } from './globo-ceu.js';
 import { texturaPlaneta, texturaBrilho } from './globo-texturas.js';
+import { criarEstrelas, ajustarEscalaEstrelas } from './globo-estrelas.js';
 import { valido, direcaoTexto, partesLocais } from './analise.js';
 
 // ------------------------------------------------------------------ 1. estado e constantes
@@ -283,7 +284,7 @@ const FRAGMENT_TERRA = /* glsl */`
       }
     }
     float lamb = mix(max(dot(Nd, sol), 0.0), max(cosSol, 0.0), 0.45 + 0.55 * noMapa);
-    vec3 cor = alb * (0.035 + 1.05 * lamb);
+    vec3 cor = alb * (0.035 + 1.15 * lamb);
     float tw = exp(-pow(cosSol / 0.13, 2.0));
     cor = mix(cor, cor * vec3(1.3, 0.82, 0.55) + vec3(0.06, 0.02, 0.0), tw * 0.5);
     float agua = temMascaras > 0.5 ? texture2D(tMascaras, vUv).r * (1.0 - noMapa) : 0.0;
@@ -392,20 +393,10 @@ function montarCena() {
   }));
   G.cena.add(G.atmosfera);
 
-  // estrelas de fundo (posições fixas por semente, para o céu não mudar a cada abertura)
-  const n = 2200, pos = new Float32Array(n * 3), cor = new Float32Array(n * 3);
-  let s = 7;
-  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  for (let i = 0; i < n; i++) {
-    const z = rnd() * 2 - 1, a = rnd() * Math.PI * 2, r = Math.sqrt(1 - z * z);
-    pos.set([r * Math.cos(a) * 60, z * 60, r * Math.sin(a) * 60], i * 3);
-    const b = 0.35 + rnd() * 0.65, q = rnd();
-    cor.set([b * (q < 0.2 ? 0.85 : 1), b * (q < 0.2 ? 0.9 : q > 0.85 ? 0.95 : 1), b * (q > 0.85 ? 0.8 : 1)], i * 3);
-  }
-  const ge = new THREE.BufferGeometry();
-  ge.setAttribute('position', new THREE.BufferAttribute(pos, 3)); ge.setAttribute('color', new THREE.BufferAttribute(cor, 3));
-  G.estrelas = new THREE.Points(ge, new THREE.PointsMaterial({ size: CELULAR ? 1.6 : 1.3, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }));
-  G.cena.add(G.estrelas);
+  // céu de fundo: estrelas reais do catálogo, giradas pelo tempo sideral em atualizarAstros
+  G.estrelas = criarEstrelas(THREE, G.pixelRatio);
+  G.cena.add(G.estrelas.grupo);
+  G.estrelas.pronto.then(() => G.estrelas.girar(instanteMostrado())).catch(() => {});
 
   // Lua: esfera na direção real, iluminada pelo Sol (a fase aparece sozinha), mais perto que a real (14 raios em vez
   // de 60) e com o dobro do tamanho aparente, para ser vista e tocada.
@@ -474,6 +465,7 @@ function atualizarAstros() {
   latLonVec(sl.lat, sl.lon, 14, G.lua.position);
   latLonVec(sl.lat, sl.lon, 1, G.terra.material.uniforms.lua.value);
   G.terra.material.uniforms.luzLua.value = faseLua(ms).fracao;
+  G.estrelas.girar(ms);
 }
 
 function instanteMostrado() {
@@ -1221,7 +1213,10 @@ function modoSistema(ligar) {
   G.dom.rodape.hidden = ligar; G.dom.chips.parentElement.hidden = ligar;
   G.marcadorUsuario.visible = !ligar && !!G.estadoApp?.local;
   fecharPainel();
-  if (ligar) { G.camAntes = { ...G.cam }; G.cam.lat = 50; G.cam.dist = 9.5; G.animCam = null; }
+  if (ligar) { // de cima, inclinado, com a órbita de Saturno (3,5 na escala da cena) cabendo na largura da tela
+    const meiaLargura = Math.atan(Math.tan(G.camera.fov * Math.PI / 360) * G.camera.aspect);
+    G.camAntes = { ...G.cam }; G.cam.lat = 50; G.cam.dist = Math.max(9.5, Math.min(18, 3.9 / Math.tan(meiaLargura))); G.animCam = null;
+  }
   else if (G.camAntes) { G.cam.lat = G.camAntes.lat; G.cam.lon = G.camAntes.lon; G.cam.dist = Math.min(G.camAntes.dist, 5.5); G.animCam = null; }
 }
 
@@ -1281,6 +1276,7 @@ function medirQualidade(dt) {
     G.nivelQualidade++;
     G.pixelRatio = Math.max(1, G.pixelRatio - 0.4);
     G.renderer.setPixelRatio(G.pixelRatio);
+    ajustarEscalaEstrelas(G.estrelas, G.pixelRatio);
     if (G.particulas && G.nivelQualidade >= 2) iniciarParticulas(G.particulas.campo);
     if (G.nivelQualidade >= 3) { G.atmosfera.visible = false; }
   }
