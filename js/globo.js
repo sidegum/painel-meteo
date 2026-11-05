@@ -31,7 +31,6 @@ const CELULAR = matchMedia('(pointer: coarse)').matches;
 
 /** Camadas visíveis no seletor. canal: canal do PNG (0 R, 1 G, 2 B, 3 = módulo de RG, para vento). */
 const CAMADAS = [
-  { id: 'diaenoite', nome: 'Dia e noite', limpa: true },
   { id: 'nuvens', nome: 'Nuvens' },
   { id: 'vento', nome: 'Vento', arquivo: 'vento', canal: 3, faixaCor: [0, 120], unidade: 'km/h', fator: 3.6,
     cores: [[0, 90, 200, 190, 0], [15, 90, 200, 190, 0.25], [30, 90, 220, 140, 0.45], [50, 240, 210, 70, 0.6], [75, 240, 130, 50, 0.7], [100, 220, 50, 50, 0.78], [120, 140, 20, 110, 0.85]] },
@@ -227,12 +226,11 @@ async function carregarNuvens(hora) {
   G.nuvens.userData.satelite = !!sat;
   G.terra.material.uniforms.tNuvens.value = t;
   G.terra.material.uniforms.temNuvens.value = 1;
-  G.terra.material.uniforms.temNuvens.value = G.camada === 'diaenoite' ? 0 : 1;
   if (G.camada === 'nuvens') { montarLegenda(CAMADAS.find((c) => c.id === 'nuvens'), null); atualizarNotaFonte(); }
 }
 
-/** Opacidade das nuvens pela camada: nenhuma em Dia e noite, discreta com dados por cima, cheia em Nuvens. */
-function opacidadeNuvens() { const c = CAMADAS.find((x) => x.id === G.camada); return c?.limpa ? 0 : c?.arquivo ? 0.3 : 1; }
+/** Opacidade das nuvens pela camada: cheia em Nuvens, discreta com dados por cima. */
+function opacidadeNuvens() { return CAMADAS.find((x) => x.id === G.camada)?.arquivo ? 0.3 : 1; }
 
 const suave = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -247,7 +245,7 @@ const VERTEX_TERRA = /* glsl */`
 
 const FRAGMENT_TERRA = /* glsl */`
   uniform sampler2D tDia, tNoite, tNormal, tMascaras, tNuvens, tCamada, tEscala, tRegiao;
-  uniform float temNormal, temNoite, temMascaras, temNuvens, temCamada, opacidade, raiz, isobaras, temRegiao, luzLua, realce;
+  uniform float temNormal, temNoite, temMascaras, temNuvens, temCamada, opacidade, raiz, isobaras, temRegiao, luzLua;
   uniform vec2 regLon, regMerc; // mosaico da região (globo-regiao.js): longitudes e limites Mercator do mosaico
   uniform vec3 sol, lua, olho; uniform vec2 faixaCanal, faixaCor, desloc; uniform int canal;
   varying vec2 vUv; varying vec3 vN; varying vec3 vP;
@@ -266,7 +264,10 @@ const FRAGMENT_TERRA = /* glsl */`
     vec3 Nd = N;
     if (temNormal > 0.5) { vec3 nm = texture2D(tNormal, vUv).xyz * 2.0 - 1.0; Nd = normalize(T * nm.x + B * nm.y + N * (nm.z * 1.6)); }
     float cosSol = dot(N, sol);
-    float dia = smoothstep(-0.10, 0.14, cosSol); // crepúsculo suave: o Sol 6° abaixo do horizonte ainda tinge o céu
+    // terminador: a luz do dia some entre o Sol 3° acima e 3° abaixo do horizonte (refração e crepúsculo civil);
+    // as luzes das cidades acendem do pôr do Sol até o fim do crepúsculo civil (Sol a −6°)
+    float dia = smoothstep(-0.05, 0.08, cosSol);
+    float noite = 1.0 - smoothstep(-0.10, 0.0, cosSol);
     // cor da superfície: imagem da NASA ou, no zoom próximo, o mapa detalhado (os dois recebem a mesma luz do Sol e da Lua)
     vec3 alb = texture2D(tDia, vUv).rgb;
     float noMapa = 0.0;
@@ -285,27 +286,29 @@ const FRAGMENT_TERRA = /* glsl */`
       }
     }
     float lamb = mix(max(dot(Nd, sol), 0.0), max(cosSol, 0.0), 0.45 + 0.55 * noMapa);
-    vec3 cor = alb * (0.035 + 1.15 * lamb);
-    float tw = exp(-pow(cosSol / 0.13, 2.0));
-    cor = mix(cor, cor * vec3(1.3, 0.82, 0.55) + vec3(0.06, 0.02, 0.0), tw * 0.5);
+    // dia claro por igual (como numa foto de satélite), escurecendo só perto do terminador
+    vec3 cor = alb * 1.3 * pow(lamb, 0.5) * dia;
+    // faixa estreita e quente do nascer e do pôr do Sol
+    float tw = exp(-pow((cosSol - 0.02) / 0.06, 2.0));
+    cor = mix(cor, cor * vec3(1.25, 0.85, 0.62), tw * 0.35);
     float agua = temMascaras > 0.5 ? texture2D(tMascaras, vUv).r * (1.0 - noMapa) : 0.0;
     vec3 H = normalize(sol + V);
-    float brilho = pow(max(dot(Nd, H), 0.0), 140.0) * agua * dia;
-    cor += vec3(1.0, 0.93, 0.8) * brilho * 1.1;
-    cor += vec3(0.5, 0.7, 1.0) * pow(max(dot(N, H), 0.0), 10.0) * agua * dia * 0.06;
+    // reflexo do Sol no mar: discreto e largo, como nas fotos da Terra inteira (não um ponto estourado)
+    float brilho = pow(max(dot(N, H), 0.0), 48.0) * agua * dia;
+    cor += vec3(1.0, 0.95, 0.85) * brilho * 0.22;
+    cor += vec3(0.5, 0.7, 1.0) * pow(max(dot(N, H), 0.0), 8.0) * agua * dia * 0.05;
     float nuvemAqui = 0.0;
     if (temNuvens > 0.5) {
       float sombra = texture2D(tNuvens, vec2(fract(vUv.x + desloc.x), 1.0 - vUv.y + desloc.y)).r;
       nuvemAqui = texture2D(tNuvens, vec2(vUv.x, 1.0 - vUv.y)).r;
       cor *= 1.0 - 0.42 * sombra * dia;
     }
-    float noite = 1.0 - dia;
-    // luar: a Lua clareia o lado escuro pela fase (luzLua = fração iluminada) e pela altura dela em cada ponto
+    // noite quase preta, com um azul muito leve; o luar clareia pela fase (luzLua = fração iluminada) e pela altura da Lua
     float luar = luzLua * max(dot(Nd, lua), 0.0);
-    cor += alb * (vec3(0.025, 0.035, 0.065) + vec3(0.20, 0.25, 0.36) * luar) * noite;
-    if (temNoite > 0.5) { // luzes das cidades (NASA Black Marble), mais fortes no modo Dia e noite
+    cor += alb * (vec3(0.008, 0.011, 0.022) + vec3(0.11, 0.14, 0.21) * luar) * (1.0 - dia);
+    if (temNoite > 0.5) { // luzes das cidades (NASA Black Marble), apagadas pelas nuvens por cima
       vec3 luzes = texture2D(tNoite, vUv).rgb;
-      cor += pow(luzes, vec3(0.85)) * vec3(1.0, 0.86, 0.62) * noite * (3.0 + 1.8 * realce) * (1.0 - 0.6 * nuvemAqui);
+      cor += pow(luzes, vec3(0.9)) * vec3(1.0, 0.82, 0.55) * noite * 5.0 * (1.0 - 0.75 * nuvemAqui);
     }
     if (temCamada > 0.5) {
       vec2 ud = uvDados(vUv);
@@ -322,7 +325,7 @@ const FRAGMENT_TERRA = /* glsl */`
       }
     }
     float fr = pow(1.0 - max(dot(N, V), 0.0), 3.2);
-    cor += vec3(0.33, 0.52, 1.0) * fr * (0.12 + 0.88 * dia) * 0.55;
+    cor += vec3(0.33, 0.52, 1.0) * fr * (0.04 + 0.96 * dia) * 0.55;
     gl_FragColor = vec4(cor, 1.0);
   }`;
 
@@ -334,13 +337,14 @@ const FRAGMENT_NUVENS = /* glsl */`
     vec3 N = normalize(vN); vec3 V = normalize(olho - vP);
     float a = texture2D(tNuvem, vec2(vUv.x, 1.0 - vUv.y)).r;
     float cosSol = dot(N, sol);
-    float dia = smoothstep(-0.12, 0.16, cosSol);
-    vec3 cor = vec3(1.0, 0.99, 0.97) * (0.10 + 0.92 * max(cosSol, 0.0));
-    float tw = exp(-pow(cosSol / 0.13, 2.0));
-    cor = mix(cor, cor * vec3(1.35, 0.8, 0.55), tw * 0.6);
-    cor = mix(vec3(0.09, 0.10, 0.13), cor, dia);
+    float dia = smoothstep(-0.05, 0.08, cosSol);
+    vec3 cor = vec3(1.0, 0.99, 0.97) * (0.08 + 0.95 * pow(max(cosSol, 0.0), 0.5));
+    float tw = exp(-pow((cosSol - 0.02) / 0.06, 2.0));
+    cor = mix(cor, cor * vec3(1.3, 0.82, 0.6), tw * 0.45);
+    // à noite as nuvens são só uma sombra escura que cobre as luzes, sem manchas cinzas
+    cor = mix(vec3(0.012, 0.015, 0.025), cor, dia);
     float borda = pow(max(dot(N, V), 0.0), 0.45);
-    gl_FragColor = vec4(cor, a * 0.96 * borda * opacNuvem);
+    gl_FragColor = vec4(cor, a * mix(0.55, 0.96, dia) * borda * opacNuvem);
   }`;
 
 const FRAGMENT_ATMOSFERA = /* glsl */`
@@ -349,11 +353,11 @@ const FRAGMENT_ATMOSFERA = /* glsl */`
     vec3 N = normalize(vN); vec3 V = normalize(olho - vP);
     float f = 1.0 - max(dot(N, V), 0.0);
     float a = pow(f, 3.0) * smoothstep(0.0, 1.0, f * 1.4);
-    float dia = smoothstep(-0.35, 0.45, dot(N, sol));
+    float dia = smoothstep(-0.2, 0.3, dot(N, sol));
     vec3 cor = mix(vec3(0.25, 0.45, 0.95), vec3(0.55, 0.75, 1.0), f);
-    float tw = exp(-pow(dot(N, sol) / 0.25, 2.0));
-    cor = mix(cor, vec3(1.0, 0.55, 0.3), tw * 0.5);
-    gl_FragColor = vec4(cor, a * (0.08 + 0.92 * dia) * 0.9);
+    float tw = exp(-pow(dot(N, sol) / 0.18, 2.0));
+    cor = mix(cor, vec3(1.0, 0.6, 0.35), tw * 0.35);
+    gl_FragColor = vec4(cor, a * (0.03 + 0.97 * dia) * 0.9);
   }`;
 
 function montarCena() {
@@ -375,7 +379,7 @@ function montarCena() {
   const uniTerra = {
     tDia: { value: null }, tNoite: { value: null }, tNormal: { value: null }, tMascaras: { value: null }, tNuvens: { value: null }, tCamada: { value: null }, tEscala: { value: null },
     temNormal: { value: 0 }, temNoite: { value: 0 }, temMascaras: { value: 0 }, temNuvens: { value: 0 }, temCamada: { value: 0 },
-    opacidade: { value: 0 }, raiz: { value: 0 }, isobaras: { value: 0 }, canal: { value: 0 }, luzLua: { value: 0 }, realce: { value: 0 },
+    opacidade: { value: 0 }, raiz: { value: 0 }, isobaras: { value: 0 }, canal: { value: 0 }, luzLua: { value: 0 },
     sol: { value: new THREE.Vector3(1, 0, 0) }, lua: { value: new THREE.Vector3(0, 0, 1) }, olho: { value: new THREE.Vector3() }, faixaCanal: { value: new THREE.Vector2(0, 1) }, faixaCor: { value: new THREE.Vector2(0, 1) }, grade: { value: new THREE.Vector2(720, 361) },
     desloc: { value: new THREE.Vector2(0.0025, 0.0025) },
   };
@@ -803,9 +807,8 @@ async function carregarCamada(id, hora) {
   G.camada = id;
   for (const b of G.dom.chips.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.camada === id));
   prefs.gravar('globoCamada', id);
-  // Dia e noite: Terra limpa, sem nuvens, com as luzes das cidades realçadas; com dados por cima, nuvens discretas
-  u.temNuvens.value = cam.limpa || !G.nuvens.material.uniforms.temNuvem.value ? 0 : 1;
-  u.realce.value = cam.limpa ? 1 : 0;
+  // o dia e a noite são sempre os reais; com dados por cima, as nuvens ficam discretas (opacidadeNuvens)
+  u.temNuvens.value = G.nuvens.material.uniforms.temNuvem.value ? 1 : 0;
   if (!cam.arquivo) { u.temCamada.value = 0; pararParticulas(); montarLegenda(cam, null); atualizarNotaFonte(); return; }
   if (!G.manifest?.gfs) { montarLegenda(cam, null); return; }
   let campo;
@@ -1280,7 +1283,7 @@ function mostrarAjuda() {
   mostrarInfo('Globo',
     el('p', { text: 'Arraste para girar, pince ou use a roda para aproximar, toque duas vezes para chegar perto. Toque num ponto da Terra para ver o tempo lá; toque no Sol, na Lua, num satélite, num planeta ou numa sonda para ver o que é, onde está e quando dá para ver daqui.' }),
     el('ul', {},
-      el('li', {}, 'Dia e noite: o lado iluminado e o escuro pela posição real do Sol agora; a Lua clareia a noite conforme a fase e as luzes das cidades (NASA Black Marble) acendem no escuro. Ao mudar a hora na linha do tempo, o Sol acompanha.'),
+      el('li', {}, 'Dia e noite (sempre ligado): o lado iluminado e o escuro pela posição real do Sol agora; a Lua clareia a noite conforme a fase e as luzes das cidades (NASA Black Marble) acendem no escuro. Ao mudar a hora na linha do tempo, o Sol acompanha.'),
       el('li', {}, 'Nuvens: imagem infravermelha dos satélites GOES-Leste, GOES-Oeste e Himawari (NASA GIBS), onde há cobertura; no resto, nuvens previstas pelo GFS.'),
       el('li', {}, 'Vento (linhas mostram para onde ele sopra, a 10 m), chuva (mm/h), temperatura (a 2 m) e pressão ao nível do mar (isóbaras a cada 4 hPa ao aproximar): modelo GFS 0,5° da NOAA, a cada 3 h até 48 h.'),
       el('li', {}, 'Ponto tocado: ECMWF IFS pela Open-Meteo, com fuso horário local. Ciclones: NHC e GDACS.'),
