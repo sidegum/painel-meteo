@@ -371,7 +371,7 @@ MESES = {m: i + 1 for i, m in enumerate(['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN
 def horizons_vetores(alvo, inicio, fim, passo, centro='500@10'):
     """Vetores de estado (x, y, z em UA; vx, vy, vz em UA/dia) na eclíptica J2000. Se o pedido passar da cobertura
     da efeméride, o Horizons avisa a data limite; o intervalo é cortado nela e o pedido refeito (uma vez por lado)."""
-    for _ in range(3):
+    for _ in range(8):
         q = {'format': 'json', 'COMMAND': f"'{alvo}'", 'OBJ_DATA': 'NO', 'MAKE_EPHEM': 'YES', 'EPHEM_TYPE': 'VECTORS', 'CENTER': f"'{centro}'",
              'START_TIME': f"'{inicio:%Y-%m-%d %H:%M}'", 'STOP_TIME': f"'{fim:%Y-%m-%d %H:%M}'", 'STEP_SIZE': f"'{passo}'",
              'VEC_TABLE': '2', 'REF_PLANE': 'ECLIPTIC', 'REF_SYSTEM': 'ICRF', 'OUT_UNITS': 'AU-D', 'CSV_FORMAT': 'YES', 'VEC_LABELS': 'NO'}
@@ -382,6 +382,12 @@ def horizons_vetores(alvo, inicio, fim, passo, centro='500@10'):
             raise RuntimeError(f'Horizons {alvo}: {e}')
         texto = j.get('result', '') + ' ' + j.get('error', '')
         m = re.search(r'(prior to|after) A\.D\. (\d{4})-([A-Z]{3})-(\d{2}) (\d{2}):(\d{2})', texto)
+        lacuna = re.search(r'Insufficient ephemeris data.*?epoch (\d{4}) ([A-Z]{3}) (\d{2})', texto, re.S)
+        if '$$SOE' not in texto and lacuna:  # buraco no meio da efeméride (ex.: Lucy em 2023): recomeça depois dele
+            inicio = datetime(int(lacuna.group(1)), MESES[lacuna.group(2)], int(lacuna.group(3)), tzinfo=timezone.utc) + timedelta(days=3)
+            if fim <= inicio:
+                raise RuntimeError(f'Horizons {alvo}: sem efeméride no intervalo')
+            continue
         if '$$SOE' not in texto and m:
             limite = datetime(int(m.group(2)), MESES[m.group(3)], int(m.group(4)), int(m.group(5)), int(m.group(6)), tzinfo=timezone.utc)
             if m.group(1) == 'prior to':
@@ -393,7 +399,7 @@ def horizons_vetores(alvo, inicio, fim, passo, centro='500@10'):
             continue
         if '$$SOE' not in texto:
             raise RuntimeError(f'Horizons {alvo}: resposta sem dados ({texto[:300]})')
-        nome = re.search(r'Target body name:\s*(.+?)\s{2,}', texto)
+        nome = re.search(r'Target body name:\s*([^{\n]+?)\s*(?:\{|$)', texto, re.M)
         linhas = texto.split('$$SOE', 1)[1].split('$$EOE', 1)[0].strip().splitlines()
         pontos = []
         for ln in linhas:
