@@ -17,7 +17,7 @@ Documentos complementares:
 ## 1. Visão geral da arquitetura
 
 ```
-┌──────────────────────────── Navegador (PWA, GitHub Pages) ────────────────────────────┐
+┌──────────────────────────── Navegador (PWA, Cloudflare Pages) ────────────────────────┐
 │ index.html + app.css                                                                  │
 │ js/app.js ── orquestração, estado, renderização das abas                              │
 │   ├─ js/analise.js  funções puras (estatística, confiança, aprendizado)  ← testado    │
@@ -564,8 +564,8 @@ A ordem é:
 
 - No `install`, guarda os arquivos do app em `painel-app-<versão>`. No `activate`, remove as versões antigas e assume as abas abertas (`clients.claim`).
 - No `fetch`, atende só `GET` do mesmo domínio. As APIs externas não passam pelo service worker.
-- A estratégia é **rede primeiro**, com `cache: 'no-cache'`, para ignorar os 10 min de cache HTTP do GitHub Pages. O cache local entra sem internet ou quando a rede demora mais de 4 s.
-- Todos os caminhos são relativos à pasta do `sw.js`, então o mesmo código serve a subpasta do GitHub Pages (`/painel-meteo/`) e a raiz do domínio no Cloudflare Pages.
+- A estratégia é **rede primeiro**, com `cache: 'no-cache'`, para ignorar o cache HTTP do servidor. O cache local entra sem internet ou quando a rede demora mais de 4 s.
+- Todos os caminhos são relativos à pasta do `sw.js`, então o app funciona em qualquer endereço base.
 - O Cloudflare Pages redireciona `/index.html` para `/` e `/privacidade.html` para `/privacidade`. Uma resposta que passou por redirecionamento não pode ser entregue a uma navegação, então `semRedirecionamento` copia a resposta sem essa marca antes de guardá-la. A política de privacidade é reconhecida com e sem `.html`.
 - **A cada release, `VERSAO` sobe em `sw.js` e em `js/app.js`.** Isso troca o cache e mostra a versão no rodapé.
 
@@ -630,8 +630,7 @@ Nenhuma chave contém a localização ou o IP do usuário.
 - `.github/workflows/pages.yml`: publica o site no Cloudflare Pages (Direct Upload, sem compilação) a cada push na `main`, depois da calibração e do workflow do Worker, e à mão. O `globo.yml` (a cada 3 h) e o `enso.yml` (quando o El Niño muda) publicam no próprio job, porque commits feitos com o `GITHUB_TOKEN` não disparam outros workflows. Passo a passo em CLOUDFLARE-PAGES.md.
   - `scripts/montar-site.sh`: copia só o que o navegador usa (`index.html`, `privacidade.html`, `manifest.json`, `sw.js`, `app.css`, `js/`, `vendor/`, `icones/`, `dados/*.json`, `cloudflare/_headers` e `cloudflare/404.html`) e os campos do Globo em `globo-dados/`. Confere que todo arquivo da lista do service worker existe. O `testes.yml` roda essa montagem em cada PR e push na `main`.
   - `scripts/publicar-pages.sh`: busca o branch `globo-dados` (se não vier pronto), monta o site, cria o projeto na primeira vez e publica com `wrangler pages deploy`.
-  - No Cloudflare Pages, `CONFIG.globoDados` aponta para `globo-dados/` do próprio site, que continua funcionando com o repositório privado. No GitHub Pages e no computador local, aponta para `raw.githubusercontent.com`.
-  - `js/mudanca.js` (antes do `app.js`): no endereço antigo do GitHub Pages, leva ao `CONFIG.enderecoOficial` com as preferências em `#migrar=`; no app instalado, mostra um aviso para instalar de novo. No endereço novo, grava só as preferências conhecidas e limpa a URL.
+  - `CONFIG.globoDados` é `globo-dados/`, relativo ao próprio site, onde a publicação copia o branch `globo-dados`.
   - O `404.html` desliga o modo de aplicação de página única do Pages: um arquivo que falta responde 404, e não o `index.html` com status 200.
   - O Worker aceita como origem o que está em `ALLOWED_ORIGIN` no `wrangler.toml` mais `https://<PAGES_PROJETO>.pages.dev` e `https://<PAINEL_DOMINIO>`, variáveis do repositório lidas pelo `worker.yml` e passadas com `wrangler deploy --var`.
 - `scripts/configurar.mjs`: grava a URL do Worker em `js/config.js`.

@@ -34,9 +34,9 @@ globalThis.fetch = async (url) => {
   return new Response('não esperado', { status: 599 });
 };
 
-const env = { ALLOWED_ORIGIN: 'https://sidegum.github.io', LIMITE_POR_MINUTO: '30' };
+const env = { ALLOWED_ORIGIN: 'https://tempo-rs.pages.dev', LIMITE_POR_MINUTO: '30' };
 let ipSeq = 0;
-const req = (path, { method = 'GET', origin = 'https://sidegum.github.io', ip } = {}) =>
+const req = (path, { method = 'GET', origin = 'https://tempo-rs.pages.dev', ip } = {}) =>
   new Request('https://painel.exemplo.workers.dev' + path, { method, headers: { origin, 'cf-connecting-ip': ip || `10.0.0.${++ipSeq % 250}` } });
 
 // ---------------- parsers com dados reais
@@ -186,7 +186,7 @@ test('parâmetros inválidos', async () => {
 
 test('CORS restrito à origem do app', async () => {
   const ok = await w.fetch(req('/v1/saude'), env);
-  assert.equal(ok.headers.get('access-control-allow-origin'), 'https://sidegum.github.io');
+  assert.equal(ok.headers.get('access-control-allow-origin'), 'https://tempo-rs.pages.dev');
   const ruim = await w.fetch(req('/v1/saude', { origin: 'https://evil.example' }), env);
   assert.equal(ruim.headers.get('access-control-allow-origin'), null);
 });

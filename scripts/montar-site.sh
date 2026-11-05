@@ -4,7 +4,7 @@
 #
 # Fica de fora tudo que não é do app (worker/, scripts/, test/, docs/, dados/historico/, package*.json), para o site
 # não expor código e dados internos quando o repositório for privado. Os campos do Globo (branch globo-dados) entram
-# em globo-dados/, porque o raw.githubusercontent.com deixa de responder com o repositório privado.
+# em globo-dados/ (o repositório é privado; o app lê tudo do próprio site).
 set -euo pipefail
 
 saida=${1:?informe a pasta de saída}

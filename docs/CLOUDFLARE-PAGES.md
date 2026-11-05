@@ -1,14 +1,14 @@
 # Publicar no Cloudflare Pages (subdomínio próprio)
 
-O app vai para o Cloudflare Pages pelo GitHub Actions, sem passo de compilação. Os arquivos são só copiados (`scripts/montar-site.sh`) e enviados com o Wrangler (`scripts/publicar-pages.sh`, modo Direct Upload). O GitHub Pages continua como está.
+O app vai para o Cloudflare Pages pelo GitHub Actions, sem passo de compilação. Os arquivos são só copiados (`scripts/montar-site.sh`) e enviados com o Wrangler (`scripts/publicar-pages.sh`, modo Direct Upload).
 
 O nome do subdomínio fica num lugar só: a variável `PAINEL_DOMINIO` do repositório. Nos exemplos, ele aparece como `tempo.seudominio.com.br`.
 
-## Ordem da mudança
+## Situação
 
-1. **Endereço:** em 05/11/2026 o Gustavo escolheu o endereço gratuito `https://tempo-rs.pages.dev/` (projeto `tempo-rs`, padrão no código). Um domínio próprio, se for comprado depois, entra pelos passos 2, 4, 5 e 6 abaixo.
-2. **Endereço antigo leva ao novo:** depois que o subdomínio abrir, o endereço oficial em `js/config.js` (`enderecoOficial`) passa a ser o subdomínio. Quem abre `sidegum.github.io/painel-meteo` no navegador vai direto para o novo endereço. No ícone instalado na tela inicial, aparece um aviso com o botão para copiar o novo endereço e instalar de novo. Deixe assim por alguns dias, até reinstalar em todos os aparelhos.
-3. **Fechar o repositório:** veja "Quando o repositório virar privado".
+Desde 05/11/2026, o app está só em `https://tempo-rs.pages.dev/` (projeto `tempo-rs`, padrão no código), e o repositório é privado. O GitHub Pages foi desligado. O antigo `sidegum.github.io/painel-meteo` levou ao novo endereço por algumas horas (versões 1.8.9 e 1.8.10), e esse código já foi removido.
+
+Os passos abaixo servem para ligar um domínio próprio, se um for comprado (os passos 1 e 3 já estão feitos).
 
 ## O que você faz (uma vez só)
 
@@ -24,7 +24,7 @@ O nome do subdomínio fica num lugar só: a variável `PAINEL_DOMINIO` do reposi
 
 **5. Liberar o novo endereço no Worker.** Em **Actions > Publicar Worker > Run workflow**. O log mostra a linha "Origens aceitas", que deve incluir `https://tempo.seudominio.com.br`.
 
-**6. Conferir.** Abra `https://tempo.seudominio.com.br/` no celular. Confira três coisas: Medições agora com dados das estações (isso vem do Worker), o Globo com vento e nuvens, e o app abrindo sem internet depois da primeira visita. Depois, instale na tela inicial a partir do novo endereço. O ícone antigo, do GitHub Pages, é outro app e pode ser apagado.
+**6. Conferir.** Abra `https://tempo.seudominio.com.br/` no celular. Confira três coisas: Medições agora com dados das estações (isso vem do Worker), o Globo com vento e nuvens, e o app abrindo sem internet depois da primeira visita. Depois, instale na tela inicial a partir do novo endereço.
 
 ## Depois disso, nada é manual
 
@@ -37,19 +37,12 @@ O nome do subdomínio fica num lugar só: a variável `PAINEL_DOMINIO` do reposi
 
 Cada publicação leva o app da `main` e os campos do Globo juntos. Sem os segredos da Cloudflare, os workflows só avisam e terminam sem erro.
 
-## Quando o repositório virar privado
+## Com o repositório privado
 
-Como fechar, depois dos dias de aviso:
-1. No GitHub, em **Settings > General**, no fim da página (**Danger Zone**), toque em **Change visibility > Change to private** e confirme.
-2. Em **Settings > Pages**, toque em **Unpublish site**, se a opção aparecer. No plano gratuito, o GitHub Pages para sozinho com o repositório privado.
-3. Abra o subdomínio no celular e confira se o app continua normal.
-
-O que acontece:
-- **O Cloudflare Pages continua funcionando.** O Direct Upload não lê o repositório: quem envia os arquivos é o GitHub Actions, e o `GITHUB_TOKEN` funciona em repositório privado.
-- **Os campos do Globo continuam.** No Cloudflare Pages, eles saem da pasta `globo-dados/` do próprio site. O endereço `raw.githubusercontent.com`, usado só no GitHub Pages, deixa de responder.
-- **O site não expõe código.** Só vão para o Pages os arquivos que o navegador usa. Ficam de fora `worker/`, `scripts/`, `test/`, `docs/`, `dados/historico/` e `package*.json`.
-- **O endereço `sidegum.github.io/painel-meteo` deixa de abrir**, e com ele o aviso de mudança. Por isso o aviso precisa ficar no ar por alguns dias antes.
-- **Os minutos do GitHub Actions** (2.000 por mês no plano gratuito) foram ajustados no PR #65 para cerca de 750 a 1.150 por mês: Globo a cada 3 h, El Niño a cada 6 h e calibração incremental.
+- O Cloudflare Pages funciona igual: o Direct Upload não lê o repositório, quem envia os arquivos é o GitHub Actions.
+- Os campos do Globo, o El Niño e a calibração saem do próprio site (`globo-dados/` e `dados/`), nada vem do `raw.githubusercontent.com`.
+- Só vão para o site os arquivos que o navegador usa. Ficam de fora `worker/`, `scripts/`, `test/`, `docs/`, `dados/historico/` e `package*.json`.
+- Os minutos do GitHub Actions (2.000 por mês no plano gratuito) foram ajustados no PR #65 para cerca de 750 a 1.150 por mês.
 
 ## Detalhes técnicos
 
@@ -57,4 +50,3 @@ O que acontece:
 - `cloudflare/_headers` define cabeçalhos de segurança, `noindex` (o site é pessoal) e cache de 5 min para `globo-dados/`. `cloudflare/404.html` faz um arquivo que não existe responder 404, em vez de devolver o app.
 - O Worker aceita as origens de `ALLOWED_ORIGIN` no `worker/wrangler.toml`, mais o endereço real do projeto no Pages (lido da API da Cloudflare) e `https://<PAINEL_DOMINIO>`. Numa publicação feita à mão do computador, acrescente o domínio no `wrangler.toml`.
 - Referências: [Direct Upload com CI](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/), [Custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/), [Headers](https://developers.cloudflare.com/pages/configuration/headers/), [Serving Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/), [Limits](https://developers.cloudflare.com/pages/platform/limits/).
-- `js/mudanca.js` roda antes do app. No endereço antigo (`*.github.io`), leva ao `CONFIG.enderecoOficial`. As preferências do aparelho (local escolhido, tema, camadas e avisos vistos) vão no fragmento `#migrar=` da URL, que não é enviado ao servidor. No endereço novo, só as preferências conhecidas são gravadas, e a URL é limpa. No app instalado (`display-mode: standalone`), mostra o aviso em vez de redirecionar.

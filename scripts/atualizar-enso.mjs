@@ -1,7 +1,7 @@
 // Atualiza dados/enso.json (rodado pelo GitHub Actions a cada 3 horas, ou à mão: node scripts/atualizar-enso.mjs).
 // Reaproveita os leitores do Worker para NOAA CPC e IRI (que não liberam leitura pelo navegador) e acrescenta
 // uma estimativa diária da temperatura do mar na região Niño 3.4 pela Open-Meteo Marine.
-// O arquivo é publicado pelo GitHub Pages no mesmo endereço do app, então o app lê sem Worker e sem CORS.
+// O arquivo é publicado no Cloudflare Pages no mesmo endereço do app, então o app lê sem Worker e sem CORS.
 import { readFile, writeFile } from 'node:fs/promises';
 import { atualizarEnso } from '../worker/src/index.js';
 
