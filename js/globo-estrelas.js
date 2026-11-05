@@ -1,5 +1,6 @@
-// Céu de fundo do Globo: as 119.625 estrelas do HYG (as 8.920 visíveis a olho nu com ficha completa e as 110.705 mais
-// fracas), a Via Láctea, os objetos de céu profundo (Messier e famosos do sul) e as linhas e nomes das 88 constelações.
+// Céu de fundo do Globo: 802.474 estrelas (as 8.920 do HYG visíveis a olho nu com ficha completa, as 110.705 mais
+// fracas do HYG e 682.849 do Gaia DR3 até G 10,5 fora do Hipparcos), a Via Láctea, 12.162 objetos de céu profundo
+// (Messier, famosos do sul e OpenNGC) e as linhas e nomes das 88 constelações.
 //
 // Dois modos de desenho, no mesmo shader:
 // - Céu (em volta da Terra): cada estrela na sua direção, numa esfera de raio RAIO_ESTRELAS, com o brilho do catálogo.
@@ -13,6 +14,9 @@
 // Catálogos (vendor/ceu, montados por scripts/globo/montar-estrelas.py e montar-ceu-profundo.py):
 // - HYG Database v4.1 (David Nash, CC BY-SA 4.0): Hipparcos, Yale Bright Star e Gliese, época 2026,0.
 // - Linhas das constelações, Messier e contornos da Via Láctea: d3-celestial (Olaf Frohn, BSD-3).
+// - Estrelas fora do Hipparcos: Gaia DR3 (ESA/Gaia/DPAC, CC BY-SA 3.0 IGO) com distâncias de Bailer-Jones et al. 2021,
+//   montadas no GitHub Actions por scripts/globo/montar-ceu-gaia.py.
+// - Objetos NGC e IC: OpenNGC (Mattia Verga, CC BY-SA 4.0).
 import * as A from '../vendor/astronomy/astronomy.min.js';
 import { temperaturaCor } from './ceu.js';
 
@@ -65,7 +69,7 @@ const VERTEX = /* glsl */`
     if (m > limite) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vAlfa = 0.0; return; }
     gl_Position = noFundo(projectionMatrix * modelViewMatrix * vec4(p, 1.0));
     gl_PointSize = clamp(3.6 - 0.62 * m, 1.0, 14.0) * escala;
-    vAlfa = m <= 6.5 ? clamp(1.1 - 0.15 * m, 0.18, 1.0) : 0.18 * clamp(1.0 - (m - 6.5) / 5.0, 0.05, 1.0);
+    vAlfa = m <= 6.5 ? clamp(1.1 - 0.15 * m, 0.18, 1.0) : 0.3 * clamp(1.0 - (m - 6.5) / 7.0, 0.15, 1.0); // as de telescópio formam o "pó" do céu
   }`;
 const FRAGMENT = /* glsl */`
   uniform float opacidade;
@@ -99,30 +103,34 @@ const VERTEX_OBJETOS = /* glsl */`
   ${COMUM}
   attribute vec3 cor;
   attribute float tamanho;
+  attribute float destaque;
   uniform float pxPorGrau;
   uniform float escala;
   varying vec3 vCor;
   varying float vPx;
+  varying float vDestaque;
   void main() {
-    vCor = cor;
+    vCor = cor; vDestaque = destaque;
     vec3 dir = normalize(position);
     vec3 p = modo3d > 0.5 ? cam + dir * ${(RAIO_FUNDO * 0.99).toFixed(1)} : dir * ${(RAIO_ESTRELAS * 0.99).toFixed(1)};
     gl_Position = noFundo(projectionMatrix * modelViewMatrix * vec4(p, 1.0));
-    gl_PointSize = clamp(tamanho / 60.0 * pxPorGrau, 7.0 * escala, 140.0 * escala);
+    gl_PointSize = clamp(tamanho / 60.0 * pxPorGrau, (destaque > 0.5 ? 7.0 : 4.0) * escala, 140.0 * escala);
     vPx = gl_PointSize / escala;
   }`;
 const FRAGMENT_OBJETOS = /* glsl */`
   uniform float opacidade;
   varying vec3 vCor;
   varying float vPx;
+  varying float vDestaque;
   void main() {
     float r = length(gl_PointCoord - 0.5) * 2.0;
     if (r > 1.0) discard;
     // objeto pequeno na tela: núcleo e um anel fino que ajuda a achá-lo; grande (Nuvens de Magalhães, Andrômeda de
     // perto): só um brilho difuso e fraco, como se vê a olho nu, sem disco nem contorno
     float grande = smoothstep(18.0, 60.0, vPx);
-    float nucleo = exp(-4.0 * r * r) * mix(0.55, 0.14, grande);
-    float anel = 0.35 * (1.0 - grande) * (1.0 - smoothstep(0.86, 0.94, r)) * smoothstep(0.78, 0.86, r);
+    // os milhares de objetos NGC/IC sem nome ficam só como uma mancha fraca, sem anel
+    float nucleo = exp(-4.0 * r * r) * mix(0.55, 0.14, grande) * mix(0.45, 1.0, vDestaque);
+    float anel = 0.35 * vDestaque * (1.0 - grande) * (1.0 - smoothstep(0.86, 0.94, r)) * smoothstep(0.78, 0.86, r);
     float a = nucleo + anel;
     gl_FragColor = vec4(vCor, a * opacidade);
   }`;
@@ -130,7 +138,7 @@ const FRAGMENT_OBJETOS = /* glsl */`
 export const TIPOS_OBJETO = {
   oc: ['Aglomerado aberto', '#bfe0ff'], gc: ['Aglomerado globular', '#fff0c0'], s: ['Galáxia espiral', '#ffd9a8'], sd: ['Galáxia espiral', '#ffd9a8'],
   e: ['Galáxia elíptica', '#ffd9a8'], i: ['Galáxia irregular', '#ffd9a8'], l: ['Galáxia lenticular', '#ffd9a8'], en: ['Nebulosa de emissão', '#ff9db0'],
-  sfr: ['Nebulosa onde nascem estrelas', '#ff9db0'], pn: ['Nebulosa planetária', '#9fffe0'], snr: ['Restos de supernova', '#ffb38a'],
+  sfr: ['Nebulosa onde nascem estrelas', '#ff9db0'], gg: ['Grupo de galáxias', '#ffd9a8'], pn: ['Nebulosa planetária', '#9fffe0'], snr: ['Restos de supernova', '#ffb38a'],
   rn: ['Nebulosa de reflexão', '#9fc4ff'], pos: ['Agrupamento de estrelas', '#d8dce8'], bn: ['Nebulosa', '#ff9db0'],
 };
 
@@ -160,7 +168,7 @@ export function descomprimir(v, alvo) {
  * Monta o céu (vazio até os catálogos chegarem) e devolve o controle dele.
  * - estrelas: as visíveis a olho nu, ordenadas por brilho; cada uma com ra, dec, mag, bv, distPc, magAbs, hip, hd, lum,
  *   nome, bayer, flamsteed, sigla, espectro, variavel e posicao (Vector3 no céu, raio RAIO_ESTRELAS).
- * - profundas: colunas das 110.705 mais fracas (ra, dec, dpc, mag, mabs, bv, classe, hip) e nomes.
+ * - profundas: colunas das mais fracas, HYG primeiro (nHyg) e depois Gaia DR3 (ra, dec, dpc, mag, mabs, bv, classe, hip) e nomes.
  * - objetos: céu profundo (id, nome, designacao, tipo, ra, dec, mag, dim, distAnosLuz, posicao).
  * - constelacoes: sigla → { nome (latim), genitivo, centro (Vector3 no grupo) }.
  */
@@ -173,7 +181,7 @@ export function criarEstrelas(THREE, pixelRatio) {
   const ceu = {
     grupo, linhas: null, pontos: null, profundas: null, pontosProfundos: null, via: null, pontosObjetos: null,
     estrelas: [], objetos: [], constelacoes: {}, limite: 21, modo3d: false, uniforms: U, pronto: null, prontoProfundo: null,
-    girar, limitarMagnitude, definir3d, acompanharCamera, posicaoVista, magnitudeVista, estrelaProfunda, posicaoProfunda,
+    girar, limitarMagnitude, reduzir, definir3d, acompanharCamera, posicaoVista, magnitudeVista, estrelaProfunda, posicaoProfunda,
   };
   const material = new THREE.ShaderMaterial({ uniforms: U, vertexShader: VERTEX, fragmentShader: FRAGMENT, transparent: true, depthWrite: false });
   const d = new Date();
@@ -186,6 +194,16 @@ export function criarEstrelas(THREE, pixelRatio) {
   };
 
   function girar(ms) { if (!ceu.modo3d) grupo.rotation.y = -A.SiderealTime(new Date(ms)) * 15 * RAD; }
+  /**
+   * Aparelho lento (qualidade adaptativa do globo): nível 2 desenha só a metade mais brilhante do Gaia (o catálogo vem
+   * ordenado por brilho), nível 3 só o HYG. As fichas e o toque continuam com tudo.
+   */
+  function reduzir(nivel) {
+    ceu.nivel = nivel;
+    const P = ceu.profundas; if (!P || !ceu.pontosProfundos) return;
+    const nGaia = P.n - P.nHyg;
+    ceu.pontosProfundos.geometry.setDrawRange(0, nivel >= 3 ? P.nHyg : nivel >= 2 ? P.nHyg + Math.round(nGaia / 2) : P.n);
+  }
   function limitarMagnitude(m) {
     ceu.limite = m; U.limite.value = m;
     if (ceu.pontosObjetos) ceu.pontosObjetos.visible = m > 0;
@@ -228,7 +246,7 @@ export function criarEstrelas(THREE, pixelRatio) {
     const dpc = P.dpc[i] > 0 ? P.dpc[i] : null;
     const classe = P.classe[i] < P.classes.length ? P.classes[P.classe[i]] : '';
     return {
-      k: i, profunda: true, ra: P.ra[i], dec: P.dec[i], mag: P.mag[i], bv: P.bv[i], distPc: dpc, magAbs: dpc ? P.mabs[i] : null,
+      k: i, profunda: true, gaia: i >= P.nHyg, ra: P.ra[i], dec: P.dec[i], mag: P.mag[i], bv: P.bv[i], distPc: dpc, magAbs: dpc ? P.mabs[i] : null,
       hip: P.hip[i] || null, hd: null, lum: dpc ? Math.pow(10, 0.4 * (4.85 - P.mabs[i])) : null,
       nome: proprio || (gliese ? gliese.replace(/^Gl /, 'Gliese ') : ''), bayer: '', flamsteed: '',
       sigla: A.Constellation(P.ra[i] / 15, P.dec[i]).symbol, espectro: classe, variavel: '',
@@ -303,43 +321,49 @@ export function criarEstrelas(THREE, pixelRatio) {
 
   // Estrelas fracas e céu profundo: depois das brilhantes, em partes, sem tarefa longa
   async function carregarProfundo() {
-    const [bin, extra, objs] = await Promise.all([baixar('estrelas-profundas.bin', 'bin'), baixar('estrelas-profundas.json'), baixar('objetos.json')]);
+    const [bin, extra, objs, gaia] = await Promise.all([baixar('estrelas-profundas.bin', 'bin'), baixar('estrelas-profundas.json'), baixar('objetos.json'),
+      baixar('estrelas-gaia.bin', 'bin').catch(() => null)]); // sem o Gaia, o céu fica só com o HYG
     await pausa();
-    const v = new DataView(bin);
-    if (String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3)) !== 'HYG1') throw new Error('estrelas-profundas.bin inválido');
-    const n = v.getUint32(4, true);
-    let o = 8;
-    const hip = new Uint32Array(bin.slice(o, o += 4 * n)), raQ = new Uint16Array(bin.slice(o, o += 2 * n)), decQ = new Int16Array(bin.slice(o, o += 2 * n));
-    const distQ = new Uint16Array(bin.slice(o, o += 2 * n)), magQ = new Int16Array(bin.slice(o, o += 2 * n)), ciQ = new Int16Array(bin.slice(o, o += 2 * n));
-    const classe = new Uint8Array(bin.slice(o, o + n));
-    const P = { n, hip, classe, classes: extra.classes, nomes: extra.nomes, ra: new Float32Array(n), dec: new Float32Array(n), dpc: new Float32Array(n),
+    const hyg = colunasCatalogo(bin, 'HYG1', true);
+    const gdr3 = gaia ? colunasCatalogo(gaia, 'GDR3', false) : null;
+    const n = hyg.n + (gdr3?.n || 0);
+    // um só conjunto de colunas: primeiro as do HYG (com HIP, tipo e nomes), depois as do Gaia DR3
+    const hip = new Uint32Array(n), classe = new Uint8Array(n).fill(255);
+    hip.set(hyg.hip); classe.set(hyg.classe);
+    const P = { n, nHyg: hyg.n, hip, classe, classes: extra.classes, nomes: extra.nomes, ra: new Float32Array(n), dec: new Float32Array(n), dpc: new Float32Array(n),
       mag: new Float32Array(n), mabs: new Float32Array(n), bv: new Float32Array(n), posicao: new Float32Array(n * 3) };
     const cor = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      if (i % 20000 === 19999) await pausa();
-      const ra = raQ[i] / 65536 * 360, dec = decQ[i] / 32767 * 90;
-      P.ra[i] = ra; P.dec[i] = dec;
-      P.mag[i] = magQ[i] / 100;
-      P.dpc[i] = distQ[i] ? Math.pow(10, (distQ[i] - 1) / 65534 * 6 - 1) : 0;
-      P.mabs[i] = P.dpc[i] ? P.mag[i] - 5 * Math.log10(P.dpc[i]) + 5 : P.mag[i];
-      P.bv[i] = ciQ[i] === 32767 ? NaN : ciQ[i] / 1000;
-      direcao(ra, dec, P.posicao, i * 3);
-      cor.set(corBV(P.bv[i]), i * 3);
+    let i = 0;
+    for (const c of [hyg, gdr3]) {
+      if (!c) continue;
+      for (let k = 0; k < c.n; k++, i++) {
+        if (i % 20000 === 19999) await pausa();
+        const ra = c.raQ[k] / 65536 * 360, dec = c.decQ[k] / 32767 * 90;
+        P.ra[i] = ra; P.dec[i] = dec;
+        P.mag[i] = c.magQ[k] / 100;
+        P.dpc[i] = c.distQ[k] ? Math.pow(10, (c.distQ[k] - 1) / 65534 * 6 - 1) : 0;
+        P.mabs[i] = P.dpc[i] ? P.mag[i] - 5 * Math.log10(P.dpc[i]) + 5 : P.mag[i];
+        P.bv[i] = c.ciQ[k] === 32767 ? NaN : c.ciQ[k] / 1000;
+        direcao(ra, dec, P.posicao, i * 3);
+        cor.set(corBV(P.bv[i]), i * 3);
+      }
     }
     ceu.profundas = P;
     ceu.pontosProfundos = pontosDe(P.posicao, cor, P.mag, P.mabs, P.dpc);
     grupo.add(ceu.pontosProfundos);
+    reduzir(ceu.nivel || 0);
     await pausa();
 
-    const m = objs.objetos.length, pos = new Float32Array(m * 3), corO = new Float32Array(m * 3), tam = new Float32Array(m), c = new THREE.Color();
+    const m = objs.objetos.length, pos = new Float32Array(m * 3), corO = new Float32Array(m * 3), tam = new Float32Array(m), dest = new Float32Array(m), c = new THREE.Color();
     objs.objetos.forEach((ob, i) => {
       direcao(ob.ra, ob.dec, pos, i * 3);
       c.set(TIPOS_OBJETO[ob.tipo]?.[1] || '#d8dce8'); corO.set([c.r, c.g, c.b], i * 3);
       tam[i] = Math.max(...String(ob.dim || '1').split('x').map(Number).filter(Number.isFinite), 1);
+      dest[i] = ob.nome || /^M\d/.test(ob.id) ? 1 : 0;
       ceu.objetos.push({ ...ob, posicao: new THREE.Vector3(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]) });
     });
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('cor', new THREE.BufferAttribute(corO, 3)); g.setAttribute('tamanho', new THREE.BufferAttribute(tam, 1));
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('cor', new THREE.BufferAttribute(corO, 3)); g.setAttribute('tamanho', new THREE.BufferAttribute(tam, 1)); g.setAttribute('destaque', new THREE.BufferAttribute(dest, 1));
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
     ceu.pontosObjetos = new THREE.Points(g, new THREE.ShaderMaterial({ uniforms: { ...U, pxPorGrau: { value: 20 } }, vertexShader: VERTEX_OBJETOS, fragmentShader: FRAGMENT_OBJETOS,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -349,6 +373,22 @@ export function criarEstrelas(THREE, pixelRatio) {
     return ceu;
   }
   return ceu;
+}
+
+/**
+ * Colunas de um catálogo binário de vendor/ceu (ver os scripts que os montam): 'HYG1' com HIP e tipo espectral,
+ * 'GDR3' (Gaia DR3) só com posição, distância, magnitude V e B−V.
+ */
+function colunasCatalogo(bin, assinatura, completo) {
+  const v = new DataView(bin);
+  if (String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3)) !== assinatura) throw new Error(`catálogo ${assinatura} inválido`);
+  const n = v.getUint32(4, true);
+  let o = 8;
+  const hip = completo ? new Uint32Array(bin.slice(o, o += 4 * n)) : null;
+  const raQ = new Uint16Array(bin.slice(o, o += 2 * n)), decQ = new Int16Array(bin.slice(o, o += 2 * n)), distQ = new Uint16Array(bin.slice(o, o += 2 * n));
+  const magQ = new Int16Array(bin.slice(o, o += 2 * n)), ciQ = new Int16Array(bin.slice(o, o += 2 * n));
+  const classe = completo ? new Uint8Array(bin.slice(o, o + n)) : null;
+  return { n, hip, raQ, decQ, distQ, magQ, ciQ, classe };
 }
 
 /** Ajusta o tamanho dos pontos quando a resolução do canvas muda (o tamanho é em pixels de tela). */

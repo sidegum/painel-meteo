@@ -41,7 +41,7 @@ const E = {
 
 // ------------------------------------------------------------------ filtros (o que aparece no espaço)
 
-const MAGS = [[21, 'Todas (119 mil, inclusive as de telescópio)'], [6.5, 'As visíveis a olho nu'], [4.5, 'As de céu de cidade'], [2.5, 'Só as mais brilhantes'], [0, 'Nenhuma']];
+const MAGS = [[21, 'Todas (800 mil, inclusive as de telescópio)'], [6.5, 'As visíveis a olho nu'], [4.5, 'As de céu de cidade'], [2.5, 'Só as mais brilhantes'], [0, 'Nenhuma']];
 const FILTROS_PADRAO = { magEstrelas: 21, viaLactea: true, objetos: true, nomesEstrelas: true, linhas: true, nomesConst: false, planetas: true, trilhas: true,
   orbitas: true, luas: true, pequenos: true, cinturoes: true, sondas: true, rotasSondas: true, rotulos: true };
 const F = { ...FILTROS_PADRAO, ...prefs.ler('globo:filtrosEspaco', {}) };
@@ -1030,6 +1030,18 @@ function visivelNoSistema(o) {
 }
 
 /** Rótulos do sistema solar sem sobreposição: os de maior prioridade ficam, os que colidem somem. */
+/** Retângulos (em coordenadas do canvas) dos controles visíveis por cima da cena, com uma folga. */
+function zonasDosControles(G, rect) {
+  if (G.dom.raiz.classList.contains('imersivo')) return [];
+  const out = [];
+  for (const b of G.dom.raiz.querySelectorAll('.globo-recolhivel button, .globo-recolhivel .globo-data-sistema, .globo-recolhivel .globo-legenda, .globo-recolhivel .globo-linha')) {
+    const r = b.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    out.push({ x0: r.left - rect.left - 4, y0: r.top - rect.top - 4, x1: r.right - rect.left + 4, y1: r.bottom - rect.top + 4 });
+  }
+  return out;
+}
+
 function posicionarRotulos() {
   const G = E.G, rect = G.dom.canvas.getBoundingClientRect();
   const v = SIS.vr || (SIS.vr = new E.THREE.Vector3());
@@ -1057,10 +1069,12 @@ function posicionarRotulos() {
     itens.push({ r: s.item, ...p });
   }
   itens.sort((a, b) => b.r.prioridade - a.r.prioridade);
-  const ocupados = [];
+  // nenhum nome por baixo de botões e filtros visíveis; com os controles recolhidos, a tela toda fica livre
+  if (!SIS.zonas || G.quadro % 15 === 0) SIS.zonas = zonasDosControles(G, rect);
+  const ocupados = [...SIS.zonas];
   for (const it of itens) {
     const w = it.r.largura, h = 22, x0 = it.x - w / 2, y0 = it.y - h / 2;
-    const fora = it.x < 0 || it.x > rect.width || it.y < 100 || it.y > rect.height - 130 || (it.x > rect.width - 70 && it.y < 260);
+    const fora = it.x < 0 || it.x > rect.width || it.y < 8 || it.y > rect.height - 8;
     const bate = ocupados.some((o) => x0 < o.x1 && x0 + w > o.x0 && y0 < o.y1 && y0 + h > o.y0);
     it.r.el.hidden = fora || bate;
     if (!it.r.el.hidden) { ocupados.push({ x0, y0, x1: x0 + w, y1: y0 + h }); it.r.el.style.transform = `translate(${(x0).toFixed(0)}px, ${(y0).toFixed(0)}px)`; }

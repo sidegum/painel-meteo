@@ -1,9 +1,11 @@
 """Monta o céu profundo da aba Globo: estrelas além do olho nu, a Via Láctea e os objetos de céu profundo.
 
-Uso: python3 scripts/globo/montar-ceu-profundo.py hygdata_v41.csv messier.json mw.json vendor/ceu
+Uso: python3 scripts/globo/montar-ceu-profundo.py hygdata_v41.csv messier.json mw.json vendor/ceu NGC.csv addendum.csv
 Fontes:
 - HYG Database v4.1 (https://github.com/astronexus/HYG-Database, hyg/CURRENT/hygdata_v41.csv, CC BY-SA 4.0).
 - d3-celestial (https://github.com/ofrohn/d3-celestial, data/messier.json e data/mw.json, BSD-3-Clause).
+- OpenNGC (https://github.com/mattiaverga/OpenNGC, database_files/NGC.csv e addendum.csv, CC BY-SA 4.0): os objetos
+  NGC e IC que não são de Messier nem estão entre os extras.
 
 Saídas em vendor/ceu:
 - estrelas-profundas.bin: as 110.705 estrelas do HYG mais fracas que a magnitude 6,5 (as mais brilhantes estão em
@@ -16,7 +18,9 @@ Saídas em vendor/ceu:
 - via-lactea.png: brilho da Via Láctea (contornos de 5 níveis de mw.json), equiretangular 2048×1024 em tons de cinza,
   coluna = 0,5 + AR/360 (a mesma convenção de longitude da esfera do Three.js), linha 0 = declinação +90°.
 - objetos.json: os 110 objetos de Messier e objetos austrais famosos fora do catálogo, com tipo, magnitude, tamanho,
-  nome em português e distância publicada quando conhecida (ver DISTANCIAS_ANOS_LUZ).
+  nome em português e distância publicada quando conhecida (ver DISTANCIAS_ANOS_LUZ); depois, os objetos NGC/IC do
+  OpenNGC (sem nome próprio; galáxias com distância pelo desvio para o vermelho quando z > 0,003, lei de Hubble com
+  H0 = 70 km/s/Mpc; abaixo disso o movimento próprio da galáxia pesa demais e a distância fica em branco).
 """
 import csv
 import json
@@ -133,7 +137,7 @@ def via_lactea(origem, pasta):
     print('via-lactea.png', (pasta / 'via-lactea.png').stat().st_size, 'bytes')
 
 
-def objetos(origem, pasta):
+def objetos(origem, pasta, ngc=()):
     saida = []
     for f in json.load(open(origem, encoding='utf-8'))['features']:
         p = f['properties']
@@ -145,13 +149,78 @@ def objetos(origem, pasta):
     for chave, nome, desig, tipo, ra, dec, mag, dim in EXTRAS:
         saida.append({'id': chave, 'nome': nome, 'designacao': desig, 'tipo': tipo, 'ra': ra, 'dec': dec, 'mag': mag, 'dim': dim,
                       'distAnosLuz': DISTANCIAS_ANOS_LUZ.get(chave)})
-    json.dump({'fonte': 'Catálogo de Messier (d3-celestial, Olaf Frohn, BSD-3-Clause) e objetos austrais famosos; distâncias publicadas, arredondadas',
+    if ngc:
+        saida += objetos_ngc(ngc, saida)
+    json.dump({'fonte': 'Catálogo de Messier (d3-celestial, Olaf Frohn, BSD-3-Clause), objetos austrais famosos e OpenNGC (Mattia Verga, CC BY-SA 4.0); distâncias publicadas, arredondadas, ou pelo desvio para o vermelho',
                'objetos': saida}, open(pasta / 'objetos.json', 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     print(len(saida), 'objetos de céu profundo')
+
+
+# Tipos do OpenNGC para os tipos usados no app (TIPOS_OBJETO em js/globo-estrelas.js); os ausentes (estrelas, duplicatas,
+# objetos inexistentes ou sem classificação) ficam de fora.
+TIPOS_NGC = {'OCl': 'oc', 'GCl': 'gc', 'PN': 'pn', 'Neb': 'bn', 'HII': 'en', 'EmN': 'en', 'Cl+N': 'sfr', '*Ass': 'pos',
+             'RfN': 'rn', 'SNR': 'snr', 'GPair': 'gg', 'GTrpl': 'gg', 'GGroup': 'gg'}
+
+
+def tipo_galaxia(hubble):
+    h = (hubble or '').strip()
+    if h.startswith('S0') or h.startswith('E-S0'):
+        return 'l'
+    if h.startswith('E'):
+        return 'e'
+    if h.startswith('I'):
+        return 'i'
+    return 's'
+
+
+def sexagesimal(texto, horas):
+    sinal = -1 if texto.strip().startswith('-') else 1
+    a, b, c = (abs(float(x)) for x in texto.strip().lstrip('+-').split(':'))
+    return sinal * (a + b / 60 + c / 3600) * (15 if horas else 1)
+
+
+def designacao_ngc(nome):
+    for prefixo in ('NGC', 'IC'):
+        if nome.startswith(prefixo) and nome[len(prefixo):].split(' ')[0].isdigit():
+            resto = nome[len(prefixo):]
+            num = resto.split(' ')[0]
+            return f'{prefixo} {int(num)}{resto[len(num):]}'
+    return nome
+
+
+def objetos_ngc(arquivos, existentes):
+    ja = {o['designacao'] for o in existentes}
+    saida = []
+    for arq in arquivos:
+        for r in csv.DictReader(open(arq, encoding='utf-8'), delimiter=';'):
+            tipo = 'g' if r['Type'] == 'G' else TIPOS_NGC.get(r['Type'])
+            if not tipo or r['M'].strip() or not r['RA'] or not r['Dec']:
+                continue
+            desig = designacao_ngc(r['Name'])
+            if desig in ja:
+                continue
+            if tipo == 'g':
+                tipo = tipo_galaxia(r['Hubble'])
+            mag = r['V-Mag'] or r['B-Mag']
+            maior, menor = r['MajAx'], r['MinAx']
+            dim = f'{float(maior):g}x{float(menor):g}' if maior and menor else (f'{float(maior):g}' if maior else '')
+            z = float(r['Redshift']) if r['Redshift'] else None
+            dist = round(z * 299792.458 / 70 * 3.26156e6, -4) if tipo in ('s', 'e', 'i', 'l', 'gg') and z and z > 0.003 else None
+            ob = {'id': desig.replace(' ', '').lower(), 'nome': '', 'designacao': desig, 'tipo': tipo,
+                  'ra': round(sexagesimal(r['RA'], True) % 360, 4), 'dec': round(sexagesimal(r['Dec'], False), 4),
+                  'mag': round(float(mag), 1) if mag else None, 'dim': dim, 'distAnosLuz': dist}
+            if dist:
+                ob['distFonte'] = 'z'
+            if r['Common names'].strip():
+                ob['apelidos'] = r['Common names'].strip().replace(',', ', ')
+            saida.append(ob)
+            ja.add(desig)
+    print(len(saida), 'objetos do OpenNGC')
+    return saida
 
 
 if __name__ == '__main__':
     destino = Path(sys.argv[4])
     estrelas(sys.argv[1], destino)
-    objetos(sys.argv[2], destino)
+    objetos(sys.argv[2], destino, sys.argv[5:])
     via_lactea(sys.argv[3], destino)
