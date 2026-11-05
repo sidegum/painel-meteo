@@ -50,7 +50,7 @@ function normalizarManifest(j) {
   } : null;
   const satelite = j.satelite && typeof j.satelite === 'object' ? {
     arquivo: 'satelite.png', largura: num(j.satelite.largura) || 2048, altura: num(j.satelite.altura) || 1024,
-    fonte: String(j.satelite.fonte || 'NASA GIBS').slice(0, 80), instante: String(j.satelite.instante || '').slice(0, 30),
+    fonte: String(j.satelite.fonte || 'NASA GIBS').slice(0, 80), instante: String(j.satelite.instante || '').slice(0, 30), alfa: j.satelite.alfa === true,
     camadas: (j.satelite.camadas || []).map((c) => ({ camada: String(c.camada || '').slice(0, 60), instante: String(c.instante || '').slice(0, 30) })),
   } : null;
   const ciclones = (Array.isArray(j.ciclones) ? j.ciclones : []).map((c) => ({

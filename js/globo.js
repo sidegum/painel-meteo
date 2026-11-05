@@ -19,7 +19,7 @@ import { valido, direcaoTexto, partesLocais } from './analise.js';
 
 const RAD = Math.PI / 180;
 const RAIO = 1;
-const DIST = { min: 1.12, inicial: 2.7, max: 8 };
+const DIST = { min: 1.12, inicial: 2.7, max: 12 };
 const MOVIMENTO_REDUZIDO = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CELULAR = matchMedia('(pointer: coarse)').matches;
 
@@ -45,6 +45,7 @@ const G = {
   camada: 'nuvens', hora: null, horaAgora: null, manifest: null, manifestAntigo: false, campos: {}, satelite: null,
   texturas: {}, relogio: null, quadro: 0, ultimoQuadro: 0, tempos: [], nivelQualidade: 0, pixelRatio: 1,
   particulas: null, tocado: null, erroDados: null, anim: 0, tempoLinha: { tocando: false, timer: null },
+  espaco: null, espacoAberto: false, sistema: false,
 };
 
 const latLonVec = (lat, lon, r = RAIO, alvo = new THREE.Vector3()) => {
@@ -161,7 +162,7 @@ async function carregarNuvens(hora) {
     mp = ctx.getImageData(0, 0, W, H).data;
   }
   const img = ctx.createImageData(W, H), d = img.data;
-  const sp = sat?.pixels;
+  const sp = sat?.pixels, alfaPronto = !!m.satelite?.alfa;
   for (let i = 0, o = 0; o < d.length; i += 4, o += 4) {
     let a = 0;
     if (mp) {
@@ -171,7 +172,7 @@ async function carregarNuvens(hora) {
     }
     if (sp) {
       const cob = sp[i + 1] / 255;
-      if (cob > 0) a = a * (1 - cob) + suave(130, 215, sp[i]) * cob; // infravermelho: nuvens frias são claras
+      if (cob > 0) a = a * (1 - cob) + (alfaPronto ? sp[i] / 255 : suave(130, 215, sp[i])) * cob; // R já é transparência (ou brilho infravermelho nas versões antigas)
     }
     d[o] = Math.round(a * 255); d[o + 3] = 255;
   }
@@ -711,11 +712,13 @@ function montarDom(secao) {
     el('button', { type: 'button', text: 'Minha posição', 'aria-label': 'Centralizar na minha posição', onclick: () => { const l = G.estadoApp?.local; if (l) irPara(l.lat, l.lon, Math.min(G.cam.dist, 2.2)); } }),
     el('button', { type: 'button', text: '+', 'aria-label': 'Aproximar', onclick: () => irPara(G.cam.lat, G.cam.lon, G.cam.dist / 1.5, 400) }),
     el('button', { type: 'button', text: '−', 'aria-label': 'Afastar', onclick: () => irPara(G.cam.lat, G.cam.lon, G.cam.dist * 1.5, 400) }),
+    el('button', { type: 'button', text: 'Espaço', class: 'globo-btn-espaco', 'aria-pressed': 'false', onclick: alternarEspaco }),
     el('button', { type: 'button', text: '?', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda }));
-  const raiz = el('div', { class: 'globo' }, canvas, el('div', { class: 'globo-topo' }, chips), botoes, aviso, painel,
-    el('div', { class: 'globo-rodape' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, sol, ciclones)));
+  const rodape = el('div', { class: 'globo-rodape' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, sol, ciclones));
+  const raiz = el('div', { class: 'globo' }, canvas, el('div', { class: 'globo-topo' }, chips), botoes, aviso, painel, rodape);
   secao.append(raiz);
-  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, sol, ciclones, faixa, rotuloHora, tocar, linha, painel };
+  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, sol, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes };
+  G.mostrarPainel = mostrarPainelTexto; G.modoSistema = modoSistema;
   window.__globo = G; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
   montarLegenda(CAMADAS.find((c) => c.id === G.camada), null);
@@ -869,8 +872,51 @@ function mostrarAjuda() {
       el('li', {}, 'Nuvens: imagem infravermelha dos satélites GOES-Leste, GOES-Oeste e Himawari (NASA GIBS), onde há cobertura; no resto, nuvens previstas pelo GFS.'),
       el('li', {}, 'Vento, chuva, temperatura e pressão: modelo GFS 0,5° da NOAA, a cada 3 h até 48 h.'),
       el('li', {}, 'Ponto tocado: ECMWF IFS pela Open-Meteo, com fuso horário local.'),
-      el('li', {}, 'Ciclones: NHC e GDACS. Raios em tempo real não têm fonte pública gratuita que o app possa usar.')),
+      el('li', {}, 'Ciclones: NHC e GDACS. Raios em tempo real não têm fonte pública gratuita que o app possa usar.'),
+      el('li', {}, 'Espaço: ISS, Tiangong e satélites (CelesTrak, SGP4) em escala real de altura; sistema solar com as posições de hoje (JPL), distâncias fora de escala.')),
     el('p', { class: 'nota', text: `Texturas: NASA Visible Earth (Blue Marble e Black Marble, domínio público). Dados gerados ${m?.gerado ? fmt.idade(Date.parse(m.gerado)) : '–'}. Este globo é um painel pessoal, não uma fonte oficial. Em situação de risco, siga a Defesa Civil e o INMET.` }));
+}
+
+// ---------- espaço: satélites e sistema solar (módulo globo-espaco.js, carregado ao tocar em Espaço) ----------
+
+async function alternarEspaco() {
+  const b = G.dom.botoes.querySelector('.globo-btn-espaco');
+  if (G.espacoAberto) {
+    G.espacoAberto = false; b.setAttribute('aria-pressed', 'false'); G.dom.raiz.classList.remove('com-espaco');
+    G.espaco?.fecharEspaco();
+    irPara(G.cam.lat, G.cam.lon, Math.min(G.cam.dist, DIST.inicial), 900);
+    return;
+  }
+  G.espacoAberto = true; b.setAttribute('aria-pressed', 'true'); G.dom.raiz.classList.add('com-espaco');
+  if (!G.espaco) {
+    try { G.espaco = await import('./globo-espaco.js'); }
+    catch (e) { G.espacoAberto = false; b.setAttribute('aria-pressed', 'false'); mostrarAviso(`Não foi possível carregar o espaço (${e?.message || 'falha'}).`, false); return; }
+  }
+  if (!G.espacoAberto) return;
+  fecharPainel();
+  irPara(G.cam.lat, G.cam.lon, Math.max(G.cam.dist, 5.5), 1200);
+  G.espaco.abrirEspaco(G, THREE);
+}
+
+/** Painel simples reutilizado pelo espaço (ISS, Tiangong): título, frase, números e fonte. */
+function mostrarPainelTexto(titulo, frase, numeros, fonte) {
+  const P = G.dom.painel;
+  P.replaceChildren(
+    el('div', { class: 'globo-painel-topo' }, el('b', { text: titulo }), el('button', { type: 'button', class: 'globo-fechar', 'aria-label': 'Fechar', text: '×', onclick: fecharPainel })),
+    el('p', { class: 'globo-frase', text: frase }), el('p', { class: 'globo-numeros', text: numeros }), el('p', { class: 'globo-quando', text: fonte }));
+  P.hidden = false;
+}
+
+/** Troca entre a Terra e o sistema solar: esconde a Terra, as nuvens, os marcadores e a interface do tempo. */
+function modoSistema(ligar) {
+  G.sistema = ligar;
+  for (const o of [G.terra, G.nuvens, G.atmosfera, G.lua, G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) o.visible = !ligar;
+  if (G.particulas) G.particulas.linhas.visible = !ligar;
+  G.dom.rodape.hidden = ligar; G.dom.chips.parentElement.hidden = ligar;
+  G.marcadorUsuario.visible = !ligar && !!G.estadoApp?.local;
+  fecharPainel();
+  if (ligar) { G.camAntes = { ...G.cam }; G.cam.lat = 58; G.cam.dist = 10.5; G.animCam = null; }
+  else if (G.camAntes) { G.cam.lat = G.camAntes.lat; G.cam.lon = G.camAntes.lon; G.cam.dist = Math.min(G.camAntes.dist, 5.5); G.animCam = null; }
 }
 
 // ------------------------------------------------------------------ 9. laço de animação e qualidade
@@ -892,11 +938,12 @@ function laco(agora) {
       const amort = Math.pow(0.92, dt / 16); c.vLon *= amort; c.vLat *= amort;
     }
   }
-  if (G.quadro % 30 === 0) atualizarAstros();
+  if (G.quadro % 30 === 0 && !G.sistema) atualizarAstros();
+  if (G.espaco && G.espacoAberto) G.espaco.atualizarEspaco(agora);
   if (G.camada === 'pressao') G.terra.material.uniforms.isobaras.value = Math.max(0, Math.min(1, (2.6 - c.dist) / 0.8));
   posicionarCamera();
   const pulso = (Math.sin(agora / 500) + 1) / 2;
-  for (const m of [G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) { const p = m.getObjectByName('pulso'); if (p) { p.scale.setScalar(1 + pulso * 1.6); p.material.opacity = 0.6 * (1 - pulso); } }
+  if (!G.sistema) for (const m of [G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) { const p = m.getObjectByName('pulso'); if (p) { p.scale.setScalar(1 + pulso * 1.6); p.material.opacity = 0.6 * (1 - pulso); } }
   if (G.particulas) animarParticulas(dt);
   G.renderer.render(G.cena, G.camera);
   G.quadro++;

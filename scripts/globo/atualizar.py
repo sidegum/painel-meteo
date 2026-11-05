@@ -18,7 +18,7 @@ Saída (pasta SAIDA, publicada no branch "globo-dados"):
   vento-HH.png            RGB 720 x 361: R = u10 (m/s), G = v10 (m/s), B = rajada (m/s)
   campo-HH.png            RGB 720 x 361: R = temperatura 2 m (°C), G = pressão (hPa), B = chuva (mm/h, escala raiz)
   nuvens-HH.png           RGB 720 x 361: R = nuvens baixas (%), G = médias (%), B = altas (%)
-  satelite.png            RGB 2048 x 1024: R = brilho infravermelho (nuvem frias claras), G = 255 onde há cobertura
+  satelite.png            RGB 2048 x 1024: R = transparência da nuvem (0-255), G = peso da cobertura, B = brilho infravermelho
   ciclones.json           lista de ciclones ativos com posição, vento e fonte
   satelites.json          elementos orbitais (OMM) por grupo
 
@@ -42,7 +42,7 @@ from datetime import datetime, timedelta, timezone
 from xml.etree import ElementTree
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 AGENTE = 'painel-meteo-pessoal/1.0 (globo; uso pessoal)'
 HORAS = list(range(0, 49, 3))
@@ -268,9 +268,17 @@ def gerar_satelite(saida):
     if not usadas:
         raise RuntimeError('nenhuma camada infravermelha disponível no GIBS')
     com = pesos > 0.02
-    brilho = np.where(com, soma / np.maximum(pesos, 1e-6), 0).astype(np.uint8)
+    brilho = np.where(com, soma / np.maximum(pesos, 1e-6), 0).astype(np.float32)
+    # Transparência das nuvens a partir do brilho infravermelho (quente = escuro = sem nuvem; frio = claro = nuvem).
+    # Faixas medidas no mosaico de 2026-11-05: terra quente 11-76, superfície típica 90-120, nuvens 140-200.
+    # Os topos mais frios saem pretos na paleta do GIBS: um pixel muito escuro cercado de nuvem clara é nuvem densa.
+    alfa = np.clip((brilho - 112.0) / (185.0 - 112.0), 0, 1)
+    alfa = alfa * alfa * (3 - 2 * alfa)
+    vizinhanca = np.asarray(Image.fromarray(brilho.astype(np.uint8)).filter(ImageFilter.BoxBlur(3)), dtype=np.float32)
+    nucleo = (brilho < 35) & (vizinhanca > 125) & com
+    alfa = np.where(nucleo, 1.0, alfa)
     cobertura = np.clip(pesos / 0.3, 0, 1) * 255  # transição suave até 255 para o app misturar com o modelo
-    Image.fromarray(np.dstack([brilho, cobertura.astype(np.uint8), np.zeros_like(brilho)]), 'RGB').save(os.path.join(saida, 'satelite.png'), optimize=True)
+    Image.fromarray(np.dstack([(alfa * 255).astype(np.uint8), cobertura.astype(np.uint8), brilho.astype(np.uint8)]), 'RGB').save(os.path.join(saida, 'satelite.png'), optimize=True)
     return usadas
 
 
@@ -369,7 +377,7 @@ def main():
         try:
             usadas = gerar_satelite(saida)
             manifest['satelite'] = {'arquivo': 'satelite.png', 'largura': 2048, 'altura': 1024, 'fonte': 'NASA GIBS (GOES-Leste, GOES-Oeste e Himawari, banda 13)',
-                                    'camadas': usadas, 'instante': max(u['instante'] for u in usadas)}
+                                    'camadas': usadas, 'instante': max(u['instante'] for u in usadas), 'alfa': True}
         except Exception as e:
             log(f'Satélite falhou: {e}')
 
