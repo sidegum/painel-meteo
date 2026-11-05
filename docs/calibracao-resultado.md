@@ -1,6 +1,6 @@
 # Resultado da calibração (gerado automaticamente)
 
-Gerado em 2026-11-05 01:51 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
+Gerado em 2026-11-05 03:01 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
 
 Estação: INMET A884 Campo Bom. Medições de 2021-03-01 a 2026-08-31 (2010 dias válidos).
 
@@ -95,13 +95,13 @@ Viés por hora na véspera (previsto − medido, °C; negativo = o modelo prevê
 
 ## Sensação térmica na véspera: erro médio em °C
 
-Fórmula, igual na previsão e na medição: Steadman (1994), forma da Bureau of Meteorology, à sombra: T + 0,33·e − 0,70·v − 4,00 (e = pressão de vapor pelo ponto de orvalho, hPa; v = vento médio, m/s). Medida = calculada com temperatura, orvalho e vento do INMET A884 na mesma hora. "Corrigida" = como o painel mostra (temperatura, orvalho e vento corrigidos, fora da amostra; o fator do vento é o anual da estação do ano).
+Fórmula, igual na previsão e na medição: NWS: índice de calor (Rothfusz/WPC) e vento frio (≤ 10 °C, transição até 15 °C) (e = pressão de vapor pelo ponto de orvalho, hPa; v = vento médio, m/s). Medida = calculada com temperatura, orvalho e vento do INMET A884 na mesma hora. "Corrigida" = como o painel mostra (temperatura, orvalho e vento corrigidos, fora da amostra; o fator do vento é o anual da estação do ano).
 
 | Modelo | Dias | Por hora: bruta → corrigida | Tarde | Sensação máxima do dia | Sensação mínima do dia | Viés da máxima (corrigida) |
 |---|---|---|---|---|---|---|
-| ECMWF IFS | 293 | 2,3 → 1,4 | 3,0 → 1,7 | 3,0 → 1,4 | 1,7 → 1,2 | 0,1 |
-| ECMWF AIFS | 437 | 2,0 → 1,6 | 2,5 → 1,6 | 3,0 → 1,3 | 1,2 → 1,2 | -0,0 |
-| UKMO 10 km | 319 | 2,3 → 1,6 | 3,1 → 1,8 | 3,3 → 1,6 | 1,7 → 1,3 | -0,0 |
+| ECMWF IFS | 293 | 1,8 → 1,4 | 2,5 → 1,9 | 2,7 → 1,7 | 1,1 → 1,0 | 0,2 |
+| ECMWF AIFS | 437 | 1,7 → 1,6 | 2,3 → 2,0 | 2,6 → 1,6 | 1,0 → 1,0 | 0,3 |
+| UKMO 10 km | 319 | 1,8 → 1,6 | 2,7 → 2,0 | 3,0 → 1,9 | 1,1 → 1,1 | 0,0 |
 
 Ponto de orvalho (umidade do ar), véspera, por hora:
 
