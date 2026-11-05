@@ -135,7 +135,7 @@ export function designacaoEstrela(e, genitivo) {
     if (g) return `${g[0]}${indice ? [...indice].map((c) => SOBRESCRITO[+c] || c).join('') : ''} ${gen}`;
   }
   if (e.flamsteed) return `${e.flamsteed} ${gen}`;
-  return e.hip ? `HIP ${e.hip}` : e.hd ? `HD ${e.hd}` : 'estrela sem designação';
+  return e.hip ? `HIP ${e.hip}` : e.hd ? `HD ${e.hd}` : e.gaia ? 'Estrela do catálogo Gaia' : 'estrela sem designação';
 }
 
 /** Tipo espectral em palavras: classe (cor e temperatura típica) e classe de luminosidade (anã, gigante...). */
@@ -183,7 +183,7 @@ export function cartaoEstrela(e, constelacao, estadoApp, t = Date.now()) {
   if (i.sempre === 'acima') onde += '; daqui ela nunca se põe';
   const frase = `${quem}; ${onde}.`;
   const numeros = `Constelação de ${nomeConst} · magnitude ${num(e.mag, 1)}`;
-  const fonte = `HYG/Hipparcos · ${hora(t, off)} · visto de ${local.nome}`;
+  const fonte = `${e.gaia ? 'Gaia DR3' : 'HYG/Hipparcos'} · ${hora(t, off)} · visto de ${local.nome}`;
   const T = Number.isFinite(e.bv) ? C.temperaturaCor(e.bv) : null;
   const outras = [e.nome ? designacao : null, e.flamsteed && e.bayer ? `${e.flamsteed} ${constelacao?.genitivo || e.sigla}` : null, e.hip ? `HIP ${e.hip}` : null, e.hd ? `HD ${e.hd}` : null].filter(Boolean);
   const letraLonga = e.bayer ? GREGAS[e.bayer.split('-')[0]]?.[1] : null;
@@ -191,7 +191,7 @@ export function cartaoEstrela(e, constelacao, estadoApp, t = Date.now()) {
     linha('Designações', `${outras.join(' · ') || designacao}${letraLonga ? ` (${letraLonga})` : ''}`),
     linha('Constelação', `${nomeConst} (${constelacao?.nome || e.sigla})`),
     linha('Brilho aparente', `magnitude ${num(e.mag, 2)}: ${C.brilhoTexto(e.mag)}`),
-    linha('Distância', Number.isFinite(e.distPc) ? `${distanciaTexto(e.distPc)} (${num(e.distPc, e.distPc < 100 ? 2 : 0)} parsecs); a luz que você vê saiu dela há ${num(Math.round(anosLuz(e.distPc)))} anos` : 'sem paralaxe confiável no catálogo'),
+    linha('Distância', Number.isFinite(e.distPc) ? `${distanciaTexto(e.distPc)} (${num(e.distPc, e.distPc < 100 ? 2 : 0)} parsecs${e.gaia ? ', pela paralaxe do Gaia' : ''}); a luz que você vê saiu dela há ${num(Math.round(anosLuz(e.distPc)))} anos` : 'sem paralaxe confiável no catálogo'),
     linha('Brilho real', Number.isFinite(e.magAbs) ? `magnitude absoluta ${num(e.magAbs, 2)}${Number.isFinite(e.lum) ? `; ${e.lum >= 1 ? `${num(e.lum, e.lum < 10 ? 1 : 0)} vezes a` : `${num(e.lum, 3)} da`} luminosidade do Sol (no visível)` : ''}` : null),
     linha('Tipo', tipo ? tipo.longo : null),
     linha('Cor e temperatura', T ? `${corEstrela(T)}; superfície a cerca de ${num(Math.round(T / 100) * 100)} K (pelo índice de cor B−V ${num(e.bv, 2)})` : null),
@@ -204,7 +204,9 @@ export function cartaoEstrela(e, constelacao, estadoApp, t = Date.now()) {
   return {
     titulo, frase, numeros, fonte,
     detalhes: () => mostrarInfo(titulo, el('table', { class: 'tabela-detalhe' }, el('tbody', {}, ...linhas)),
-      el('p', { class: 'nota', text: `Catálogo HYG v4.1 (Hipparcos, Yale Bright Star e Gliese), com movimento próprio até 2026; posição de agora com precessão, nutação, aberração e refração pelo Astronomy Engine 2.1.19, vista de ${local.nome}. Horários no fuso do local.` })),
+      el('p', { class: 'nota', text: e.gaia
+        ? `Gaia DR3 (ESA, época 2016): posição e brilho; magnitude V e cor B−V convertidas da fotometria G e BP−RP do Gaia (Riello et al. 2021); distância geométrica de Bailer-Jones et al. (2021). Posição de agora pelo Astronomy Engine 2.1.19, vista de ${local.nome}. Horários no fuso do local.`
+        : `Catálogo HYG v4.1 (Hipparcos, Yale Bright Star e Gliese), com movimento próprio até 2026; posição de agora com precessão, nutação, aberração e refração pelo Astronomy Engine 2.1.19, vista de ${local.nome}. Horários no fuso do local.` })),
   };
 }
 
@@ -217,7 +219,8 @@ export function cartaoObjeto(ob, estadoApp, t = Date.now()) {
   const i = C.infoEstrela(ob.ra, ob.dec, C.observador(local.lat, local.lon, 0), t);
   const tipo = TIPOS_OBJETO[ob.tipo]?.[0] || 'Objeto de céu profundo';
   const sigla = A.Constellation(ob.ra / 15, ob.dec).symbol;
-  const titulo = ob.nome || ob.id.replace(/^M(\d)/, 'M $1');
+  const messier = /^M\d/.test(ob.id);
+  const titulo = ob.nome || (messier ? ob.id.replace(/^M(\d)/, 'M $1') : ob.designacao);
   const dims = String(ob.dim || '').split('x').map(Number).filter(Number.isFinite);
   const tamanho = dims.length ? `${dims.map((x) => num(x, x < 10 ? 1 : 0)).join(' × ')} minutos de arco${dims[0] >= 31 ? ` (${num(dims[0] / 31, 1)} vezes a Lua cheia)` : ''}` : null;
   const acima = i.altura > 0;
@@ -226,11 +229,12 @@ export function cartaoObjeto(ob, estadoApp, t = Date.now()) {
   const olhoNu = Number.isFinite(ob.mag) && ob.mag <= 5 ? 'visível a olho nu em céu escuro' : Number.isFinite(ob.mag) && ob.mag <= 9 ? 'visível com binóculo' : 'visível com telescópio';
   const linhas = [
     linha('Tipo', tipo),
-    linha('Catálogo', [ob.id.startsWith('M') ? ob.id.replace(/^M/, 'Messier ') : null, ob.designacao].filter(Boolean).join(' · ')),
+    linha('Catálogo', [messier ? ob.id.replace(/^M/, 'Messier ') : null, ob.designacao].filter(Boolean).join(' · ')),
+    linha('Outros nomes', ob.apelidos || null),
     linha('Constelação', `${C.CONSTELACOES[sigla] || sigla}`),
     linha('Brilho', Number.isFinite(ob.mag) ? `magnitude ${num(ob.mag, 1)}: ${olhoNu}` : null),
     linha('Tamanho no céu', tamanho),
-    linha('Distância', ob.distAnosLuz ? `cerca de ${anosLuzTexto(ob.distAnosLuz)}; a luz que você vê saiu de lá há ${anosLuzTexto(ob.distAnosLuz).replace(' de anos-luz', ' de anos').replace(' anos-luz', ' anos')}` : 'sem distância nesta ficha'),
+    linha('Distância', ob.distAnosLuz ? `cerca de ${anosLuzTexto(ob.distAnosLuz)}${ob.distFonte === 'z' ? ' (estimada pelo desvio para o vermelho)' : ''}; a luz que você vê saiu de lá há ${anosLuzTexto(ob.distAnosLuz).replace(' de anos-luz', ' de anos').replace(' anos-luz', ' anos')}` : 'sem distância nesta ficha'),
     linha('Agora', `${num(i.altura, 1)}° de altura, azimute ${num(i.azimute, 0)}° (${C.rumo(i.azimute)})`),
     linha('Nasce e se põe', i.sempre === 'acima' ? 'nunca se põe neste local' : i.sempre === 'abaixo' ? 'nunca nasce neste local' : [i.nasce && `nasce ${diaHora(i.nasce, off, t)}`, i.poe && `se põe ${diaHora(i.poe, off, t)}`].filter(Boolean).join('; ')),
     linha('Ponto mais alto', i.culmina.altura > 0 ? `${diaHora(i.culmina.ms, off, t)}, a ${num(i.culmina.altura, 1)}° de altura` : null),
@@ -240,9 +244,9 @@ export function cartaoObjeto(ob, estadoApp, t = Date.now()) {
     titulo,
     frase: `${tipo}${ob.distAnosLuz ? ` a ${anosLuzTexto(ob.distAnosLuz)}` : ''}; ${onde}.`,
     numeros: `Constelação de ${C.CONSTELACOES[sigla] || sigla}${Number.isFinite(ob.mag) ? ` · magnitude ${num(ob.mag, 1)}` : ''}`,
-    fonte: `Catálogo de Messier · ${hora(t, off)} · visto de ${local.nome}`,
+    fonte: `${messier ? 'Catálogo de Messier' : ob.nome ? 'Catálogos NGC/IC' : 'OpenNGC'} · ${hora(t, off)} · visto de ${local.nome}`,
     detalhes: () => mostrarInfo(titulo, el('table', { class: 'tabela-detalhe' }, el('tbody', {}, ...linhas)),
-      el('p', { class: 'nota', text: `Posição e tamanho do catálogo de Messier (via d3-celestial) e de catálogos NGC/IC; distâncias publicadas, arredondadas. No mapa 3D os objetos de céu profundo ficam no fundo do céu. Horários no fuso do local, vistos de ${local.nome}.` })),
+      el('p', { class: 'nota', text: `Posição e tamanho do catálogo de Messier (via d3-celestial) e do OpenNGC (NGC e IC); distâncias publicadas, arredondadas, ou, nas galáxias do OpenNGC, pelo desvio para o vermelho com H0 = 70 km/s/Mpc. No mapa 3D os objetos de céu profundo ficam no fundo do céu. Horários no fuso do local, vistos de ${local.nome}.` })),
   };
 }
 

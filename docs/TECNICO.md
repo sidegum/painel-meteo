@@ -657,7 +657,7 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `ceu.js` | cálculo puro do céu (sem DOM, testado): Sol, Lua, planetas e estrelas pelo Astronomy Engine; satélites pelo SGP4; passagens visíveis, chuvas de meteoros (IMO, por longitude solar), eclipses, fases, estações, o resumo "Céu de hoje" e `ondeOlhar` (direção, altura em graus e em punhos, caminho no céu e a referência mais útil por perto: Lua, planeta brilhante ou uma das 24 estrelas e figuras de `REFERENCIAS`) |
 | `globo-ceu.js` | textos: bloco "Céu de hoje" e cartões de Sol, Lua, planetas, estrelas, satélites e sondas |
 | `globo-astro.js` | pontos subsolar e sublunar e posições para o sistema solar |
-| `globo-estrelas.js` | céu: 119.625 estrelas do HYG v4.1 (8.920 até magnitude 6,5 e 110.705 mais fracas, carregadas depois em partes), Via Láctea, 121 galáxias, nebulosas e aglomerados e linhas das 88 constelações; precessão e nutação para a data, giro pelo tempo sideral, tamanho e brilho pela magnitude e cor pelo B−V em shader próprio; no sistema solar, estrelas em 3D na distância real |
+| `globo-estrelas.js` | céu: 802.474 estrelas (HYG v4.1: 8.920 até magnitude 6,5 e 110.705 mais fracas; Gaia DR3: 682.849 até G 10,5 fora do Hipparcos, com distância de Bailer-Jones; as fracas carregadas depois em partes), Via Láctea, 12.162 galáxias, nebulosas e aglomerados (Messier, austrais famosos e OpenNGC) e linhas das 88 constelações; precessão e nutação para a data, giro pelo tempo sideral, tamanho e brilho pela magnitude e cor pelo B−V em shader próprio; no sistema solar, estrelas em 3D na distância real |
 | `globo-corpos.js` | cálculo puro (testado em `test/corpos.test.mjs`): luas, corpos menores, propagação kepleriana, polos e rotação da IAU (WGCCRE 2015), raios e planetas anões oficiais |
 | `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra, filtros e o sistema solar navegável (planetas, luas, corpos menores, cinturões reais e sondas) |
 | `globo-sondas.js` | fichas das missões e interpolação de Hermite dos vetores do JPL Horizons |
@@ -713,6 +713,14 @@ Céu profundo e navegação livre (1.8.0):
   no Sol e fica rarefeito além disso. Um toque no mesmo botão, ou "Visão geral", volta ao modo de órbita.
 - `scripts/globo/montar-ceu-profundo.py` gera os quatro arquivos de `vendor/ceu` a partir do CSV do HYG e dos
   `messier.json` e `mw.json` do d3-celestial.
+- Gaia DR3 (1.8.7): `scripts/globo/montar-ceu-gaia.py`, rodado pelo workflow `ceu-gaia.yml` (o Gaia Archive não é
+  acessível do ambiente de desenvolvimento), consulta o TAP com `MAXREC` (sem ele o serviço corta em 50 mil linhas sem
+  avisar) e grava `estrelas-gaia.bin` no próprio branch. O app junta HYG e Gaia num só conjunto de colunas
+  (`profundas.nHyg` marca onde o Gaia começa). Em aparelho lento, a qualidade adaptativa desenha só a metade mais
+  brilhante do Gaia (nível 2) ou só o HYG (nível 3), por `setDrawRange`, sem tirar nada das fichas.
+- Objetos NGC/IC do OpenNGC (`montar-ceu-profundo.py` com `NGC.csv` e `addendum.csv`): sem nome nem anel, só mancha fraca;
+  os de Messier, os austrais famosos e os que têm nome em português ganham anel e rótulo.
+- Rótulos do espaço não ficam sob os controles visíveis (`zonasDosControles`); com os controles recolhidos, usam a tela toda.
 
 Regras de visibilidade (constantes `VIS` em `ceu.js`): céu escuro com Sol a −6° ou menos (planetas muito brilhantes a
 partir de −1° a −4°, pela magnitude); pelo menos 10° de altura; satélite visível só iluminado pelo Sol (sombra

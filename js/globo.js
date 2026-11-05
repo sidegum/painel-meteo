@@ -1465,5 +1465,6 @@ function medirQualidade(dt) {
     ajustarEscalaEstrelas(G.estrelas, G.pixelRatio);
     if (G.particulas && G.nivelQualidade >= 2) iniciarParticulas(G.particulas.campo);
     if (G.nivelQualidade >= 3) { G.atmosfera.visible = false; }
+    G.estrelas?.reduzir?.(G.nivelQualidade);
   }
 }
