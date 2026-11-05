@@ -161,7 +161,7 @@ async function carregarNuvens(hora) {
     mp = ctx.getImageData(0, 0, W, H).data;
   }
   const img = ctx.createImageData(W, H), d = img.data;
-  const sp = sat?.pixels;
+  const sp = sat?.pixels, alfaPronto = !!m.satelite?.alfa;
   for (let i = 0, o = 0; o < d.length; i += 4, o += 4) {
     let a = 0;
     if (mp) {
@@ -171,7 +171,7 @@ async function carregarNuvens(hora) {
     }
     if (sp) {
       const cob = sp[i + 1] / 255;
-      if (cob > 0) a = a * (1 - cob) + suave(130, 215, sp[i]) * cob; // infravermelho: nuvens frias são claras
+      if (cob > 0) a = a * (1 - cob) + (alfaPronto ? sp[i] / 255 : suave(130, 215, sp[i])) * cob; // R já é transparência (ou brilho infravermelho nas versões antigas)
     }
     d[o] = Math.round(a * 255); d[o + 3] = 255;
   }
