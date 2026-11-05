@@ -7,6 +7,8 @@ import { CIDADES } from './globo-cidades.js';
 import * as C from './ceu.js';
 import { MISSOES, estadoSonda, interpolar } from './globo-sondas.js';
 import * as CORPOS_EXTRA from './globo-corpos.js';
+import * as A from '../vendor/astronomy/astronomy.min.js';
+import { TIPOS_OBJETO } from './globo-estrelas.js';
 
 /** Número em pt-BR com separador de milhar a partir de 10.000 (regra do CLDR para o português). */
 const num = (v, casas = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) : null);
@@ -203,6 +205,44 @@ export function cartaoEstrela(e, constelacao, estadoApp, t = Date.now()) {
     titulo, frase, numeros, fonte,
     detalhes: () => mostrarInfo(titulo, el('table', { class: 'tabela-detalhe' }, el('tbody', {}, ...linhas)),
       el('p', { class: 'nota', text: `Catálogo HYG v4.1 (Hipparcos, Yale Bright Star e Gliese), com movimento próprio até 2026; posição de agora com precessão, nutação, aberração e refração pelo Astronomy Engine 2.1.19, vista de ${local.nome}. Horários no fuso do local.` })),
+  };
+}
+
+/** Distância em anos-luz por extenso (milhões a partir de 1 milhão). */
+const anosLuzTexto = (al) => (al >= 1e6 ? `${num(al / 1e6, al < 1e7 ? 2 : 1)} milhões de anos-luz` : `${num(al)} anos-luz`);
+
+/** Cartão de um objeto de céu profundo (Messier e famosos do sul), visto do local do usuário. */
+export function cartaoObjeto(ob, estadoApp, t = Date.now()) {
+  const local = localDoObservador(estadoApp), off = fusoS(estadoApp);
+  const i = C.infoEstrela(ob.ra, ob.dec, C.observador(local.lat, local.lon, 0), t);
+  const tipo = TIPOS_OBJETO[ob.tipo]?.[0] || 'Objeto de céu profundo';
+  const sigla = A.Constellation(ob.ra / 15, ob.dec).symbol;
+  const titulo = ob.nome || ob.id.replace(/^M(\d)/, 'M $1');
+  const dims = String(ob.dim || '').split('x').map(Number).filter(Number.isFinite);
+  const tamanho = dims.length ? `${dims.map((x) => num(x, x < 10 ? 1 : 0)).join(' × ')} minutos de arco${dims[0] >= 31 ? ` (${num(dims[0] / 31, 1)} vezes a Lua cheia)` : ''}` : null;
+  const acima = i.altura > 0;
+  const onde = acima ? `agora ${C.alturaTexto(i.altura)} para o ${C.rumo(i.azimute)} (${Math.round(i.altura)}°)`
+    : i.sempre === 'abaixo' ? 'daqui nunca aparece' : `agora abaixo do horizonte${i.nasce ? `; nasce às ${hora(i.nasce, off)}` : ''}`;
+  const olhoNu = Number.isFinite(ob.mag) && ob.mag <= 5 ? 'visível a olho nu em céu escuro' : Number.isFinite(ob.mag) && ob.mag <= 9 ? 'visível com binóculo' : 'visível com telescópio';
+  const linhas = [
+    linha('Tipo', tipo),
+    linha('Catálogo', [ob.id.startsWith('M') ? ob.id.replace(/^M/, 'Messier ') : null, ob.designacao].filter(Boolean).join(' · ')),
+    linha('Constelação', `${C.CONSTELACOES[sigla] || sigla}`),
+    linha('Brilho', Number.isFinite(ob.mag) ? `magnitude ${num(ob.mag, 1)}: ${olhoNu}` : null),
+    linha('Tamanho no céu', tamanho),
+    linha('Distância', ob.distAnosLuz ? `cerca de ${anosLuzTexto(ob.distAnosLuz)}; a luz que você vê saiu de lá há ${anosLuzTexto(ob.distAnosLuz).replace(' de anos-luz', ' de anos').replace(' anos-luz', ' anos')}` : 'sem distância nesta ficha'),
+    linha('Agora', `${num(i.altura, 1)}° de altura, azimute ${num(i.azimute, 0)}° (${C.rumo(i.azimute)})`),
+    linha('Nasce e se põe', i.sempre === 'acima' ? 'nunca se põe neste local' : i.sempre === 'abaixo' ? 'nunca nasce neste local' : [i.nasce && `nasce ${diaHora(i.nasce, off, t)}`, i.poe && `se põe ${diaHora(i.poe, off, t)}`].filter(Boolean).join('; ')),
+    linha('Ponto mais alto', i.culmina.altura > 0 ? `${diaHora(i.culmina.ms, off, t)}, a ${num(i.culmina.altura, 1)}° de altura` : null),
+    linha('Coordenadas', `ascensão reta ${horasMin(ob.ra)}, declinação ${ob.dec >= 0 ? '+' : '−'}${num(Math.abs(ob.dec), 2)}° (J2000)`),
+  ];
+  return {
+    titulo,
+    frase: `${tipo}${ob.distAnosLuz ? ` a ${anosLuzTexto(ob.distAnosLuz)}` : ''}; ${onde}.`,
+    numeros: `Constelação de ${C.CONSTELACOES[sigla] || sigla}${Number.isFinite(ob.mag) ? ` · magnitude ${num(ob.mag, 1)}` : ''}`,
+    fonte: `Catálogo de Messier · ${hora(t, off)} · visto de ${local.nome}`,
+    detalhes: () => mostrarInfo(titulo, el('table', { class: 'tabela-detalhe' }, el('tbody', {}, ...linhas)),
+      el('p', { class: 'nota', text: `Posição e tamanho do catálogo de Messier (via d3-celestial) e de catálogos NGC/IC; distâncias publicadas, arredondadas. No mapa 3D os objetos de céu profundo ficam no fundo do céu. Horários no fuso do local, vistos de ${local.nome}.` })),
   };
 }
 

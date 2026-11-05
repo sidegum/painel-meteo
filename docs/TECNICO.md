@@ -639,7 +639,7 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `ceu.js` | cálculo puro do céu (sem DOM, testado): Sol, Lua, planetas e estrelas pelo Astronomy Engine; satélites pelo SGP4; passagens visíveis, chuvas de meteoros (IMO, por longitude solar), eclipses, fases, estações e o resumo "Céu de hoje" |
 | `globo-ceu.js` | textos: bloco "Céu de hoje" e cartões de Sol, Lua, planetas, estrelas, satélites e sondas |
 | `globo-astro.js` | pontos subsolar e sublunar e posições para o sistema solar |
-| `globo-estrelas.js` | céu de fundo com as 8.920 estrelas do HYG v4.1 até magnitude 6,5 (precessão e nutação para a data, giro pelo tempo sideral, tamanho e brilho pela magnitude e cor pelo B−V em shader próprio) e linhas das 88 constelações |
+| `globo-estrelas.js` | céu: 119.625 estrelas do HYG v4.1 (8.920 até magnitude 6,5 e 110.705 mais fracas, carregadas depois em partes), Via Láctea, 121 galáxias, nebulosas e aglomerados e linhas das 88 constelações; precessão e nutação para a data, giro pelo tempo sideral, tamanho e brilho pela magnitude e cor pelo B−V em shader próprio; no sistema solar, estrelas em 3D na distância real |
 | `globo-corpos.js` | cálculo puro (testado em `test/corpos.test.mjs`): luas, corpos menores, propagação kepleriana, polos e rotação da IAU (WGCCRE 2015), raios e planetas anões oficiais |
 | `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra, filtros e o sistema solar navegável (planetas, luas, corpos menores, cinturões reais e sondas) |
 | `globo-sondas.js` | fichas das missões e interpolação de Hermite dos vetores do JPL Horizons |
@@ -665,10 +665,31 @@ Sistema solar (1.7.0):
   dias. Sem `corpos.json`, anéis ilustrativos avisados no cartão.
 - Navegação: câmera em volta de um foco (`G.foco`); "Ir até" no cartão ou dois toques levam a câmera ao corpo e o
   seguem; planetas com luas enquadram o sistema de luas (16 raios). "Visão geral" volta ao Sol. Zoom multiplicativo.
-- Filtros (`prefs` `globo:filtrosEspaco`): estrelas por magnitude (6,5, 4,5, 2,5, nenhuma, via `setDrawRange` no
-  catálogo ordenado), nomes, linhas e nomes das constelações, planetas no céu, trilhas, órbitas, luas, corpos menores,
+- Filtros (`prefs` `globo:filtrosEspaco`): estrelas por magnitude, Via Láctea, objetos de céu profundo, nomes, linhas e nomes das constelações, planetas no céu, trilhas, órbitas, luas, corpos menores,
   cinturões, sondas, rotas e nomes.
 - Montagem em partes (`pausa` entre planetas, populações e sondas): nenhuma tarefa longa enquanto o Globo abre.
+
+Céu profundo e navegação livre (1.8.0):
+- Estrelas em 3D: no sistema solar o grupo das estrelas gira −ε (eclíptica) e cada estrela com paralaxe vai para
+  `direção·1,25·(d_pc·206.264,8)^0,45`, a mesma compressão dos planetas. O brilho visto é recalculado no shader a
+  partir da distância real até a câmera (`camReal`, descomprimida na CPU): `m = M + 5·log10(d) − 5`. O Sol entra como
+  vértice especial (M = 4,83), aceso a partir de 12 unidades da origem; além de 60 (uns 5.000 UA) a maquete do sistema
+  solar some e só o rótulo do Sol fica. Estrelas sem distância ficam ao fundo, a 4.000 unidades da câmera.
+- `noFundo` (`z = 0,99999·w`): estrelas, Via Láctea e objetos nunca são cortados pelo plano distante. `projetar`
+  (`globo-espaco.js`) ignora o plano distante, para tocar e rotular estrelas além dele.
+- Via Láctea: polígonos do d3-celestial rasterizados com preenchimento XOR (anéis que dão a volta no céu fechados pela
+  borda) em `via-lactea.png`, esfera vista por dentro com mistura aditiva.
+- Objetos de céu profundo: pontos dimensionados pelo tamanho angular real (`pxPorGrau = altura/fov`), cor por tipo
+  (`TIPOS_OBJETO`), ficha em `cartaoObjeto` (`globo-ceu.js`).
+- Filtro por magnitude no shader (`uniforms.limite`): 21 (todas), 6,5, 4,5, 2,5 ou nenhuma.
+- Navegação livre (botão no canto inferior direito do sistema solar): câmera solta (`G.livre`: posição, guinada e
+  arfagem, Euler YXZ). Arrastar olha em volta; pinça, roda ou W/S avançam com passo proporcional à distância da
+  superfície mais próxima (`distanciaProxima`: Sol, planetas, luas, corpos menores, sondas e estrelas); dois toques
+  voam até o objeto tocado (parando a 6 raios) ou ao longo do raio tocado; "Ir até" na ficha de uma estrela leva até
+  ela. Planos próximo e distante se ajustam à escala. Limite de 7.000 unidades (~1 kpc), porque o catálogo é centrado
+  no Sol e fica rarefeito além disso. Um toque no mesmo botão, ou "Visão geral", volta ao modo de órbita.
+- `scripts/globo/montar-ceu-profundo.py` gera os quatro arquivos de `vendor/ceu` a partir do CSV do HYG e dos
+  `messier.json` e `mw.json` do d3-celestial.
 
 Regras de visibilidade (constantes `VIS` em `ceu.js`): céu escuro com Sol a −6° ou menos (planetas muito brilhantes a
 partir de −1° a −4°, pela magnitude); pelo menos 10° de altura; satélite visível só iluminado pelo Sol (sombra
