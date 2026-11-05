@@ -25,7 +25,7 @@ import { valido, direcaoTexto, partesLocais } from './analise.js';
 
 const RAD = Math.PI / 180;
 const RAIO = 1;
-const DIST = { min: 1.004, cidade: 1.08, inicial: 2.7, max: 12 }; // raio da Terra = 1; min: ~25 km de altura; cidade: ~500 km
+const DIST = { min: 1.0005, cidade: 1.08, inicial: 2.7, max: 12 }; // raio da Terra = 1; min: ~3 km de altura (ruas no mapa); cidade: ~500 km
 const MOVIMENTO_REDUZIDO = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CELULAR = matchMedia('(pointer: coarse)').matches;
 
@@ -342,9 +342,12 @@ const FRAGMENT_TERRA = /* glsl */`
     // noite quase preta, com um azul muito leve; o luar clareia pela fase (luzLua = fração iluminada) e pela altura da Lua
     float luar = luzLua * max(dot(Nd, lua), 0.0);
     cor += alb * (vec3(0.008, 0.011, 0.022) + vec3(0.11, 0.14, 0.21) * luar) * (1.0 - dia);
+    // à noite o mapa detalhado continua legível, em tons escuros e frios (como um mapa noturno): a imagem de luzes da
+    // NASA tem 10 km por pixel e, esticada no zoom de rua, vira manchas; sobre o mapa ela fica só como brilho leve
+    cor += alb * vec3(0.17, 0.19, 0.26) * noMapa * (1.0 - dia);
     if (temNoite > 0.5) { // luzes das cidades (NASA Black Marble), apagadas pelas nuvens por cima
       vec3 luzes = texture2D(tNoite, vUv).rgb;
-      cor += pow(luzes, vec3(0.9)) * vec3(1.0, 0.82, 0.55) * noite * 5.0 * (1.0 - 0.75 * nuvemAqui);
+      cor += pow(luzes, vec3(0.9)) * vec3(1.0, 0.82, 0.55) * noite * 5.0 * (1.0 - 0.75 * nuvemAqui) * (1.0 - 0.8 * noMapa);
     }
     if (temCamada > 0.5) {
       vec2 ud = uvDados(vUv);
@@ -537,8 +540,8 @@ function posicionarCamera() {
     G.camera.lookAt(G.foco);
     return;
   }
-  // plano próximo proporcional à altura: perto da superfície (25 km) a Terra não pode ser cortada
-  const near = Math.max(0.0004, Math.min(0.05, (c.dist - 1) * 0.25));
+  // plano próximo proporcional à altura: perto da superfície (3 km) a Terra não pode ser cortada
+  const near = Math.max(0.00005, Math.min(0.05, (c.dist - 1) * 0.25));
   if (Math.abs(near - G.camera.near) > near * 0.25) { G.camera.near = near; G.camera.updateProjectionMatrix(); }
   latLonVec(c.lat, c.lon, c.dist, G.camera.position);
   G.camera.up.set(0, 1, 0);
@@ -687,7 +690,33 @@ function distanciaQueCabe() {
 
 function definirDist(d) {
   if (G.galaxia) { const [min, max] = G.galaxia.limitesDistancia(); G.cam.dist = Math.max(min, Math.min(max, d)); return; }
-  G.cam.dist = G.sistema ? Math.max(G.focoDistMin || 0.3, Math.min(40, d)) : Math.max(DIST.min, Math.min(DIST.max, d)); } // no sistema solar, de rente ao corpo em foco até além das Voyager
+  const max = G.sistema ? DIST_MAX_SISTEMA : DIST.max;
+  G.cam.dist = G.sistema ? Math.max(G.focoDistMin || 0.3, Math.min(max, d)) : Math.max(DIST.min, Math.min(max, d)); // no sistema solar, de rente ao corpo em foco até além das Voyager
+  seguirAfastando(d, max);
+}
+
+/**
+ * Zoom sem fim para fora: insistir em afastar no limite de uma escala passa para a seguinte (Terra → sistema solar →
+ * Via Láctea → universo próximo). Conta o quanto se pediu além do limite; aproximar zera a conta.
+ */
+const DIST_MAX_SISTEMA = 40;
+function seguirAfastando(pedido, max) {
+  if (G.livre || G.animCam) return;
+  if (pedido <= max * 1.0001) { G.alemDoLimite = 0; return; }
+  G.alemDoLimite = (G.alemDoLimite || 0) + Math.log(pedido / max);
+  if (G.alemDoLimite < 0.35 || G.trocandoEscala) return; // uns três toques da roda ou um movimento de pinça
+  G.alemDoLimite = 0; G.trocandoEscala = true;
+  setTimeout(() => { G.trocandoEscala = false; }, 1500);
+  if (G.sistema) { abrirGalaxia(); return; }
+  (async () => { // da Terra para o sistema solar: abre o espaço (se preciso) e liga o sistema solar quando ficar pronto
+    if (!G.espacoAberto) await alternarEspaco();
+    for (let i = 0; i < 40 && G.espacoAberto && !G.sistema; i++) {
+      const chip = G.dom.raiz.querySelector('.globo-chip-sistema');
+      if (chip && !chip.hidden && !chip.disabled) { chip.click(); break; }
+      await new Promise((ok) => setTimeout(ok, 250));
+    }
+  })();
+}
 
 /**
  * Sistema solar: leva o foco da câmera até um corpo e passa a segui-lo (ele se move com o tempo).
@@ -1514,7 +1543,8 @@ function laco(agora) {
   if (G.camada === 'pressao') G.terra.material.uniforms.isobaras.value = Math.max(0, Math.min(1, (2.6 - c.dist) / 0.8));
   if (!G.sistema) {
     const antes = G.regiao.estado.ativa;
-    G.regiao.atualizar(c, agora);
+    const cv = G.renderer.domElement;
+    G.regiao.atualizar(c, agora, { fov: G.camera.fov, aspecto: G.camera.aspect, largura: cv.width, altura: cv.height });
     if (antes !== G.regiao.estado.ativa) atualizarNotaFonte();
     // a esfera de nuvens fica a 40 km de altura: perto do chão ela some aos poucos, para não tapar o mapa nem cortar a câmera
     const base = opacidadeNuvens();
@@ -1525,7 +1555,7 @@ function laco(agora) {
   G.estrelas.acompanharCamera(G.camera, G.dom.canvas.clientHeight * G.pixelRatio);
   const pulso = (Math.sin(agora / 500) + 1) / 2;
   if (!G.sistema) {
-    const esc = Math.max(0.012, Math.min(1, (c.dist - 1) / (DIST.inicial - 1))); // marcadores encolhem com a aproximação (tamanho fixo na tela)
+    const esc = Math.max(0.0001, Math.min(1, (c.dist - 1) / (DIST.inicial - 1))); // marcadores encolhem com a aproximação (tamanho fixo na tela)
     for (const m of [G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) { m.scale.setScalar(esc); const p = m.getObjectByName('pulso'); if (p) { p.scale.setScalar(1 + pulso * 1.6); p.material.opacity = 0.6 * (1 - pulso); } }
   }
   if (G.particulas) animarParticulas(dt);
