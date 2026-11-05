@@ -718,3 +718,12 @@ button.globo-rotulo { cursor: pointer; }
 .alerta-epocas span { color: var(--fraco); font-size: 15px; }
 .link-aviso { all: unset; cursor: pointer; color: var(--quente); font-weight: 650; min-height: 44px; display: inline-flex; align-items: center; }
 .aviso-card.painel-aviso { border-left-color: var(--chuva); }
+
+/* Aviso de mudança de endereço (js/mudanca.js), só no app instalado pelo endereço antigo */
+.mudanca { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; justify-content: center; gap: 12px;
+  padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); background: var(--fundo); color: var(--texto); }
+.mudanca h2 { margin: 0; font-size: 22px; }
+.mudanca p { margin: 0; font-size: 16px; line-height: 1.45; }
+.mudanca-abrir { display: block; width: 100%; font: inherit; margin-top: 8px; padding: 14px; border-radius: 12px; background: var(--sup2); color: var(--texto);
+  text-align: center; font-weight: 600; text-decoration: none; border: 1px solid var(--linha); }
+.mudanca-depois { padding: 12px; border: 0; background: none; color: var(--fraco); font: inherit; }

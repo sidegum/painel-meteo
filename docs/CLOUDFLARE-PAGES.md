@@ -4,9 +4,11 @@ O app vai para o Cloudflare Pages pelo GitHub Actions, sem passo de compilação
 
 O nome do subdomínio fica num lugar só: a variável `PAINEL_DOMINIO` do repositório. Nos exemplos, ele aparece como `tempo.seudominio.com.br`.
 
-## Situação em 05/11/2026
+## Ordem da mudança
 
-O projeto `painel-meteo` já foi criado e publicado pelo workflow (o token atual já tinha a permissão do Pages). O site está em `https://painel-meteo.pages.dev/`. Falta só o subdomínio: passos 2, 4, 5 e 6.
+1. **Subdomínio:** passos 2, 4, 5 e 6 abaixo (os passos 1 e 3 já foram feitos em 05/11/2026; o site já está em `https://painel-meteo.pages.dev/`).
+2. **Endereço antigo leva ao novo:** depois que o subdomínio abrir, o endereço oficial em `js/config.js` (`enderecoOficial`) passa a ser o subdomínio. Quem abre `sidegum.github.io/painel-meteo` no navegador vai direto para o novo endereço. No ícone instalado na tela inicial, aparece um aviso com o botão para copiar o novo endereço e instalar de novo. Deixe assim por alguns dias, até reinstalar em todos os aparelhos.
+3. **Fechar o repositório:** veja "Quando o repositório virar privado".
 
 ## O que você faz (uma vez só)
 
@@ -29,19 +31,25 @@ O projeto `painel-meteo` já foi criado e publicado pelo workflow (o token atual
 | O que muda | Quem publica no Pages |
 |---|---|
 | Código na `main` (push ou PR mesclado) | `pages.yml` |
-| Campos do Globo (a cada hora) | `globo.yml`, no mesmo job |
-| El Niño (a cada 3 h, só quando muda) | `enso.yml`, no mesmo job |
+| Campos do Globo (a cada 3 h) | `globo.yml`, no mesmo job |
+| El Niño (a cada 6 h, só quando muda) | `enso.yml`, no mesmo job |
 | Calibração diária, endereço do Worker | `pages.yml`, depois desses workflows |
 
 Cada publicação leva o app da `main` e os campos do Globo juntos. Sem os segredos da Cloudflare, os workflows só avisam e terminam sem erro.
 
 ## Quando o repositório virar privado
 
+Como fechar, depois dos dias de aviso:
+1. No GitHub, em **Settings > General**, no fim da página (**Danger Zone**), toque em **Change visibility > Change to private** e confirme.
+2. Em **Settings > Pages**, toque em **Unpublish site**, se a opção aparecer. No plano gratuito, o GitHub Pages para sozinho com o repositório privado.
+3. Abra o subdomínio no celular e confira se o app continua normal.
+
+O que acontece:
 - **O Cloudflare Pages continua funcionando.** O Direct Upload não lê o repositório: quem envia os arquivos é o GitHub Actions, e o `GITHUB_TOKEN` funciona em repositório privado.
-- **Os campos do Globo continuam.** No Cloudflare Pages eles saem da pasta `globo-dados/` do próprio site. O endereço `raw.githubusercontent.com`, usado no GitHub Pages, deixa de responder com o repositório privado.
+- **Os campos do Globo continuam.** No Cloudflare Pages, eles saem da pasta `globo-dados/` do próprio site. O endereço `raw.githubusercontent.com`, usado só no GitHub Pages, deixa de responder.
 - **O site não expõe código.** Só vão para o Pages os arquivos que o navegador usa. Ficam de fora `worker/`, `scripts/`, `test/`, `docs/`, `dados/historico/` e `package*.json`.
-- **O GitHub Pages para.** No plano gratuito do GitHub, o Pages só funciona em repositório público. O endereço `sidegum.github.io/painel-meteo` deixa de abrir, e isso é esperado.
-- **Atenção aos minutos do GitHub Actions.** Em repositório privado, o plano gratuito tem 2.000 minutos por mês, e o GitHub arredonda cada job para o minuto de cima. Pelas execuções de hoje, a estimativa é: Globo a cada hora, ~2 min cada (~1.440 min/mês); calibração diária, ~18 min (~540); El Niño, ~1 min a cada 3 h (~240). Isso soma cerca de 2.200 minutos, acima do limite. Antes de fechar o repositório, vale reduzir o Globo para a cada 2 ou 3 horas (o GFS só muda a cada 6 h) ou rever a calibração. É uma estimativa, não uma medição de um mês inteiro.
+- **O endereço `sidegum.github.io/painel-meteo` deixa de abrir**, e com ele o aviso de mudança. Por isso o aviso precisa ficar no ar por alguns dias antes.
+- **Os minutos do GitHub Actions** (2.000 por mês no plano gratuito) foram ajustados no PR #65 para cerca de 750 a 1.150 por mês: Globo a cada 3 h, El Niño a cada 6 h e calibração incremental.
 
 ## Detalhes técnicos
 
@@ -49,3 +57,4 @@ Cada publicação leva o app da `main` e os campos do Globo juntos. Sem os segre
 - `cloudflare/_headers` define cabeçalhos de segurança, `noindex` (o site é pessoal) e cache de 5 min para `globo-dados/`. `cloudflare/404.html` faz um arquivo que não existe responder 404, em vez de devolver o app.
 - O Worker aceita as origens de `ALLOWED_ORIGIN` no `worker/wrangler.toml`, mais `https://<PAGES_PROJETO>.pages.dev` e `https://<PAINEL_DOMINIO>`. Numa publicação feita à mão do computador, acrescente o domínio no `wrangler.toml`.
 - Referências: [Direct Upload com CI](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/), [Custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/), [Headers](https://developers.cloudflare.com/pages/configuration/headers/), [Serving Pages](https://developers.cloudflare.com/pages/configuration/serving-pages/), [Limits](https://developers.cloudflare.com/pages/platform/limits/).
+- `js/mudanca.js` roda antes do app. No endereço antigo (`*.github.io`), leva ao `CONFIG.enderecoOficial`. As preferências do aparelho (local escolhido, tema, camadas e avisos vistos) vão no fragmento `#migrar=` da URL, que não é enviado ao servidor. No endereço novo, só as preferências conhecidas são gravadas, e a URL é limpa. No app instalado (`display-mode: standalone`), mostra o aviso em vez de redirecionar.
