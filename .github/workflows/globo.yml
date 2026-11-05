@@ -1,0 +1,61 @@
+name: Dados do globo
+
+# Gera os campos globais da aba Globo (GFS 0,5°, mosaico infravermelho do GIBS, ciclones e elementos orbitais) e
+# publica tudo no branch "globo-dados", sempre com um único commit (sem histórico), para o repositório não crescer.
+# O app lê os arquivos em https://raw.githubusercontent.com/<repo>/globo-dados/ (CORS liberado, cache de 5 min).
+on:
+  schedule:
+    - cron: '25 * * * *'   # a cada hora (o GFS novo entra a cada 6 h; o satélite, a cada hora)
+  workflow_dispatch:
+    inputs:
+      so:
+        description: 'Só algumas partes (gfs,satelite,ciclones,satelites); vazio = todas'
+        required: false
+        default: ''
+  push:
+    paths:
+      - 'scripts/globo/atualizar.py'
+      - '.github/workflows/globo.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: globo-dados
+  cancel-in-progress: false
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar ecCodes, NumPy e Pillow
+        run: pip install --quiet "eccodes==2.50.0" "numpy>=2" "pillow>=11"
+      - name: Buscar a publicação anterior (para reaproveitar a rodada do GFS se não mudou)
+        run: |
+          git clone --quiet --depth 1 --branch globo-dados "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" saida/globo \
+            || mkdir -p saida/globo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Gerar os dados
+        run: python3 scripts/globo/atualizar.py saida/globo
+        env:
+          GLOBO_SO: ${{ github.event.inputs.so }}
+      - name: Publicar no branch globo-dados (um commit só)
+        run: |
+          cd saida/globo
+          rm -rf .git
+          git init --quiet
+          git checkout --quiet -b globo-dados
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "Dados do globo gerados em $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push --force --quiet "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" globo-dados
+          du -sh .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
