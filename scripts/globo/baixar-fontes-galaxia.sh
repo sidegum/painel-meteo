@@ -10,17 +10,27 @@
 set -uo pipefail
 pasta=${1:-scripts/globo/fontes}
 mkdir -p "$pasta"
-viz='https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-out.all&-out.max=unlimited&-source='
-baixar() { # nome url
-  if curl -fsSL --retry 3 --max-time 300 -A 'painel-meteo (GitHub Actions)' -o "$pasta/$1.tmp" "$2"; then
-    mv "$pasta/$1.tmp" "$pasta/$1"; echo "ok $1 ($(wc -c < "$pasta/$1") bytes)"; head -c 1500 "$pasta/$1"; echo; echo ---
-  else
-    rm -f "$pasta/$1.tmp"; echo "falhou $1 ($2)"
-  fi
+# VizieR: o servidor principal (CDS, Estrasburgo) e os espelhos oficiais (CfA, Harvard; NAOJ, Tóquio)
+espelhos=(https://vizier.cds.unistra.fr https://vizier.cfa.harvard.edu https://vizier.nao.ac.jp)
+baixar() { # nome url...
+  local nome=$1; shift
+  for url in "$@"; do
+    if curl -fsSL --connect-timeout 20 --retry 2 --max-time 240 -A 'painel-meteo (GitHub Actions)' -o "$pasta/$nome.tmp" "$url"; then
+      mv "$pasta/$nome.tmp" "$pasta/$nome"; echo "ok $nome ($(wc -c < "$pasta/$nome") bytes) de $url"; head -c 1500 "$pasta/$nome"; echo; echo ---
+      return 0
+    fi
+    echo "falhou $nome em $url"
+  done
+  rm -f "$pasta/$nome.tmp"
 }
-baixar reid2019-masers.tsv "${viz}J/ApJ/885/131"
-baixar harris2010.tsv "${viz}VII/202"
-baixar mcconnachie2012.tsv "${viz}J/AJ/144/4"
+vizier() { # nome fonte
+  local urls=()
+  for e in "${espelhos[@]}"; do urls+=("$e/viz-bin/asu-tsv?-out.all&-out.max=unlimited&-source=$2"); done
+  baixar "$1" "${urls[@]}"
+}
+vizier reid2019-masers.tsv J/ApJ/885/131
+vizier harris2010.tsv VII/202
+vizier mcconnachie2012.tsv J/AJ/144/4
 baixar baumgardt-gc.txt 'https://people.smp.uq.edu.au/HolgerBaumgardt/globular/orbits_table.txt'
 baixar mcconnachie-atual.dat 'https://www.astro.uvic.ca/~alan/Nearby_Dwarfs_Database_files/NearbyGalaxies.dat'
 ls -la "$pasta"
