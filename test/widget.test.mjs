@@ -11,10 +11,10 @@ const APP = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 
 /** Resumo no formato 1, como o painel entrega em window.painelResumo (capturado do modo widget). */
 export const RESUMO = {
-  formato: 1, versao: '1.2.24', geradoMs: 1793809395885, previsaoMs: 1793809395850,
+  formato: 1, versao: '1.2.26', geradoMs: 1793809395885, previsaoMs: 1793809395850,
   valores: { temperatura: 21.3, temperaturaMedida: true, chance: 0.98, chovendo: true, chegando: false, temporal: 'alto', aviso: true, rajadaKmh: 19 },
   textos: {
-    local: 'Campo Bom', temperatura: '21°', rotuloTemperatura: 'agora',
+    local: 'Campo Bom', temperatura: '21°', rotuloTemperatura: 'agora', sensacao: 'sensação 22°',
     notaTemperatura: 'INMET Campo Bom · 15:00', notaPrevisao: 'Open-Meteo · 15:43', minMax: 'mín 18° · máx 27°',
     chuva: 'Chovendo agora', chance: 'agora', chuvaDetalhe: '≈ 9 mm até 21h',
     temporal: 'Risco alto de temporal', temporalFonte: 'INMET', rajada: 'Rajada 19 km/h de NE às 15h', confianca: 'Confiança alta',
@@ -98,7 +98,7 @@ test('contrato: o formato do resumo é o mesmo no app e no widget', () => {
 test('tamanho médio mostra os textos prontos do painel, sem recalcular', async () => {
   const { widget } = await rodar();
   const t = textos(widget);
-  for (const esperado of ['Campo Bom', '21°', 'agora', 'mín 18° · máx 27°', 'Chovendo agora', '≈ 9 mm até 21h',
+  for (const esperado of ['Campo Bom', '21°', 'agora', 'sensação 22°', 'mín 18° · máx 27°', 'Chovendo agora', '≈ 9 mm até 21h',
     'Risco alto de temporal · INMET', 'Rajada 19 km/h de NE às 15h', 'INMET Campo Bom · 15:00', 'Open-Meteo · 15:43', 'Confiança alta']) {
     assert.ok(t.includes(esperado), `faltou "${esperado}" em ${JSON.stringify(t)}`);
   }

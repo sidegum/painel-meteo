@@ -247,8 +247,9 @@ c = n / (n + meia)        n = dias (ou casos) verificados; c = 0,5 quando n = me
 
 **Onde é aplicado: uma fonte única.** `recalibrar()` (app.js) recalcula `estado.prev` e `estado.ens` a partir das séries brutas (`estado.prevBruta`, `estado.ensBruto`) sempre que chega previsão, cenários, calibração ou aprendizado. Ela chama:
 
-- `calibrarPrevisao(prev, { calib, aprendizado, refMs })`: corrige `temperature_2m` hora a hora (a correção de cada hora é interpolada entre a da mínima e a da máxima pela posição da hora entre a mínima e a máxima do dia daquele modelo, de modo que a máxima do gráfico é exatamente a máxima corrigida do dia), a temperatura `current` e multiplica `wind_gusts_10m` e `wind_speed_10m` pelo fator histórico. A antecedência de cada dia é a distância até o dia da busca, mínimo 1, máximo 5.
-- `calibrarEnsemble(ens, calib, refMs, offset)`: aplica o fator de rajada aos membros dos cenários, usando o modelo determinístico de mesma origem (`CALIBRACAO_ENSEMBLE`).
+- `calibrarPrevisao(prev, { calib, aprendizado, refMs })`: por dia local de cada modelo, `correcaoTemperaturaDia` escolhe a correção de temperatura (hora a hora quando `calib.temperaturaHoraria` aprovou o modelo e a antecedência: viés de cada hora do dia + ajuste de máxima e mínima; senão, só máxima e mínima) e `prepararCorrecaoDia` a aplica a `temperature_2m` e à temperatura `current`; a máxima do gráfico é exatamente a máxima corrigida do dia. Multiplica `wind_gusts_10m` e `wind_speed_10m` pelo fator histórico. Passa o total de chuva de cada dia por `mapearChuva` (tabela de quantis `calib.modelos[m].chuvaQuantis`) e escala as horas na mesma proporção (`calibrarChuvaSerie`). A antecedência de cada dia é a distância até o dia da busca, mínimo 1, máximo 5.
+- `calibrarEnsemble(ens, calib, refMs, offset)`: aplica a tabela de chuva e o fator de rajada aos membros dos cenários, usando o modelo determinístico de mesma origem (`CALIBRACAO_ENSEMBLE`). A chance de chuva dos cenários já sai da série corrigida.
+- Depois, `ancorarTemperatura` ajusta as próximas horas pela medição de agora (seção sobre ancoragem).
 
 Todas as telas (primeira tela, gráficos, Semana, comparação, pressão) leem `estado.prev` e `estado.ens`, então herdam a mesma correção e nunca se contradizem. `analisarDia` não aplica nenhuma correção própria.
 
@@ -633,20 +634,20 @@ Scriptable ── GPS (≈3 km, arredondado a 2 casas) ──► WebView: APP/?w
   dos modelos ou a hora cheia. Usada por `renderAgora()` e `resumoWidget()`.
 - `situacaoChuva(a)`: chuva medida agora, chuva chegando pelo radar, frase curta (`respostaChuva`) e texto de detalhe
   (quanto ainda cai, horário de início pelo radar, volume e janela provável). Usada por `renderPrimeira()` e `resumoWidget()`.
-- `resumoWidget()`: junta `temperaturaAgora`, `analisarDia(hoje)`, `situacaoChuva`, `avaliarRisco`, `avisosOrdenados`,
+- `resumoWidget()`: junta `temperaturaAgora`, `sensacaoAgora`, `analisarDia(hoje)`, `situacaoChuva`, `avaliarRisco`, `avisosOrdenados`,
   `notaFonte`/`notaPrevisao` e `fmt`.
 
 ### 11.4 Contrato do resumo (`FORMATO_RESUMO = 1`)
 
 ```js
 {
-  formato: 1, versao: '1.2.24', geradoMs, previsaoMs,
+  formato: 1, versao: '1.2.26', geradoMs, previsaoMs,
   valores: {               // só para cor e ícone no widget
     temperatura, temperaturaMedida, chance, chovendo, chegando,
     temporal: 'moderado' | 'alto' | null, aviso: boolean, rajadaKmh,
   },
   textos: {                // exibidos como estão
-    local, temperatura, rotuloTemperatura, notaTemperatura, notaPrevisao, minMax,
+    local, temperatura, rotuloTemperatura, sensacao /* ou null */, notaTemperatura, notaPrevisao, minMax,
     chuva, chance, chuvaDetalhe, temporal, temporalFonte, rajada, confianca,
   },
 }

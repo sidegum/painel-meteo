@@ -24,6 +24,7 @@ Também funciona na tela bloqueada (tamanhos retangular, circular e em linha), c
 | Parte | De onde vem |
 |---|---|
 | Temperatura e "agora" ou "agora (prevista)" | Mesma regra do topo do painel: estação a até 25 km com leitura de até 2 h; sem ela, o ECMWF |
+| Sensação térmica (tamanho médio) | Mesma do resumo de Hoje |
 | Mínima e máxima | Mesmas da tela Hoje (ECMWF corrigido) |
 | Chuva (frase, chance e detalhe) | Mesma frase e chance da tela Hoje, inclusive "Chovendo agora" e "Chuva chegando" |
 | Risco de temporal | Mesmo cartão da tela Hoje. Sem risco moderado ou alto, aparece a linha de avisos do INMET |

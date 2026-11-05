@@ -4,8 +4,10 @@
 //
 // Estações (as mesmas da verificação do app, VERIFICACAO em js/app.js):
 // - A884 Campo Bom (INMET): a principal. Calibra o painel; recebe os 6 modelos e a rajada de curto prazo.
-// - A801 Porto Alegre Jardim Botânico (INMET) e SBCO Canoas (METAR): só para a tabela "Acerto de cada modelo",
-//   com os 3 modelos do painel.
+//   Também guarda a temperatura hora a hora dos modelos do painel e da medição (dados/historico/A884-horario.json),
+//   base da correção hora a hora (scripts/lib/temperatura-horaria.mjs).
+// - A801 Porto Alegre Jardim Botânico (INMET), SBCO Canoas e SBPA Porto Alegre aeroporto (METAR): só para a
+//   tabela "Acerto de cada modelo", com os 3 modelos do painel.
 // 1. Medições: arquivos anuais do INMET (BDMEP), hora a hora; METAR de Canoas pelo arquivo da Iowa
 //    Environmental Mesonet (IEM), que guarda os METAR mundiais desde a década de 2000.
 // 2. Previsões passadas: Open-Meteo Previous Runs API, o que cada modelo previu 1 a 5 dias antes de cada hora
@@ -18,12 +20,14 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { listarZip, extrairZip, lerCsvInmet, controleQualidade, diasLocais, numeroInmet, instanteUtc, lerCsvIem } from './lib/inmet.mjs';
 import { MODELOS_CALIBRACAO, LEADS, VARS_PREVISAO, prevDiaria, MODELOS_RAJADA_CURTO_PRAZO, rajadaCurtoPrazo } from './lib/calibracao.mjs';
+import { MODELOS_HORARIO, LEADS_HORARIO, seriesPorHora, obsPorHora } from './lib/temperatura-horaria.mjs';
 
 const MODELOS_APP = Object.keys(MODELOS_CALIBRACAO).filter((m) => MODELOS_CALIBRACAO[m].app);
 const ESTACOES = [
-  { id: 'A884', tipo: 'inmet', nome: 'Campo Bom', lat: -29.674, lon: -51.064, modelos: Object.keys(MODELOS_CALIBRACAO), curtoPrazo: true },
-  { id: 'A801', tipo: 'inmet', nome: 'Porto Alegre Jardim Botânico', lat: -30.054, lon: -51.175, modelos: MODELOS_APP, curtoPrazo: false },
-  { id: 'SBCO', tipo: 'metar', nome: 'Canoas', lat: -29.945, lon: -51.144, modelos: MODELOS_APP, curtoPrazo: false },
+  { id: 'A884', tipo: 'inmet', nome: 'Campo Bom', lat: -29.674, lon: -51.064, modelos: Object.keys(MODELOS_CALIBRACAO), curtoPrazo: true, horario: true },
+  { id: 'A801', tipo: 'inmet', nome: 'Porto Alegre Jardim Botânico', lat: -30.054, lon: -51.175, modelos: MODELOS_APP },
+  { id: 'SBCO', tipo: 'metar', nome: 'Canoas', lat: -29.945, lon: -51.144, modelos: MODELOS_APP },
+  { id: 'SBPA', tipo: 'metar', nome: 'Porto Alegre aeroporto', lat: -29.994, lon: -51.171, modelos: MODELOS_APP },
 ];
 // Todo o histórico que a Previous Runs guarda: a maioria dos modelos desde jan/2024 e o GFS (temperatura)
 // desde mar/2021 (doc oficial). Antes do início de cada modelo a API devolve nulos, que não entram na tabela.
@@ -209,6 +213,85 @@ async function medicoesRecentesComToken(est, desde, ate) {
   return horas;
 }
 
+// ------------------------------------------------------------------ temperatura hora a hora (modelos do painel)
+
+// Início do arquivo de cada modelo na Previous Runs (antes disso a API devolve nulos e só gasta cota). O ECMWF IFS
+// começa em out/2025; os demais, em jan/2024 (doc). A Historical Forecast vai desde 2022 (INICIO_HF).
+const INICIO_PR_HORARIO = { ecmwf_ifs: '2025-09-01', ecmwf_aifs025_single: '2024-01-01', ukmo_global_deterministic_10km: '2024-01-01' };
+
+/**
+ * Busca uma API horária da Open-Meteo em blocos e devolve as séries de 24 valores por dia (seriesPorHora).
+ * @param {string} base URL da API
+ * @param {Record<string, string>} mapa chave de destino → variável
+ */
+async function horarioOpenMeteo(base, est, modelo, datas, mapa, blocoDias) {
+  const out = {};
+  if (!datas.length) return out;
+  const ini = datas[0], fim = datas.at(-1);
+  for (let a = ini; a <= fim; a = somaDias(a, blocoDias)) {
+    const b = [somaDias(a, blocoDias - 1), fim].sort()[0];
+    const p = new URLSearchParams({
+      latitude: String(est.lat), longitude: String(est.lon), hourly: [...new Set(Object.values(mapa))].join(','),
+      models: modelo, start_date: a, end_date: b, timezone: 'America/Sao_Paulo',
+    });
+    try {
+      const j = await buscar(`${base}?${p}`);
+      if (j.error) throw new Error(j.reason);
+      const dias = seriesPorHora(j, mapa);
+      for (const [d, x] of Object.entries(dias)) out[d] = { ...(out[d] || {}), ...x };
+      console.log(`  ${new URL(base).hostname.split('.')[0]} ${modelo} ${a} a ${b}: ${Object.keys(dias).length} dias`);
+    } catch (e) { console.log(`  ${new URL(base).hostname.split('.')[0]} ${modelo} ${a} a ${b}: falhou (${e.message})`); }
+    await espera(1500);
+  }
+  return out;
+}
+
+/**
+ * Atualiza dados/historico/<ID>-horario.json: temperatura medida (o) e, por modelo, a de curto prazo (h0) e a
+ * prevista 1 a 5 dias antes (p1…p5), 24 valores por dia local. Incremental como a tabela diária: busca os dias que faltam
+ * e os mais recentes (as rodadas e o INMET completam os últimos dias com atraso).
+ * @param {object} est estação
+ * @param {{ms:number, temp:number|null}[]} horasObs medições já com controle de qualidade
+ */
+async function coletarHorario(est, horasObs) {
+  const arq = new URL(`../dados/historico/${est.id}-horario.json`, import.meta.url);
+  let tab = { dias: {} };
+  try { tab = JSON.parse(await readFile(arq, 'utf8')); } catch {}
+  console.log('  Temperatura hora a hora');
+  const linha = (d) => (tab.dias[d] ||= {});
+  for (const [d, o] of Object.entries(obsPorHora(horasObs))) linha(d).o = o;
+
+  const dias = (de, falta, recentes) => {
+    const xs = [];
+    for (let d = de; d <= ontem; d = somaDias(d, 1)) if (falta(tab.dias[d]) || d >= somaDias(ontem, -recentes)) xs.push(d);
+    return xs;
+  };
+  const mapaPR = Object.fromEntries(LEADS_HORARIO.map((L) => [`p${L}`, `temperature_2m_previous_day${L}`]));
+  for (const m of MODELOS_HORARIO) {
+    const pr = await horarioOpenMeteo('https://previous-runs-api.open-meteo.com/v1/forecast', est, m,
+      dias(INICIO_PR_HORARIO[m], (l) => !l?.[m]?.p1, 10), mapaPR, 60);
+    const hf = await horarioOpenMeteo('https://historical-forecast-api.open-meteo.com/v1/forecast', est, m,
+      dias(INICIO_HF, (l) => !l?.[m]?.h0, 15), { h0: 'temperature_2m' }, 180);
+    for (const fonte of [pr, hf]) for (const [d, x] of Object.entries(fonte)) linha(d)[m] = { ...(linha(d)[m] || {}), ...x };
+  }
+
+  const ids = Object.keys(tab.dias).sort();
+  const conta = (f) => ids.filter((d) => f(tab.dias[d])).length;
+  console.log(`  ${ids.length} dias, ${conta((l) => l.o)} com medição`);
+  for (const m of MODELOS_HORARIO) console.log(`  ${m}: curto prazo ${conta((l) => l[m]?.h0)}, véspera ${conta((l) => l[m]?.p1)}`);
+  const cab = {
+    estacao: { id: est.id, nome: est.nome }, modelos: MODELOS_HORARIO, atualizadoEm: new Date().toISOString(),
+    fontes: {
+      o: `INMET ${est.id}, temperatura do ar (bulbo seco) na hora cheia`,
+      h0: 'Open-Meteo Historical Forecast API (CC BY 4.0): primeiras horas de cada rodada',
+      p: 'Open-Meteo Previous Runs API (CC BY 4.0): previsto 1 a 5 dias antes (p1 a p5)',
+    },
+    formato: 'dias[data local].o e dias[data local][modelo][h0|p1…p5] = 24 valores em °C, hora local 0 a 23 (UTC−3)',
+  };
+  const linhas = ids.map((d) => `    ${JSON.stringify(d)}: ${JSON.stringify(tab.dias[d])}`);
+  await writeFile(arq, `${JSON.stringify(cab, null, 2).slice(0, -2)},\n  "dias": {\n${linhas.join(',\n')}\n  }\n}\n`);
+}
+
 // ------------------------------------------------------------------ principal
 
 const ontem = somaDias(hojeLocal(), -1);
@@ -281,7 +364,9 @@ async function coletarEstacao(est) {
     }
   }
 
-  const { modelos: _m, curtoPrazo: _c, ...dadosEst } = est;
+  if (est.horario) await coletarHorario(est, qc.horas);
+
+  const { modelos: _m, curtoPrazo: _c, horario: _h, ...dadosEst } = est;
   tabela.estacao = { ...dadosEst, ...(meta?.lat ? { lat: meta.lat, lon: meta.lon, altitude: meta.altitude } : {}) };
   tabela.atualizadoEm = new Date().toISOString();
   tabela.fontes = {

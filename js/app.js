@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.24';
+const VERSAO = '1.2.26';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -32,6 +32,7 @@ const VERIFICACAO = [
   { id: 'A884', nome: 'Campo Bom (INMET)', lat: -29.674, lon: -51.064, chuva: true },
   { id: 'A801', nome: 'Porto Alegre Jardim Botânico (INMET)', lat: -30.054, lon: -51.175, chuva: true },
   { id: 'SBCO', nome: 'Canoas (METAR)', lat: -29.945, lon: -51.144, chuva: false },
+  { id: 'SBPA', nome: 'Porto Alegre aeroporto (METAR)', lat: -29.994, lon: -51.171, chuva: false },
 ];
 
 // ------------------------------------------------------------------ modo widget
@@ -361,6 +362,37 @@ function atualizarCabecalho() {
 }
 
 /**
+ * Sensação térmica de agora, uma só para todas as telas. Medida: a que o INMET publica ou, sem ela, a
+ * temperatura aparente (mesma fórmula da previsão, Steadman/BoM) com temperatura, umidade e vento da mesma
+ * estação. Sem medição, a sensação prevista para esta hora (já calibrada e ancorada na medição).
+ * @returns {{valor:number, medida:boolean, title:string}|null}
+ */
+function sensacaoAgora() {
+  const pt = pontoExato(), agora = Date.now();
+  if (estado.obs && pt) {
+    const fontes = fontesNormalizadas();
+    const pega = (v) => escolherFonte(fontes, v, pt.lat, pt.lon, agora, CONFIG.idadeMaxMedicaoMin).escolhida;
+    const inmet = pega('sensacao');
+    if (inmet && inmet.distancia <= 25) return { valor: inmet.valor, medida: true, title: `Medida em ${inmet.fonte.nome}, ${fmt.idade(inmet.ms)}` };
+    const t = pega('temperatura'), u = pega('umidade'), ve = pega('vento');
+    if (t && u && ve && t.distancia <= 25 && t.fonte.id === u.fonte.id && u.fonte.id === ve.fonte.id) {
+      const v = apparente(t.valor, u.valor, ve.valor);
+      if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome}, ${fmt.idade(t.ms)}` };
+    }
+  }
+  const p = estado.prev;
+  const i = p ? p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000) : -1;
+  const v = i < 0 ? null : tempHora(p, 'apparent_temperature', i, modelosAtivos());
+  return valido(v) ? { valor: v, medida: false, title: 'Prevista para esta hora' } : null;
+}
+
+// "sensação 28°" ao lado da temperatura de agora; some sem dado.
+function sensacaoResumo() {
+  const s = sensacaoAgora();
+  return s ? el('span', { class: 'sens-agora', title: s.title }, 'sensação ', el('b', { text: fmt.c(s.valor) })) : null;
+}
+
+/**
  * Temperatura agora: medição da estação mais próxima (até 25 km e 2 h); sem ela, a prevista para esta hora
  * (valor "current" do ECMWF, MODELO_TEMP; sem ele, mediana ponderada dos modelos; por fim, a hora cheia).
  * Fonte única do topo, do resumo de Hoje e do widget.
@@ -385,7 +417,8 @@ function temperaturaAgora() {
   return { valor: valido(v) ? v : null, medida: false, estacao: null, ms: estado.prevEm, distanciaKm: null };
 }
 
-// Temperatura agora no topo e no resumo de Hoje (temperaturaAgora).
+// Temperatura agora no topo e no resumo de Hoje (temperaturaAgora); no resumo, ao lado, a sensação térmica
+// de agora (sensacaoAgora), em destaque.
 function renderAgora() {
   const alvo = $('#agora');
   const noResumo = document.getElementById('agora-hoje');
@@ -401,7 +434,7 @@ function renderAgora() {
     alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(t.valor) ?? 'sem dado'}, prevista`);
   }
   if (noResumo) {
-    noResumo.replaceChildren(el('b', { text: texto }), el('span', { class: 'rot-agora', text: t.medida ? 'agora' : 'agora (prevista)' }));
+    noResumo.replaceChildren(el('b', { text: texto }), el('span', { class: 'rot-agora', text: t.medida ? 'agora' : 'agora (prevista)' }), sensacaoResumo());
     noResumo.title = alvo.title;
   }
 }
@@ -544,6 +577,8 @@ function analisarDia(data, diaIndice, desdeAgora) {
     // mínima e máxima: ECMWF (padrão europeu), corrigido pelo aprendizado; sem ECMWF, mediana ponderada
     tmin: valido(resumosTodo.find((x) => x.modelo === MODELO_TEMP)?.tmin) ? resumosTodo.find((x) => x.modelo === MODELO_TEMP).tmin : mediana(resumosTodo.map((x) => x.tmin), resumosTodo.map((x) => pesos[x.modelo] ?? 1)),
     tmax: valido(resumosTodo.find((x) => x.modelo === MODELO_TEMP)?.tmax) ? resumosTodo.find((x) => x.modelo === MODELO_TEMP).tmax : mediana(resumosTodo.map((x) => x.tmax), resumosTodo.map((x) => pesos[x.modelo] ?? 1)),
+    // sensação máxima do dia: maior sensação prevista hora a hora (série calibrada e ancorada, a mesma do gráfico)
+    sensMax: maximo(idxTodo.map((i) => tempHora(p, 'apparent_temperature', i, mods))),
     tminFaixa: [minimo(resumosTodo.map((x) => x.tmin)), maximo(resumosTodo.map((x) => x.tmin))],
     tmaxFaixa: [minimo(resumosTodo.map((x) => x.tmax)), maximo(resumosTodo.map((x) => x.tmax))],
     rajadaPico: pico === null ? null : { ms: p.horas[pico], valor: cons.med[pico], dir: dirPico },
@@ -692,7 +727,7 @@ function situacaoChuva(a) {
 
 /**
  * Resumo de Hoje para o widget do iPhone, montado com as mesmas funções e os mesmos formatos da primeira tela
- * (temperaturaAgora, analisarDia, situacaoChuva, avaliarRisco, avisosOrdenados, fmt). O widget só exibe os
+ * (temperaturaAgora, sensacaoAgora, analisarDia, situacaoChuva, avaliarRisco, avisosOrdenados, fmt). O widget só exibe os
  * textos prontos de "textos"; os valores numéricos vão junto apenas para cor e ícone.
  * Contrato (FORMATO_RESUMO): docs/TECNICO.md, seção 11.
  * @returns {object} objeto simples, serializável em JSON
@@ -706,6 +741,7 @@ function resumoWidget() {
   const temRisco = !!risco && risco.nivel !== 'baixo';
   const avisos = avisosOrdenados();
   const t = temperaturaAgora();
+  const sens = sensacaoAgora();
   const rp = a.rajadaPico;
   const alertasOk = !!estado.alertas && !estado.alertas.indisponivel;
   // mesma regra da primeira tela: risco moderado ou alto substitui a linha de avisos do INMET
@@ -725,6 +761,7 @@ function resumoWidget() {
       local: estado.local.nome,
       temperatura: fmt.c(t?.valor) ?? '–',
       rotuloTemperatura: t?.medida ? 'agora' : 'agora (prevista)',
+      sensacao: sens ? `sensação ${fmt.c(sens.valor)}` : null, // como no resumo de Hoje (sensacaoResumo)
       // notas no formato "Fonte · Horário" (notaFonte e notaPrevisao)
       notaTemperatura: t?.medida ? notaFonte({ fonte: t.estacao, ms: t.ms }, off) : notaPrevisao(off),
       notaPrevisao: notaPrevisao(off),
@@ -803,7 +840,8 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       el('span', { class: 'cond', title: ceu?.origem || null }, ceu ? ceu.texto : ausente('céu sem dado'))),
     el('div', { class: 'resumo-temp' },
       el('span', { class: 'bloco-t min' }, el('small', { text: 'mínima' }), el('b', { class: 'tmin', text: fmt.c(a.tmin) ?? '–' })),
-      el('span', { class: 'bloco-t max' }, el('small', { text: 'máxima' }), el('b', { class: 'tmax', text: fmt.c(a.tmax) ?? '–' })),
+      el('span', { class: 'bloco-t max' }, el('small', { text: 'máxima' }), el('b', { class: 'tmax', text: fmt.c(a.tmax) ?? '–' }),
+        valido(a.sensMax) && Math.round(a.sensMax) !== Math.round(a.tmax) ? el('small', { class: 'sens-max', text: `sensação ${fmt.c(a.sensMax)}` }) : null),
       el('span', { class: 'bloco-t chuva' }, el('small', { text: 'chuva' }), el('b', { text: chovendo ? 'agora' : (av.prob === null ? '–' : fmt.pct(av.prob)) }))),
     el('div', { class: 'resumo-chuva' + (chovendo ? ' chovendo' : '') },
       el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
@@ -1201,7 +1239,8 @@ function instrumentos() {
 
   const t = val('temperatura'), u = val('umidade'), ve = val('vento');
   const sensInmet = linhaSilenciosa(fontes, 'sensacao', p, agora);
-  const sens = sensInmet ? sensInmet.valor : (t && u && ve && t.fonte.id === u.fonte.id && u.fonte.id === ve.fonte.id ? apparente(t.valor, u.valor, ve.valor) : null);
+  const sa = sensacaoAgora();
+  const sens = sa?.medida ? sa.valor : null; // a mesma do resumo; aqui só a medida
   const pr = val('pressao');
   const dir = val('direcao');
 
@@ -1564,7 +1603,7 @@ function linhaPlacar() {
     linha('Mínima', x.tmin, `com erro de até ${pl.limites.tempC} °C`),
     x.rajada?.n ? linha('Rajada', x.rajada, `com erro de até ${pl.limites.rajadaKmh} km/h`) : null)];
   const abrir = () => mostrarInfo('Acerto da véspera',
-    el('p', { text: 'Quanto a previsão feita no dia anterior acertou, comparada com a estação do INMET em Campo Bom. Temperatura e rajada já com a correção pelo histórico, medida em meses que a correção não viu.' }),
+    el('p', { text: 'Quanto a previsão feita no dia anterior acertou, comparada com a estação do INMET em Campo Bom. Chuva, temperatura e rajada já com a correção pelo histórico, medida em meses que a correção não viu.' }),
     ...bloco(`Últimos ${u.dias} dias (${dataBr(u.ini)} a ${dataBr(u.fim)})`, u),
     ...(pl.completo?.dias > u.dias ? bloco(`Todo o período (${pl.completo.dias} dias, desde ${dataBr(pl.completo.ini)}/${pl.completo.ini.slice(2, 4)})`, pl.completo) : []),
     el('p', { class: 'nota', text: 'O arquivo do INMET chega com um ou dois meses de atraso; o placar é recalculado sozinho quando ele chega.' }));
@@ -1852,7 +1891,12 @@ function tabelaAcerto() {
       const linhas = [];
       for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
         const x = k.modelos?.[m]; if (!x?.chuva?.[d]) continue;
-        linhas.push(linha(m, d, x.chuva[d].acerto, x.chuva[d].mae, erroUsado(x.rajada?.[d]), erroUsado(x.tmax?.[d]), x.chuva[d].n));
+        // chuva em uso no painel: corrigida (fora da amostra) quando a tabela de quantis foi aprovada
+        const q = x.chuvaQuantis?.usar ? x.chuvaQuantis.validacao?.porLead?.[d]?.depois : null;
+        // máxima em uso: a do método hora a hora quando ele foi aprovado, senão a do método diário
+        const h = k.temperaturaHoraria?.modelos?.[m]?.leads?.[d];
+        const tmax = h?.usar ? h.validacao?.tmax?.horaria?.mae : erroUsado(x.tmax?.[d]);
+        linhas.push(linha(m, d, q ? q.acerto : x.chuva[d].acerto, q ? q.mae : x.chuva[d].mae, erroUsado(x.rajada?.[d]), tmax, x.chuva[d].n));
       }
       blocos.push(el('p', { class: 'fonte', text: `INMET Campo Bom · histórico de ${dataBr(k.periodo.ini)} a ${dataBr(k.periodo.fim)}` }));
       if (linhas.length) blocos.push(tabela(linhas));
@@ -1870,7 +1914,7 @@ function tabelaAcerto() {
       blocos.push(el('p', { class: 'nota', text: workerConfigurado() ? 'Sem histórico importado; os dias passam a contar a partir de amanhã.' : 'Sem histórico importado.' }));
     }
   }
-  blocos.push(el('p', { class: 'nota', text: '"Acertou se chovia" conta os dias em que o modelo disse que ia chover e choveu, ou disse que não ia e não choveu. Os erros mostram, em média, quanto o modelo errou para mais ou para menos: quanto menor, melhor. Em Campo Bom, temperatura e rajada já com a correção que o painel aplica.' }));
+  blocos.push(el('p', { class: 'nota', text: '"Acertou se chovia" conta os dias em que o modelo disse que ia chover e choveu, ou disse que não ia e não choveu. Os erros mostram, em média, quanto o modelo errou para mais ou para menos: quanto menor, melhor. Em Campo Bom, chuva, temperatura e rajada já com a correção que o painel aplica.' }));
   return el('div', {}, ...blocos);
 }
 

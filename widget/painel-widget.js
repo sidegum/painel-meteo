@@ -200,6 +200,7 @@ function medio(w, r, nota, guardado) {
   esq.layoutVertically();
   texto(esq, T.temperatura, Font.boldSystemFont(40));
   texto(esq, T.rotuloTemperatura, Font.systemFont(11), CORES.fraco);
+  if (T.sensacao) texto(esq, T.sensacao, Font.semiboldSystemFont(12));
   texto(esq, T.minMax, Font.systemFont(12));
   corpo.addSpacer(14);
   const dir = corpo.addStack();
