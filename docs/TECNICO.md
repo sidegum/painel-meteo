@@ -539,6 +539,8 @@ A ordem é:
 - No `install`, guarda os arquivos do app em `painel-app-<versão>`. No `activate`, remove as versões antigas e assume as abas abertas (`clients.claim`).
 - No `fetch`, atende só `GET` do mesmo domínio. As APIs externas não passam pelo service worker.
 - A estratégia é **rede primeiro**, com `cache: 'no-cache'`, para ignorar os 10 min de cache HTTP do GitHub Pages. O cache local entra sem internet ou quando a rede demora mais de 4 s.
+- Todos os caminhos são relativos à pasta do `sw.js`, então o mesmo código serve a subpasta do GitHub Pages (`/painel-meteo/`) e a raiz do domínio no Cloudflare Pages.
+- O Cloudflare Pages redireciona `/index.html` para `/` e `/privacidade.html` para `/privacidade`. Uma resposta que passou por redirecionamento não pode ser entregue a uma navegação, então `semRedirecionamento` copia a resposta sem essa marca antes de guardá-la. A política de privacidade é reconhecida com e sem `.html`.
 - **A cada release, `VERSAO` sobe em `sw.js` e em `js/app.js`.** Isso troca o cache e mostra a versão no rodapé.
 
 ---
@@ -598,6 +600,12 @@ Nenhuma chave contém a localização ou o IP do usuário.
 - `.github/workflows/calibracao.yml`: no dia 5 de cada mês (e quando os scripts da calibração mudam), roda:
   - `scripts/historico.mjs`: baixa os ZIPs anuais do INMET (BDMEP), extrai a A884 (`scripts/lib/inmet.mjs`: leitor de ZIP próprio, CSV em Latin-1, controle de qualidade, dia local) e as previsões passadas da Previous Runs API (6 modelos, 1 a 5 dias antes, blocos de 60 dias). Grava `dados/historico/A884-diario.json` (uma linha por dia, incremental).
   - `scripts/calibrar.mjs`: calcula `dados/calibracao.json` e `docs/calibracao-resultado.md` (`scripts/lib/calibracao.mjs`). Detalhes em CALIBRACAO.md.
+- `.github/workflows/pages.yml`: publica o site no Cloudflare Pages (Direct Upload, sem compilação) a cada push na `main`, depois da calibração e do workflow do Worker, e à mão. O `globo.yml` (a cada hora) e o `enso.yml` (quando o El Niño muda) publicam no próprio job, porque commits feitos com o `GITHUB_TOKEN` não disparam outros workflows. Passo a passo em CLOUDFLARE-PAGES.md.
+  - `scripts/montar-site.sh`: copia só o que o navegador usa (`index.html`, `privacidade.html`, `manifest.json`, `sw.js`, `app.css`, `js/`, `vendor/`, `icones/`, `dados/*.json`, `cloudflare/_headers` e `cloudflare/404.html`) e os campos do Globo em `globo-dados/`. Confere que todo arquivo da lista do service worker existe. O `testes.yml` roda essa montagem em cada push.
+  - `scripts/publicar-pages.sh`: busca o branch `globo-dados` (se não vier pronto), monta o site, cria o projeto na primeira vez e publica com `wrangler pages deploy`.
+  - No Cloudflare Pages, `CONFIG.globoDados` aponta para `globo-dados/` do próprio site, que continua funcionando com o repositório privado. No GitHub Pages e no computador local, aponta para `raw.githubusercontent.com`.
+  - O `404.html` desliga o modo de aplicação de página única do Pages: um arquivo que falta responde 404, e não o `index.html` com status 200.
+  - O Worker aceita como origem o que está em `ALLOWED_ORIGIN` no `wrangler.toml` mais `https://<PAGES_PROJETO>.pages.dev` e `https://<PAINEL_DOMINIO>`, variáveis do repositório lidas pelo `worker.yml` e passadas com `wrangler deploy --var`.
 - `scripts/configurar.mjs`: grava a URL do Worker em `js/config.js`.
 - `test/analise.test.mjs`: 21 testes das funções puras.
 - `worker/test/worker.test.mjs`: 24 testes dos parsers e das regras do Worker, com fixtures reais.

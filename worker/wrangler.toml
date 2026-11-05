@@ -5,6 +5,8 @@ workers_dev = true
 
 # Só leitura de dados públicos. Nenhuma outra permissão (sem D1, R2, filas, etc.).
 [vars]
+# Origens aceitas no CORS, separadas por vírgula. O workflow de publicação acrescenta o site do Cloudflare Pages
+# (variáveis PAINEL_DOMINIO e PAGES_PROJETO do repositório); numa publicação à mão, acrescente aqui.
 ALLOWED_ORIGIN = "https://sidegum.github.io"
 LIMITE_POR_MINUTO = "30"
 

@@ -4,6 +4,7 @@ name: Publicar Worker
 # Precisa de dois segredos do repositório: CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID.
 # Sem eles, o workflow só avisa e termina sem erro.
 # O token do INMET (opcional) fica só na Cloudflare: painel do Worker > Settings > Variables and Secrets.
+# Variáveis opcionais do repositório: PAINEL_DOMINIO (subdomínio do site no Cloudflare Pages) e PAGES_PROJETO.
 
 on:
   push:
@@ -76,10 +77,29 @@ jobs:
           fi
           echo "url=https://painel-meteo.$sub.workers.dev" >> "$GITHUB_OUTPUT"
 
+      # Origens aceitas pelo CORS: as do wrangler.toml (GitHub Pages) mais o site do Cloudflare Pages, montadas a partir
+      # das variáveis do repositório PAINEL_DOMINIO (ex.: tempo.seudominio.com.br) e PAGES_PROJETO (padrão painel-meteo).
       - name: Publicar
         if: steps.seg.outputs.ok == 'true'
         working-directory: worker
-        run: npx --yes wrangler@4 deploy
+        env:
+          PAINEL_DOMINIO: ${{ vars.PAINEL_DOMINIO }}
+          PAGES_PROJETO: ${{ vars.PAGES_PROJETO }}
+        run: |
+          set -euo pipefail
+          origens=$(sed -n 's/^ALLOWED_ORIGIN = "\(.*\)"$/\1/p' wrangler.toml)
+          origens="$origens,https://${PAGES_PROJETO:-painel-meteo}.pages.dev"
+          dominio=$(printf '%s' "${PAINEL_DOMINIO:-}" | sed -E 's#^https?://##; s#/.*$##' | tr 'A-Z' 'a-z')
+          if [ -n "$dominio" ]; then
+            if ! printf '%s' "$dominio" | grep -Eq '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'; then
+              echo "::error::PAINEL_DOMINIO inválido: $PAINEL_DOMINIO (use só o nome, ex.: tempo.seudominio.com.br)"; exit 1
+            fi
+            origens="$origens,https://$dominio"
+          else
+            echo "::notice::Variável PAINEL_DOMINIO vazia: o Worker aceita só o GitHub Pages e o endereço pages.dev."
+          fi
+          echo "Origens aceitas: $origens"
+          npx --yes wrangler@4 deploy --var "ALLOWED_ORIGIN:$origens"
 
       - name: Conferir saúde
         if: steps.seg.outputs.ok == 'true'

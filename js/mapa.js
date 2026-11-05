@@ -205,7 +205,7 @@ export function secaoMapa(container, estado) {
     const lat = estado.local.lat, lon = estado.local.lon;
     mapa.setView([lat, lon], 8);
     // Mapa base do OpenStreetMap. A política dos servidores dele exige saber de qual site vem o pedido,
-    // então só os quadros do mapa enviam a origem (https://sidegum.github.io), nunca o caminho da página.
+    // então só os quadros do mapa enviam a origem (o endereço do site, sem o caminho da página).
     const tema = document.documentElement.getAttribute('data-tema');
     const escuro = tema ? tema === 'escuro' : !matchMedia('(prefers-color-scheme: light)').matches;
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {

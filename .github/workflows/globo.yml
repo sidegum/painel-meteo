@@ -2,7 +2,8 @@ name: Dados do globo
 
 # Gera os campos globais da aba Globo (GFS 0,5°, mosaico infravermelho do GIBS, ciclones e elementos orbitais) e
 # publica tudo no branch "globo-dados", sempre com um único commit (sem histórico), para o repositório não crescer.
-# O app lê os arquivos em https://raw.githubusercontent.com/<repo>/globo-dados/ (CORS liberado, cache de 5 min).
+# O app lê os arquivos em https://raw.githubusercontent.com/<repo>/globo-dados/ no GitHub Pages (CORS liberado, cache de
+# 5 min) e na pasta globo-dados/ do próprio site no Cloudflare Pages, publicada ao fim deste job.
 on:
   schedule:
     - cron: '25 * * * *'   # a cada hora (o GFS novo entra a cada 6 h; o satélite, a cada hora)
@@ -59,3 +60,18 @@ jobs:
           du -sh .
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Os campos novos também vão para o Cloudflare Pages (pasta globo-dados/ do site), no mesmo job, para gastar
+      # menos minutos do Actions. Só a partir da main: o app publicado é sempre o da main.
+      - uses: actions/setup-node@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          node-version: '22'
+      - name: Publicar no Cloudflare Pages
+        if: github.ref == 'refs/heads/main'
+        run: scripts/publicar-pages.sh saida/globo
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJETO: ${{ vars.PAGES_PROJETO }}
+          PAGES_MENSAGEM: Campos do Globo atualizados
