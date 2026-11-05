@@ -580,6 +580,7 @@ function configurarGestos() {
     if (!ponteiros.delete(e.pointerId)) return;
     const agora = performance.now();
     if (ponteiros.size > 0) { ancorar(); historico = []; return; } // de dois dedos para um: recomeça a âncora sem pular
+    if (G.revelou) { G.revelou = false; toque = null; } // só trouxe os controles de volta
     if (toque && toque.moveu < 8 && agora - toque.t < 400 && e.type === 'pointerup') {
       if (agora - ultimoToque < 320) { if (G.livre) irLivre(e.clientX, e.clientY); else if (G.sistema) G.espaco?.focarNoToque(e.clientX, e.clientY); else aproximar(e.clientX, e.clientY); ultimoToque = 0; }
       else { ultimoToque = agora; tocarPonto(e.clientX, e.clientY); }
@@ -990,7 +991,7 @@ function montarDom(secao) {
   const painel = el('div', { class: 'globo-painel', hidden: true, role: 'dialog', 'aria-label': 'Tempo no ponto tocado' });
   // Controles discretos: só ícones, numa coluna estreita. Aproximar e afastar ficam nos gestos (pinça, dois toques, roda).
   const icone = (...filhos) => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, ...filhos);
-  const botoes = el('div', { class: 'globo-botoes' },
+  const botoes = el('div', { class: 'globo-botoes globo-recolhivel' },
     el('button', { type: 'button', title: 'Minha posição', 'aria-label': 'Centralizar na minha posição', onclick: () => { const l = G.estadoApp?.local; if (l) irPara(l.lat, l.lon, Math.min(G.cam.dist, DIST.cidade)); } },
       icone(svg('circle', { cx: 12, cy: 12, r: 6 }), svg('circle', { cx: 12, cy: 12, r: 1.6, class: 'cheio' }), svg('path', { d: 'M12 2v4M12 18v4M2 12h4M18 12h4' }))),
     el('button', { type: 'button', title: 'Espaço', class: 'globo-btn-espaco', 'aria-label': 'Espaço: satélites e sistema solar', 'aria-pressed': 'false', onclick: alternarEspaco },
@@ -998,16 +999,49 @@ function montarDom(secao) {
     el('button', { type: 'button', title: 'Ajuda', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda },
       icone(svg('path', { d: 'M9.2 9a2.9 2.9 0 1 1 4.3 2.5c-.9.5-1.5 1.1-1.5 2.1v.6' }), svg('circle', { cx: 12, cy: 17.6, r: 1.1, class: 'cheio' }))));
   const relogio = el('p', { class: 'globo-relogio', 'aria-live': 'off' });
-  const rodape = el('div', { class: 'globo-rodape' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, relogio, ciclones));
+  const rodape = el('div', { class: 'globo-rodape globo-recolhivel' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, relogio, ciclones));
   const cidades = el('div', { class: 'globo-cidades', 'aria-hidden': 'true' });
-  const raiz = el('div', { class: 'globo' }, canvas, cidades, el('div', { class: 'globo-topo' }, chips), botoes, aviso, painel, rodape);
+  const raiz = el('div', { class: 'globo' }, canvas, cidades, el('div', { class: 'globo-topo globo-recolhivel' }, chips), botoes, aviso, painel, rodape);
   secao.append(raiz);
   G.dom = { raiz, canvas, chips, aviso, legenda, fonte, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
   montarCidades();
   G.mostrarPainel = mostrarPainelTexto; G.fecharPainel = fecharPainel; G.modoSistema = modoSistema; G.focarSistema = focarSistema; G.distanciaVisaoGeral = distanciaVisaoGeral; G.navegacaoLivre = navegacaoLivre; G.voarLivreAte = voarLivreAte;
   window.__globo = G; G.pontoNaTela = pontoNaTela; G.pontoDesenhado = pontoDesenhado; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
+  // a barra de cima do app se recolhe sozinha: o globo cresce para ocupar a altura liberada
+  addEventListener('resize', ajustarTamanho);
+  window.visualViewport?.addEventListener('resize', ajustarTamanho);
+  configurarRecolhimento(raiz);
   montarLegenda(CAMADAS.find((c) => c.id === G.camada), null);
+}
+
+// ---------- controles que se recolhem ----------
+
+/** Sem toque por este tempo, botões, filtros e notas somem e a cena fica limpa; qualquer toque traz de volta. */
+const OCIOSO_MS = 4500;
+
+function configurarRecolhimento(raiz) {
+  const revelar = () => {
+    if (raiz.classList.contains('imersivo')) G.revelou = true; // o toque que traz os controles não age na cena
+    mostrarControles();
+  };
+  raiz.addEventListener('pointerdown', revelar, { capture: true });
+  raiz.addEventListener('wheel', mostrarControles, { capture: true, passive: true });
+  raiz.addEventListener('keydown', mostrarControles, { capture: true });
+  raiz.addEventListener('focusin', mostrarControles);
+  mostrarControles();
+}
+
+function mostrarControles() {
+  G.dom.raiz.classList.remove('imersivo');
+  clearTimeout(G.timerOcioso);
+  G.timerOcioso = setTimeout(recolherControles, OCIOSO_MS);
+}
+
+function recolherControles() {
+  const ocupado = !G.dom.painel.hidden || G.tempoLinha.tocando || G.dom.raiz.contains(document.activeElement) && document.activeElement !== G.dom.canvas;
+  if (ocupado || !G.aberto) { mostrarControles(); return; }
+  G.dom.raiz.classList.add('imersivo');
 }
 
 // ---------- cidades com temperatura ----------
@@ -1289,6 +1323,7 @@ function mostrarAjuda() {
       el('li', {}, 'Ponto tocado: ECMWF IFS pela Open-Meteo, com fuso horário local. Ciclones: NHC e GDACS.'),
       el('li', {}, 'Céu de hoje: o que dá para ver a olho nu do seu local até o amanhecer, com horário, direção e altura, já com as nuvens previstas.'),
       el('li', {}, 'Espaço: ISS, Tiangong e satélites (CelesTrak, SGP4) em escala real de altura; planetas na direção real. Sistema solar com posições reais (Astronomy Engine), sondas pelo JPL Horizons e distâncias comprimidas para caber na tela.')),
+    el('p', { class: 'nota', text: `Nesta tela: ${[G.dom.fonte.textContent, ...(G.espaco?.notasFontes?.() || [])].filter(Boolean).join(' · ')}.` }),
     el('p', { class: 'nota', text: `Texturas: NASA Visible Earth (Blue Marble e Black Marble, domínio público). Dados gerados ${m?.gerado ? fmt.idade(Date.parse(m.gerado)) : '–'}. Este globo é um painel pessoal, não uma fonte oficial. Em situação de risco, siga a Defesa Civil e o INMET.` }));
 }
 

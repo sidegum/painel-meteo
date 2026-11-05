@@ -158,7 +158,7 @@ function montarInterface() {
     } }));
   }
   const nota = el('p', { class: 'globo-espaco-nota', text: '' });
-  const raiz = el('div', { class: 'globo-espaco', hidden: true }, chips, nota);
+  const raiz = el('div', { class: 'globo-espaco globo-recolhivel', hidden: true }, chips, nota);
   G.dom.raiz.append(raiz);
   E.dom = { raiz, chips, nota };
 }
@@ -486,6 +486,17 @@ export function tocarEspaco(cx, cy, modo = 'tocar') {
   return true;
 }
 
+/** Fontes do espaço no formato "Fonte · Horário", para a ajuda (fora da cena). */
+export function notasFontes() {
+  const out = [];
+  if (E.notaSat) out.push(E.notaSat);
+  const off = fusoS(E.G?.estadoApp);
+  if (E.sondas?.gerado) out.push(`JPL Horizons · ${fmt.dataCurta(Date.parse(E.sondas.gerado), off)}`);
+  if (E.corpos?.gerado) out.push(`JPL SBDB · ${fmt.dataCurta(Date.parse(E.corpos.gerado), off)}`);
+  out.push('Astronomy Engine · agora');
+  return out;
+}
+
 /** Objeto sob o dedo para a navegação livre (posição no mundo e raio), ou null. */
 export function alvoNoToque(cx, cy) { return E.modo === 'sistema' ? tocarEspaco(cx, cy, 'alvo') : null; }
 
@@ -597,7 +608,7 @@ function paraCena(x, y, z, alvo) {
 /** Distância da câmera ao Sol (cena; uns 5.000 UA) a partir da qual o sistema solar vira um ponto. */
 const LONGE_DO_SOL = 60;
 const SIS = { desloc: 0, vel: 0, ultimo: 0, dom: null, rotulos: [] };
-const VELOCIDADES = [{ v: 0, nome: 'Tempo real' }, { v: 1, nome: '1 dia/s' }, { v: 30, nome: '1 mês/s' }, { v: 365.25, nome: '1 ano/s' }];
+const VELOCIDADES = [{ v: 0, nome: 'Tempo real' }, { v: 1, nome: '1 dia por segundo' }, { v: 30, nome: '1 mês por segundo' }, { v: 365.25, nome: '1 ano por segundo' }];
 const instanteSistema = () => Date.now() + SIS.desloc;
 
 function alternarSistema(ligar) {
@@ -623,7 +634,7 @@ function alternarSistema(ligar) {
 
 function definirVelocidade(v) {
   SIS.vel = v; SIS.ultimo = performance.now();
-  if (SIS.dom) for (const b of SIS.dom.velocidades.querySelectorAll('[data-vel]')) b.setAttribute('aria-pressed', String(Number(b.dataset.vel) === v));
+  if (SIS.dom) { SIS.dom.tempo.textContent = (VELOCIDADES.find((x) => x.v === v) || VELOCIDADES[0]).nome; SIS.dom.tempo.setAttribute('aria-pressed', String(v !== 0)); }
 }
 
 // Luas em volta do planeta: direção real e distância em escala logarítmica, r·(1 + ln(d/R)), com r o raio do planeta
@@ -940,20 +951,19 @@ function mostrarSonda(chave) {
 }
 
 function montarControlesSistema() {
-  const velocidades = el('div', { class: 'globo-chips globo-velocidades', role: 'group', 'aria-label': 'Velocidade do tempo' });
-  for (const v of VELOCIDADES) velocidades.append(el('button', { type: 'button', 'data-vel': String(v.v), text: v.nome, 'aria-pressed': String(v.v === 0), onclick: () => definirVelocidade(v.v) }));
-  velocidades.append(el('button', { type: 'button', text: 'Hoje', 'aria-label': 'Voltar para hoje', onclick: () => { SIS.desloc = 0; definirVelocidade(0); } }));
+  // um botão só para a velocidade do tempo (cada toque passa para a próxima) e "Hoje" só quando a data mudou
+  const tempo = el('button', { type: 'button', class: 'globo-tempo', text: VELOCIDADES[0].nome, 'aria-pressed': 'false', title: 'Toque para acelerar o tempo',
+    onclick: () => { const i = VELOCIDADES.findIndex((v) => v.v === SIS.vel); definirVelocidade(VELOCIDADES[(i + 1) % VELOCIDADES.length].v); } });
+  const hoje = el('button', { type: 'button', class: 'globo-hoje', text: 'Hoje', hidden: true, 'aria-label': 'Voltar para hoje', onclick: () => { SIS.desloc = 0; definirVelocidade(0); } });
   const geral = el('button', { type: 'button', class: 'globo-visao-geral', text: 'Visão geral', hidden: true, onclick: visaoGeral });
   const livre = el('button', { type: 'button', class: 'globo-livre', text: 'Navegação livre', 'aria-pressed': 'false', onclick: () => alternarLivre(!E.G.livre) });
   const dica = el('p', { class: 'globo-dica', hidden: true, text: 'Arraste para olhar em volta · afaste os dedos para avançar · dois toques para ir até algo' });
-  const topo = el('div', { class: 'globo-sistema-topo' }, geral, livre);
   const data = el('p', { class: 'globo-data-sistema' });
-  const fontes = ['Astronomy Engine', E.sondas ? 'JPL Horizons' : null, E.corpos ? 'JPL SBDB' : null].filter(Boolean).join(' · ');
-  const gerado = Date.parse(E.sondas?.gerado || E.corpos?.gerado || '') || Date.now();
-  const nota = el('p', { class: 'globo-espaco-nota', text: `${fontes} · ${fmt.dataCurta(gerado, fusoS(E.G.estadoApp))}` });
-  const raiz = el('div', { class: 'globo-sistema-controles', hidden: true }, dica, topo, velocidades, data, nota);
+  const topo = el('div', { class: 'globo-sistema-topo' }, tempo, hoje, geral, livre);
+  // fontes e data dos dados ficam no "?" (ajuda), fora da cena
+  const raiz = el('div', { class: 'globo-sistema-controles globo-recolhivel', hidden: true }, dica, data, topo);
   E.G.dom.raiz.append(raiz);
-  SIS.dom = { raiz, velocidades, data, geral, livre, dica };
+  SIS.dom = { raiz, tempo, hoje, data, geral, livre, dica };
 }
 
 const _m4 = { m: null, x: null, y: null, z: null, p: null };
@@ -981,6 +991,8 @@ function atualizarSistema(agora) {
     const pos = P.p.corpo === 'Pluto' ? C.helioEcliptica('Pluto', ms) : posicaoPlaneta(P.p, ms);
     paraCena(pos.x, pos.y, pos.z, P.grupo.position);
     orientar(P.malha, P.p.corpo, ms);
+    // em órbita, um planeta que passa rente à câmera vira um disco enorme na frente de tudo: some enquanto não for o foco
+    P.malha.visible = !!G.livre || SIS.focado === P.malha || cam.distanceTo(P.grupo.position) > P.r * 12;
     // luas: a nossa sempre; as dos outros planetas quando a câmera chega perto (ou o planeta está em foco)
     const perto = cam.distanceTo(P.grupo.position) < P.r * 40;
     P.luas.visible = F.luas && (P.p.corpo === 'Earth' || perto);
@@ -1005,7 +1017,9 @@ function atualizarSistema(agora) {
   posicionarRotulos();
   if (SIS.dom && G.quadro % 10 === 0) {
     const d = new Date(ms);
-    SIS.dom.data.textContent = SIS.desloc === 0 && !SIS.vel ? `Hoje, ${d.toLocaleDateString('pt-BR')} · tempo real` : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+    const agoraMesmo = SIS.desloc === 0 && !SIS.vel;
+    SIS.dom.data.textContent = agoraMesmo ? `Hoje, ${d.toLocaleDateString('pt-BR')}` : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+    SIS.dom.hoje.hidden = agoraMesmo;
   }
 }
 

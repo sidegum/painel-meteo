@@ -102,20 +102,28 @@ const VERTEX_OBJETOS = /* glsl */`
   uniform float pxPorGrau;
   uniform float escala;
   varying vec3 vCor;
+  varying float vPx;
   void main() {
     vCor = cor;
     vec3 dir = normalize(position);
     vec3 p = modo3d > 0.5 ? cam + dir * ${(RAIO_FUNDO * 0.99).toFixed(1)} : dir * ${(RAIO_ESTRELAS * 0.99).toFixed(1)};
     gl_Position = noFundo(projectionMatrix * modelViewMatrix * vec4(p, 1.0));
     gl_PointSize = clamp(tamanho / 60.0 * pxPorGrau, 7.0 * escala, 140.0 * escala);
+    vPx = gl_PointSize / escala;
   }`;
 const FRAGMENT_OBJETOS = /* glsl */`
   uniform float opacidade;
   varying vec3 vCor;
+  varying float vPx;
   void main() {
     float r = length(gl_PointCoord - 0.5) * 2.0;
     if (r > 1.0) discard;
-    float a = 0.55 * exp(-3.5 * r * r) + 0.35 * (1.0 - smoothstep(0.86, 0.94, r)) * smoothstep(0.78, 0.86, r);
+    // objeto pequeno na tela: núcleo e um anel fino que ajuda a achá-lo; grande (Nuvens de Magalhães, Andrômeda de
+    // perto): só um brilho difuso e fraco, como se vê a olho nu, sem disco nem contorno
+    float grande = smoothstep(18.0, 60.0, vPx);
+    float nucleo = exp(-4.0 * r * r) * mix(0.55, 0.14, grande);
+    float anel = 0.35 * (1.0 - grande) * (1.0 - smoothstep(0.86, 0.94, r)) * smoothstep(0.78, 0.86, r);
+    float a = nucleo + anel;
     gl_FragColor = vec4(vCor, a * opacidade);
   }`;
 
