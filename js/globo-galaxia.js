@@ -24,7 +24,8 @@ const EQ_GAL = [ // equatorial J2000 → galáctico (linhas: x para o centro, y 
   [0.4941094279, -0.4448296300, 0.7469822445],
   [-0.8676661490, -0.1980763734, 0.4559837762],
 ];
-const DIST = { min: 0.002, max: 1.2e6, inicial: 46 }; // kpc: de ~400 UA... até além das galáxias mais distantes do NGC
+const DIST = { min: 0.002, max: 4.5e7, inicial: 46 }; // kpc: de ~400 UA até ver de fora a esfera do universo observável
+const RAIO_UNIVERSO = 14250; // Mpc: raio comóvel do universo observável (46,5 bilhões de anos-luz; Planck 2018, ΛCDM)
 const CELULAR = matchMedia('(pointer: coarse)').matches;
 const MOVIMENTO_REDUZIDO = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const num = (v, casas = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) : '–');
@@ -230,6 +231,19 @@ function montarMarcos() {
   }
   GX.viaLactea = { tipo: 'galaxia-nossa', nome: 'Via Láctea', p: GX.centro };
   rotulo('Via Láctea', GX.centro, { prioridade: 90, de: 160, ate: 1.5e4, alvo: GX.viaLactea });
+  // universo observável: esfera centrada em nós, com o raio comóvel até a radiação cósmica de fundo; vista de fora
+  // ela é só um recurso visual (não existe "fora"), com a borda acesa na cor da radiação cósmica de fundo
+  const R = RAIO_UNIVERSO * 1000;
+  GX.universo = { tipo: 'universo', nome: 'Universo observável', p: GX.sol, distKpc: R };
+  GX.esferaUniverso = new THREE.Mesh(new THREE.SphereGeometry(R, 96, 48), new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: 'varying vec3 vN; varying vec3 vV; void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+    fragmentShader: 'varying vec3 vN; varying vec3 vV; void main() { float f = 1.0 - abs(dot(vN, vV)); gl_FragColor = vec4(vec3(1.0, 0.56, 0.32) * (0.04 + 0.9 * pow(f, 4.0)), 1.0); }',
+  }));
+  GX.esferaUniverso.position.copy(GX.sol);
+  GX.esferaUniverso.visible = false;
+  GX.cena.add(GX.esferaUniverso);
+  rotulo('Universo observável', new THREE.Vector3(0, R, 0).add(GX.sol), { prioridade: 95, de: 1.6e7, ate: Infinity, alvo: GX.universo });
 }
 
 /** Galáxias do Grupo Local e vizinhas (McConnachie 2012): discos inclinados para as grandes, brilho difuso para as anãs. */
@@ -431,6 +445,7 @@ export function atualizarGalaxia(agora) {
   const olhar = GX.camera.getWorldDirection(_v.a);
   GX.uniformes.face.value = Math.min(1, Math.max(0, (Math.abs(olhar.y) - 0.12) / 0.5));
   GX.disco.material.opacity = Math.pow(GX.uniformes.face.value, 1.5);
+  GX.esferaUniverso.visible = G.cam.dist > 2e6;
   GX.particulas.visible = GX.poeira.visible = GX.uniformes.face.value < 0.97; // de frente, só a imagem (as partículas somariam ~0)
   // perto do Sol (até uns 3 kpc), as estrelas reais aparecem e o modelo se apaga um pouco
   const dSol = GX.camera.position.distanceTo(GX.sol);
@@ -548,6 +563,7 @@ export function focarNoToque(cx, cy) {
 
 function irAte(it) {
   const raio = it.tipo === 'galaxia-nossa' ? 20 : it.tipo === 'braco' ? 3 : it.diam / 2;
+  if (it.tipo === 'universo') { irPara(GX.sol, it.distKpc * 2.6, null, 3000); return; }
   const dist = it.tipo === 'aglomerado' ? 9000 : it.tipo === 'sol' ? 0.6 : it.tipo === 'centro' ? 1.2 : Math.max(0.05, raio * 3.2);
   irPara(it.p, dist, null, 2600);
 }
@@ -576,6 +592,10 @@ function mostrarCartao(it) {
     G.mostrarPainel(it.nome, `${it.descricao || 'Galáxia do Grupo Local'} a ${kpcTexto(it.distKpc)} do Sol.`,
       [it.mv != null ? `Magnitude absoluta ${num(it.mv, 1)}` : null, it.raioKpc ? `${num(it.raioKpc * 2 * AL_POR_KPC / 1000, 0)} mil anos-luz de diâmetro` : null].filter(Boolean).join(' · '),
       it.fonte || 'McConnachie 2012', [ir()]);
+  } else if (it.tipo === 'universo') {
+    G.mostrarPainel('Universo observável', 'Tudo de onde a luz já teve tempo de chegar até nós desde o Big Bang, há 13,8 bilhões de anos. Por causa da expansão, a borda hoje está a 46,5 bilhões de anos-luz.',
+      'A luz mais antiga que vemos é a radiação cósmica de fundo · o universo inteiro pode ser muito maior (ou infinito) · visto “de fora” só como ilustração',
+      'Planck Collaboration 2018 (ΛCDM)', []);
   } else if (it.tipo === 'aglomerado') {
     G.mostrarPainel(it.nome, `Aglomerado de galáxias${it.n ? ` (${it.n})` : ''} a ${kpcTexto(it.distKpc)}.`,
       it.mpc ? 'Distância medida' : `Distância pelo desvio para o vermelho (z = ${num(it.z, 4)}, H0 = 70 km/s/Mpc)`, it.fonte, [ir()]);

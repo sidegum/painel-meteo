@@ -696,10 +696,18 @@ de kpc), toques e o render do laço vão para o módulo enquanto `G.galaxia` exi
   Reid et al. 2019 (só paralaxe/erro ≥ 3, distância = 1/paralaxe), 165 aglomerados globulares de Baumgardt & Vasiliev
   2021 e 101 galáxias do Grupo Local de McConnachie 2012. Andrômeda, Triângulo e as Nuvens de Magalhães são discos com
   inclinação e ângulo de posição medidos (fontes no script); as demais são pontos com o raio de meia luz.
+- Universo observável (1.9.1): esfera de raio comóvel 14,25 Gpc (46,5 bilhões de anos-luz, Planck 2018) centrada no
+  Sol, com borda acesa; aparece a partir de 2 milhões de kpc e pode ser vista "de fora" (até 4,5 × 10⁷ kpc), como ilustração.
+- Zoom sem fim (1.9.1, `seguirAfastando` em `globo.js`): insistir em afastar no limite passa à escala seguinte (Terra →
+  sistema solar → Via Láctea), somando o que se pediu além do limite (ln 0,35); aproximar zera a soma.
 - Nomes: os marcos da Galáxia aparecem por faixa de zoom; os objetos pontuais, quando estão na região vista (até 1,5×
   o zoom do foco ou 2,5× da câmera), por prioridade e sem sobrepor nomes nem botões.
 - `salvarImagem`: renderiza a vista com o lado maior em até 4.096 px (ou o limite da GPU), desenha nomes, escala e
   créditos num canvas 2D e entrega PNG (folha de compartilhar no celular, download no computador).
+
+Mapa detalhado (1.9.1, `globo-regiao.js`): nível dos quadros do OSM e quantidade (até 16 × 16) calculados pelo tamanho do
+canvas em pixels de desenho, para ~0,85 pixel do mapa por pixel da tela, até o nível 17; zoom mínimo de ~3 km de altura.
+À noite o mapa fica visível em tons escuros e a imagem de luzes da NASA (10 km por pixel) vira só um brilho sobre ele.
 
 Tempo na Terra (1.9.0): um botão com o instante ("Agora · 19:03" ou "sex 00h · previsão"); ao tocar, abre a linha do
 tempo (faixa com os dias e botão de animar). Fora de agora, "Agora" volta ao tempo real.
