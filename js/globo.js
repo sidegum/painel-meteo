@@ -10,7 +10,7 @@
 //   2. abrir / fechar           5. câmera e gestos (arrastar, pinça, roda, toque)          8. interface (chips, legenda, painel)
 //   3. carregamento progressivo 6. camadas de dados e linha do tempo                        9. laço de animação e qualidade
 import * as THREE from '../vendor/three/three.module.min.js';
-import { el, fmt, prefs, mostrarInfo, linkExterno } from './ui.js';
+import { el, svg, fmt, prefs, mostrarInfo, linkExterno } from './ui.js';
 import { buscarManifest, buscarCampo, buscarSatelite, lerPontoGfs, buscarPonto, textoCodigoTempo, valorDoByte, amostrar } from './globo-dados.js';
 import { criarRegiao } from './globo-regiao.js';
 import { CIDADES } from './globo-cidades.js';
@@ -447,50 +447,77 @@ function irPara(lat, lon, dist = G.cam.dist, ms = 900) {
   G.animCam = { de, para: { lat, lon: de.lon + dlon, dist }, t0: performance.now(), ms };
 }
 
+/**
+ * Gestos no estilo de mapa: o ponto da Terra que está sob o dedo (ou sob o meio dos dois dedos) acompanha o dedo.
+ * - Um dedo arrasta; dois dedos aproximam ou afastam em torno do ponto entre eles e também arrastam.
+ * - Ao passar de dois dedos para um (e de volta), a âncora é refeita: nada pula.
+ * - A inércia usa a velocidade média dos últimos 100 ms, não a do último evento (no iPhone dois eventos podem
+ *   chegar com 1 ms de diferença e a velocidade instantânea explode).
+ * - Toque curto abre o painel do ponto; dois toques rápidos aproximam.
+ */
 function configurarGestos() {
   const cv = G.dom.canvas;
   const ponteiros = new Map();
-  let ultimo = null, pinca = null, toque = null, ultimoToque = 0;
-  const velAng = () => 0.22 * Math.max(0.0015, (G.cam.dist - 1) / (DIST.inicial - 1)); // graus por pixel, proporcional à altura
+  let gesto = null, toque = null, ultimoToque = 0, historico = [];
+  const centro = () => {
+    const ps = [...ponteiros.values()];
+    const x = ps.reduce((s, p) => s + p.x, 0) / ps.length, y = ps.reduce((s, p) => s + p.y, 0) / ps.length;
+    return { x, y, d: ps.length > 1 ? Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y) : 0 };
+  };
+  // Âncora do gesto: ponto da Terra sob o centro dos dedos, a altura no início e a última posição (para quando a âncora cai fora da Terra).
+  const ancorar = () => {
+    const c = centro();
+    gesto = { n: ponteiros.size, ancora: pontoNaTela(c.x, c.y), d0: c.d, dist0: G.cam.dist, ultimo: c };
+  };
+  const registrar = (agora) => {
+    historico.push({ t: agora, lat: G.cam.lat, lon: G.cam.lon });
+    while (historico.length > 2 && agora - historico[0].t > 100) historico.shift();
+  };
   cv.addEventListener('pointerdown', (e) => {
-    cv.setPointerCapture(e.pointerId);
+    try { cv.setPointerCapture(e.pointerId); } catch { /* ponteiro já encerrado pelo sistema */ }
     ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
     G.cam.vLat = G.cam.vLon = 0; G.animCam = null; G.autoGira = false;
-    if (ponteiros.size === 1) { ultimo = { x: e.clientX, y: e.clientY, t: performance.now() }; toque = { x: e.clientX, y: e.clientY, t: performance.now(), moveu: 0 }; }
-    else if (ponteiros.size === 2) { const [a, b] = [...ponteiros.values()]; pinca = { d: Math.hypot(a.x - b.x, a.y - b.y), dist: G.cam.dist }; toque = null; }
+    historico = [];
+    toque = ponteiros.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now(), moveu: 0 } : null;
+    ancorar();
   });
   cv.addEventListener('pointermove', (e) => {
-    if (!ponteiros.has(e.pointerId)) return;
-    ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (ponteiros.size === 2 && pinca) {
-      const [a, b] = [...ponteiros.values()];
-      const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (d > 0) definirDist(1 + (pinca.dist - 1) * (pinca.d / d)); // a pinça escala a altura, não a distância ao centro
-      return;
+    const p = ponteiros.get(e.pointerId);
+    if (!p || !gesto) return;
+    if (toque) toque.moveu += Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y);
+    p.x = e.clientX; p.y = e.clientY;
+    const c = centro();
+    if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(1 + (gesto.dist0 - 1) * (gesto.d0 / c.d)); // a pinça escala a altura
+    if (!gesto.ancora || !levarPontoA(gesto.ancora, c.x, c.y)) {
+      // âncora fora da Terra (dedo no espaço): giro proporcional à altura, como antes
+      const k = 0.22 * Math.max(0.0015, (G.cam.dist - 1) / (DIST.inicial - 1));
+      G.cam.lon -= (c.x - gesto.ultimo.x) * k / Math.max(0.2, Math.cos(G.cam.lat * RAD));
+      G.cam.lat = Math.max(-85, Math.min(85, G.cam.lat + (c.y - gesto.ultimo.y) * k));
     }
-    if (ponteiros.size !== 1 || !ultimo) return;
-    const dx = e.clientX - ultimo.x, dy = e.clientY - ultimo.y, agora = performance.now(), dt = Math.max(1, agora - ultimo.t);
-    const k = velAng();
-    G.cam.lon -= dx * k; G.cam.lat = Math.max(-85, Math.min(85, G.cam.lat + dy * k));
-    G.cam.vLon = -dx * k / dt * 16; G.cam.vLat = dy * k / dt * 16;
-    if (toque) toque.moveu += Math.abs(dx) + Math.abs(dy);
-    ultimo = { x: e.clientX, y: e.clientY, t: agora };
+    gesto.ultimo = c;
+    registrar(performance.now());
   });
   const soltar = (e) => {
-    ponteiros.delete(e.pointerId);
-    if (ponteiros.size < 2) pinca = null;
-    if (ponteiros.size === 0) {
-      if (toque && toque.moveu < 8 && performance.now() - toque.t < 400) {
-        const agora = performance.now();
-        if (agora - ultimoToque < 320) { aproximar(e.clientX, e.clientY); ultimoToque = 0; }
-        else { ultimoToque = agora; tocarPonto(e.clientX, e.clientY); }
-      }
-      if (performance.now() - (ultimo?.t || 0) > 80) { G.cam.vLat = G.cam.vLon = 0; }
-      ultimo = null; toque = null;
+    if (!ponteiros.delete(e.pointerId)) return;
+    const agora = performance.now();
+    if (ponteiros.size > 0) { ancorar(); historico = []; return; } // de dois dedos para um: recomeça a âncora sem pular
+    if (toque && toque.moveu < 8 && agora - toque.t < 400 && e.type === 'pointerup') {
+      if (agora - ultimoToque < 320) { aproximar(e.clientX, e.clientY); ultimoToque = 0; }
+      else { ultimoToque = agora; tocarPonto(e.clientX, e.clientY); }
+    } else if (historico.length >= 2 && agora - historico[historico.length - 1].t < 60) {
+      const a = historico[0], b = historico[historico.length - 1], dt = Math.max(16, b.t - a.t);
+      let dlon = b.lon - a.lon; dlon = ((dlon + 540) % 360) - 180;
+      G.cam.vLon = dlon / dt * 16; G.cam.vLat = (b.lat - a.lat) / dt * 16;
     }
+    gesto = null; toque = null; historico = [];
   };
   cv.addEventListener('pointerup', soltar); cv.addEventListener('pointercancel', soltar);
-  cv.addEventListener('wheel', (e) => { e.preventDefault(); definirDist(1 + (G.cam.dist - 1) * Math.exp(e.deltaY * 0.0012)); G.autoGira = false; }, { passive: false });
+  cv.addEventListener('wheel', (e) => {
+    e.preventDefault(); G.autoGira = false; G.animCam = null; G.cam.vLat = G.cam.vLon = 0;
+    const ancora = pontoNaTela(e.clientX, e.clientY);
+    definirDist(1 + (G.cam.dist - 1) * Math.exp(e.deltaY * 0.0012));
+    if (ancora) levarPontoA(ancora, e.clientX, e.clientY); // a roda aproxima em direção ao cursor
+  }, { passive: false });
   cv.addEventListener('dblclick', (e) => e.preventDefault());
   cv.addEventListener('keydown', (e) => {
     const passo = 5;
@@ -500,6 +527,30 @@ function configurarGestos() {
     else return;
     e.preventDefault(); G.autoGira = false;
   });
+}
+
+/** Ponto da Terra sob a posição da tela com a câmera atual (atualiza a matriz antes de medir). */
+function pontoNaTela(cx, cy) {
+  posicionarCamera();
+  G.camera.updateMatrixWorld();
+  return pontoSob(cx, cy);
+}
+
+/**
+ * Gira a câmera para o ponto `alvo` (lat, lon) ficar sob a posição (cx, cy) da tela. Como a câmera sempre olha
+ * para o centro da Terra, basta corrigir latitude e longitude pela diferença medida; duas iterações bastam.
+ * @returns {boolean} false se a posição da tela não cai sobre a Terra
+ */
+function levarPontoA(alvo, cx, cy) {
+  for (let k = 0; k < 2; k++) {
+    const p = pontoNaTela(cx, cy);
+    if (!p) return false;
+    let dlon = alvo.lon - p.lon; dlon = ((dlon + 540) % 360) - 180;
+    G.cam.lon += dlon;
+    G.cam.lat = Math.max(-85, Math.min(85, G.cam.lat + (alvo.lat - p.lat)));
+  }
+  posicionarCamera();
+  return true;
 }
 
 /** Distância em que a Terra inteira cabe na tela, com folga, qualquer que seja a proporção. */
@@ -738,12 +789,15 @@ function montarDom(secao) {
   const tocar = el('button', { type: 'button', class: 'globo-tocar', text: 'Animar', 'aria-pressed': 'false', onclick: alternarLinhaDoTempo });
   const linha = el('div', { class: 'globo-linha', hidden: true }, rotuloHora, faixa, tocar);
   const painel = el('div', { class: 'globo-painel', hidden: true, role: 'dialog', 'aria-label': 'Tempo no ponto tocado' });
+  // Controles discretos: só ícones, numa coluna estreita. Aproximar e afastar ficam nos gestos (pinça, dois toques, roda).
+  const icone = (...filhos) => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, ...filhos);
   const botoes = el('div', { class: 'globo-botoes' },
-    el('button', { type: 'button', text: 'Minha posição', 'aria-label': 'Centralizar na minha posição', onclick: () => { const l = G.estadoApp?.local; if (l) irPara(l.lat, l.lon, Math.min(G.cam.dist, DIST.cidade)); } }),
-    el('button', { type: 'button', text: '+', 'aria-label': 'Aproximar', onclick: () => irPara(G.cam.lat, G.cam.lon, Math.max(DIST.min, 1 + (G.cam.dist - 1) / 1.8), 400) }),
-    el('button', { type: 'button', text: '−', 'aria-label': 'Afastar', onclick: () => irPara(G.cam.lat, G.cam.lon, Math.min(DIST.max, 1 + (G.cam.dist - 1) * 1.8), 400) }),
-    el('button', { type: 'button', text: 'Espaço', class: 'globo-btn-espaco', 'aria-pressed': 'false', onclick: alternarEspaco }),
-    el('button', { type: 'button', text: '?', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda }));
+    el('button', { type: 'button', title: 'Minha posição', 'aria-label': 'Centralizar na minha posição', onclick: () => { const l = G.estadoApp?.local; if (l) irPara(l.lat, l.lon, Math.min(G.cam.dist, DIST.cidade)); } },
+      icone(svg('circle', { cx: 12, cy: 12, r: 6 }), svg('circle', { cx: 12, cy: 12, r: 1.6, class: 'cheio' }), svg('path', { d: 'M12 2v4M12 18v4M2 12h4M18 12h4' }))),
+    el('button', { type: 'button', title: 'Espaço', class: 'globo-btn-espaco', 'aria-label': 'Espaço: satélites e sistema solar', 'aria-pressed': 'false', onclick: alternarEspaco },
+      icone(svg('circle', { cx: 12, cy: 12, r: 5 }), svg('ellipse', { cx: 12, cy: 12, rx: 10, ry: 3.4, transform: 'rotate(-20 12 12)' }))),
+    el('button', { type: 'button', title: 'Ajuda', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda },
+      icone(svg('path', { d: 'M9.2 9a2.9 2.9 0 1 1 4.3 2.5c-.9.5-1.5 1.1-1.5 2.1v.6' }), svg('circle', { cx: 12, cy: 17.6, r: 1.1, class: 'cheio' }))));
   const relogio = el('p', { class: 'globo-relogio', 'aria-live': 'off' });
   const rodape = el('div', { class: 'globo-rodape' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, relogio, sol, ciclones));
   const cidades = el('div', { class: 'globo-cidades', 'aria-hidden': 'true' });
@@ -752,7 +806,7 @@ function montarDom(secao) {
   G.dom = { raiz, canvas, chips, aviso, legenda, fonte, sol, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
   montarCidades();
   G.mostrarPainel = mostrarPainelTexto; G.modoSistema = modoSistema;
-  window.__globo = G; // só para testes automáticos de tela
+  window.__globo = G; G.pontoNaTela = pontoNaTela; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
   montarLegenda(CAMADAS.find((c) => c.id === G.camada), null);
 }
