@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.28';
+const VERSAO = '1.3.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -1956,7 +1956,7 @@ function comparacaoHistorica(oni) {
 
 // ------------------------------------------------------------------ navegação e gestos
 
-const ABAS = ['hoje', 'amanha', 'semana', 'modelos', 'elnino'];
+const ABAS = ['hoje', 'amanha', 'semana', 'modelos', 'elnino', 'globo'];
 function irPara(aba, rolarTopo = true, direcao = 0) {
   if (!ABAS.includes(aba)) return;
   const mudou = estado.aba !== aba;
@@ -1966,6 +1966,7 @@ function irPara(aba, rolarTopo = true, direcao = 0) {
   document.querySelectorAll('.nav button').forEach((b) => { if (b.dataset.ir === aba) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   if (rolarTopo) window.scrollTo({ top: 0, behavior: 'instant' });
   if (aba === 'elnino' && estado.prev !== undefined) renderElNino();
+  abrirOuFecharGlobo(aba);
   // Entrada suave da aba (só transform e opacidade, que a placa de vídeo faz sem travar).
   // Gráficos e faixas se ajustam sozinhos pelo ResizeObserver quando a aba aparece; nada é redesenhado à força.
   if (mudou) {
@@ -1974,6 +1975,18 @@ function irPara(aba, rolarTopo = true, direcao = 0) {
     void sec.offsetWidth;
     sec.classList.add(direcao > 0 ? 'entra-dir' : direcao < 0 ? 'entra-esq' : 'entra');
   }
+}
+
+// O globo 3D (Three.js, texturas) só é baixado na primeira abertura da aba e para de animar ao sair dela.
+let globo = null;
+function abrirOuFecharGlobo(aba) {
+  if (aba === 'globo') {
+    const alvo = $('#globo-conteudo');
+    if (!globo) {
+      globo = import('./globo.js').catch((e) => { globo = null; alvo.replaceChildren(el('p', { class: 'nota', text: `O globo não carregou (${e?.message || 'falha de rede'}). Toque em Globo de novo para tentar outra vez.` })); return null; });
+    }
+    globo.then((m) => { if (m && estado.aba === 'globo') m.abrirGlobo(alvo, estado); });
+  } else if (globo) globo.then((m) => m?.fecharGlobo());
 }
 
 function configurarNavegacao() {
@@ -1986,7 +1999,7 @@ function configurarNavegacao() {
   const main = $('#conteudo');
   const rolaHorizontal = (alvo) => {
     for (let n = alvo; n && n !== main; n = n.parentElement) {
-      if (n.matches?.('[data-hscroll], .mapa, .ceu, dialog, input, .rolar, .tabela-rolar, .camadas, .horas, .u-wrap')) return true;
+      if (n.matches?.('[data-hscroll], .mapa, .ceu, .globo, dialog, input, .rolar, .tabela-rolar, .camadas, .horas, .u-wrap')) return true;
       if (n.scrollWidth > n.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(n).overflowX)) return true;
     }
     return false;
@@ -2019,7 +2032,7 @@ function configurarPuxar() {
   let y0 = null, x0 = 0, dy = 0;
   const mostrar = (v) => { ind.style.transform = `translate(-50%, ${v}px)`; ind.style.opacity = v > 0 ? '1' : '0'; };
   window.addEventListener('touchstart', (e) => {
-    y0 = window.scrollY <= 0 && e.touches.length === 1 && !e.target.closest('.mapa, dialog, .camadas, [data-hscroll]') ? e.touches[0].clientY : null;
+    y0 = window.scrollY <= 0 && e.touches.length === 1 && !e.target.closest('.mapa, .globo, dialog, .camadas, [data-hscroll]') ? e.touches[0].clientY : null;
     x0 = e.touches[0]?.clientX ?? 0; dy = 0;
   }, { passive: true });
   window.addEventListener('touchmove', (e) => {
