@@ -409,7 +409,7 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
 
 ### 5.3 Primeira tela (`renderPrimeira`)
 
-Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mínima, a máxima e a chance, a resposta "Vai chover", o volume e a janela, o alerta (`linhaAlerta`), a rajada e o gráfico horário com três modos:
+Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mínima, a máxima e a chance, a resposta "Vai chover", o volume e a janela, o cartão de risco de temporal (`cartaoTemporal`, só com risco moderado ou alto), a rajada e o gráfico horário com três modos:
 
 - **Chuva** (`graficoChance`):
   - A chance por hora vem de `chanceHoraria(ms)`: a fração de **todos** os membros de cenários com 0,2 mm ou mais na hora, se houver 10 ou mais. Sem isso, a mediana de `precipitation_probability` dos modelos.
@@ -460,11 +460,14 @@ A ordem é:
   - Para Campo Bom, usa a lista oficial de municípios por código IBGE (`municipioPadrao`).
   - Para outros locais, testa se o ponto está dentro do polígono do aviso. `dentroPoligono` usa *ray casting* e roda no aparelho, sem enviar a posição.
   - Sem área (RSS), aceita avisos que citam o RS e os marca como `incerto`.
-- `detalheAlertas` abre o texto oficial (riscos e instruções) num diálogo.
+- `avisosOrdenados()`: do mais grave ao menos grave; na mesma gravidade, o que começa antes.
+- Aba **Avisos** (`renderAvisos`, chamada no início de `renderTudo`, sem depender da previsão): um cartão por aviso do local (`cartaoAviso`: título, gravidade e período visíveis; riscos e orientações em `details`), a nota "INMET · HH:MM" da consulta, os outros avisos do RS recolhidos e os links oficiais. Desde a 1.5.0 os avisos não aparecem mais na primeira tela de Hoje e Amanhã; ficam só o cartão de risco de temporal e o ponto vermelho no botão "Ver mais" (`data-avisos`, com o número no `aria-label` e no item do menu).
+- As listas `riscos` e `instrucoes` chegam do INMET como array JSON; `listaPython` (app e Worker) aceita também o formato antigo em texto `"['a', 'b']"`.
 
 ### 5.7 Navegação e gestos
 
-- `irPara(aba, rolarTopo, direcao)`: troca a aba visível, atualiza `aria-current` e aplica a animação de entrada (`entra`, `entra-dir`, `entra-esq`). A animação usa só `transform` e `opacity`, que são compostas na GPU.
+- Barra com Hoje, Amanhã, Semana e **Ver mais** (`#btn-mais`), que abre o diálogo `#dlg-mais` com Avisos, Globo, El Niño e Modelos (`ABAS_MAIS`). Nessas abas o botão Ver mais fica marcado.
+- `irPara(aba, rolarTopo, direcao)`: troca a aba visível, atualiza `aria-current` (barra e itens do menu) e aplica a animação de entrada (`entra`, `entra-dir`, `entra-esq`). A animação usa só `transform` e `opacity`, que são compostas na GPU.
 - `configurarNavegacao()`: deslizar entre Hoje, Amanhã e Semana. O gesto só vale com:
   - um dedo;
   - duração de até 450 ms;
@@ -556,7 +559,7 @@ A ordem é:
 
 | Rota | Parâmetros | Função |
 |---|---|---|
-| `/v1/observacoes` | `lat`, `lon` (validados por `lerCoord` e arredondados) | Estações METAR numa caixa de ±1,2° (`normalizarMetar`: nós → km/h, umidade pela fórmula de Magnus) e até 4 estações do INMET a até 120 km. Com token: série de 7 dias. Sem token: última leitura (`ultimaInmet`) somada à série horária gravada no KV. `acumulados` calcula a chuva em 1 h, 24 h, 72 h e 7 dias, exigindo 90% das horas. `normalizarInmet` converte m/s → km/h e a pressão da estação para o nível do mar (fórmula barométrica). |
+| `/v1/observacoes` | `lat`, `lon` (validados por `lerCoord` e arredondados) | Estações METAR numa caixa de ±1,2° (`normalizarMetar`: nós → km/h, umidade pela fórmula de Magnus) e até 4 estações do INMET a até 120 km. Com token: série de 7 dias. Sem token: última leitura (`ultimaInmet`) somada à série horária gravada no KV. `acumulados` calcula a chuva em 1 h, 24 h, 72 h e 7 dias: `valor` só com 90% das horas; `soma` (total das horas que existem) sempre, usada pelo app como mínimo garantido ("≥ X mm") quando há pelo menos metade das horas. `normalizarInmet` converte m/s → km/h e a pressão da estação para o nível do mar (fórmula barométrica). |
 | `/v1/alertas` | — | Avisos ativos do INMET (`normalizarAvisos`, `poligonosGeojson` simplificado para até 400 pontos por anel, `listaPython`). Se falhar, usa o RSS do INMET (sem área). Se o RSS também falhar, responde 502 `indisponivel`. |
 | `/v1/enso` | — | Lê `enso:ultimo` do KV. Se tiver mais de 7 h, chama `atualizarEnso`. |
 | `/v1/acerto` | `estacao` | O histórico `acerto:<id>` resumido por `resumirAcerto` (taxa de acerto de chuva, MAE e viés por modelo e antecedência de 1 a 5 dias), mais `calibracao` (pares, índice de Brier e 10 faixas). |
@@ -566,7 +569,7 @@ A ordem é:
 
 | Cron | Tarefa |
 |---|---|
-| `5 * * * *` | `registrarSeries`: guarda a última leitura das estações INMET de verificação em `serie:<id>`, com janela de 8 dias. |
+| `5,25,45 * * * *` | `registrarSeries`: guarda a última leitura das estações INMET de verificação em `serie:<id>`, com janela de 8 dias. Três buscas por hora porque o INMET publica com 40 a 70 min de atraso e a API só dá a leitura mais recente; leitura repetida não é regravada. |
 | `0 */6 * * *` | `atualizarEnso`: baixa os índices semanais e mensais, o ONI, o RONI, a discussão, as probabilidades e as intensidades do CPC e o IRI. Se uma parte falhar, mantém a versão anterior marcada como `desatualizado`. |
 | `15 9 * * *` | `registrarAcerto`: para o dia anterior, junta as medições (`obsDoDia`, que exige 12 ou mais leituras de temperatura e 22 ou mais de chuva) e as previsões de 1 a 5 dias antes (Previous Runs API, `prevDoDia`) em `acerto:<id>`, com até 120 dias. `registrarPrevisaoPainel`: guarda a chance diária de 1 mm ou mais dos três sistemas de cenários (`probDiariaCenarios`) para os próximos 5 dias em `painel:<id>`, com até 600 registros. |
 

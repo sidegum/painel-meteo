@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.4.0';
+const VERSAO = '1.5.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -578,9 +578,13 @@ function fontesNormalizadas() {
         if (ponto[v] !== null && ponto[v] !== undefined) { leituras[v] = { valor: ponto[v], ms: ponto.ms }; break; }
       }
     }
+    // Acumulados de chuva: completo (90% das horas) ou, com pelo menos metade das horas, a soma das horas
+    // registradas como mínimo garantido (parcial). Menos que isso fica sem valor: nunca vira zero por falta de dado.
     if (f.acumulados) for (const [k, a] of Object.entries(f.acumulados)) {
       const ultimo = f.serie.length ? f.serie[f.serie.length - 1].ms : null;
-      if (valido(a.valor) && ultimo) leituras['chuva_' + k] = { valor: a.valor, ms: ultimo };
+      if (!ultimo) continue;
+      if (valido(a.valor)) leituras['chuva_' + k] = { valor: a.valor, ms: ultimo };
+      else if (valido(a.soma) && a.esperado > 1 && a.horas >= a.esperado * 0.5) leituras['chuva_' + k] = { valor: a.soma, ms: ultimo, parcial: { horas: a.horas, esperado: a.esperado } };
     }
     out.push({ ...f, leituras });
   }
@@ -631,6 +635,7 @@ function chegandoAgora() {
 // ------------------------------------------------------------------ render geral
 
 function renderTudo() {
+  renderAvisos(); // não depende da previsão
   if (!estado.prev) { renderSemPrevisao(); return; }
   for (const f of estado.faixas) f.destruir();
   estado.faixas = [];
@@ -710,12 +715,11 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
       el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
 
-  // Risco de temporal (moderado ou alto) substitui a linha de avisos do INMET: um cartão só, com a fonte,
-  // e os horários de todos os avisos do local ao tocar. Sem risco, a linha de avisos aparece sozinha.
+  // Risco de temporal (moderado ou alto): um cartão só, com a fonte (INMET quando há aviso de tempestade)
+  // e os horários dos avisos do local ao tocar. Os avisos do INMET em si ficam na aba Avisos (menu Ver mais).
   const risco = avaliarRisco(a, chovendo, !!chegando);
-  const temRisco = risco && risco.nivel !== 'baixo';
   const filhos = [resumo];
-  filhos.push(temRisco ? cartaoTemporal(risco) : linhaAlerta());
+  if (risco && risco.nivel !== 'baixo') filhos.push(cartaoTemporal(risco));
 
   // rajada
   const rp = a.rajadaPico;
@@ -957,19 +961,10 @@ function cartaoTemporal(risco) {
     el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal`, el('small', { text: `· ${risco.aviso ? 'INMET' : 'Previsão'}` })));
 }
 
-// Avisos do INMET válidos para o local, do mais grave ao menos grave.
+// Avisos do INMET válidos para o local, do mais grave ao menos grave; na mesma gravidade, o que começa antes.
 function avisosOrdenados() {
   const grau = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
-  return alertasDoLocal().sort((x, y) => grau(y) - grau(x));
-}
-
-function linhaAlerta() {
-  if (!estado.alertas || estado.alertas.indisponivel) return el('button', { type: 'button', class: 'alerta indisponivel', onclick: () => mostrarInfo('Alertas', el('p', { text: 'A consulta aos avisos do INMET falhou. Isso não significa que não há alertas.' }), linkExterno('https://alertas2.inmet.gov.br/', 'Avisos do INMET')) }, 'Alertas indisponíveis');
-  const meus = avisosOrdenados();
-  if (!meus.length) return el('p', { class: 'nota', style: { margin: '2px 0' } }, `Nenhum aviso do INMET encontrado para este local (consulta ${fmt.idade(estado.alertasEm)}).`);
-  const a = meus[0];
-  return el('button', { type: 'button', class: 'alerta', onclick: () => detalheAlertas(meus) },
-    `Aviso do INMET: ${a.titulo.toLowerCase()}${a.severidade ? ` (${a.severidade.toLowerCase()})` : ''}${meus.length > 1 ? ` e mais ${meus.length - 1}` : ''}`);
+  return alertasDoLocal().sort((x, y) => grau(y) - grau(x) || String(x.inicio || '').localeCompare(String(y.inicio || '')));
 }
 
 const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -992,15 +987,53 @@ function alertasDoLocal() {
     return false;
   });
 }
-function detalheAlertas(lista) {
-  mostrarInfo('Avisos do INMET', ...lista.map((a) => el('div', { class: 'secao' },
-    el('h2', { text: a.titulo }),
-    el('p', { class: 'fonte', text: [a.severidade, a.inicio && `início ${a.inicio}`, a.fim && `fim ${a.fim}`].filter(Boolean).join(', ') }),
+// ------------------------------------------------------------------ Avisos (menu Ver mais)
+
+const GRAVES = ['perigo', 'grande perigo'];
+const severidadeDe = (a) => String(a.severidade || '').trim().toLowerCase();
+
+/** Cartão de um aviso: título, gravidade e período visíveis; descrição, riscos e orientações ao tocar. */
+function cartaoAviso(a) {
+  const sev = severidadeDe(a);
+  const detalhes = [a.descricao, ...(a.riscos || [])].filter(Boolean);
+  return el('article', { class: 'aviso-card' + (GRAVES.includes(sev) ? ' grave' : '') },
+    el('h2', { text: `${a.titulo}${sev ? ` (${sev})` : ''}` }),
+    el('p', { class: 'quando', text: periodoAviso(a) || 'Horário não informado pelo INMET' }),
     a.incerto ? el('p', { class: 'nota', text: 'Aviso para parte do RS. Confira no INMET se inclui o seu município.' }) : null,
-    a.descricao ? el('p', { text: a.descricao }) : null,
-    ...(a.riscos || []).map((r) => el('p', { text: r })),
-    ...(a.instrucoes || []).map((r) => el('p', { class: 'nota', text: r })))),
-  el('p', { class: 'oficial', text: 'Siga as orientações da Defesa Civil (199) e do INMET.' }), linkExterno('https://alertas2.inmet.gov.br/', 'Abrir avisos no INMET'));
+    detalhes.length || a.instrucoes?.length ? el('details', {}, el('summary', { text: 'Riscos e orientações' }),
+      ...detalhes.map((t) => el('p', { text: t })),
+      ...(a.instrucoes || []).map((t) => el('p', { class: 'nota', text: t }))) : null);
+}
+
+/**
+ * Aba Avisos: avisos do INMET válidos para o local (alertasDoLocal, do mais grave ao menos grave), os demais
+ * avisos do RS recolhidos e a orientação oficial. Também marca o botão "Ver mais" quando há aviso para o local.
+ */
+function renderAvisos() {
+  const alvo = $('#avisos-conteudo');
+  const meus = estado.alertas && !estado.alertas.indisponivel ? avisosOrdenados() : [];
+  const botao = $('#btn-mais'), item = $('#mais-avisos');
+  if (meus.length) botao.dataset.avisos = String(meus.length); else delete botao.dataset.avisos;
+  botao.setAttribute('aria-label', meus.length ? `Ver mais (${meus.length} ${meus.length > 1 ? 'avisos' : 'aviso'} para o local)` : 'Ver mais');
+  item.textContent = meus.length ? `${meus.length} ${meus.length > 1 ? 'avisos ativos' : 'aviso ativo'} para o local` : 'Avisos oficiais do INMET para o local';
+  item.parentElement.classList.toggle('com-aviso', meus.length > 0);
+  const fonte = estado.alertasEm ? el('p', { class: 'nota', text: `INMET · ${fmt.horaMin(estado.alertasEm, estado.prev?.offset ?? -10800)}` }) : null;
+  const oficial = el('p', { class: 'oficial', text: 'Este painel não é fonte oficial. Em situação de risco, siga a Defesa Civil (199) e o INMET.' });
+  const links = el('p', {}, linkExterno('https://alertas2.inmet.gov.br/', 'Avisos no site do INMET'), ' · ', linkExterno('https://www.defesacivil.rs.gov.br/', 'Defesa Civil RS'));
+  if (!estado.alertas) {
+    alvo.replaceChildren(el('p', { class: 'avisos-vazio', text: estado.erros.alertas ? 'Não foi possível consultar os avisos.' : 'Consultando os avisos…' }),
+      ...[estado.erros.alertas ? el('p', { text: 'Isso não significa que não há avisos. Confira no site do INMET.' }) : null, links, oficial].filter(Boolean));
+    return;
+  }
+  const outrosRS = estado.alertas.semArea ? [] : (estado.alertas.avisos || [])
+    .filter((a) => !meus.includes(a) && /\bRS\b|rio grande do sul/i.test(a.estados || ''));
+  alvo.replaceChildren(...[
+    meus.length ? null : el('p', { class: 'avisos-vazio', text: `Nenhum aviso do INMET para ${estado.local?.nome || 'este local'} agora.` }),
+    ...meus.map(cartaoAviso),
+    fonte,
+    outrosRS.length ? el('details', { class: 'avisos-outros' }, el('summary', { text: `Outros avisos no RS (${outrosRS.length})` }),
+      el('ul', {}, ...outrosRS.map((a) => el('li', { text: `${a.titulo}${a.severidade ? ` (${severidadeDe(a)})` : ''}: ${periodoAviso(a) || 'horário não informado'}` })))) : null,
+    links, oficial].filter(Boolean));
 }
 
 /**
@@ -1147,7 +1180,15 @@ function instrumentos() {
     bloco('Rajada', val('rajada'), val('rajada') ? fmt.kmh(val('rajada').valor) : null));
   const chuva = el('div', { class: 'medicoes chuvas' },
     ...[['Última hora', 'chuva_h1'], ['24 h', 'chuva_h24'], ['72 h', 'chuva_h72'], ['7 dias', 'chuva_d7']]
-      .map(([n, k]) => { const c = val(k) || (k === 'chuva_h1' ? val('chuva') : null); return bloco(n, c, c ? fmt.mm(c.valor) : null); }));
+      .map(([n, k]) => {
+        const c = val(k) || (k === 'chuva_h1' ? val('chuva') : null);
+        const parcial = c?.fonte.leituras?.[k]?.parcial;
+        if (!c && k !== 'chuva_h1' && (estado.obs?.fontes || []).some((f) => f.acumulados?.[k.slice(6)]?.horas > 1)) return bloco(n, null, null, 'registro incompleto');
+        if (!parcial) return bloco(n, c, c ? fmt.mm(c.valor) : null);
+        // horas faltando no registro: a soma é um mínimo, nunca o total
+        const minimo = c.valor >= 1 ? Math.floor(c.valor) : Math.floor(c.valor * 10) / 10; // arredonda para baixo: segue sendo mínimo
+        return bloco(n, c, `≥ ${fmt.mm(minimo)}`, `faltam ${parcial.esperado - parcial.horas} h de registro`);
+      }));
   s.append(painelPressao(pr), grade);
   if ([...chuva.children].some((b) => !b.classList.contains('vazio'))) s.append(el('h3', { class: 'med-tit', text: 'Chuva medida' }), chuva);
 
@@ -1973,14 +2014,18 @@ function comparacaoHistorica(oni) {
 
 // ------------------------------------------------------------------ navegação e gestos
 
-const ABAS = ['hoje', 'amanha', 'semana', 'modelos', 'elnino', 'globo'];
+const ABAS = ['hoje', 'amanha', 'semana', 'avisos', 'globo', 'elnino', 'modelos'];
+const ABAS_MAIS = ['avisos', 'globo', 'elnino', 'modelos']; // fora da barra, no menu "Ver mais"
 function irPara(aba, rolarTopo = true, direcao = 0) {
   if (!ABAS.includes(aba)) return;
   const mudou = estado.aba !== aba;
   estado.aba = aba;
   for (const s of document.querySelectorAll('.aba')) s.hidden = s.dataset.aba !== aba;
   if (aba !== 'hoje') $('#agora').classList.remove('oculto'); else observarAgora();
-  document.querySelectorAll('.nav button').forEach((b) => { if (b.dataset.ir === aba) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  document.querySelectorAll('.nav button, .mais-item').forEach((b) => {
+    const atual = b.dataset.ir ? b.dataset.ir === aba : ABAS_MAIS.includes(aba); // botão "Ver mais" fica marcado nas abas do menu
+    if (atual) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   if (rolarTopo) window.scrollTo({ top: 0, behavior: 'instant' });
   if (aba === 'elnino' && estado.prev !== undefined) renderElNino();
   abrirOuFecharGlobo(aba);
@@ -2007,7 +2052,10 @@ function abrirOuFecharGlobo(aba) {
 }
 
 function configurarNavegacao() {
-  for (const b of document.querySelectorAll('.nav button')) b.addEventListener('click', () => irPara(b.dataset.ir));
+  for (const b of document.querySelectorAll('.nav button[data-ir]')) b.addEventListener('click', () => irPara(b.dataset.ir));
+  const mais = $('#dlg-mais');
+  $('#btn-mais').addEventListener('click', () => mais.showModal());
+  for (const b of mais.querySelectorAll('.mais-item')) b.addEventListener('click', () => { mais.close(); irPara(b.dataset.ir); });
   // Deslizar entre Hoje, Amanhã e Semana. Para não trocar de aba sem querer, o gesto só vale quando:
   // é um único dedo, rápido (até 450 ms), claramente horizontal (80 px ou mais, e 3 vezes mais que o vertical),
   // a página não rolou no meio, não começou na borda da tela (gesto de voltar do sistema)

@@ -2,7 +2,7 @@
 
 ## O que foi entregue
 
-- App completo nas cinco abas (Hoje, Amanhã, Semana, Modelos, El Niño), com primeira tela sem rolagem em 360 x 640, Faixa do Céu, meteograma de 7 painéis, previsto x medido, mapa com radar, instrumentos, estado das fontes e página de privacidade.
+- App completo nas abas Hoje, Amanhã e Semana, mais Avisos, Globo, El Niño e Modelos no menu Ver mais (desde a 1.5.0), com primeira tela sem rolagem em 360 x 640, Faixa do Céu, meteograma de 7 painéis, previsto x medido, mapa com radar, instrumentos, estado das fontes e página de privacidade.
 - Cloudflare Worker com rotas fixas `/v1/observacoes`, `/v1/alertas`, `/v1/enso`, `/v1/acerto` e `/v1/saude`, mais três tarefas agendadas (séries horárias, El Niño, acerto diário).
 - PWA instalável (manifest, service worker, ícones).
 - 32 testes automáticos (`npm test`), CI no GitHub Actions, Dependabot.
