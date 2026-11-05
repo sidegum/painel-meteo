@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.3.1';
+const VERSAO = '1.3.2';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -1054,7 +1054,8 @@ function renderHojeDetalhes() {
   alvo.replaceChildren(...filhos);
   meteograma(met, Date.now() - 2 * 3600000, Date.now() + 48 * 3600000, 24, 'hoje');
   previstoMedido(pm);
-  import('./mapa.js').then((m) => m.secaoMapa(mapa, estado)).catch(() => mapa.append(el('p', { class: 'nota', text: 'Mapa indisponível.' })));
+  estado.desligarMapa?.(); estado.desligarMapa = null;
+  import('./mapa.js').then((m) => { estado.desligarMapa = m.secaoMapa(mapa, estado); }).catch(() => mapa.append(el('p', { class: 'nota', text: 'Mapa indisponível.' })));
   void p;
 }
 

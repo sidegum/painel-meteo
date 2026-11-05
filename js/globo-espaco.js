@@ -20,7 +20,7 @@ const GRUPOS = [
 ];
 const DESTAQUES = [/^ISS \(ZARYA\)/i, /^CSS \(TIANHE\)/i, /^TIANGONG/i];
 
-const E = { THREE: null, G: null, grupo: null, pontos: {}, ativos: new Set(['estacoes']), satrecs: {}, rotulos: [], trilha: null, ultimo: 0, sistema: null, modo: 'terra', dom: null };
+const E = { THREE: null, G: null, grupo: null, notaSat: null, pontos: {}, ativos: new Set(['estacoes']), satrecs: {}, rotulos: [], trilha: null, ultimo: 0, sistema: null, modo: 'terra', dom: null };
 
 /**
  * Liga o modo Espaço: baixa os elementos orbitais, cria os pontos dos satélites e as fichas de grupo.
@@ -42,7 +42,8 @@ export async function abrirEspaco(G, THREE) {
       for (const [g, lista] of Object.entries(dados.grupos)) {
         E.satrecs[g] = lista.map((o) => { try { return { nome: String(o.OBJECT_NAME).slice(0, 30), rec: sat.json2satrec(o) }; } catch { return null; } }).filter(Boolean);
       }
-      E.dom.nota.textContent = `CelesTrak · ${fmt.horaMin(Date.parse(dados.gerado), -new Date().getTimezoneOffset() * 60)}`;
+      E.notaSat = `CelesTrak · ${fmt.horaMin(Date.parse(dados.gerado), -new Date().getTimezoneOffset() * 60)}`;
+      E.dom.nota.textContent = E.notaSat;
       montarPontos();
     } catch (e) {
       E.dom.nota.textContent = `Satélites indisponíveis (${e?.message || 'falha'}).`;
@@ -172,7 +173,7 @@ function mostrarSatelite(s, nome) {
   const d = v.userData;
   G.mostrarPainel(nome === 'ISS' ? 'Estação Espacial Internacional' : 'Estação espacial chinesa Tiangong',
     `Agora sobre ${fmt.n(Math.abs(d.lat), 1)}°${d.lat < 0 ? 'S' : 'N'} ${fmt.n(Math.abs(d.lon), 1)}°${d.lon < 0 ? 'O' : 'L'}, a ${fmt.n(d.alt)} km de altura.`,
-    `${fmt.n(d.vel * 3600)} km/h · uma volta a cada ${fmt.n(2 * Math.PI / s.rec.no)} min`, `CelesTrak · elementos de ${s.rec.epochyr ? '' : ''}${E.dom.nota.textContent.replace('CelesTrak · ', '')}`);
+    `${fmt.n(d.vel * 3600)} km/h · uma volta a cada ${fmt.n(2 * Math.PI / s.rec.no)} min`, E.notaSat ? E.notaSat.replace('CelesTrak · ', 'CelesTrak · elementos de ') : 'CelesTrak');
 }
 
 // ---------- sistema solar ----------
@@ -189,7 +190,7 @@ function alternarSistema(ligar) {
   if (ligar) for (const r of E.rotulos) r.el.hidden = true;
   G.modoSistema(ligar);
   if (ligar) E.dom.nota.textContent = 'Posições reais dos planetas hoje (JPL). Distâncias fora de escala, tamanhos fora de escala.';
-  else E.dom.nota.textContent = E.dom.notaSat || E.dom.nota.textContent;
+  else E.dom.nota.textContent = E.notaSat || E.dom.nota.textContent;
 }
 
 const distanciaTela = (ua) => 1.1 + 1.7 * Math.log(1 + ua);

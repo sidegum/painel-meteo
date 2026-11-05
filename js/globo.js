@@ -42,7 +42,7 @@ const G = {
   renderer: null, cena: null, camera: null, terra: null, nuvens: null, atmosfera: null, estrelas: null, lua: null,
   marcadorUsuario: null, marcadorToque: null, ciclones: [],
   cam: { lat: -29.7, lon: -51.1, dist: DIST.inicial, vLat: 0, vLon: 0 }, animCam: null, autoGira: !MOVIMENTO_REDUZIDO, chegou: false,
-  camada: 'nuvens', hora: null, horaAgora: null, manifest: null, manifestAntigo: false, campos: {}, satelite: null,
+  camada: 'nuvens', hora: null, horaAgora: null, manifest: null, manifestAntigo: false, satelite: null,
   texturas: {}, relogio: null, quadro: 0, ultimoQuadro: 0, tempos: [], nivelQualidade: 0, pixelRatio: 1,
   particulas: null, tocado: null, erroDados: null, anim: 0, tempoLinha: { tocando: false, timer: null },
   espaco: null, espacoAberto: false, sistema: false,
@@ -92,7 +92,7 @@ function textura(url, opcoes = {}) {
       t.anisotropy = Math.min(4, G.renderer.capabilities.getMaxAnisotropy());
       t.wrapS = THREE.RepeatWrapping;
       ok(t);
-    }, undefined, () => falha(new Error('textura não carregou: ' + url)));
+    }, undefined, () => { delete G.texturas[url]; falha(new Error('textura não carregou: ' + url)); }); // sem memorizar a falha: dá para tentar de novo
   });
   return G.texturas[url];
 }
@@ -152,6 +152,7 @@ async function carregarNuvens(hora) {
   let modelo = null, sat = null;
   try { modelo = await buscarCampo(m, 'nuvens', hora); } catch {}
   if (hora === G.horaAgora && m.satelite) { try { sat = await buscarSatelite(m); G.satelite = sat; } catch {} }
+  if (G.hora !== hora) return; // o usuário já mudou a hora enquanto carregava: quem chegou por último não pode sobrescrever
   if (!modelo && !sat) return;
   const W = sat ? sat.largura : 1440, H = sat ? sat.altura : 720;
   const cv = new OffscreenCanvas(W, H), ctx = cv.getContext('2d', { willReadFrequently: true });
@@ -204,7 +205,8 @@ const FRAGMENT_TERRA = /* glsl */`
   uniform float temNormal, temNoite, temMascaras, temNuvens, temCamada, opacidade, raiz, isobaras;
   uniform vec3 sol, olho; uniform vec2 faixaCanal, faixaCor, desloc; uniform int canal;
   varying vec2 vUv; varying vec3 vN; varying vec3 vP;
-  vec2 uvDados(vec2 uv) { return vec2(fract(uv.x + 0.5 / 720.0), ((1.0 - uv.y) * 360.0 + 0.5) / 361.0); }
+  uniform vec2 grade; // colunas e linhas da grade de dados (coluna 0 em -180°, linha 0 em +90°, última linha em -90°)
+  vec2 uvDados(vec2 uv) { return vec2(fract(uv.x + 0.5 / grade.x), ((1.0 - uv.y) * (grade.y - 1.0) + 0.5) / grade.y); }
   float valorCanal(vec4 px) {
     float b = canal == 0 ? px.r : canal == 1 ? px.g : canal == 2 ? px.b : 0.0;
     if (canal == 3) { vec2 uv = (px.rg * (faixaCanal.y - faixaCanal.x) + faixaCanal.x); return length(uv); }
@@ -303,7 +305,7 @@ function montarCena() {
     tDia: { value: null }, tNoite: { value: null }, tNormal: { value: null }, tMascaras: { value: null }, tNuvens: { value: null }, tCamada: { value: null }, tEscala: { value: null },
     temNormal: { value: 0 }, temNoite: { value: 0 }, temMascaras: { value: 0 }, temNuvens: { value: 0 }, temCamada: { value: 0 },
     opacidade: { value: 0 }, raiz: { value: 0 }, isobaras: { value: 0 }, canal: { value: 0 },
-    sol: { value: new THREE.Vector3(1, 0, 0) }, olho: { value: new THREE.Vector3() }, faixaCanal: { value: new THREE.Vector2(0, 1) }, faixaCor: { value: new THREE.Vector2(0, 1) },
+    sol: { value: new THREE.Vector3(1, 0, 0) }, olho: { value: new THREE.Vector3() }, faixaCanal: { value: new THREE.Vector2(0, 1) }, faixaCor: { value: new THREE.Vector2(0, 1) }, grade: { value: new THREE.Vector2(720, 361) },
     desloc: { value: new THREE.Vector2(0.0025, 0.0025) },
   };
   G.terra = new THREE.Mesh(new THREE.SphereGeometry(RAIO, seg[0], seg[1]), new THREE.ShaderMaterial({ uniforms: uniTerra, vertexShader: VERTEX_TERRA, fragmentShader: FRAGMENT_TERRA }));
@@ -345,7 +347,10 @@ function montarCena() {
   G.marcadorToque = criarMarcador(0xffffff, 0.018); G.marcadorToque.visible = false;
   G.cena.add(G.marcadorUsuario, G.marcadorToque);
 
-  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); mostrarAviso('O 3D foi interrompido pelo aparelho. Toque em atualizar para reabrir o globo.', true); fecharGlobo(); });
+  // O aparelho pode descartar o contexto WebGL (app em segundo plano, memória baixa). O Three.js recria programas e
+  // texturas sozinho quando o contexto volta; aqui só pausamos o laço e avisamos enquanto isso.
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); G.contextoPerdido = true; mostrarAviso('O 3D foi pausado pelo aparelho. Ele volta sozinho em instantes.', true); });
+  canvas.addEventListener('webglcontextrestored', () => { G.contextoPerdido = false; esconderAviso(); G.ultimoQuadro = performance.now(); if (G.aberto && !G.anim) G.anim = requestAnimationFrame(laco); });
   configurarGestos();
 }
 
@@ -537,11 +542,11 @@ async function carregarCamada(id, hora) {
   try { campo = await buscarCampo(G.manifest, cam.arquivo, hora); }
   catch (e) { mostrarAviso(`Não foi possível carregar a camada ${cam.nome} (${e?.message || 'falha'}).`, false); return; }
   if (G.camada !== id || G.hora !== hora) return; // o usuário já trocou enquanto carregava
-  G.campos[cam.arquivo] = campo;
   const canalInfo = campo.canais[cam.canal === 3 ? 'R' : ['R', 'G', 'B'][cam.canal]]; // canal 3 = módulo de (R, G), mesma faixa dos dois
   if (!cam.textura) cam.textura = escalaTextura(cam);
   u.tCamada.value?.dispose?.();
   u.tCamada.value = texturaDeImagem(campo.imagem);
+  u.grade.value.set(campo.largura, campo.altura);
   u.tEscala.value = cam.textura;
   u.canal.value = cam.canal;
   u.raiz.value = canalInfo?.escala === 'raiz' ? 1 : 0;
@@ -586,12 +591,14 @@ function atualizarRotuloHora() {
 function alternarLinhaDoTempo() {
   if (G.tempoLinha.tocando) { pararLinhaDoTempo(); return; }
   G.tempoLinha.tocando = true;
+  const serie = (G.tempoLinha.serie = (G.tempoLinha.serie || 0) + 1); // identifica esta animação: pausar e animar de novo não duplica o passo
   G.dom.tocar.textContent = 'Pausar'; G.dom.tocar.setAttribute('aria-pressed', 'true');
   const passo = async () => {
-    if (!G.tempoLinha.tocando) return;
+    if (!G.tempoLinha.tocando || G.tempoLinha.serie !== serie) return;
     const horas = G.manifest.gfs.horas;
     const k = (horas.indexOf(G.hora) + 1) % horas.length;
     await definirHora(horas[k]);
+    if (!G.tempoLinha.tocando || G.tempoLinha.serie !== serie) return;
     G.tempoLinha.timer = setTimeout(passo, 1100);
   };
   passo();
@@ -783,7 +790,9 @@ function fecharPainel() { G.dom.painel.hidden = true; G.marcadorToque.visible = 
 
 async function mostrarPontoTocado(lat, lon, soGfs) {
   const P = G.dom.painel;
-  const gfs = lerPontoGfs(G.campos, lat, lon);
+  const hora = G.hora;
+  const gfs = lerPontoGfs(await camposDaHora(hora), lat, lon);
+  if (G.tocado?.lat !== lat || G.hora !== hora) return; // o toque ou a hora mudaram enquanto os campos carregavam
   const cic = G.ciclones.find((c) => Math.hypot(c.userData.lat - lat, (c.userData.lon - lon) * Math.cos(lat * RAD)) < 3)?.userData.ciclone;
   const titulo = el('div', { class: 'globo-painel-topo' }, el('b', { text: cic ? `${cic.nome} (ciclone)` : `${fmtLat(lat)} ${fmtLon(lon)}` }),
     el('button', { type: 'button', class: 'globo-fechar', 'aria-label': 'Fechar', text: '×', onclick: fecharPainel }));
@@ -804,6 +813,13 @@ async function mostrarPontoTocado(lat, lon, soGfs) {
     const pl = partesLocais(om.atual.ms || Date.now(), om.offset || 0);
     quando.textContent = `Agora lá são ${String(pl.hora).padStart(2, '0')}:${String(pl.minuto).padStart(2, '0')}${om.fuso ? ` (${om.fuso.replace(/_/g, ' ')})` : ''}.`;
   } catch { quando.textContent += ' Sem resposta da previsão detalhada deste ponto.'; }
+}
+
+/** Os três campos do GFS da hora mostrada (memorizados por globo-dados; o que falhar fica de fora). */
+async function camposDaHora(hora) {
+  if (!G.manifest?.gfs) return {};
+  const r = await Promise.allSettled(['vento', 'campo', 'nuvens'].map((t) => buscarCampo(G.manifest, t, hora)));
+  return { vento: r[0].value || null, campo: r[1].value || null, nuvens: r[2].value || null };
 }
 
 function fraseSimples(gfs, om, cic) {
@@ -922,8 +938,8 @@ function modoSistema(ligar) {
 // ------------------------------------------------------------------ 9. laço de animação e qualidade
 
 function laco(agora) {
-  G.anim = G.aberto ? requestAnimationFrame(laco) : 0;
-  if (!G.aberto || document.hidden) return;
+  G.anim = G.aberto && !G.contextoPerdido ? requestAnimationFrame(laco) : 0;
+  if (!G.aberto || G.contextoPerdido || document.hidden) return;
   const dt = Math.min(100, agora - G.ultimoQuadro); G.ultimoQuadro = agora;
   medirQualidade(dt);
   const c = G.cam;

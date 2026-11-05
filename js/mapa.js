@@ -177,15 +177,23 @@ export function secaoMapa(container, estado) {
   const marcar = () => botoes.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.camada === atual)));
   marcar();
 
+  // A seção é montada de novo a cada atualização do painel: o retorno desliga o mapa anterior
+  // (temporizadores do radar, ouvinte de visibilidade e o próprio Leaflet) para não acumular na memória.
+  let destruido = false;
+  const limpezas = [];
+  const destruir = () => { destruido = true; io.disconnect(); for (const f of limpezas.splice(0)) f(); };
+
   const io = new IntersectionObserver(async (ents) => {
     if (!ents.some((e) => e.isIntersecting)) return;
     io.disconnect();
     try { await montar(); } catch (e) { caixa.replaceChildren(el('p', { class: 'nota', style: { padding: '16px' }, text: 'Mapa indisponível: ' + e.message })); }
   }, { rootMargin: '200px' });
   io.observe(caixa);
+  return destruir;
 
   async function montar() {
     const L = await carregarLeaflet();
+    if (destruido) return;
     caixa.replaceChildren();
     // No computador: arrastar com o mouse e zoom pela rodinha. No celular: um dedo rola a página normalmente
     // (o mapa não prende a rolagem) e dois dedos movem e aproximam o mapa, como nos mapas embutidos em sites.
@@ -229,7 +237,9 @@ export function secaoMapa(container, estado) {
     const rotulo = () => { btnPausa.textContent = pausado ? 'Animar radar' : 'Pausar radar'; btnPausa.setAttribute('aria-pressed', String(pausado)); };
     btnPausa.onclick = () => { pausado = !pausado; prefs.gravar('radarPausado', pausado); rotulo(); tocar(); };
     rotulo();
-    document.addEventListener('visibilitychange', () => { if (document.hidden) clearInterval(timer); else tocar(); });
+    const aoMudarVisibilidade = () => { if (document.hidden) clearInterval(timer); else tocar(); };
+    document.addEventListener('visibilitychange', aoMudarVisibilidade);
+    limpezas.push(() => { clearInterval(timer); clearInterval(timerCarga); document.removeEventListener('visibilitychange', aoMudarVisibilidade); mapa.remove(); });
 
     async function ligarRadar() {
       if (!radar) radar = await buscarRadar();
