@@ -617,18 +617,18 @@ Nenhuma chave contém a localização ou o IP do usuário.
 
 ## 10. Automação, scripts e testes
 
-- `.github/workflows/testes.yml`: roda `npm test`, `npm audit` e a busca por segredos em cada push e PR.
-- `.github/workflows/globo.yml`: a cada hora gera os dados da aba Globo (`scripts/globo/atualizar.py`) e publica no branch `globo-dados` (ver seção 12).
+- `.github/workflows/testes.yml`: roda `npm test`, `npm audit` e a busca por segredos em cada PR e em cada push na `main`.
+- `.github/workflows/globo.yml`: a cada 3 h gera os dados da aba Globo (`scripts/globo/atualizar.py`) e publica no branch `globo-dados` (ver seção 12).
 - `.github/workflows/worker.yml`: publica o Worker quando `worker/**` muda na `main`.
-- `.github/workflows/enso.yml`: a cada 3 h, roda `scripts/atualizar-enso.mjs`.
+- `.github/workflows/enso.yml`: a cada 6 h, roda `scripts/atualizar-enso.mjs`.
   - O script reaproveita `atualizarEnso` do Worker com um "KV" de arquivo.
   - Também estima o Niño 3.4 diário: a média da temperatura do mar em 18 pontos entre 5°N e 5°S, 170°W e 120°W (Open-Meteo Marine), menos a climatologia mensal de 1991 a 2020 derivada do `sstoi.indices` do CPC e interpolada entre os meios dos meses.
   - O resultado é gravado em `dados/enso.json`.
-- `.github/workflows/calibracao.yml`: no dia 5 de cada mês (e quando os scripts da calibração mudam), roda:
-  - `scripts/historico.mjs`: baixa os ZIPs anuais do INMET (BDMEP), extrai a A884 (`scripts/lib/inmet.mjs`: leitor de ZIP próprio, CSV em Latin-1, controle de qualidade, dia local) e as previsões passadas da Previous Runs API (6 modelos, 1 a 5 dias antes, blocos de 60 dias). Grava `dados/historico/A884-diario.json` (uma linha por dia, incremental).
+- `.github/workflows/calibracao.yml`: todo dia às 07:40 de Brasília (e quando os scripts da calibração mudam), roda:
+  - `scripts/historico.mjs`: baixa os ZIPs anuais do INMET (BDMEP), extrai a A884 (`scripts/lib/inmet.mjs`: leitor de ZIP próprio, CSV em Latin-1, controle de qualidade, dia local) e as previsões passadas da Previous Runs API (6 modelos, 1 a 5 dias antes, blocos de 60 dias). Grava `dados/historico/A884-diario.json` (uma linha por dia, incremental: por modelo, só os 10 dias mais recentes e os que faltam a partir do primeiro dia com dado; blocos que não têm dia faltando não são pedidos).
   - `scripts/calibrar.mjs`: calcula `dados/calibracao.json` e `docs/calibracao-resultado.md` (`scripts/lib/calibracao.mjs`). Detalhes em CALIBRACAO.md.
-- `.github/workflows/pages.yml`: publica o site no Cloudflare Pages (Direct Upload, sem compilação) a cada push na `main`, depois da calibração e do workflow do Worker, e à mão. O `globo.yml` (a cada hora) e o `enso.yml` (quando o El Niño muda) publicam no próprio job, porque commits feitos com o `GITHUB_TOKEN` não disparam outros workflows. Passo a passo em CLOUDFLARE-PAGES.md.
-  - `scripts/montar-site.sh`: copia só o que o navegador usa (`index.html`, `privacidade.html`, `manifest.json`, `sw.js`, `app.css`, `js/`, `vendor/`, `icones/`, `dados/*.json`, `cloudflare/_headers` e `cloudflare/404.html`) e os campos do Globo em `globo-dados/`. Confere que todo arquivo da lista do service worker existe. O `testes.yml` roda essa montagem em cada push.
+- `.github/workflows/pages.yml`: publica o site no Cloudflare Pages (Direct Upload, sem compilação) a cada push na `main`, depois da calibração e do workflow do Worker, e à mão. O `globo.yml` (a cada 3 h) e o `enso.yml` (quando o El Niño muda) publicam no próprio job, porque commits feitos com o `GITHUB_TOKEN` não disparam outros workflows. Passo a passo em CLOUDFLARE-PAGES.md.
+  - `scripts/montar-site.sh`: copia só o que o navegador usa (`index.html`, `privacidade.html`, `manifest.json`, `sw.js`, `app.css`, `js/`, `vendor/`, `icones/`, `dados/*.json`, `cloudflare/_headers` e `cloudflare/404.html`) e os campos do Globo em `globo-dados/`. Confere que todo arquivo da lista do service worker existe. O `testes.yml` roda essa montagem em cada PR e push na `main`.
   - `scripts/publicar-pages.sh`: busca o branch `globo-dados` (se não vier pronto), monta o site, cria o projeto na primeira vez e publica com `wrangler pages deploy`.
   - No Cloudflare Pages, `CONFIG.globoDados` aponta para `globo-dados/` do próprio site, que continua funcionando com o repositório privado. No GitHub Pages e no computador local, aponta para `raw.githubusercontent.com`.
   - O `404.html` desliga o modo de aplicação de página única do Pages: um arquivo que falta responde 404, e não o `index.html` com status 200.

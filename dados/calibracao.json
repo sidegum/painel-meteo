@@ -1,6 +1,6 @@
 {
  "versao": 1,
- "geradoEm": "2026-11-05T03:01:17.996Z",
+ "geradoEm": "2026-11-05T21:38:56.221Z",
  "estacao": {
   "id": "A884",
   "nome": "Campo Bom",
@@ -29,33 +29,33 @@
  "cobertura": {
   "ecmwf_ifs": {
    "ini": "2022-01-01",
-   "fim": "2026-11-03",
-   "dias": 1768
+   "fim": "2026-11-04",
+   "dias": 1769
   },
   "ecmwf_aifs025_single": {
    "ini": "2025-02-18",
-   "fim": "2026-11-03",
-   "dias": 624
+   "fim": "2026-11-04",
+   "dias": 625
   },
   "ukmo_global_deterministic_10km": {
    "ini": "2022-03-01",
-   "fim": "2026-11-03",
-   "dias": 1709
+   "fim": "2026-11-04",
+   "dias": 1710
   },
   "ecmwf_ifs025": {
    "ini": "2024-02-04",
-   "fim": "2026-11-03",
-   "dias": 1004
+   "fim": "2026-11-04",
+   "dias": 1005
   },
   "ncep_gfs_seamless": {
    "ini": "2021-03-24",
-   "fim": "2026-11-03",
-   "dias": 2051
+   "fim": "2026-11-04",
+   "dias": 2052
   },
   "dwd_icon_global": {
    "ini": "2022-11-17",
-   "fim": "2026-11-03",
-   "dias": 1448
+   "fim": "2026-11-04",
+   "dias": 1449
   }
  },
  "pesos": {
@@ -409,8 +409,8 @@
    },
    "periodo": {
     "ini": "2021-03-01",
-    "fim": "2026-11-03",
-    "diasComMedicao": 2074
+    "fim": "2026-11-04",
+    "diasComMedicao": 2075
    },
    "fontes": {
     "medicoes": "METAR SBCO Canoas, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
@@ -422,7 +422,7 @@
       "n": 382,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.29,
+      "maeTmax": 1.28,
       "maeRajada": null
      },
      "2": {
@@ -524,8 +524,8 @@
       "n": 652,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.92,
-      "maeRajada": 21.98
+      "maeTmax": 1.93,
+      "maeRajada": 21.99
      }
     }
    }
@@ -540,8 +540,8 @@
    },
    "periodo": {
     "ini": "2021-03-01",
-    "fim": "2026-11-03",
-    "diasComMedicao": 1917
+    "fim": "2026-11-04",
+    "diasComMedicao": 1918
    },
    "fontes": {
     "medicoes": "METAR SBPA Porto Alegre aeroporto, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
@@ -574,7 +574,7 @@
       "n": 397,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.58,
+      "maeTmax": 1.57,
       "maeRajada": null
      },
      "5": {
@@ -597,7 +597,7 @@
       "n": 622,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.29,
+      "maeTmax": 1.3,
       "maeRajada": null
      },
      "3": {
@@ -618,7 +618,7 @@
       "n": 605,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.59,
+      "maeTmax": 1.6,
       "maeRajada": null
      }
     },
@@ -628,13 +628,13 @@
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.18,
-      "maeRajada": 12.62
+      "maeRajada": 12.61
      },
      "2": {
       "n": 647,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.33,
+      "maeTmax": 1.34,
       "maeRajada": 12.37
      },
      "3": {
@@ -642,21 +642,21 @@
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.43,
-      "maeRajada": 12.68
+      "maeRajada": 12.69
      },
      "4": {
       "n": 567,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.59,
-      "maeRajada": 13.08
+      "maeTmax": 1.6,
+      "maeRajada": 13.09
      },
      "5": {
       "n": 569,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.85,
-      "maeRajada": 13.1
+      "maeRajada": 13.12
      }
     }
    }

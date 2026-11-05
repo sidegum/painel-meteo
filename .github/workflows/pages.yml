@@ -3,7 +3,7 @@ name: Publicar no Cloudflare Pages
 # Publica o app no Cloudflare Pages (Direct Upload, sem compilação) sempre que a main muda.
 # - push na main: mudanças feitas por pessoas (os commits dos robôs não disparam "push" com o GITHUB_TOKEN).
 # - workflow_run: depois dos robôs que gravam na main com pouca frequência (calibração diária, endereço do Worker).
-# - Os campos do Globo (a cada hora) e o El Niño (só quando muda) são publicados no próprio job que os gera, para
+# - Os campos do Globo (a cada 3 h) e o El Niño (só quando muda) são publicados no próprio job que os gera, para
 #   gastar menos minutos do GitHub Actions.
 # Segredos: CLOUDFLARE_API_TOKEN (com "Cloudflare Pages: Edit") e CLOUDFLARE_ACCOUNT_ID.
 # Variável opcional do repositório: PAGES_PROJETO (padrão painel-meteo). Passo a passo em docs/CLOUDFLARE-PAGES.md.

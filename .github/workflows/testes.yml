@@ -1,7 +1,10 @@
 name: Testes
 on:
+  # na main e nos PRs (um push num branch com PR aberto rodava duas vezes)
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

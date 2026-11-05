@@ -6,7 +6,7 @@ name: Dados do globo
 # 5 min) e na pasta globo-dados/ do próprio site no Cloudflare Pages, publicada ao fim deste job.
 on:
   schedule:
-    - cron: '25 * * * *'   # a cada hora (o GFS novo entra a cada 6 h; o satélite, a cada hora)
+    - cron: '25 */3 * * *'   # a cada 3 h (o GFS novo entra a cada 6 h; repositório privado: limite de 2.000 min/mês do Actions)
   workflow_dispatch:
     inputs:
       so:

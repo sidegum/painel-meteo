@@ -2,7 +2,7 @@ name: Dados do El Niño
 
 on:
   schedule:
-    - cron: '17 */3 * * *'   # a cada 3 horas
+    - cron: '17 */6 * * *'   # a cada 6 horas (NOAA CPC e IRI mudam por semana ou por mês)
   workflow_dispatch:
 
 permissions:
