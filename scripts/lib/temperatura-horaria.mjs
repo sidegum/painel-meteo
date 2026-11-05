@@ -57,18 +57,19 @@ export function seriesPorHora(j, mapa) {
 }
 
 /**
- * Temperatura medida hora a hora (já com controle de qualidade) → 24 valores por dia local.
- * @param {{ms:number, temp:number|null}[]} horas instantes UTC
+ * Uma medida hora a hora (já com controle de qualidade) → 24 valores por dia local.
+ * @param {{ms:number}[]} horas instantes UTC
+ * @param {string} [campo] 'temp', 'orvalho' ou 'vento'
  * @param {number} [offsetH] fuso local fixo (−3 h em Campo Bom)
  * @returns {Record<string, (number|null)[]>}
  */
-export function obsPorHora(horas, offsetH = -3) {
+export function obsPorHora(horas, campo = 'temp', offsetH = -3) {
   const out = {};
   for (const h of horas) {
-    if (!num(h.temp)) continue;
+    if (!num(h[campo])) continue;
     const local = new Date(h.ms + offsetH * 3600000);
     const d = local.toISOString().slice(0, 10);
-    (out[d] ||= Array(24).fill(null))[local.getUTCHours()] = h.temp;
+    (out[d] ||= Array(24).fill(null))[local.getUTCHours()] = h[campo];
   }
   return out;
 }
@@ -81,12 +82,13 @@ export function obsPorHora(horas, offsetH = -3) {
  * @param {string} modelo identificador Open-Meteo
  * @param {string} chave 'h0' ou 'p1'…'p5'
  * @param {object} [diario] tabela dados/historico/A884-diario.json, para a máxima e a mínima medidas do dia
+ * @param {string} [chaveObs] medida comparada: 'o' (temperatura) ou 'od' (ponto de orvalho)
  * @returns {{data:string, mes:string, estacao:string, prev:(number|null)[], obs:(number|null)[], tmax:number|null, tmin:number|null}[]}
  */
-export function diasHorarios(horario, modelo, chave, diario = null) {
+export function diasHorarios(horario, modelo, chave, diario = null, chaveObs = 'o') {
   const out = [];
   for (const [data, linha] of Object.entries(horario.dias || {})) {
-    const p = linha[modelo]?.[chave], o = linha.o;
+    const p = linha[modelo]?.[chave], o = linha[chaveObs];
     if (!p || !o) continue;
     if (HORAS.filter((h) => num(p[h]) && num(o[h])).length < PARAM_HORARIO.minHorasDia) continue;
     const ob = diario?.dias?.[data]?.obs;
@@ -164,7 +166,7 @@ const extremosDe = (ext, est) => ({ tmax: ext.tmax?.porEstacao[est].vies ?? 0, t
  * @param {object[]} dias0 diasHorarios da antecedência 0 (base); pode ser vazio
  * @param {(treino: (mes: string) => boolean) => ((estacao: string) => {tmax:number, tmin:number})|null} metodoDiario
  *   recebe o filtro dos meses de treino e devolve a correção diária por estação do ano ajustada só com eles
- * @returns {{porDia:Map<string, {tmax:number|null, tmin:number|null}>, dias:number, meses:number, horaria:object,
+ * @returns {{porDia:Map<string, {tmax:number|null, tmin:number|null, horaria:number[], diaria:number[]}>, dias:number, meses:number, horaria:object,
  *   tarde:object, tmax:object, tmin:object, usar:boolean}|null}
  */
 export function validarHorario(dias, dias0, metodoDiario) {
@@ -195,7 +197,8 @@ export function validarHorario(dias, dias0, metodoDiario) {
           if (h >= t0 && h <= t1) T[nome].push(par);
         }
         const mx = maxDe(s), mn = minDe(s);
-        if (nome === 'horaria') porDia.set(d.data, { tmax: mx, tmin: mn });
+        if (nome === 'horaria') porDia.set(d.data, { ...(porDia.get(d.data) || {}), tmax: mx, tmin: mn, horaria: s });
+        if (nome === 'diaria') porDia.set(d.data, { ...(porDia.get(d.data) || {}), diaria: s });
         if (num(mx) && num(d.tmax)) MX[nome].push({ prev: mx, obs: d.tmax });
         if (num(mn) && num(d.tmin)) MN[nome].push({ prev: mn, obs: d.tmin });
       }

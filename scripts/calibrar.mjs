@@ -12,6 +12,7 @@ import {
   validar, metricas, contingenciaChuva, pesosRelativos, foraDaAmostra, coerenciaFator, arredondar as r,
 } from './lib/calibracao.mjs';
 import { paresChuva, ajustarChuva, validarChuva, tabelaFinal, corrigirChuva, PARAM_CHUVA } from './lib/chuva.mjs';
+import { calibrarOrvalho, conferirSensacao } from './lib/sensacao.mjs';
 import { MODELOS_HORARIO, LEADS_HORARIO, PARAM_HORARIO, diasHorarios, validarHorario, ajusteFinal } from './lib/temperatura-horaria.mjs';
 
 const ARQ_HIST = new URL('../dados/historico/A884-diario.json', import.meta.url);
@@ -262,9 +263,13 @@ function placar() {
  */
 // modelo:antecedência → (data → máxima e mínima corrigidas hora a hora, fora da amostra), para o placar
 const maximasHorarias = new Map();
+// modelo → séries de temperatura da véspera corrigidas fora da amostra (para conferir a sensação térmica)
+const temperaturaVespera = new Map();
+let tabelaHoraria = null;
 async function temperaturaHoraria() {
   let horario;
   try { horario = JSON.parse(await readFile(ARQ_HORARIO, 'utf8')); } catch { return null; }
+  tabelaHoraria = horario;
   const res = { fontes: horario.fontes, metodo: { ...PARAM_HORARIO, documento: 'docs/CALIBRACAO.md' }, modelos: {} };
   const resumo = (v) => v && Object.fromEntries(['horaria', 'tarde', 'tmax', 'tmin'].map((k) => [k,
     Object.fromEntries(Object.entries(v[k]).map(([nome, x]) => [nome, { n: x.n, mae: r(x.mae), vies: r(x.vies) }]))]));
@@ -286,6 +291,7 @@ async function temperaturaHoraria() {
       if (!v || !fim) { out.leads[L] = { usar: false, dias: dias.length }; continue; }
       out.leads[L] = { usar: v.usar, ...fim, ini: dias[0].data, fim: dias.at(-1).data, validacao: resumo(v) };
       if (v.usar) maximasHorarias.set(`${m}:${L}`, v.porDia);
+      if (L === 1) temperaturaVespera.set(m, { porDia: v.porDia, usarHoraria: v.usar });
       console.log(`Hora a hora ${m}, ${L} dia(s): ${dias.length} dias, erro por hora ${r(v.horaria.bruta.mae)} → diário ${r(v.horaria.diaria.mae)} → horário ${r(v.horaria.horaria.mae)} °C; ${v.usar ? 'em uso' : 'não usado'}`);
     }
     res.modelos[m] = out;
@@ -294,6 +300,38 @@ async function temperaturaHoraria() {
 }
 
 const horaria = await temperaturaHoraria();
+
+// ------------------------------------------------------------------ ponto de orvalho e sensação térmica
+
+/**
+ * Orvalho hora a hora (véspera) e conferência da sensação térmica prevista contra a medida, por modelo do
+ * painel (scripts/lib/sensacao.mjs). null sem tabela horária.
+ */
+function orvalhoESensacao() {
+  if (!tabelaHoraria) return { orvalho: null, sensacao: null };
+  const orvalho = { modelos: {} }, sensacao = { formula: 'Steadman (1994), forma da Bureau of Meteorology, à sombra: T + 0,33·e − 0,70·v − 4,00', modelos: {} };
+  for (const m of MODELOS_HORARIO) {
+    const o = calibrarOrvalho(tabelaHoraria, m);
+    if (o) {
+      const { porDia, ...resto } = o;
+      orvalho.modelos[m] = resto;
+      console.log(`Orvalho ${m}: ${o.dias} dias, erro por hora ${o.validacao.antes.mae} → ${o.validacao.depois.mae} °C; ${o.usar ? 'em uso' : 'não usado'}`);
+    }
+    const vento = modelos[m]?.vento?.[1];
+    const t = temperaturaVespera.get(m);
+    const c = conferirSensacao(tabelaHoraria, m, {
+      temperatura: t?.porDia, usarHoraria: t?.usarHoraria,
+      orvalho: o?.usar ? o.porDia : null,
+      fatorVento: vento?.usar ? (e) => vento.fator[e] : null,
+    });
+    if (c) {
+      sensacao.modelos[m] = c;
+      console.log(`Sensação ${m}: ${c.dias} dias, erro por hora ${c.hora.bruta.mae} → ${c.hora.corrigida.mae} °C, sensação máxima ${c.max.bruta.mae} → ${c.max.corrigida.mae} °C`);
+    }
+  }
+  return { orvalho, sensacao };
+}
+const umidade = orvalhoESensacao();
 const calib = {
   versao: 1,
   geradoEm: new Date().toISOString(),
@@ -312,6 +350,8 @@ const calib = {
   placar: placar(),
   outras: await outrasEstacoes(),
   temperaturaHoraria: horaria,
+  orvalhoHorario: umidade.orvalho,
+  sensacao: umidade.sensacao,
   modelos,
 };
 
@@ -387,6 +427,18 @@ function relatorio(c) {
       L.push('', `Viés por hora na véspera (previsto − medido, °C; negativo = o modelo prevê frio demais):`, '');
       L.push(`| Estação | ${hs.map((h) => `${h} h`).join(' | ')} |`, `|---|${'---|'.repeat(hs.length)}`);
       for (const e of ESTACOES) L.push(`| ${e} | ${hs.map((h) => f(x1.vies[e][h])).join(' | ')} |`);
+    }
+  }
+  if (c.sensacao && Object.keys(c.sensacao.modelos).length) {
+    L.push('', '## Sensação térmica na véspera: erro médio em °C', '',
+      `Fórmula, igual na previsão e na medição: ${c.sensacao.formula} (e = pressão de vapor pelo ponto de orvalho, hPa; v = vento médio, m/s). Medida = calculada com temperatura, orvalho e vento do INMET A884 na mesma hora. "Corrigida" = como o painel mostra (temperatura, orvalho e vento corrigidos, fora da amostra; o fator do vento é o anual da estação do ano).`, '');
+    L.push('| Modelo | Dias | Por hora: bruta → corrigida | Tarde | Sensação máxima do dia | Sensação mínima do dia | Viés da máxima (corrigida) |', '|---|---|---|---|---|---|---|');
+    for (const [m, x] of Object.entries(c.sensacao.modelos)) {
+      L.push(`| ${MODELOS_CALIBRACAO[m].nome} | ${x.dias} | ${f(x.hora.bruta.mae)} → ${f(x.hora.corrigida.mae)} | ${f(x.tarde.bruta.mae)} → ${f(x.tarde.corrigida.mae)} | ${f(x.max.bruta.mae)} → ${f(x.max.corrigida.mae)} | ${f(x.min.bruta.mae)} → ${f(x.min.corrigida.mae)} | ${f(x.max.corrigida.vies)} |`);
+    }
+    L.push('', 'Ponto de orvalho (umidade do ar), véspera, por hora:', '', '| Modelo | Dias | Erro antes | Erro depois | Viés antes | Em uso |', '|---|---|---|---|---|---|');
+    for (const [m, x] of Object.entries(c.orvalhoHorario?.modelos || {})) {
+      L.push(`| ${MODELOS_CALIBRACAO[m].nome} | ${x.dias} | ${f(x.validacao.antes.mae)} | ${f(x.validacao.depois.mae)} | ${f(x.validacao.antes.vies)} | ${x.usar ? 'sim' : 'não'} |`);
     }
   }
   L.push('', '## Rajada exibida (mediana dos modelos): erro médio em km/h', '', '| Antecedência | Antes | Depois | Viés antes | Viés depois | Dias |', '|---|---|---|---|---|---|');

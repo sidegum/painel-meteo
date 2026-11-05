@@ -201,7 +201,7 @@ async function medicoesRecentesComToken(est, desde, ate) {
       for (const l of linhas) {
         const ms = instanteUtc(String(l.DT_MEDICAO || ''), String(l.HR_MEDICAO ?? '').padStart(4, '0'));
         if (ms === null) continue;
-        horas.push({ ms, chuva: n(l.CHUVA), temp: n(l.TEM_INS), tmax: n(l.TEM_MAX), tmin: n(l.TEM_MIN), rajada: kmh(l.VEN_RAJ), vento: kmh(l.VEN_VEL), direcao: n(l.VEN_DIR) });
+        horas.push({ ms, chuva: n(l.CHUVA), temp: n(l.TEM_INS), orvalho: n(l.PTO_INS), tmax: n(l.TEM_MAX), tmin: n(l.TEM_MIN), rajada: kmh(l.VEN_RAJ), vento: kmh(l.VEN_VEL), direcao: n(l.VEN_DIR) });
       }
       console.log(`  INMET (token) ${a} a ${b}: ${linhas.length} horas`);
     } catch (e) {
@@ -232,7 +232,7 @@ async function horarioOpenMeteo(base, est, modelo, datas, mapa, blocoDias) {
     const b = [somaDias(a, blocoDias - 1), fim].sort()[0];
     const p = new URLSearchParams({
       latitude: String(est.lat), longitude: String(est.lon), hourly: [...new Set(Object.values(mapa))].join(','),
-      models: modelo, start_date: a, end_date: b, timezone: 'America/Sao_Paulo',
+      models: modelo, start_date: a, end_date: b, timezone: 'America/Sao_Paulo', wind_speed_unit: 'kmh',
     });
     try {
       const j = await buscar(`${base}?${p}`);
@@ -259,17 +259,24 @@ async function coletarHorario(est, horasObs) {
   try { tab = JSON.parse(await readFile(arq, 'utf8')); } catch {}
   console.log('  Temperatura hora a hora');
   const linha = (d) => (tab.dias[d] ||= {});
-  for (const [d, o] of Object.entries(obsPorHora(horasObs))) linha(d).o = o;
+  // temperatura (o), ponto de orvalho (od) e vento médio em km/h (ow): base da sensação térmica medida
+  for (const [chave, campo] of [['o', 'temp'], ['od', 'orvalho'], ['ow', 'vento']]) {
+    for (const [d, x] of Object.entries(obsPorHora(horasObs, campo))) linha(d)[chave] = x;
+  }
 
   const dias = (de, falta, recentes) => {
     const xs = [];
     for (let d = de; d <= ontem; d = somaDias(d, 1)) if (falta(tab.dias[d]) || d >= somaDias(ontem, -recentes)) xs.push(d);
     return xs;
   };
-  const mapaPR = Object.fromEntries(LEADS_HORARIO.map((L) => [`p${L}`, `temperature_2m_previous_day${L}`]));
+  // temperatura de 1 a 5 dias antes (p1…p5) e, na véspera, ponto de orvalho (d1) e vento (w1), para a sensação
+  const mapaPR = {
+    ...Object.fromEntries(LEADS_HORARIO.map((L) => [`p${L}`, `temperature_2m_previous_day${L}`])),
+    d1: 'dew_point_2m_previous_day1', w1: 'wind_speed_10m_previous_day1',
+  };
   for (const m of MODELOS_HORARIO) {
     const pr = await horarioOpenMeteo('https://previous-runs-api.open-meteo.com/v1/forecast', est, m,
-      dias(INICIO_PR_HORARIO[m], (l) => !l?.[m]?.p1, 10), mapaPR, 60);
+      dias(INICIO_PR_HORARIO[m], (l) => !l?.[m]?.p1 || !l?.[m]?.d1, 10), mapaPR, 60);
     const hf = await horarioOpenMeteo('https://historical-forecast-api.open-meteo.com/v1/forecast', est, m,
       dias(INICIO_HF, (l) => !l?.[m]?.h0, 15), { h0: 'temperature_2m' }, 180);
     for (const fonte of [pr, hf]) for (const [d, x] of Object.entries(fonte)) linha(d)[m] = { ...(linha(d)[m] || {}), ...x };
@@ -282,11 +289,11 @@ async function coletarHorario(est, horasObs) {
   const cab = {
     estacao: { id: est.id, nome: est.nome }, modelos: MODELOS_HORARIO, atualizadoEm: new Date().toISOString(),
     fontes: {
-      o: `INMET ${est.id}, temperatura do ar (bulbo seco) na hora cheia`,
+      o: `INMET ${est.id}, temperatura do ar (bulbo seco) na hora cheia; od: ponto de orvalho; ow: vento médio (km/h)`,
       h0: 'Open-Meteo Historical Forecast API (CC BY 4.0): primeiras horas de cada rodada',
-      p: 'Open-Meteo Previous Runs API (CC BY 4.0): previsto 1 a 5 dias antes (p1 a p5)',
+      p: 'Open-Meteo Previous Runs API (CC BY 4.0): temperatura prevista 1 a 5 dias antes (p1 a p5); na véspera, ponto de orvalho (d1) e vento em km/h (w1)',
     },
-    formato: 'dias[data local].o e dias[data local][modelo][h0|p1…p5] = 24 valores em °C, hora local 0 a 23 (UTC−3)',
+    formato: 'dias[data local][o|od|ow] e dias[data local][modelo][h0|p1…p5|d1|w1] = 24 valores, hora local 0 a 23 (UTC−3)',
   };
   const linhas = ids.map((d) => `    ${JSON.stringify(d)}: ${JSON.stringify(tab.dias[d])}`);
   await writeFile(arq, `${JSON.stringify(cab, null, 2).slice(0, -2)},\n  "dias": {\n${linhas.join(',\n')}\n  }\n}\n`);

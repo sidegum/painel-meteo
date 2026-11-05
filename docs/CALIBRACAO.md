@@ -110,6 +110,24 @@ Validação: um mês de fora (inclusive da base) e três versões comparadas no 
 
 No app, `correcaoTemperaturaDia` decide por modelo, antecedência e mês: horário quando aprovado, senão diário. O aprendizado recente do Worker soma, aos extremos, o que acrescenta ao histórico diário. A ancoragem na medição de agora (`ancorarTemperatura`) vem depois, sobre a série já corrigida.
 
+### 4.7 Ponto de orvalho e sensação térmica (`scripts/lib/sensacao.mjs`)
+
+A sensação térmica não é medida por um instrumento: é uma conta com temperatura, umidade e vento. O painel usa uma conta só, para a previsão e para a medição (`sensacaoTermica`, em js/analise.js): a temperatura aparente de Steadman (1994), na forma da Bureau of Meteorology da Austrália, à sombra:
+
+```
+sensação = T + 0,33·e − 0,70·v − 4,00
+e = pressão de vapor (hPa) = 6,105·exp(17,27·Td / (237,7 + Td))   Td = ponto de orvalho (°C)
+v = vento médio a 10 m (m/s)
+```
+
+Exemplo: 30 °C, orvalho 24 °C (abafado) e vento de 10 km/h dão e ≈ 29,9 hPa e sensação de 33,9 °C.
+
+No app (`umidadeESensacao`, chamada em `calibrarPrevisao`), a sensação prevista é refeita hora a hora com a temperatura corrigida (4.1 e 4.6), o vento corrigido (4.2) e o ponto de orvalho corrigido pelo viés da hora do dia e estação do ano, quando aprovado. A umidade relativa é refeita com o mesmo vapor: com a temperatura corrigida para cima e o mesmo orvalho, a umidade cai, como no ar de verdade. A `apparent_temperature` da Open-Meteo não é usada, porque a fórmula dela não é a mesma da sensação medida.
+
+Ponto de orvalho: viés por hora do dia e estação do ano, medido na véspera (orvalho previsto 1 dia antes × medido no INMET A884) e usado em todas as antecedências, com validação de um mês de fora e ganho mínimo de 2%.
+
+Conferência: para a véspera, a sensação prevista (bruta e corrigida como o painel mostra) é comparada hora a hora com a sensação calculada pelas medições do INMET A884 na mesma hora, pela mesma fórmula. O relatório traz o erro por hora, à tarde, na sensação máxima e na mínima do dia. Ressalva: o fator do vento usado na conferência é o ajustado com todos os meses (não fora da amostra); o efeito dele na sensação é pequeno (0,7 °C por m/s).
+
 ## 5. Arquivo `dados/calibracao.json`
 
 ```
@@ -133,7 +151,7 @@ Resumo (detalhes em [TECNICO.md](TECNICO.md), seção 3.7):
 
 - `buscarCalibracao` (js/dados.js) lê o arquivo do próprio GitHub Pages, uma vez por dia, e guarda no cache local.
 - `recalibrar` (js/app.js) é a **fonte única**: a partir das séries brutas, gera as séries calibradas que todas as telas usam. Nenhuma tela faz ajuste próprio, então primeira tela, gráficos, Semana, comparação de modelos e análise de pressão sempre mostram os mesmos números.
-- `calibrarPrevisao` (js/analise.js) corrige a temperatura (hora a hora quando aprovada, seção 4.6; senão interpolando entre a correção da mínima e a da máxima), a temperatura atual prevista, rajada, vento e chuva (seção 4.3).
+- `calibrarPrevisao` (js/analise.js) corrige a temperatura (hora a hora quando aprovada, seção 4.6; senão interpolando entre a correção da mínima e a da máxima), a temperatura atual prevista, rajada, vento e chuva (seção 4.3), e refaz orvalho, umidade e sensação térmica com os valores corrigidos (seção 4.7).
 - `calibrarEnsemble` aplica o fator de rajada e a tabela de chuva aos cenários (ECMWF ENS com os do `ecmwf_ifs025`; MOGREPS-G com os do UKMO 10 km). Suposição, não testada: o erro de escala é do sistema (física e grade), e não de cada membro. O AIFS não tem rajada, e o AIFS ENS fica sem correção de chuva.
 - `correcaoTemperatura` mistura o viés histórico com o aprendizado diário do Worker: `(n·recente + 20·histórico) / (n + 20)`. O histórico dá o ponto de partida no primeiro dia; o recente capta mudanças (atualização de modelo, mudança no entorno da estação).
 - Tudo só vale a até 50 km da A884 (`calibracaoAplicavel`). Fora disso, o painel mostra os modelos sem correção histórica.

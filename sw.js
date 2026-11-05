@@ -1,6 +1,6 @@
 // Service worker simples: guarda só os arquivos do app para abrir sem internet.
 // Dados de previsão ficam no cache "painel-dados-v1", gravado pelo próprio app (dados públicos).
-const VERSAO = 'painel-app-v1.2.25';
+const VERSAO = 'painel-app-v1.2.26';
 const ARQUIVOS = [
   './', './index.html', './app.css', './manifest.json', './privacidade.html',
   './js/app.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js',
