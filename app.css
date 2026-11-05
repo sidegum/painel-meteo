@@ -544,7 +544,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .globo-notas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
 .globo-notas p { margin: 0; font-size: 11.5px; color: #aab3bd; }
 .globo-ciclones { color: #ff9a8a !important; font-weight: 600; }
-.globo-painel { position: absolute; left: 12px; right: 12px; bottom: 150px; max-width: 420px; margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(10,14,22,.86); color: #eceef0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12); }
+.globo-painel { z-index: 6; position: absolute; left: 12px; right: 12px; bottom: 150px; max-width: 420px; margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(10,14,22,.86); color: #eceef0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12); }
 .globo-painel-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: #b7c0c9; }
 .globo-painel-topo b { color: #eceef0; font-weight: 640; }
 .globo-fechar { min-width: 36px; min-height: 36px; border: 0; background: none; color: #dfe4ea; font-size: 22px; line-height: 1; }
@@ -565,4 +565,12 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .globo-rotulo { position: absolute; left: 0; top: 0; padding: 2px 8px; border-radius: 10px; background: rgba(10,14,22,.75); color: #ffd166; font-size: 12px; font-weight: 650; border: 1px solid rgba(255,209,102,.5); margin: -28px 0 0 -16px; white-space: nowrap; pointer-events: auto; }
 button.globo-rotulo { cursor: pointer; }
 .globo-rotulo-planeta { color: #dfe4ea; border-color: rgba(255,255,255,.2); margin: 0 0 0 -20px; pointer-events: none; }
+.globo-cidades { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.globo-cidade { position: absolute; left: 0; top: 0; margin: -7px 0 0 6px; padding-left: 8px; font-size: 12px; font-weight: 600; color: #f3f5f8; text-shadow: 0 0 3px #000, 0 1px 2px #000; white-space: nowrap; }
+.globo-cidade::before { content: ''; position: absolute; left: 0; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
+.globo-relogio { font-size: 12px; color: #b7c0c9; font-variant-numeric: tabular-nums; margin: 2px 0 0; }
+.globo-sistema-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; pointer-events: none; }
+.globo-sistema-controles > * { pointer-events: auto; }
+.globo-velocidades button { font-size: 12px; }
+.globo-data-sistema { margin: 0; font-size: 13px; color: #dfe4ea; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
 .globo.com-espaco .globo-botoes { top: 108px; }

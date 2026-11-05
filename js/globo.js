@@ -11,7 +11,9 @@
 //   3. carregamento progressivo 6. camadas de dados e linha do tempo                        9. laço de animação e qualidade
 import * as THREE from '../vendor/three/three.module.min.js';
 import { el, fmt, prefs, mostrarInfo, linkExterno } from './ui.js';
-import { buscarManifest, buscarCampo, buscarSatelite, lerPontoGfs, buscarPonto, textoCodigoTempo, valorDoByte } from './globo-dados.js';
+import { buscarManifest, buscarCampo, buscarSatelite, lerPontoGfs, buscarPonto, textoCodigoTempo, valorDoByte, amostrar } from './globo-dados.js';
+import { criarRegiao } from './globo-regiao.js';
+import { CIDADES } from './globo-cidades.js';
 import { pontoSubsolar, pontoSublunar } from './globo-astro.js';
 import { valido, direcaoTexto, partesLocais } from './analise.js';
 
@@ -19,7 +21,7 @@ import { valido, direcaoTexto, partesLocais } from './analise.js';
 
 const RAD = Math.PI / 180;
 const RAIO = 1;
-const DIST = { min: 1.12, inicial: 2.7, max: 12 };
+const DIST = { min: 1.004, cidade: 1.08, inicial: 2.7, max: 12 }; // raio da Terra = 1; min: ~25 km de altura; cidade: ~500 km
 const MOVIMENTO_REDUZIDO = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const CELULAR = matchMedia('(pointer: coarse)').matches;
 
@@ -73,6 +75,7 @@ export function abrirGlobo(secao, estadoApp) {
   ajustarTamanho();
   G.ultimoQuadro = performance.now();
   if (!G.anim) G.anim = requestAnimationFrame(laco);
+  if (!G.verificador) G.verificador = setInterval(verificarAtualizacao, VERIFICA_MS);
 }
 
 /** Para o laço de animação ao sair da aba (a cena fica em memória para voltar na hora). */
@@ -115,7 +118,7 @@ async function carregarTudo() {
     // chegada: o globo inteiro aparece e a câmera desce suavemente até o local do usuário (Rio Grande do Sul por padrão)
     const l = G.estadoApp?.local;
     G.cam.dist = distanciaQueCabe(); G.cam.lat = (l?.lat ?? -29.7) * 0.6; G.cam.lon = (l?.lon ?? -51.1) + 35;
-    irPara(l?.lat ?? -29.7, l?.lon ?? -51.1, DIST.inicial, 2200);
+    irPara(l?.lat ?? -29.7, l?.lon ?? -51.1, l ? DIST.cidade : DIST.inicial, 2600); // com localização, chega já na cidade
     G.chegou = true;
   } catch { mostrarAviso('Não foi possível carregar a imagem da Terra. Verifique a conexão e toque em atualizar.', true); return; }
   textura('vendor/texturas/terra-dia-4096.jpg', { cor: true }).then((t) => { u.tDia.value = t; }).catch(() => {});
@@ -123,6 +126,9 @@ async function carregarTudo() {
   textura('vendor/texturas/terra-noite-2048.jpg', { cor: true }).then((t) => { u.tNoite.value = t; u.temNoite.value = 1; }).catch(() => {});
   textura('vendor/texturas/terra-mascaras-2048.png').then((t) => { u.tMascaras.value = t; u.temMascaras.value = 1; }).catch(() => {});
   await carregarDados();
+  // com localização, o painel do seu local já abre sozinho: o globo chega mostrando o tempo onde você está
+  const l = G.estadoApp?.local;
+  if (l && !G.tocado && G.aberto) { G.tocado = { lat: l.lat, lon: l.lon }; mostrarPontoTocado(l.lat, l.lon, false); }
 }
 
 /** Lê o manifest do branch globo-dados e carrega a hora mais próxima de agora. */
@@ -136,7 +142,7 @@ async function carregarDados() {
     G.horaAgora = manifest.gfs.horas.reduce((m, x) => (Math.abs(x - h) < Math.abs(m - h) ? x : m), manifest.gfs.horas[0]);
     G.hora = G.horaAgora;
     montarLinhaDoTempo();
-    await Promise.all([carregarNuvens(G.hora), carregarCamada(G.camada, G.hora)]);
+    await Promise.all([carregarNuvens(G.hora), carregarCamada(G.camada, G.hora), atualizarTemperaturasCidades()]);
     marcarCiclones();
     atualizarNotaFonte();
   } catch (e) {
@@ -201,8 +207,9 @@ const VERTEX_TERRA = /* glsl */`
   }`;
 
 const FRAGMENT_TERRA = /* glsl */`
-  uniform sampler2D tDia, tNoite, tNormal, tMascaras, tNuvens, tCamada, tEscala;
-  uniform float temNormal, temNoite, temMascaras, temNuvens, temCamada, opacidade, raiz, isobaras;
+  uniform sampler2D tDia, tNoite, tNormal, tMascaras, tNuvens, tCamada, tEscala, tRegiao;
+  uniform float temNormal, temNoite, temMascaras, temNuvens, temCamada, opacidade, raiz, isobaras, temRegiao;
+  uniform vec2 regLon, regMerc; // mosaico da região (globo-regiao.js): longitudes e limites Mercator do mosaico
   uniform vec3 sol, olho; uniform vec2 faixaCanal, faixaCor, desloc; uniform int canal;
   varying vec2 vUv; varying vec3 vN; varying vec3 vP;
   uniform vec2 grade; // colunas e linhas da grade de dados (coluna 0 em -180°, linha 0 em +90°, última linha em -90°)
@@ -240,6 +247,17 @@ const FRAGMENT_TERRA = /* glsl */`
       cor += pow(luzes, vec3(0.8)) * vec3(1.0, 0.88, 0.7) * noite * 3.2 * (1.0 - 0.6 * nuvemAqui);
     }
     cor += cDia * vec3(0.18, 0.25, 0.4) * noite * 0.7;
+    if (temRegiao > 0.0) { // mapa detalhado da região sob a câmera (zoom próximo), em Mercator
+      float lon = (vUv.x - 0.5) * 360.0, lat = (vUv.y - 0.5) * 3.14159265;
+      float u = (lon - regLon.x) / (regLon.y - regLon.x);
+      float merc = log(tan(0.78539816 + lat * 0.5));
+      float w = (regMerc.x - merc) / (regMerc.x - regMerc.y);
+      if (u > 0.0 && u < 1.0 && w > 0.0 && w < 1.0) {
+        vec3 mapa = texture2D(tRegiao, vec2(u, w)).rgb;
+        float borda = smoothstep(0.0, 0.06, u) * smoothstep(0.0, 0.06, 1.0 - u) * smoothstep(0.0, 0.06, w) * smoothstep(0.0, 0.06, 1.0 - w);
+        cor = mix(cor, mapa * (0.5 + 0.5 * max(lamb, 0.0)), temRegiao * borda);
+      }
+    }
     if (temCamada > 0.5) {
       vec2 ud = uvDados(vUv);
       vec4 px = texture2D(tCamada, ud);
@@ -308,6 +326,7 @@ function montarCena() {
     sol: { value: new THREE.Vector3(1, 0, 0) }, olho: { value: new THREE.Vector3() }, faixaCanal: { value: new THREE.Vector2(0, 1) }, faixaCor: { value: new THREE.Vector2(0, 1) }, grade: { value: new THREE.Vector2(720, 361) },
     desloc: { value: new THREE.Vector2(0.0025, 0.0025) },
   };
+  G.regiao = criarRegiao(THREE, uniTerra);
   G.terra = new THREE.Mesh(new THREE.SphereGeometry(RAIO, seg[0], seg[1]), new THREE.ShaderMaterial({ uniforms: uniTerra, vertexShader: VERTEX_TERRA, fragmentShader: FRAGMENT_TERRA }));
   G.cena.add(G.terra);
 
@@ -410,6 +429,9 @@ function instanteMostrado() {
 
 function posicionarCamera() {
   const c = G.cam;
+  // plano próximo proporcional à altura: perto da superfície (25 km) a Terra não pode ser cortada
+  const near = Math.max(0.0004, Math.min(0.05, (c.dist - 1) * 0.25));
+  if (Math.abs(near - G.camera.near) > near * 0.25) { G.camera.near = near; G.camera.updateProjectionMatrix(); }
   latLonVec(c.lat, c.lon, c.dist, G.camera.position);
   G.camera.up.set(0, 1, 0);
   G.camera.lookAt(0, 0, 0);
@@ -429,7 +451,7 @@ function configurarGestos() {
   const cv = G.dom.canvas;
   const ponteiros = new Map();
   let ultimo = null, pinca = null, toque = null, ultimoToque = 0;
-  const velAng = () => 0.22 * Math.max(0.08, (G.cam.dist - 1) / (DIST.inicial - 1));
+  const velAng = () => 0.22 * Math.max(0.0015, (G.cam.dist - 1) / (DIST.inicial - 1)); // graus por pixel, proporcional à altura
   cv.addEventListener('pointerdown', (e) => {
     cv.setPointerCapture(e.pointerId);
     ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -443,7 +465,7 @@ function configurarGestos() {
     if (ponteiros.size === 2 && pinca) {
       const [a, b] = [...ponteiros.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
-      if (d > 0) definirDist(pinca.dist * (pinca.d / d));
+      if (d > 0) definirDist(1 + (pinca.dist - 1) * (pinca.d / d)); // a pinça escala a altura, não a distância ao centro
       return;
     }
     if (ponteiros.size !== 1 || !ultimo) return;
@@ -468,13 +490,13 @@ function configurarGestos() {
     }
   };
   cv.addEventListener('pointerup', soltar); cv.addEventListener('pointercancel', soltar);
-  cv.addEventListener('wheel', (e) => { e.preventDefault(); definirDist(G.cam.dist * Math.exp(e.deltaY * 0.0012)); G.autoGira = false; }, { passive: false });
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); definirDist(1 + (G.cam.dist - 1) * Math.exp(e.deltaY * 0.0012)); G.autoGira = false; }, { passive: false });
   cv.addEventListener('dblclick', (e) => e.preventDefault());
   cv.addEventListener('keydown', (e) => {
     const passo = 5;
     if (e.key === 'ArrowLeft') G.cam.lon -= passo; else if (e.key === 'ArrowRight') G.cam.lon += passo;
     else if (e.key === 'ArrowUp') G.cam.lat = Math.min(85, G.cam.lat + passo); else if (e.key === 'ArrowDown') G.cam.lat = Math.max(-85, G.cam.lat - passo);
-    else if (e.key === '+' || e.key === '=') definirDist(G.cam.dist / 1.2); else if (e.key === '-') definirDist(G.cam.dist * 1.2);
+    else if (e.key === '+' || e.key === '=') definirDist(1 + (G.cam.dist - 1) / 1.2); else if (e.key === '-') definirDist(1 + (G.cam.dist - 1) * 1.2);
     else return;
     e.preventDefault(); G.autoGira = false;
   });
@@ -486,7 +508,7 @@ function distanciaQueCabe() {
   return Math.min(DIST.max, 1 / Math.sin(Math.min(fovV, fovH) / 2 * 0.86));
 }
 
-function definirDist(d) { G.cam.dist = Math.max(DIST.min, Math.min(DIST.max, d)); }
+function definirDist(d) { G.cam.dist = Math.max(DIST.min, Math.min(G.sistema ? 24 : DIST.max, d)); } // no sistema solar a câmera pode ir mais longe
 
 /** Ponto da esfera sob a posição da tela (interseção analítica raio x esfera), ou null fora da Terra. */
 function pontoSob(cx, cy) {
@@ -505,7 +527,7 @@ function pontoSob(cx, cy) {
 function aproximar(cx, cy) {
   const p = pontoSob(cx, cy);
   if (!p) return;
-  irPara(p.lat, p.lon, Math.max(DIST.min, G.cam.dist * 0.55), 700);
+  irPara(p.lat, p.lon, Math.max(DIST.min, 1 + (G.cam.dist - 1) * 0.45), 700);
 }
 
 // ------------------------------------------------------------------ 6. camadas de dados e linha do tempo
@@ -565,7 +587,8 @@ async function definirHora(h) {
   if (!G.manifest?.gfs?.horas?.includes(h)) return;
   G.hora = h;
   atualizarRotuloHora();
-  await Promise.all([carregarNuvens(h), carregarCamada(G.camada, h)]);
+  await Promise.all([carregarNuvens(h), carregarCamada(G.camada, h), atualizarTemperaturasCidades()]);
+  atualizarRelogio();
   if (G.tocado) mostrarPontoTocado(G.tocado.lat, G.tocado.lon, true);
 }
 
@@ -716,19 +739,110 @@ function montarDom(secao) {
   const linha = el('div', { class: 'globo-linha', hidden: true }, rotuloHora, faixa, tocar);
   const painel = el('div', { class: 'globo-painel', hidden: true, role: 'dialog', 'aria-label': 'Tempo no ponto tocado' });
   const botoes = el('div', { class: 'globo-botoes' },
-    el('button', { type: 'button', text: 'Minha posição', 'aria-label': 'Centralizar na minha posição', onclick: () => { const l = G.estadoApp?.local; if (l) irPara(l.lat, l.lon, Math.min(G.cam.dist, 2.2)); } }),
-    el('button', { type: 'button', text: '+', 'aria-label': 'Aproximar', onclick: () => irPara(G.cam.lat, G.cam.lon, G.cam.dist / 1.5, 400) }),
-    el('button', { type: 'button', text: '−', 'aria-label': 'Afastar', onclick: () => irPara(G.cam.lat, G.cam.lon, G.cam.dist * 1.5, 400) }),
+    el('button', { type: 'button', text: 'Minha posição', 'aria-label': 'Centralizar na minha posição', onclick: () => { const l = G.estadoApp?.local; if (l) irPara(l.lat, l.lon, Math.min(G.cam.dist, DIST.cidade)); } }),
+    el('button', { type: 'button', text: '+', 'aria-label': 'Aproximar', onclick: () => irPara(G.cam.lat, G.cam.lon, Math.max(DIST.min, 1 + (G.cam.dist - 1) / 1.8), 400) }),
+    el('button', { type: 'button', text: '−', 'aria-label': 'Afastar', onclick: () => irPara(G.cam.lat, G.cam.lon, Math.min(DIST.max, 1 + (G.cam.dist - 1) * 1.8), 400) }),
     el('button', { type: 'button', text: 'Espaço', class: 'globo-btn-espaco', 'aria-pressed': 'false', onclick: alternarEspaco }),
     el('button', { type: 'button', text: '?', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda }));
-  const rodape = el('div', { class: 'globo-rodape' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, sol, ciclones));
-  const raiz = el('div', { class: 'globo' }, canvas, el('div', { class: 'globo-topo' }, chips), botoes, aviso, painel, rodape);
+  const relogio = el('p', { class: 'globo-relogio', 'aria-live': 'off' });
+  const rodape = el('div', { class: 'globo-rodape' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, relogio, sol, ciclones));
+  const cidades = el('div', { class: 'globo-cidades', 'aria-hidden': 'true' });
+  const raiz = el('div', { class: 'globo' }, canvas, cidades, el('div', { class: 'globo-topo' }, chips), botoes, aviso, painel, rodape);
   secao.append(raiz);
-  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, sol, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes };
+  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, sol, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
+  montarCidades();
   G.mostrarPainel = mostrarPainelTexto; G.modoSistema = modoSistema;
   window.__globo = G; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
   montarLegenda(CAMADAS.find((c) => c.id === G.camada), null);
+}
+
+// ---------- cidades com temperatura ----------
+
+function montarCidades() {
+  G.cidades = CIDADES.map((c) => {
+    const elc = el('span', { class: 'globo-cidade', hidden: true, text: c.n });
+    G.dom.cidades.append(elc);
+    return { ...c, el: elc, pos: latLonVec(c.lat, c.lon, RAIO * 1.002), temp: null };
+  });
+}
+
+/** Temperatura de cada cidade pelo campo do GFS da hora mostrada (sem chamadas de rede: o campo já está em memória). */
+async function atualizarTemperaturasCidades() {
+  if (!G.manifest?.gfs || !G.cidades) return;
+  const hora = G.hora;
+  let campo = null;
+  try { campo = await buscarCampo(G.manifest, 'campo', hora); } catch { return; }
+  if (G.hora !== hora) return;
+  for (const c of G.cidades) {
+    const t = amostrar(campo, 0, c.lat, c.lon);
+    c.temp = valido(t) ? Math.round(t) : null;
+    c.el.textContent = c.temp === null ? c.n : `${c.n} ${c.temp}°`;
+  }
+}
+
+/** Projeta as cidades visíveis (hemisfério voltado à câmera, nível conforme a distância) para rótulos sobre o canvas. */
+function posicionarCidades() {
+  if (!G.cidades) return;
+  const d = G.cam.dist;
+  const nivel = G.sistema || G.espacoAberto ? 0 : d > 3.6 ? 1 : d > 1.5 ? 2 : 3;
+  const r = G.dom.canvas.getBoundingClientRect();
+  const olho = G.camera.position, v = new THREE.Vector3();
+  const ocupados = [];
+  for (const c of G.cidades) {
+    let mostra = c.nivel <= nivel;
+    if (mostra) { v.copy(olho).sub(c.pos); mostra = c.pos.dot(v) > 0.18 * c.pos.length() * v.length(); } // só o lado visível, longe da borda
+    if (mostra) {
+      v.copy(c.pos).project(G.camera);
+      const x = (v.x + 1) / 2 * r.width, y = (1 - v.y) / 2 * r.height;
+      mostra = v.z < 1 && x > 8 && y > 56 && x < r.width - 8 && y < r.height - 150 && !(x > r.width - 120 && y < 400); // fora dos botões da direita
+      if (mostra && ocupados.some((o) => Math.abs(o.x - x) < 70 && Math.abs(o.y - y) < 18)) mostra = c.nivel < 3 && d > 1.5 ? false : mostra && !ocupados.some((o) => Math.abs(o.x - x) < 40 && Math.abs(o.y - y) < 14);
+      if (mostra) { ocupados.push({ x, y }); c.el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)`; }
+    }
+    c.el.hidden = !mostra;
+  }
+}
+
+// ---------- tempo real: relógio e verificação de dados novos ----------
+
+const VERIFICA_MS = 60000; // a cada minuto: hora "agora" da linha do tempo; a cada 5 min: manifest novo (rodada ou satélite)
+
+function atualizarRelogio() {
+  const agora = new Date();
+  const hh = String(agora.getHours()).padStart(2, '0'), mm = String(agora.getMinutes()).padStart(2, '0'), ss = String(agora.getSeconds()).padStart(2, '0');
+  G.dom.relogio.textContent = G.hora === G.horaAgora || G.hora === null ? `Tempo real · ${hh}:${mm}:${ss} · Sol, Lua e satélites na posição de agora` : `Mostrando a previsão para ${G.dom.rotuloHora.textContent}; o Sol acompanha esse horário`;
+}
+
+function horaMaisProxima(manifest) {
+  const h = Math.round((Date.now() - Date.parse(manifest.gfs.rodada)) / 3600000 / 3) * 3;
+  return manifest.gfs.horas.reduce((m, x) => (Math.abs(x - h) < Math.abs(m - h) ? x : m), manifest.gfs.horas[0]);
+}
+
+/** Chamado a cada minuto com a aba aberta: avança a hora "agora" e, a cada 5 min, procura rodada ou satélite novos. */
+async function verificarAtualizacao() {
+  if (!G.aberto || document.hidden || !G.manifest?.gfs) return;
+  const agora = Date.now();
+  if (agora - (G.ultimaVerificacao || 0) >= 5 * VERIFICA_MS) {
+    G.ultimaVerificacao = agora;
+    try {
+      const { manifest, antigo } = await buscarManifest();
+      const mudou = manifest.gfs?.rodada !== G.manifest.gfs.rodada || manifest.satelite?.instante !== G.manifest.satelite?.instante || manifest.gerado !== G.manifest.gerado;
+      if (!antigo && mudou) {
+        const estavaAgora = G.hora === G.horaAgora;
+        G.manifest = manifest; G.manifestAntigo = false; G.satelite = null;
+        G.horaAgora = horaMaisProxima(manifest);
+        if (estavaAgora || !manifest.gfs.horas.includes(G.hora)) G.hora = G.horaAgora;
+        montarLinhaDoTempo();
+        await Promise.all([carregarNuvens(G.hora), carregarCamada(G.camada, G.hora), atualizarTemperaturasCidades()]);
+        marcarCiclones(); atualizarNotaFonte();
+        if (G.tocado) mostrarPontoTocado(G.tocado.lat, G.tocado.lon, true);
+        mostrarAviso('Dados novos carregados.', false);
+        return;
+      }
+    } catch { /* sem rede agora: tenta de novo em 5 min */ }
+  }
+  const h = horaMaisProxima(G.manifest);
+  if (h !== G.horaAgora) { const estavaAgora = G.hora === G.horaAgora; G.horaAgora = h; if (estavaAgora) await definirHora(h); else atualizarRotuloHora(); }
 }
 
 function ajustarTamanho() {
@@ -766,6 +880,7 @@ function atualizarNotaFonte() {
   const m = G.manifest;
   if (m?.gfs?.rodada) partes.push(`NOAA GFS · ${fmt.horaMin(Date.parse(m.gfs.rodada), off)}`);
   if (G.camada === 'nuvens' && G.nuvens?.userData?.satelite && m?.satelite?.instante) partes.push(`NASA GIBS · ${fmt.horaMin(Date.parse(m.satelite.instante), off)}`);
+  if (G.regiao?.estado.ativa) partes.push('Mapa © OpenStreetMap');
   if (G.manifestAntigo) partes.push('dados guardados, podem estar desatualizados');
   if (!partes.length) partes.push(G.erroDados ? 'sem dados de tempo' : 'carregando dados…');
   G.dom.fonte.textContent = partes.join(' · ');
@@ -931,7 +1046,7 @@ function modoSistema(ligar) {
   G.dom.rodape.hidden = ligar; G.dom.chips.parentElement.hidden = ligar;
   G.marcadorUsuario.visible = !ligar && !!G.estadoApp?.local;
   fecharPainel();
-  if (ligar) { G.camAntes = { ...G.cam }; G.cam.lat = 58; G.cam.dist = 10.5; G.animCam = null; }
+  if (ligar) { G.camAntes = { ...G.cam }; G.cam.lat = 52; G.cam.dist = 13; G.animCam = null; }
   else if (G.camAntes) { G.cam.lat = G.camAntes.lat; G.cam.lon = G.camAntes.lon; G.cam.dist = Math.min(G.camAntes.dist, 5.5); G.animCam = null; }
 }
 
@@ -955,11 +1070,24 @@ function laco(agora) {
     }
   }
   if (G.quadro % 30 === 0 && !G.sistema) atualizarAstros();
+  if (G.quadro % 4 === 0) posicionarCidades();
+  if (G.quadro % 30 === 0) atualizarRelogio();
   if (G.espaco && G.espacoAberto) G.espaco.atualizarEspaco(agora);
   if (G.camada === 'pressao') G.terra.material.uniforms.isobaras.value = Math.max(0, Math.min(1, (2.6 - c.dist) / 0.8));
+  if (!G.sistema) {
+    const antes = G.regiao.estado.ativa;
+    G.regiao.atualizar(c, agora);
+    if (antes !== G.regiao.estado.ativa) atualizarNotaFonte();
+    // a esfera de nuvens fica a 40 km de altura: perto do chão ela some aos poucos, para não tapar o mapa nem cortar a câmera
+    const base = CAMADAS.find((x) => x.id === G.camada)?.arquivo ? 0.3 : 1;
+    G.nuvens.material.uniforms.opacNuvem.value = base * Math.max(0, Math.min(1, (c.dist - 1.03) / 0.15));
+  }
   posicionarCamera();
   const pulso = (Math.sin(agora / 500) + 1) / 2;
-  if (!G.sistema) for (const m of [G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) { const p = m.getObjectByName('pulso'); if (p) { p.scale.setScalar(1 + pulso * 1.6); p.material.opacity = 0.6 * (1 - pulso); } }
+  if (!G.sistema) {
+    const esc = Math.max(0.012, Math.min(1, (c.dist - 1) / (DIST.inicial - 1))); // marcadores encolhem com a aproximação (tamanho fixo na tela)
+    for (const m of [G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) { m.scale.setScalar(esc); const p = m.getObjectByName('pulso'); if (p) { p.scale.setScalar(1 + pulso * 1.6); p.material.opacity = 0.6 * (1 - pulso); } }
+  }
   if (G.particulas) animarParticulas(dt);
   G.renderer.render(G.cena, G.camera);
   G.quadro++;
