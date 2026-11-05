@@ -433,6 +433,9 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .resumo-agora { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 2px; }
 .resumo-agora b { font-size: 40px; font-weight: 640; letter-spacing: -.03em; line-height: 1; }
 .resumo-agora .rot-agora { font-size: 13px; color: var(--fraco); font-weight: 600; }
+.resumo-agora .sens-agora { margin-left: auto; font-size: 14px; color: var(--fraco); font-weight: 600; }
+.resumo-agora .sens-agora b { font-size: 22px; color: var(--texto); letter-spacing: -.02em; }
+.bloco-t .sens-max { margin-top: 2px; font-size: 11.5px; }
 .agora.oculto { visibility: hidden; }
 
 .resumo-chuva .det.resto { font-size: 16px; font-weight: 600; color: var(--chuva-txt); }
