@@ -619,10 +619,15 @@ button.globo-rotulo { cursor: pointer; }
 .globo-relogio { font-size: 12px; color: #b7c0c9; font-variant-numeric: tabular-nums; margin: 2px 0 0; }
 .globo-sistema-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; pointer-events: none; }
 .globo-sistema-controles > * { pointer-events: auto; }
-.globo-velocidades button { font-size: 12px; }
+.globo-recolhivel { transition: opacity .45s ease; }
+.globo.imersivo .globo-recolhivel { opacity: 0; }
+.globo.imersivo .globo-recolhivel, .globo.imersivo .globo-recolhivel * { pointer-events: none !important; }
+.globo-tempo, .globo-hoje { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; }
+.globo-tempo[aria-pressed="true"] { border-color: #ffd166; color: #ffe1a0; }
+.globo-hoje[hidden] { display: none; }
 .globo-visao-geral { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(236,238,240,.92); color: #0b0f16; font-size: 13px; font-weight: 680; }
 .globo-visao-geral[hidden] { display: none; }
-.globo-sistema-topo { display: flex; align-items: center; gap: 8px; align-self: stretch; pointer-events: none; }
+.globo-sistema-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; align-self: stretch; pointer-events: none; }
 .globo-sistema-topo > * { pointer-events: auto; }
 .globo-livre { margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
 .globo-livre[aria-pressed="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
