@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.6.2';
+const VERSAO = '1.7.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -714,7 +714,7 @@ let globoPreCarregado = false;
 function preCarregarGlobo() {
   if (globoPreCarregado || navigator.connection?.saveData) return;
   globoPreCarregado = true;
-  document.head.append(el('link', { rel: 'modulepreload', href: new URL('./globo.js', import.meta.url).href }));
+  for (const m of ['./globo.js', './globo-espaco.js']) document.head.append(el('link', { rel: 'modulepreload', href: new URL(m, import.meta.url).href }));
 }
 
 function renderSemPrevisao() {

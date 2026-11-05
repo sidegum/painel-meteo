@@ -171,6 +171,25 @@ export async function buscarSondas(manifest) {
   return { gerado: String(j?.gerado || '').slice(0, 30), sondas };
 }
 
+/**
+ * Luas (elementos osculantes do JPL Horizons em relação ao planeta), corpos menores (JPL SBDB) e as populações dos
+ * cinturões. Ângulos em graus, a em UA, n em graus/dia, épocas em ms. Só entram números finitos.
+ * @returns {Promise<{gerado:string, luas:Object, pequenos:Object, populacoes:Object<string,number[][]>}>}
+ */
+export async function buscarCorpos(manifest) {
+  const versao = manifest?.corpos?.gerado || new Date().toISOString().slice(0, 10);
+  const r = await fetchComTempo(BASE + 'corpos.json?g=' + encodeURIComponent(versao), 30000);
+  const j = await r.json();
+  const fin = (v) => typeof v === 'number' && Number.isFinite(v);
+  const elementos = (o) => (o && fin(o.e) && fin(o.i) && fin(o.om) && fin(o.w) && fin(o.epoca) && (fin(o.a) || fin(o.q)) ? o : null);
+  const filtrar = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => /^[a-z0-9]{2,20}$/.test(k) && elementos(v)));
+  const populacoes = {};
+  for (const [k, l] of Object.entries(j?.populacoes || {})) {
+    if (/^[a-z]{2,20}$/.test(k) && Array.isArray(l)) populacoes[k] = l.filter((p) => Array.isArray(p) && p.length === 7 && p.every(fin));
+  }
+  return { gerado: String(j?.gerado || '').slice(0, 30), luas: filtrar(j?.luas), pequenos: filtrar(j?.pequenos), populacoes };
+}
+
 // ---------- leitura de valores ----------
 
 /** Valor físico de um byte de canal pela faixa do manifest (inverso da quantização do script). */

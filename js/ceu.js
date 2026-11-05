@@ -97,7 +97,7 @@ export function rumo(az) { return ['norte', 'nordeste', 'leste', 'sudeste', 'sul
 export function alturaTexto(alt) { return alt >= 70 ? 'quase a pino' : alt >= 45 ? 'alto no céu' : alt >= 20 ? 'a meia altura' : 'baixo no horizonte'; }
 
 /** Brilho a olho nu pela magnitude (quanto menor, mais brilhante). */
-export function brilhoTexto(mag) { return mag <= -3 ? 'brilha muito, mais que qualquer estrela' : mag <= -1 ? 'muito brilhante' : mag <= 1 ? 'brilhante como as estrelas mais fortes' : mag <= 3 ? 'visível como uma estrela comum' : 'fraco, só com céu bem escuro'; }
+export function brilhoTexto(mag) { return mag <= -3 ? 'brilha muito, mais que qualquer estrela' : mag <= -1 ? 'muito brilhante' : mag <= 1 ? 'brilhante como as estrelas mais fortes' : mag <= 3 ? 'visível como uma estrela comum' : mag <= 4.5 ? 'visível longe das luzes fortes da cidade' : 'fraca, só com céu bem escuro'; }
 
 /** Posição de um corpo visto do observador (com refração), em graus. */
 export function posicaoNoCeu(corpo, obs, t) {

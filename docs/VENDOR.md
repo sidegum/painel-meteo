@@ -13,7 +13,7 @@ Todas com versão fixa, baixadas do registro npm em 2026-11-03. Para atualizar, 
 | vendor/three/three.module.min.js | three 0.187.0 (build/three.module.js minificado com esbuild 0.25.10, só para a aba Globo) | MIT | f0b701b88055285086b2c913486b1230b74c298713780cfdfe69381ece446f43 |
 | vendor/satellite/satellite.min.js | satellite.js 7.1.0 (dist/index.js sem a variante WASM, empacotado com esbuild 0.25.10) | MIT | 895a4413217bce76c0e883e1cac3a39cdb673008fde7c3218f5d82af7b4e0752 |
 | vendor/astronomy/astronomy.min.js | astronomy-engine 2.1.19 (esm/astronomy.js minificado com esbuild 0.25.10; posições de Sol, Lua, planetas e estrelas, eclipses, fases) | MIT | 9f49bb125ed26ae692174afc51657e365c41590c168a5889dab13695b1aeb2ad |
-| vendor/ceu/estrelas.json | d3-celestial (Olaf Frohn): stars.6.json, starnames.json e constellations.lines.json reduzidos a 5.044 estrelas até magnitude 6, 99 nomes (conferidos com a lista da IAU) e linhas das 88 constelações | BSD-3-Clause | 2b1feb84986b7bc9ea5e4c4bf4df5bb5c5078ca710abd1bec76c351c1785f256 |
+| vendor/ceu/estrelas.json | HYG Database v4.1 (David Nash; Hipparcos, Yale Bright Star e Gliese): 8.920 estrelas até magnitude 6,5 com movimento próprio até 2026,0, montadas por `scripts/globo/montar-estrelas.py`; linhas das 88 constelações do d3-celestial (Olaf Frohn) | CC BY-SA 4.0 (HYG, `LICENSE-HYG`) e BSD-3-Clause (d3-celestial, `LICENSE-d3-celestial`) | 9ba1c86c4e10159da77779c262bfbc5d1f83f346e13dc6c37b7a08aa3b9f51d3 |
 
 Texturas da Terra (NASA, domínio público): ver `vendor/texturas/LICENCA.md`. Baixadas em 2026-11-05.
 

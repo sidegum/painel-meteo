@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       so:
-        description: 'Só algumas partes (gfs,satelite,ciclones,satelites,sondas); vazio = todas'
+        description: 'Só algumas partes (gfs,satelite,ciclones,satelites,sondas,corpos); vazio = todas'
         required: false
         default: ''
   push:

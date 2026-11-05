@@ -79,16 +79,23 @@ export function texturaSol(THREE) {
   const t = textura(THREE, cv); cache.set('sol', t); return t;
 }
 
-/** Faixa radial dos anéis de Saturno, com a divisão de Cassini. */
+/**
+ * Faixa radial dos anéis de Saturno pelos raios reais (km, do anel C interno à borda do anel A; u = 0 a 1 nesse
+ * intervalo): anel C fraco, anel B denso, divisão de Cassini, anel A com a divisão de Encke. Raios: NASA/JPL.
+ */
+export const ANEL_SATURNO_KM = [74658, 136775];
 export function texturaAnel(THREE) {
   if (cache.has('anel')) return cache.get('anel');
-  const W = 256, cv = canvas(W, 1);
+  const W = 512, cv = canvas(W, 1), [r0, r1] = ANEL_SATURNO_KM;
   const ctx = cv.getContext('2d'), img = ctx.createImageData(W, 1), d = img.data;
+  const FAIXAS = [[74658, 0.18, [170, 160, 140]], [92000, 0.92, [232, 214, 178]], [117580, 0.07, [120, 110, 95]],
+    [122170, 0.62, [214, 198, 165]], [133423, 0.05, [120, 110, 95]], [133745, 0.58, [210, 194, 160]]];
   let s = 41; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
   for (let x = 0; x < W; x++) {
-    const u = x / W; const divisao = u > 0.62 && u < 0.68 ? 0.1 : 1;
-    const a = (u < 0.08 ? u / 0.08 : u > 0.95 ? (1 - u) / 0.05 : 1) * divisao * (0.55 + 0.45 * rnd());
-    d[x * 4] = 225; d[x * 4 + 1] = 205; d[x * 4 + 2] = 165; d[x * 4 + 3] = Math.round(a * 230);
+    const km = r0 + (x + 0.5) / W * (r1 - r0);
+    const [, opac, cor] = FAIXAS.filter((f) => f[0] <= km).pop();
+    const a = opac * (0.8 + 0.2 * rnd());
+    d[x * 4] = cor[0]; d[x * 4 + 1] = cor[1]; d[x * 4 + 2] = cor[2]; d[x * 4 + 3] = Math.round(a * 255);
   }
   ctx.putImageData(img, 0, 0);
   const t = textura(THREE, cv); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
