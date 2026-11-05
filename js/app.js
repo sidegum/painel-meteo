@@ -5,7 +5,7 @@ import {
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, ancorarTemperatura, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
-  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico,
+  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor,
 } from './analise.js';
 import {
   buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.25';
+const VERSAO = '1.2.26';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -1084,10 +1084,9 @@ function proximasHoras() {
   return secao('Próximas horas', 'Chance de chuva, volume, vento e rajada (km/h).', lista);
 }
 
+// sensação medida: a mesma fórmula da prevista (js/analise.js, sensacaoTermica)
 function apparente(t, rh, kmh) {
-  if (![t, rh, kmh].every(valido)) return null;
-  const e = (rh / 100) * 6.105 * Math.exp((17.27 * t) / (237.7 + t));
-  return t + 0.33 * e - 0.7 * (kmh / 3.6) - 4;
+  return valido(t) && valido(rh) ? sensacaoTermica(t, (rh / 100) * pressaoVapor(t), kmh) : null;
 }
 
 function instrumentos() {
