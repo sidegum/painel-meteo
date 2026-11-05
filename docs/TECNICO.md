@@ -459,6 +459,10 @@ A ordem é:
 - **Subdescrições**: um bloco autoexplicativo não leva texto abaixo do título. Ficam só a nota de fonte ("Fonte · Horário") onde ela existe e avisos que mudam a leitura do dado, como `notaConcordancia` (sem ensemble, a fração de modelos é concordância, não probabilidade).
 - **Modelos** (`renderModelos`, `resumoAprendizado`, `tabelaAcerto`): os pesos atuais, o que já foi aprendido e o acerto por modelo e antecedência.
 - **El Niño** (`renderElNino`, `painelEnso`, `intensidade`, `barrasProb`, `comparacaoHistorica`): os índices ONI e RONI, a discussão do CPC, as probabilidades do CPC e do IRI, e a estimativa diária do Niño 3.4.
+  - Desde a 1.8.5, a aba mostra também o que o El Niño faz no RS.
+  - **O que o El Niño costuma causar no RS** (`efeitosNoRs`): o padrão de chuva no estado (`ENSO_RS_EFEITOS`, de Fontana e Berlato 1997 e do resumo do CPTEC/INPE). Com episódio em curso, inclui a tendência para a primavera do ano de início e para abril a junho do ano seguinte. As fontes ficam em "De onde vem isso".
+  - **Nas notícias do RS** (`noticiasRs`): até 5 notícias dos últimos 45 dias, com título, veículo, data e link, marcadas como conteúdo de terceiros. Vêm da parte `noticias` de `atualizarEnso` (Worker 1.2.0 e GitHub Actions). A busca RSS do Google Notícias (`URL_NOTICIAS_ENSO`) exige "El Niño", o RS e um termo de tempo severo, nos últimos 30 dias. `parseNoticias` tira o veículo do título, aceita só links `https://news.google.com/`, descarta repetidas e devolve as 8 mais recentes.
+  - **El Niños marcantes e o que houve no RS** (`comparacaoHistorica` com `eventosEnso`): os episódios fortes pelo pico do índice, mais os de `ENSO_RS_EPISODIOS` (1982, 1997, 2015 e 2023), com o que foi registrado no RS. Um ano pertence ao episódio mais forte que passa por ele. Esses textos são fixos e verificados; revisá-los a cada novo episódio forte.
 
 ### 5.6 Alertas
 
@@ -478,6 +482,7 @@ A ordem é:
   - Recolhe quando a página rola mais de 6 px para baixo depois da altura da barra. No Globo, recolhe também depois de 4 s sem toque na barra (`OCIOSO_GLOBO_MS`).
   - Volta ao rolar para cima, ao chegar ao topo ou ao trocar de aba (`cabecalho.aoMudarAba`).
   - A alça `#alca-cabeca`, centrada na borda de baixo da barra, mostra e oculta a qualquer momento. Mostrada pela alça, a barra não se recolhe sozinha no Globo até a próxima troca de aba.
+  - No Globo (desde a 1.8.6), a página não rola: `body[data-aba=globo]` fica fixo do tamanho da janela, sem rodapé nem faixa de estado. Lá a barra só muda pela alça ou pelo tempo sem uso; o ouvinte de rolagem ignora essa aba.
   - Fora da tela, a barra perde a altura (`data-recolhida`). No Globo, o `body` deixa de reservar o espaço (`body[data-aba=globo][data-cab=oculta]`) e um evento `resize` avisa o globo para ocupar a tela.
 - Filtros com muitas opções usam `seletor()` (`js/ui.js`): um único botão com a opção atual, que abre a lista nativa do sistema. Hoje isso vale para a camada do mapa e para o gráfico "Hora a hora", que mostra um gráfico por vez (`prefs 'paineis-v2'` guarda o escolhido).
 - Ordem de Hoje: Próximas horas (com legenda chance, chuva, vento e rajada), Mapa, Medições agora, Previsto x medido, Hora a hora e Fontes de dados. Os títulos das telas são os mesmos das abas (Semana, não "Próximos 7 dias"). Na Amanhã, o bloco "Confiança" não tem mais a tabela de modelos, que fica na aba Modelos.

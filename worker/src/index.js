@@ -10,7 +10,7 @@
 // - INMET_TOKEN nunca aparece em respostas, erros ou logs.
 // - Nenhuma localização ou IP é gravado no KV ou em logs.
 
-const VERSAO = '1.1.1';
+const VERSAO = '1.2.0';
 
 export const DESTINOS = new Set([
   'apitempo.inmet.gov.br',
@@ -20,6 +20,7 @@ export const DESTINOS = new Set([
   'iri.columbia.edu',
   'previous-runs-api.open-meteo.com',
   'ensemble-api.open-meteo.com',
+  'news.google.com',
 ]);
 
 const USER_AGENT = 'painel-meteo-pessoal/1.0 (uso pessoal, nao comercial)';
@@ -543,6 +544,29 @@ export function parseIri(html) {
   return { publicado, forca };
 }
 
+// Notícias recentes do RS que citam o El Niño, pela busca RSS do Google Notícias (agrega GZH, g1, MetSul, Correio do Povo...).
+// Conteúdo de terceiros: o app mostra título, veículo, data e link, marcado como notícia, sem tirar conclusões dele.
+const BUSCA_NOTICIAS_ENSO = '"El Niño" ("Rio Grande do Sul" OR gaúcho OR gaúcha OR "Porto Alegre") (chuva OR temporal OR tornado OR enchente OR cheia OR granizo OR ciclone OR vendaval OR estiagem) when:30d';
+export const URL_NOTICIAS_ENSO = `https://news.google.com/rss/search?q=${encodeURIComponent(BUSCA_NOTICIAS_ENSO)}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
+export function parseNoticias(xml, agora = Date.now()) {
+  xmlSeguro(xml);
+  const vistos = new Set(), out = [];
+  for (const m of xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
+    const campo = (n) => (m[1].match(new RegExp(`<${n}\\b[^>]*>([\\s\\S]*?)</${n}>`, 'i')) || [])[1] || '';
+    const veiculo = textoPuro(campo('source')).slice(0, 60);
+    let titulo = textoPuro(campo('title')).trim().slice(0, 240);
+    if (veiculo && titulo.endsWith(` - ${veiculo}`)) titulo = titulo.slice(0, -(veiculo.length + 3)).trim();
+    const link = textoPuro(campo('link')).trim();
+    const ms = Date.parse(textoPuro(campo('pubDate')).trim());
+    if (!titulo || !/^https:\/\/news\.google\.com\/[^\s"'<>]*$/.test(link) || !Number.isFinite(ms) || agora - ms > 45 * 86400000) continue;
+    const chave = titulo.toLowerCase().replace(/[^a-z0-9à-ú]+/g, '');
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    out.push({ titulo, veiculo, link, ms });
+  }
+  return out.sort((a, b) => b.ms - a.ms).slice(0, 8);
+}
+
 async function tentar(fn) { try { return { ok: true, dados: await fn() }; } catch (e) { return { ok: false, erro: String(e.message || 'falha').slice(0, 120) }; } }
 
 export async function atualizarEnso(env) {
@@ -560,6 +584,7 @@ export async function atualizarEnso(env) {
     probCpc: tentar(async () => parseProbabilidades(await t(`${base}/products/analysis_monitoring/enso/roni/probabilities/`))),
     forcaCpc: tentar(async () => parseForcas(await t(`${base}/products/analysis_monitoring/enso/roni/strengths/`))),
     iri: tentar(async () => parseIri(await t(iri))),
+    noticias: tentar(async () => parseNoticias(await t(URL_NOTICIAS_ENSO, { maxBytes: 1_500_000 }))),
   };
   const partes = Object.fromEntries(await Promise.all(Object.entries(tarefas).map(async ([k, p]) => [k, await p])));
   const anterior = env.KV ? await env.KV.get('enso:ultimo', 'json') : null;

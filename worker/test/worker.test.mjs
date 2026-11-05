@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import w, {
   parseOni, parseSemanal, parseMensal, parseDiscussao, parseProbabilidades, parseIri, normalizarMetar, coberturaMetar,
-  normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia, calibracao, probDiariaCenarios,
+  normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, parseNoticias, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia, calibracao, probDiariaCenarios,
 } from '../src/index.js';
 
 const fx = (n) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
@@ -276,4 +276,19 @@ test('força do El Niño por trimestre (tabela real do CPC)', async () => {
   assert.equal(f[3].tri, 'DJF');
   assert.deepEqual(f[3].elNino, { fraco: 0, moderado: 3, forte: 16, muitoForte: 81 });
   assert.equal(f[8].neutro, 70);
+});
+
+test('parseNoticias: título sem veículo, só links do Google Notícias, recentes e sem repetidas', () => {
+  const agora = Date.parse('2026-11-05T12:00:00Z');
+  const item = (t, l, d, f) => `<item><title>${t}</title><link>${l}</link><pubDate>${d}</pubDate>${f ? `<source url="https://x.com">${f}</source>` : ''}</item>`;
+  const xml = `<rss><channel>${[
+    item('Tornado no RS e El Niño - GZH', 'https://news.google.com/rss/articles/a?oc=5', 'Wed, 04 Nov 2026 10:00:00 GMT', 'GZH'),
+    item('Tornado no RS e El Niño - g1', 'https://news.google.com/rss/articles/b', 'Wed, 04 Nov 2026 09:00:00 GMT', 'g1'),
+    item('Chuva &amp; cheia no Guaíba - MetSul', 'https://news.google.com/rss/articles/c', 'Thu, 05 Nov 2026 08:00:00 GMT', 'MetSul'),
+    item('Antiga', 'https://news.google.com/rss/articles/d', 'Mon, 01 Jan 2024 00:00:00 GMT', 'X'),
+    item('Link ruim', 'javascript:alert(1)', 'Thu, 05 Nov 2026 08:00:00 GMT', 'Y'),
+  ].join('')}</channel></rss>`;
+  const r = parseNoticias(xml, agora);
+  assert.deepEqual(r.map((n) => [n.titulo, n.veiculo]), [['Chuva & cheia no Guaíba', 'MetSul'], ['Tornado no RS e El Niño', 'GZH']]);
+  assert.throws(() => parseNoticias('<!DOCTYPE x><rss></rss>'));
 });

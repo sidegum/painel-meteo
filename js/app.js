@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.8.4';
+const VERSAO = '1.8.7';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -1950,6 +1950,8 @@ async function renderElNino() {
     disc ? el('p', {}, el('span', { class: 'marca oficial', text: 'estimativa oficial' }), ' ', el('span', { lang: 'en', text: disc.sinopse })) : el('p', { text: 'Não foi possível ler a discussão.' }),
     disc ? el('p', { class: 'nota', text: `Publicado em ${disc.emitido || 'data não encontrada'}. Próxima atualização: ${disc.proxima || 'data não encontrada na fonte'}.` }) : null,
     el('p', {}, linkExterno(E.fontes?.cpc, 'Ler a discussão completa (em inglês)'))));
+  filhos.push(efeitosNoRs(P.roni?.dados?.length ? P.roni.dados : P.oni?.dados, E));
+  if (P.noticias) filhos.push(noticiasRs(P.noticias));
   const gInd = secao('Índices recentes', null);
   const gHist = secao('ONI e RONI desde 1950', null);
   gInd.classList.add('largura-total'); gHist.classList.add('largura-total');
@@ -1966,8 +1968,8 @@ async function renderElNino() {
     iri?.forca ? el('p', { lang: 'en', text: iri.forca }) : null,
     el('p', { class: 'nota', text: 'Os números por modelo do IRI só são publicados como imagens, então o painel mostra o resumo em texto e o link.' }),
     el('p', {}, linkExterno(E.fontes?.iri, 'Ver a previsão do IRI'))));
-  filhos.push(secao('Tendência para o Sul e o RS', null, el('p', { text: 'O painel do INMET não tem formato de dados estável para leitura automática. Para não arriscar uma extração errada, mostramos só o link oficial.' }), el('p', {}, linkExterno(E.fontes?.inmet, 'Abrir o INMET'))));
-  filhos.push(secao('Comparação com eventos fortes', null, comparacaoHistorica(P.roni?.dados?.length ? P.roni.dados : P.oni?.dados)));
+  // o que já está na tela com dado oficial vem antes; os efeitos no RS logo depois do status
+  filhos.push(secao('El Niños marcantes e o que houve no RS', null, comparacaoHistorica(P.roni?.dados?.length ? P.roni.dados : P.oni?.dados)));
   filhos.push(el('p', { class: 'explica' }, 'El Niño indica tendências sazonais e não garante impactos específicos. Este painel não faz previsão própria de El Niño e não usa esses dados para alterar a previsão diária.'));
   filhos.push(el('p', { class: 'nota', text: `Dados verificados ${fmt.idade(E.verificadoEm)} (${E.origem || 'Worker'}; o app confere de novo a cada 6 horas).` }));
   alvo.replaceChildren(...filhos);
@@ -2082,22 +2084,83 @@ function barrasProb(linhas) {
     el('p', { class: 'nota', text: 'Trimestres em inglês: DJF é dezembro-janeiro-fevereiro, JFM é janeiro-fevereiro-março, e assim por diante. Números em %.' }));
 }
 
-function comparacaoHistorica(oni) {
-  if (!oni?.length) return el('p', { text: 'ONI indisponível.' });
-  // eventos: sequências com ONI >= 0,5; fortes quando o pico passa de 1,5
+// ------------------------------------------------------------------ El Niño no RS
+// Conteúdo fixo e verificável (estudos e registros oficiais), não notícias. Revisar a cada novo episódio forte.
+// Padrão no RS: Fontana e Berlato (1997), séries de chuva de localidades do RS; resumo de impactos do CPTEC/INPE.
+const ENSO_RS_EFEITOS = [
+  'Chove mais que o normal, principalmente na primavera (outubro e novembro) do ano em que o El Niño começa.',
+  'Volta a chover acima do normal no fim do outono do ano seguinte, de abril a junho.',
+  'Nessas épocas, aumenta o risco de cheias nos rios e de temporais.',
+  'A temperatura média tende a ficar um pouco mais alta.',
+];
+// Episódios: ano de início do El Niño e o que foi registrado no RS. Só fatos com registro oficial ou estudo publicado.
+const ENSO_RS_EPISODIOS = [
+  { ano: 1982, texto: 'Enchentes em sequência no Sul entre maio e julho de 1983, inclusive no rio Uruguai (Itaqui, São Borja, Uruguaiana).' },
+  { ano: 1997, texto: 'Um dos El Niños mais fortes do século XX, associado a enchentes no Sul do Brasil.' },
+  { ano: 2015, texto: 'Primavera muito chuvosa: o Guaíba chegou a 2,94 m em Porto Alegre em outubro de 2015.' },
+  { ano: 2023, texto: 'Setembro de 2023: enchente histórica no Vale do Taquari após um ciclone. Maio de 2024: maior desastre climático do RS, com o Guaíba em 5,35 m, acima do recorde de 1941. O El Niño foi um dos fatores, não o único.' },
+];
+const ENSO_RS_FONTES = [
+  ['https://enos.cptec.inpe.br/', 'CPTEC/INPE: El Niño e La Niña'],
+  ['https://www.scielo.br/j/ea/a/LyHVHKHzm67CwpvcWPKPwTm/', 'Estudo sobre as chuvas de abril e maio de 2024 no RS'],
+];
+
+/** Eventos de El Niño na série (ONI ou RONI): sequências com 0,5 °C ou mais; pico é o maior valor. */
+function eventosEnso(oni) {
   const eventos = []; let atual = null;
-  for (const r of oni) {
+  for (const r of oni || []) {
     if (r.anom >= 0.5) { if (!atual) atual = { ini: r, pico: r }; if (r.anom > atual.pico.anom) atual.pico = r; atual.fim = r; }
     else if (atual) { eventos.push(atual); atual = null; }
   }
   if (atual) eventos.push({ ...atual, emCurso: true });
-  const fortes = eventos.filter((e) => e.pico.anom >= 1.5);
-  const ultimo = oni[oni.length - 1];
+  return eventos;
+}
+
+// O que o El Niño costuma causar no RS e, havendo episódio em curso, o que isso indica para os próximos meses.
+function efeitosNoRs(oni, E) {
+  const eventos = eventosEnso(oni);
+  const atual = eventos.at(-1)?.emCurso ? eventos.at(-1) : null;
+  const filhos = [el('ul', {}, ...ENSO_RS_EFEITOS.map((t) => el('li', { text: t })))];
+  if (atual) {
+    // Primavera do ano de início e outono do ano seguinte; se o episódio começou no começo do ano, a primavera é a do mesmo ano.
+    const a0 = atual.ini.ano;
+    filhos.unshift(el('p', { class: 'destaque-rs' }, el('b', { text: 'Agora: ' }),
+      `com o El Niño em curso, a tendência é de primavera de ${a0} mais chuvosa no RS e nova fase de chuva acima do normal entre abril e junho de ${a0 + 1}. É tendência, não previsão de um evento.`));
+  }
+  filhos.push(el('details', { class: 'detalhe-toque' }, el('summary', { text: 'De onde vem isso' }),
+    el('p', { text: 'Padrão medido em décadas de dados de chuva no RS (Fontana e Berlato, 1997) e resumido pelo CPTEC/INPE. Cada El Niño é diferente: alguns trazem pouco efeito, e outros fatores também influenciam.' }),
+    el('ul', {}, ...ENSO_RS_FONTES.map(([u, t]) => el('li', {}, linkExterno(u, t)))),
+    E?.fontes?.inmet ? el('p', {}, linkExterno(E.fontes.inmet, 'Prognóstico do INMET')) : null));
+  return secao('O que o El Niño costuma causar no RS', null, ...filhos);
+}
+
+// Notícias recentes do RS que citam o El Niño (Google Notícias, via Worker ou GitHub Actions): conteúdo de terceiros.
+function noticiasRs(parte) {
+  const lista = (parte.dados || []).filter((n) => Date.now() - n.ms < 45 * 86400000).slice(0, 5);
+  const itens = lista.length
+    ? el('ul', { class: 'noticias' }, ...lista.map((n) => el('li', {},
+      linkExterno(n.link, n.titulo),
+      el('span', { class: 'nota', text: `${n.veiculo || 'veículo não informado'} · ${new Date(n.ms).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}` }))))
+    : el('p', { class: 'nota', text: parte.ok ? 'Nenhuma notícia do RS citando o El Niño nos últimos 30 dias.' : 'Notícias indisponíveis agora.' });
+  return secao('Nas notícias do RS', null, itens,
+    el('p', { class: 'nota', text: 'Notícias de terceiros que citam o El Niño. O painel não confere o conteúdo nem afirma a relação.' }));
+}
+
+// Episódios fortes pela força do aquecimento (pico do índice) e o que houve no RS nos que têm registro.
+function comparacaoHistorica(oni) {
+  if (!oni?.length) return el('p', { text: 'Índice indisponível.' });
+  const eventos = eventosEnso(oni);
+  // o episódio de um ano é o mais forte entre os que passam por ele (2015 cai no forte 2015–16, não no fraco 2014–15)
+  const doAno = (ano) => eventos.filter((e) => e.ini.ano <= ano && e.fim.ano >= ano).sort((a, b) => b.pico.anom - a.pico.anom)[0];
+  const linhas = new Map();
+  for (const e of eventos.filter((x) => x.pico.anom >= 1.5)) linhas.set(e, null);
+  for (const ep of ENSO_RS_EPISODIOS) { const e = doAno(ep.ano); if (e) linhas.set(e, ep.texto); }
+  const lista = [...linhas.entries()].sort((a, b) => b[0].ini.ano - a[0].ini.ano);
   return el('div', {},
-    el('p', {}, `Último valor: ${fmt.n(ultimo.anom, 2)} °C (${ultimo.seas} ${ultimo.ano}).`),
-    el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Evento forte' }), el('th', { class: 'n', text: 'Pico' }))),
-      el('tbody', {}, ...fortes.map((e) => el('tr', {}, el('td', { text: `${e.ini.ano}–${e.fim.ano}${e.emCurso ? ' (em curso)' : ''}` }), el('td', { class: 'n', text: `${fmt.n(e.pico.anom, 1)} °C` }))))),
-    el('p', { class: 'nota', text: 'Eventos com intensidade parecida tiveram impactos diferentes no RS. A comparação mostra só a força do aquecimento, não sugere que os impactos se repetirão.' }));
+    el('ul', { class: 'episodios' }, ...lista.map(([e, texto]) => el('li', { class: e.emCurso ? 'em-curso' : null },
+      el('div', { class: 'ep-cab' }, el('b', { text: e.emCurso ? `${e.ini.ano} (agora)` : `${e.ini.ano}–${e.fim.ano}` }), el('span', { class: 'ep-pico', text: `${e.emCurso ? 'até agora' : 'pico'} +${fmt.n(e.pico.anom, 1)} °C` })),
+      texto ? el('p', { text: texto }) : null))),
+    el('p', { class: 'nota', text: 'Força parecida não garante impactos parecidos.' }));
 }
 
 // ------------------------------------------------------------------ navegação e gestos
@@ -2220,7 +2283,7 @@ function configurarCabecalho() {
   alca.addEventListener('click', () => { fixa = oculta; aplicar(!oculta); });
   cab.addEventListener('pointerdown', armarOcioso, { passive: true });
   window.addEventListener('scroll', () => {
-    if (quadro) return;
+    if (quadro || estado.aba === 'globo') return; // no Globo a página não rola: a barra só muda pela alça ou pelo tempo
     quadro = requestAnimationFrame(() => {
       quadro = 0;
       const y = window.scrollY, dy = y - ultimoY;

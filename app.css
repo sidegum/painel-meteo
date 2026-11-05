@@ -100,6 +100,11 @@ body { padding-top: var(--alt-cab, 110px); }
 .cabeca[data-oculta] { transform: translateY(calc(-100% + var(--safe-t))); }
 .cabeca[data-recolhida] { height: var(--safe-t); overflow: hidden; }
 body[data-aba="globo"][data-cab="oculta"] { padding-top: var(--safe-t); }
+/* Globo: tela fixa do tamanho da janela, sem rolagem da página (o arrastar é só do globo).
+   O rodapé e a faixa de estado saem dessa tela; a barra de cima só muda pela alça ou pelo tempo sem uso. */
+html:has(body[data-aba="globo"]) { overflow: hidden; overscroll-behavior: none; }
+body[data-aba="globo"] { position: fixed; inset: 0; width: 100%; overflow: hidden; overscroll-behavior: none; }
+body[data-aba="globo"] .rodape, body[data-aba="globo"] #estado { display: none; }
 .alca { position: fixed; z-index: 21; left: 50%; top: calc(var(--cab-vis, 110px) - 11px); transform: translateX(-50%); width: 64px; height: 22px; padding: 0; border: 0; background: none; display: flex; align-items: center; justify-content: center; transition: top .22s ease; }
 .alca i { width: 36px; height: 5px; border-radius: 3px; background: var(--fraco); opacity: .55; }
 .alca[aria-expanded="false"] { top: var(--safe-t); }
@@ -686,3 +691,15 @@ button.globo-rotulo { cursor: pointer; }
 .dia > .cab { position: relative; padding-right: 36px; color: inherit; font: inherit; }
 .dia > .cab::after { content: ''; position: absolute; right: 18px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--fraco); border-top: 2px solid var(--fraco); transform: translateY(-50%) rotate(45deg); }
 .dia > .cab:active { background: var(--sup); }
+
+/* El Niño no RS */
+.destaque-rs { background: var(--sup); border-radius: 10px; padding: 10px 12px; }
+.episodios { list-style: none; margin: 0; padding: 0; }
+.episodios li { border-bottom: 1px solid var(--linha); padding: 10px 0; }
+.episodios li p { margin: 4px 0 0; }
+.episodios .ep-cab { display: flex; justify-content: space-between; gap: 8px; }
+.episodios .ep-pico { color: var(--quente); font-weight: 600; white-space: nowrap; }
+.episodios li.em-curso .ep-cab b { color: var(--quente); }
+.noticias { list-style: none; margin: 0; padding: 0; }
+.noticias li { padding: 10px 0; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; gap: 2px; }
+.noticias a { font-weight: 600; text-decoration: none; }
