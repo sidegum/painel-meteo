@@ -7,7 +7,7 @@
     "lon": -51.06416666,
     "altitude": 23.35
   },
-  "atualizadoEm": "2026-11-05T21:43:13.579Z",
+  "atualizadoEm": "2026-11-05T22:30:01.655Z",
   "fontes": {
     "medicoes": "INMET, BDMEP (portal.inmet.gov.br/dadoshistoricos), estação automática A884 Campo Bom",
     "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"

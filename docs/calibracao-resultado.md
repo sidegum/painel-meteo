@@ -1,6 +1,6 @@
 # Resultado da calibração (gerado automaticamente)
 
-Gerado em 2026-11-05 21:44 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
+Gerado em 2026-11-05 22:31 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
 
 Estação: INMET A884 Campo Bom. Medições de 2021-03-01 a 2026-08-31 (2010 dias válidos).
 

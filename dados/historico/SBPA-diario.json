@@ -6,7 +6,7 @@
     "lat": -29.994,
     "lon": -51.171
   },
-  "atualizadoEm": "2026-11-05T21:44:27.322Z",
+  "atualizadoEm": "2026-11-05T22:31:15.742Z",
   "fontes": {
     "medicoes": "METAR SBPA Porto Alegre aeroporto, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
     "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
