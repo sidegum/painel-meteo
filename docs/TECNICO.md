@@ -685,6 +685,12 @@ de kpc), toques e o render do laço vão para o módulo enquanto `G.galaxia` exi
 - Perto do Sol (até ~3 kpc) entram as estrelas do céu (HYG e Gaia DR3) na distância medida, e o modelo se apaga.
 - Galáxias do OpenNGC com distância (diâmetro real pelo tamanho aparente), aglomerados de Virgem e Fornax (distâncias
   medidas) e de Centauro, Hidra, Norma, Perseu e Coma (desvio para o vermelho, H0 = 70).
+- `vendor/ceu/galaxia.json` (`scripts/globo/montar-galaxia.py`, a partir de `scripts/globo/fontes/`): 190 masers de
+  Reid et al. 2019 (só paralaxe/erro ≥ 3, distância = 1/paralaxe), 165 aglomerados globulares de Baumgardt & Vasiliev
+  2021 e 101 galáxias do Grupo Local de McConnachie 2012. Andrômeda, Triângulo e as Nuvens de Magalhães são discos com
+  inclinação e ângulo de posição medidos (fontes no script); as demais são pontos com o raio de meia luz.
+- Nomes: os marcos da Galáxia aparecem por faixa de zoom; os objetos pontuais, quando estão na região vista (até 1,5×
+  o zoom do foco ou 2,5× da câmera), por prioridade e sem sobrepor nomes nem botões.
 - `salvarImagem`: renderiza a vista com o lado maior em até 4.096 px (ou o limite da GPU), desenha nomes, escala e
   créditos num canvas 2D e entrega PNG (folha de compartilhar no celular, download no computador).
 

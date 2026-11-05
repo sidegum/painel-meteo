@@ -243,7 +243,7 @@ function montarGrupoLocal() {
     const it = { tipo: 'local', ...g, p, cor: g.disco ? '#ffe7c4' : '#e8dcc8', diam: raioKpc * 2, minPx: g.disco ? 4 : 3, k: g.disco ? 0.9 : 0.6 };
     GX.locais.push(it);
     if (g.disco) GX.cena.add(discoInclinado(g, p, raioKpc));
-    rotulo(g.nome, p, { prioridade: g.disco ? 70 : 30 - Math.min(20, Math.max(0, (g.mv ?? -10) + 15)), de: Math.max(60, g.distKpc * 0.08), ate: g.disco ? 2e4 : 6e3, alvo: it, perto: true });
+    rotulo(g.nome, p, { prioridade: g.disco ? 70 : 30 - Math.min(20, Math.max(0, (g.mv ?? -10) + 15)), ate: g.disco ? 2e4 : 6e3, alvo: it, perto: true });
   }
   if (GX.locais.length) GX.cena.add(pontosAlvo(GX.locais));
 }
@@ -321,7 +321,7 @@ function montarGalaxiasNgc() {
   }
   GX.pontosNgc = pontosAlvo(GX.ngc);
   GX.cena.add(GX.pontosNgc);
-  for (const it of GX.ngc) if (it.ob.nome) rotulo(it.ob.nome, it.p, { prioridade: 20, de: Math.max(60, it.p.length() * 0.1), ate: it.p.length() * 4, alvo: it, perto: true });
+  for (const it of GX.ngc) if (it.ob.nome) rotulo(it.ob.nome, it.p, { prioridade: 20, ate: it.p.length() * 4, alvo: it, perto: true });
 }
 
 /** Masers com paralaxe (Reid et al. 2019) e aglomerados globulares (Baumgardt & Vasiliev 2021). */
@@ -454,8 +454,10 @@ function posicionarRotulos() {
   const cam = GX.camera.position, zoom = G.cam.dist;
   const itens = [];
   for (const r of GX.rotulos) {
-    // pelo zoom (distância da câmera ao foco) ou por estar perto do que se está olhando
-    const ok = (zoom >= r.de && zoom <= r.ate) || (r.perto && cam.distanceTo(r.p) <= 2.5 * zoom);
+    // marcos da Galáxia: pela faixa de zoom (distância da câmera ao foco); objetos pontuais: por estarem na região
+    // vista (perto do foco ou da câmera), para que um objeto distante atrás do foco não ganhe nome por engano
+    const ok = r.perto ? zoom <= r.ate && (GX.foco.distanceTo(r.p) <= 1.5 * zoom || cam.distanceTo(r.p) <= 2.5 * zoom)
+      : zoom >= r.de && zoom <= r.ate;
     const p = ok ? projetar(r.p, rect) : null;
     if (!p) { r.el.hidden = true; continue; }
     itens.push({ r, x: p.x, y: p.y + 14 });
@@ -465,7 +467,7 @@ function posicionarRotulos() {
   const ocupados = [...GX.zonas];
   for (const it of itens) {
     const w = it.r.largura, h = 22, x0 = it.x - w / 2, y0 = it.y - h / 2;
-    const fora = it.x < 0 || it.x > rect.width || it.y < 8 || it.y > rect.height - 8;
+    const fora = x0 < 0 || x0 + w > rect.width || it.y < 8 || it.y > rect.height - 8;
     const bate = ocupados.some((o) => x0 < o.x1 && x0 + w > o.x0 && y0 < o.y1 && y0 + h > o.y0);
     it.r.el.hidden = fora || bate;
     if (!it.r.el.hidden) { ocupados.push({ x0, y0, x1: x0 + w, y1: y0 + h }); it.r.el.style.transform = `translate(${x0.toFixed(0)}px, ${y0.toFixed(0)}px)`; }
