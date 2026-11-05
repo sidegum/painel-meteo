@@ -1,6 +1,9 @@
 // Configuração pública do app. Não coloque segredos aqui: este arquivo é publicado.
 // Para preencher o endereço do Worker, rode: node scripts/configurar.mjs https://SEU-WORKER.workers.dev
 export const CONFIG = {
+  // Endereço oficial do app (subdomínio no Cloudflare Pages). Quem abre pelo endereço antigo do GitHub Pages é levado
+  // para cá (js/mudanca.js). Vazio = sem redirecionamento; preencher só quando o subdomínio já estiver abrindo.
+  enderecoOficial: '',
   workerUrl: 'https://painel-meteo.painel-566f64cc.workers.dev',
   // Centro de Campo Bom, RS (praça central, coordenada pública da cidade)
   padrao: { nome: 'Campo Bom', regiao: 'RS, BR', lat: -29.68, lon: -51.05 },

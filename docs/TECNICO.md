@@ -631,6 +631,7 @@ Nenhuma chave contém a localização ou o IP do usuário.
   - `scripts/montar-site.sh`: copia só o que o navegador usa (`index.html`, `privacidade.html`, `manifest.json`, `sw.js`, `app.css`, `js/`, `vendor/`, `icones/`, `dados/*.json`, `cloudflare/_headers` e `cloudflare/404.html`) e os campos do Globo em `globo-dados/`. Confere que todo arquivo da lista do service worker existe. O `testes.yml` roda essa montagem em cada PR e push na `main`.
   - `scripts/publicar-pages.sh`: busca o branch `globo-dados` (se não vier pronto), monta o site, cria o projeto na primeira vez e publica com `wrangler pages deploy`.
   - No Cloudflare Pages, `CONFIG.globoDados` aponta para `globo-dados/` do próprio site, que continua funcionando com o repositório privado. No GitHub Pages e no computador local, aponta para `raw.githubusercontent.com`.
+  - `js/mudanca.js` (antes do `app.js`): no endereço antigo do GitHub Pages, leva ao `CONFIG.enderecoOficial` com as preferências em `#migrar=`; no app instalado, mostra um aviso para instalar de novo. No endereço novo, grava só as preferências conhecidas e limpa a URL.
   - O `404.html` desliga o modo de aplicação de página única do Pages: um arquivo que falta responde 404, e não o `index.html` com status 200.
   - O Worker aceita como origem o que está em `ALLOWED_ORIGIN` no `wrangler.toml` mais `https://<PAGES_PROJETO>.pages.dev` e `https://<PAINEL_DOMINIO>`, variáveis do repositório lidas pelo `worker.yml` e passadas com `wrangler deploy --var`.
 - `scripts/configurar.mjs`: grava a URL do Worker em `js/config.js`.
