@@ -7,7 +7,7 @@
     "lon": -51.17472221,
     "altitude": 41.18
   },
-  "atualizadoEm": "2026-11-05T21:37:51.884Z",
+  "atualizadoEm": "2026-11-05T21:43:27.056Z",
   "fontes": {
     "medicoes": "INMET, BDMEP (portal.inmet.gov.br/dadoshistoricos), estação automática A801 Porto Alegre Jardim Botânico",
     "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
