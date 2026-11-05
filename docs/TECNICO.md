@@ -450,7 +450,8 @@ A ordem é:
 ### 5.5 Outras abas
 
 - **Amanhã** (`renderAmanhaDetalhes`): a mesma primeira tela, com `desdeAgora = false`, mais a tabela por modelo (`tabelaModelosDia`) e o índice UV (`textoUv`).
-- **Semana** (`renderSemana`, `tabelaLimites`, `tabelaFaixas`): um dia por linha, com as probabilidades de passar limites e as faixas entre modelos.
+- **Semana** (`renderSemana`, `tabelaLimites`, `tabelaFaixas`): um dia por linha com resumo, números e confiança, sem fontes nem tabela de modelos (o detalhe por modelo fica na aba Modelos). Gráficos e tabelas sem subdescrição.
+- **Subdescrições**: um bloco autoexplicativo não leva texto abaixo do título. Ficam só a nota de fonte ("Fonte · Horário") onde ela existe e avisos que mudam a leitura do dado, como `notaConcordancia` (sem ensemble, a fração de modelos é concordância, não probabilidade).
 - **Modelos** (`renderModelos`, `resumoAprendizado`, `tabelaAcerto`): os pesos atuais, o que já foi aprendido e o acerto por modelo e antecedência.
 - **El Niño** (`renderElNino`, `painelEnso`, `intensidade`, `barrasProb`, `comparacaoHistorica`): os índices ONI e RONI, a discussão do CPC, as probabilidades do CPC e do IRI, e a estimativa diária do Niño 3.4.
 

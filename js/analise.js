@@ -257,10 +257,13 @@ export function escolherFonte(fontes, variavel, lat, lon, agoraMs, idadeMaxMin) 
  * @returns {number[]}
  */
 export function indicesDoDia(horas, data, offsetSeg, aPartirMs = -Infinity) {
+  // número do dia local por aritmética (sem criar Date por hora): mesmo resultado de partesLocais(...).data
+  const [a, m, d] = String(data).split('-').map(Number);
+  const alvo = Date.UTC(a, m - 1, d) / 86400000;
   const idx = [];
   horas.forEach((ms, i) => {
     if (ms + 3600000 <= aPartirMs) return;
-    if (partesLocais(ms, offsetSeg).data === data) idx.push(i);
+    if (Math.floor((ms + offsetSeg * 1000) / 86400000) === alvo) idx.push(i);
   });
   return idx;
 }
@@ -1094,7 +1097,17 @@ export function calibrarProb(p, calib) {
  * Séries horárias de mediana, mínimo e máximo de uma variável entre os modelos.
  * @returns {{med:Array<number|null>, lo:Array<number|null>, hi:Array<number|null>}}
  */
+// Memória por objeto de previsão: as telas pedem o mesmo consenso dezenas de vezes por renderização
+// (antes, até uma vez por hora do dia). Cada calibração ou ancoragem cria um objeto novo, então nada fica velho.
+const memoriaConsenso = new WeakMap();
 export function consensoHorario(prev, variavel, modelos) {
+  let porPrev = memoriaConsenso.get(prev);
+  if (!porPrev) { porPrev = new Map(); memoriaConsenso.set(prev, porPrev); }
+  const chave = `${variavel}|${modelos.join(',')}`;
+  if (!porPrev.has(chave)) porPrev.set(chave, calcularConsenso(prev, variavel, modelos));
+  return porPrev.get(chave);
+}
+function calcularConsenso(prev, variavel, modelos) {
   const med = [], lo = [], hi = [];
   for (let i = 0; i < prev.horas.length; i++) {
     const vs = modelos.map((m) => prev.modelos[m]?.vars[variavel]?.[i]);

@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.5.3';
+const VERSAO = '1.5.4';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -46,8 +46,6 @@ async function iniciar() {
   configurarLocal();
   configurarRodape();
   configurarPuxar();
-  // aba: sempre Hoje, salvo se um detalhe estava aberto nesta sessão
-  try { const s = sessionStorage.getItem('abaComDetalhe'); if (s) irPara(s, false); } catch {}
 
   estado.local = prefs.ler('local', null);
   // 1. mostra o que houver em cache imediatamente
@@ -1143,7 +1141,7 @@ function renderHojeDetalhes() {
   const mapa = secao('Mapa', null);
   mapa.classList.add('largura-total');
   filhos.push(mapa);
-  const met = secao('Meteograma', 'Previsão das próximas 48 horas. Arraste para os lados.');
+  const met = secao('Meteograma', null);
   met.classList.add('largura-total');
   filhos.push(met);
   filhos.push(estadoFontes());
@@ -1177,7 +1175,7 @@ function proximasHoras() {
       el('div', { class: 'v', text: valido(vento[i]) ? `${Math.round(vento[i])}` : '–' }),
       el('div', { class: 'g', text: valido(raj[i]) ? `${Math.round(raj[i])}` : '–' })));
   }
-  return secao('Próximas horas', 'Chance de chuva, volume, vento e rajada (km/h).', lista);
+  return secao('Próximas horas', null, lista);
 }
 
 // Sensação medida: a mesma fórmula da prevista (js/analise.js, sensacaoTermica). Vapor pela umidade ou,
@@ -1636,12 +1634,12 @@ function renderAmanhaDetalhes(data) {
       el('div', {}, el('span', { class: 'tmin', text: fmt.c(minimo(t)) || '–' }), ' a ', el('span', { class: 'tmax', text: fmt.c(maximo(t)) || '–' })));
   });
   filhos.push(secao('Períodos', notaPrevisao(p.offset), el('div', { class: 'periodos' }, ...caixas)));
-  const met = secao('Meteograma de amanhã', 'Previsão de 0h a 24h.');
+  const met = secao('Meteograma de amanhã', null);
   met.classList.add('largura-total');
   filhos.push(met);
-  filhos.push(secao('Probabilidades de chuva e rajadas', a.limites.origem === 'cenários do ensemble' ? `Fração dos ${a.limites.n.chuva} cenários do ensemble.` : `Sem ensemble: fração de ${a.limites.n.chuva} modelos, o que é concordância e não probabilidade.`, tabelaLimites([a])));
+  filhos.push(secao('Probabilidades de chuva e rajadas', notaConcordancia(a), tabelaLimites([a])));
   const k = p.diario.datas.indexOf(data);
-  filhos.push(secao('Sol e UV', 'Previsão Open-Meteo. UV máximo vem só do GFS.',
+  filhos.push(secao('Sol e UV', null,
     el('p', {}, `Nascer do sol ${fmt.horaMin(p.diario.nascer[k], p.offset)}, pôr do sol ${fmt.horaMin(p.diario.por[k], p.offset)}.`),
     el('p', {}, 'Índice UV máximo: ', valido(p.diario.uvMax[k]) ? el('b', { text: `${fmt.n(p.diario.uvMax[k], 0)} (${textoUv(p.diario.uvMax[k])})` }) : ausente('sem dado'))));
   filhos.push(secao('Confiança e divergência entre modelos', null, tabelaModelosDia(a), el('ul', {}, ...(a.av.confianca.motivos.length ? a.av.confianca.motivos : ['modelos e cenários concordam']).map((m) => el('li', { text: m }))),
@@ -1649,6 +1647,9 @@ function renderAmanhaDetalhes(data) {
   alvo.replaceChildren(...filhos);
   meteograma(met, p.horas[a.idxTodo[0]], p.horas[a.idxTodo[a.idxTodo.length - 1]], null, 'amanha');
 }
+
+// Sem ensemble, a fração de modelos acima do limite é concordância, não probabilidade: isso precisa ficar dito.
+function notaConcordancia(a) { return a && a.limites.origem !== 'cenários do ensemble' ? 'Sem cenários agora: mostra concordância, não probabilidade.' : null; }
 
 function textoUv(u) { return u < 3 ? 'baixo' : u < 6 ? 'moderado' : u < 8 ? 'alto' : u < 11 ? 'muito alto' : 'extremo'; }
 
@@ -1664,12 +1665,11 @@ function tabelaModelosDia(a) {
 function tabelaLimites(dias) {
   const p = estado.prev;
   const L = REGRAS.limitesSemana;
-  const cab = el('tr', {}, el('th', { text: 'Dia' }), ...L.chuva.map((l) => el('th', { class: 'n', text: `>${l} mm` })), ...L.rajada.map((l) => el('th', { class: 'n', text: `>${l}` })));
+  const cab = el('tr', {}, el('th', { text: 'Dia' }), ...L.chuva.map((l) => el('th', { class: 'n', text: `>${l} mm` })), ...L.rajada.map((l) => el('th', { class: 'n', text: `>${l} km/h` })));
   const linhas = dias.map((a) => el('tr', {}, el('td', { text: `${fmt.diaSemana(p.horas[a.idxTodo[0]], p.offset)} ${fmt.dataCurta(p.horas[a.idxTodo[0]], p.offset)}` }),
     ...a.limites.chuva.map((c) => el('td', { class: 'p', text: valido(c.p) ? `${Math.round(c.p * 100)}%` : '–' })),
     ...a.limites.rajada.map((c) => el('td', { class: 'g', text: valido(c.p) ? `${Math.round(c.p * 100)}%` : '–' }))));
-  return el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', { class: 'mini-tab' }, el('thead', {}, cab), el('tbody', {}, ...linhas)),
-    el('p', { class: 'nota', text: 'Colunas em mm são chuva no dia; em km/h, rajada máxima.' }));
+  return el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', { class: 'mini-tab' }, el('thead', {}, cab), el('tbody', {}, ...linhas)));
 }
 
 // ------------------------------------------------------------------ Semana
@@ -1680,19 +1680,12 @@ function renderSemana() {
   const ds = datas();
   const dias = ds.slice(0, 7).map((d, k) => analisarDia(d, k, k === 0));
   const extra = ds.slice(7).map((d, k) => analisarDia(d, k + 7, false)).filter((a) => a.modelosComDado.length);
-  const abertos = new Set(prefs.ler('diasAbertos', []));
   const chovendoAgora = !!medicaoChuvaAgora()?.chovendo;
   const restoAgora = chovendoAgora ? chuvaRestante() : null;
   const item = (a, longe) => {
     const ms = p.horas[a.idxTodo[0]];
     const agoraHoje = a.diaIndice === 0 && chovendoAgora;
-    const exp = el('div', { class: 'exp', hidden: !abertos.has(a.data) }, tabelaModelosDia(a),
-      el('p', { class: 'nota', text: a.av.confianca.motivos.join('; ') || 'modelos e cenários concordam' }));
-    const btn = el('button', { type: 'button', 'aria-expanded': String(abertos.has(a.data)), onclick: () => {
-      const abre = exp.hidden; exp.hidden = !abre; btn.setAttribute('aria-expanded', String(abre));
-      abre ? abertos.add(a.data) : abertos.delete(a.data); prefs.gravar('diasAbertos', [...abertos]);
-      try { abre ? sessionStorage.setItem('abaComDetalhe', 'semana') : sessionStorage.removeItem('abaComDetalhe'); } catch {}
-    } },
+    const cab = el('div', { class: 'cab' },
       el('span', { class: 'dn' }, a.diaIndice === 0 ? 'Hoje' : fmt.diaSemana(ms, p.offset), el('small', { text: fmt.dataCurta(ms, p.offset) })),
       el('span', { class: 'resumo', text: agoraHoje ? 'Chovendo agora' : a.frase }),
       el('span', { class: 'nums' },
@@ -1700,22 +1693,22 @@ function renderSemana() {
         el('span', { class: 'g', text: a.av.rajada ? `${Math.round(a.av.rajada.mediana)} km/h` : 'rajada –' }),
         el('span', { class: 't' }, el('span', { class: 'tmin', text: fmt.c(a.tmin) || '–' }), '/', el('span', { class: 'tmax', text: fmt.c(a.tmax) || '–' }))),
       el('span', { class: 'cf', text: `confiança ${a.av.confianca.geral}` }));
-    return el('li', { class: 'dia' + (longe ? ' longe' : '') }, btn, exp);
+    return el('li', { class: 'dia' + (longe ? ' longe' : '') }, cab);
   };
   const filhos = [el('ul', { class: 'dias largura-total' }, ...dias.map((a) => item(a)))];
   if (extra.length) {
     const det = el('details', { class: 'largura-total' }, el('summary', { class: 'chip', style: { display: 'inline-flex', 'align-items': 'center', margin: '10px 0' } }, `Mais ${extra.length} dias (confiança menor)`),
-      el('p', { class: 'nota', text: `Depois do 7º dia restam ${[...new Set(extra.flatMap((a) => a.modelosComDado))].map((m) => MODELOS[m].curto).join(' e ')}. Use só como tendência.` }),
+      el('p', { class: 'nota', text: 'Depois do 7º dia, use só como tendência.' }),
       el('ul', { class: 'dias' }, ...extra.map((a) => item(a, true))));
     filhos.push(det);
   }
   const x = dias.map((a) => p.horas[a.idxTodo[0]] + 12 * 3600000);
   const fmtDia = (u, vals) => vals.map((v) => { const d = dataNoFuso(v, p.fuso); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()]; });
-  const gChuva = secao('Chuva diária e acumulada', 'Previsão: mediana dos modelos se chover; acumulada soma as medianas.');
-  const gTemp = secao('Temperatura mínima e máxima', notaPrevisao(estado.prev.offset));
-  const gRaj = secao('Rajada máxima', 'Linha: valor mais provável; faixa: do menor ao maior provável.');
-  const faixas = secao('Faixa provável', 'Do menor ao maior valor provável: cenários p10 a p90 quando há ensemble; senão, menor e maior modelo.', tabelaFaixas(dias));
-  const probs = secao('Probabilidade por dia', dias[0]?.limites.origem === 'cenários do ensemble' ? 'Fração dos cenários do ensemble acima de cada limite.' : 'Sem ensemble: concordância entre modelos, não é probabilidade.', tabelaLimites(dias));
+  const gChuva = secao('Chuva diária e acumulada', null);
+  const gTemp = secao('Temperatura mínima e máxima', null);
+  const gRaj = secao('Rajada máxima', null);
+  const faixas = secao('Faixa provável', null, tabelaFaixas(dias));
+  const probs = secao('Probabilidade por dia', notaConcordancia(dias[0]), tabelaLimites(dias));
   filhos.push(gChuva, gTemp, gRaj, faixas, probs);
   alvo.replaceChildren(...filhos);
   const chuvaDia = dias.map((a) => mediana(a.resumos.map((r) => r.chuva)));
@@ -1750,7 +1743,7 @@ function tabelaFaixas(dias) {
       el('td', { class: 'n', text: a.av.rajada ? `${Math.round(a.av.rajada.min)}–${Math.round(a.av.rajada.max)}` : '–' }),
       el('td', { class: 'n', text: valido(a.tminFaixa[0]) ? `${Math.round(a.tminFaixa[0])}–${Math.round(a.tminFaixa[1])}°` : '–' }),
       el('td', { class: 'n', text: valido(a.tmaxFaixa[0]) ? `${Math.round(a.tmaxFaixa[0])}–${Math.round(a.tmaxFaixa[1])}°` : '–' }))))),
-    el('p', { class: 'nota', text: 'Volume de chuva considera só os cenários ou modelos em que chove mais de 1 mm.' }));
+    el('p', { class: 'nota', text: 'Volume de chuva só nos casos em que chove mais de 1 mm.' }));
 }
 
 // ------------------------------------------------------------------ Modelos
@@ -1773,10 +1766,10 @@ function renderModelos() {
       ...mods.map((m) => { const r = a.resumos.find((x) => x.modelo === m); return el('td', { class: 'n' },
         el('div', { class: 'p', style: { color: 'var(--chuva-txt)' }, text: valido(r.chuva) ? fmt.mm(r.chuva) : '–' }),
         el('div', { style: { color: 'var(--rajada-txt)' }, text: valido(r.rajada?.valor) ? `${Math.round(r.rajada.valor)} km/h` : '–' })); }))))));
-  filhos.push(secao('Chuva e rajada de cada modelo', 'Previsão por dia. Traço indica dado ausente, não zero.', tab,
+  filhos.push(secao('Chuva e rajada de cada modelo', 'Traço indica dado ausente, não zero.', tab,
     ...ausencias.map((t) => el('p', { class: 'nota', text: t })), faltam.length ? el('p', { class: 'nota', text: `Sem dados agora: ${faltam.map((m) => MODELOS[m].nome).join(', ')}.` }) : null));
-  const gC = secao('Chuva acumulada por modelo', 'Previsão, 7 dias. Faixa: cenários do ensemble (p10 a p90) e mediana.');
-  const gR = secao('Rajadas por modelo', 'Previsão, 7 dias. Faixa: cenários do ensemble (p10 a p90).');
+  const gC = secao('Chuva acumulada por modelo', 'Faixa: cenários do ensemble (p10 a p90) e mediana.');
+  const gR = secao('Rajadas por modelo', 'Faixa: cenários do ensemble (p10 a p90).');
   gC.classList.add('largura-total'); gR.classList.add('largura-total');
   filhos.push(gC, gR);
   filhos.push(secao('Acerto de cada modelo', null, tabelaAcerto()));
@@ -1911,7 +1904,7 @@ async function renderElNino() {
   const roniUlt = P.roni?.dados?.at(-1);
   filhos.push(painelEnso(P, disc, roniUlt));
   const avisoParte = (k) => (P[k]?.desatualizado ? el('p', { class: 'faixa-aviso erro', text: `A fonte mudou ou falhou (${P[k].erro}). Mostrando a última versão válida, de ${new Date(P[k].em).toLocaleDateString('pt-BR')}.` }) : null);
-  filhos.push(secao('Status oficial da NOAA CPC', 'Estimativa oficial', avisoParte('discussao'),
+  filhos.push(secao('Status oficial da NOAA CPC', null, avisoParte('discussao'),
     disc ? el('p', {}, el('span', { class: 'marca oficial', text: 'estimativa oficial' }), ' ', el('span', { lang: 'en', text: disc.sinopse })) : el('p', { text: 'Não foi possível ler a discussão.' }),
     disc ? el('p', { class: 'nota', text: `Publicado em ${disc.emitido || 'data não encontrada'}. Próxima atualização: ${disc.proxima || 'data não encontrada na fonte'}.` }) : null,
     el('p', {}, linkExterno(E.fontes?.cpc, 'Ler a discussão completa (em inglês)'))));
@@ -1924,15 +1917,15 @@ async function renderElNino() {
     el('li', { text: 'Niño 3.4 relativo: a mesma anomalia, descontado o aquecimento de todos os oceanos tropicais. Evita confundir aquecimento global com El Niño.' }),
     el('li', { text: 'ONI: média de 3 meses do Niño 3.4 convencional. El Niño quando fica em +0,5 °C ou mais por vários trimestres.' }),
     el('li', { text: 'RONI: média de 3 meses do Niño 3.4 relativo. Desde 2026 é o índice que a NOAA usa para classificar El Niño e La Niña; por isso aparece em destaque aqui.' }))));
-  filhos.push(secao('Probabilidades oficiais da NOAA por trimestre', 'Estimativa oficial do CPC, atualizada na 2ª quinta-feira de cada mês', avisoParte('probCpc'), barrasProb(P.probCpc?.dados), el('p', {}, linkExterno(E.fontes?.cpcProb, 'Tabela oficial'))));
+  filhos.push(secao('Probabilidades oficiais da NOAA por trimestre', null, avisoParte('probCpc'), barrasProb(P.probCpc?.dados), el('p', {}, linkExterno(E.fontes?.cpcProb, 'Tabela oficial'))));
   const iri = P.iri?.dados;
-  filhos.push(secao('Previsão baseada em modelos do IRI', 'Separada da NOAA: combina dezenas de modelos dinâmicos e estatísticos, sem ajuste humano.', avisoParte('iri'),
+  filhos.push(secao('Previsão baseada em modelos do IRI', null, avisoParte('iri'),
     iri ? el('p', { class: 'nota', text: `Publicada em ${iri.publicado}.` }) : el('p', { text: 'Resumo do IRI indisponível.' }),
     iri?.forca ? el('p', { lang: 'en', text: iri.forca }) : null,
     el('p', { class: 'nota', text: 'Os números por modelo do IRI só são publicados como imagens, então o painel mostra o resumo em texto e o link.' }),
     el('p', {}, linkExterno(E.fontes?.iri, 'Ver a previsão do IRI'))));
-  filhos.push(secao('Tendência para o Sul e o RS', 'INMET e parceiros', el('p', { text: 'O painel do INMET não tem formato de dados estável para leitura automática. Para não arriscar uma extração errada, mostramos só o link oficial.' }), el('p', {}, linkExterno(E.fontes?.inmet, 'Abrir o INMET'))));
-  filhos.push(secao('Comparação com eventos fortes', 'Calculado a partir do RONI oficial', comparacaoHistorica(P.roni?.dados?.length ? P.roni.dados : P.oni?.dados)));
+  filhos.push(secao('Tendência para o Sul e o RS', null, el('p', { text: 'O painel do INMET não tem formato de dados estável para leitura automática. Para não arriscar uma extração errada, mostramos só o link oficial.' }), el('p', {}, linkExterno(E.fontes?.inmet, 'Abrir o INMET'))));
+  filhos.push(secao('Comparação com eventos fortes', null, comparacaoHistorica(P.roni?.dados?.length ? P.roni.dados : P.oni?.dados)));
   filhos.push(el('p', { class: 'explica' }, 'El Niño indica tendências sazonais e não garante impactos específicos. Este painel não faz previsão própria de El Niño e não usa esses dados para alterar a previsão diária.'));
   filhos.push(el('p', { class: 'nota', text: `Dados verificados ${fmt.idade(E.verificadoEm)} (${E.origem || 'Worker'}; o app confere de novo a cada 6 horas).` }));
   alvo.replaceChildren(...filhos);
