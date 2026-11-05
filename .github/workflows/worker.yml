@@ -92,6 +92,15 @@ jobs:
           done
           echo "::warning::O Worker foi publicado, mas ainda não respondeu. O endereço workers.dev pode levar alguns minutos na primeira vez."
 
+      # Resumo das medições de Campo Bom: quantas leituras horárias cada estação tem e os acumulados de chuva.
+      # Só informativo (não falha o workflow); ajuda a ver se o histórico gravado pelo cron está completo.
+      - name: Conferir medições
+        if: steps.seg.outputs.ok == 'true'
+        run: |
+          curl -s -H "Origin: https://sidegum.github.io" "${{ steps.cf.outputs.url }}/v1/observacoes?lat=-29.68&lon=-51.05" -o /tmp/obs.json || true
+          jq -c '.status' /tmp/obs.json || cat /tmp/obs.json
+          jq -c '.fontes[] | select(.tipo == "inmet") | {id, modo, leituras26h: (.serie | length), primeira: (.serie[0].ms / 1000 | todate), ultima: (.serie[-1].ms / 1000 | todate), acumulados}' /tmp/obs.json || true
+
       - name: Apontar o app para o Worker
         if: steps.seg.outputs.ok == 'true'
         run: |
