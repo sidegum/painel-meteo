@@ -6,7 +6,7 @@ name: Publicar no Cloudflare Pages
 # - Os campos do Globo (a cada 3 h) e o El Niño (só quando muda) são publicados no próprio job que os gera, para
 #   gastar menos minutos do GitHub Actions.
 # Segredos: CLOUDFLARE_API_TOKEN (com "Cloudflare Pages: Edit") e CLOUDFLARE_ACCOUNT_ID.
-# Variável opcional do repositório: PAGES_PROJETO (padrão painel-meteo). Passo a passo em docs/CLOUDFLARE-PAGES.md.
+# Variável opcional do repositório: PAGES_PROJETO (padrão tempo-rs). Passo a passo em docs/CLOUDFLARE-PAGES.md.
 
 on:
   push:

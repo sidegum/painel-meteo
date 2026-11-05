@@ -6,13 +6,13 @@
 #
 # Variáveis de ambiente:
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID  segredos do repositório (o token precisa de "Cloudflare Pages: Edit")
-#   PAGES_PROJETO                                nome do projeto no Pages (padrão: painel-meteo)
+#   PAGES_PROJETO                                nome do projeto no Pages (padrão: tempo-rs)
 # Sem os segredos, só avisa e termina sem erro, como o workflow do Worker.
 # Documentação: https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/
 set -euo pipefail
 
 globo=${1:-}
-projeto=${PAGES_PROJETO:-painel-meteo}
+projeto=${PAGES_PROJETO:-tempo-rs}
 wrangler=(npx --yes wrangler@4)
 
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
