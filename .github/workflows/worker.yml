@@ -78,7 +78,7 @@ jobs:
           echo "url=https://painel-meteo.$sub.workers.dev" >> "$GITHUB_OUTPUT"
 
       # Origens aceitas pelo CORS: as do wrangler.toml (GitHub Pages) mais o site do Cloudflare Pages, montadas a partir
-      # das variáveis do repositório PAINEL_DOMINIO (ex.: tempo.seudominio.com.br) e PAGES_PROJETO (padrão painel-meteo).
+      # das variáveis do repositório PAINEL_DOMINIO (ex.: tempo.seudominio.com.br) e PAGES_PROJETO (padrão tempo-rs).
       - name: Publicar
         if: steps.seg.outputs.ok == 'true'
         working-directory: worker
@@ -88,7 +88,11 @@ jobs:
         run: |
           set -euo pipefail
           origens=$(sed -n 's/^ALLOWED_ORIGIN = "\(.*\)"$/\1/p' wrangler.toml)
-          origens="$origens,https://${PAGES_PROJETO:-painel-meteo}.pages.dev"
+          # Endereço real do projeto no Pages (se o nome já tinha dono, a Cloudflare acrescenta letras no fim).
+          projeto=${PAGES_PROJETO:-tempo-rs}
+          sub=$(curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$projeto" | jq -r '.result.subdomain // empty' || true)
+          origens="$origens,https://${sub:-$projeto.pages.dev}"
           dominio=$(printf '%s' "${PAINEL_DOMINIO:-}" | sed -E 's#^https?://##; s#/.*$##' | tr 'A-Z' 'a-z')
           if [ -n "$dominio" ]; then
             if ! printf '%s' "$dominio" | grep -Eq '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'; then
