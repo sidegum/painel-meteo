@@ -1224,17 +1224,18 @@ export function leituraPressao(av, probChuva) {
   if (!valido(probChuva)) {
     return piora
       ? { titulo: 'Pressão caindo', texto: 'Costuma anteceder mudança no tempo.', classe: 'mudanca' }
-      : { titulo: av.sinal === 'firme' ? 'Pressão subindo' : 'Pressão estável', texto: 'Sem sinal de piora.', classe: av.sinal === 'firme' ? 'firme' : 'neutra' };
+      : { titulo: av.sinal === 'firme' ? 'Pressão subindo' : 'Pressão sem sinal de mudança', texto: 'Sem sinal de piora.', classe: av.sinal === 'firme' ? 'firme' : 'neutra' };
   }
   if (piora && chuvaPrevista) {
     return { titulo: 'Confirma a chuva prevista', classe: av.sinal === 'forte' ? 'forte' : 'confirma',
       texto: av.sinal === 'fraco' ? 'A pressão começa a cair.' : 'A pressão está caindo, como antes de uma frente.' };
   }
   if (piora) return { titulo: 'Mudança no tempo', classe: 'mudanca', texto: 'A pressão cai, mas sem chuva prevista hoje: por ora, mais nuvens ou vento.' };
-  if (chuvaPrevista) return { titulo: 'Pressão estável', classe: 'neutra', texto: 'Isso não muda a chuva prevista.' };
+  // "sem sinal de mudança", e não "estável": a tendência de 3 h logo acima pode dizer "subindo devagar" (até 1,5 hPa)
+  if (chuvaPrevista) return { titulo: 'Pressão sem sinal de mudança', classe: 'neutra', texto: 'Isso não muda a chuva prevista.' };
   return av.sinal === 'firme'
     ? { titulo: 'Tempo firme', classe: 'firme', texto: 'Pressão subindo ou alta.' }
-    : { titulo: 'Pressão estável', classe: 'neutra', texto: 'Sem variação importante.' };
+    : { titulo: 'Pressão sem sinal de mudança', classe: 'neutra', texto: 'Variação pequena nas últimas horas.' };
 }
 
 // ---------- chuva chegando (radar) ----------

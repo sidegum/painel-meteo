@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.3.2';
+const VERSAO = '1.3.3';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -794,6 +794,20 @@ function chanceHoraria(ms) {
 }
 
 /**
+ * A chance de uma hora nunca passa a chance do dia (a principal, calibrada): a do dia conta cenários com 1 mm ou
+ * mais no total e passa pela calibração local, a da hora conta 0,2 mm na hora, e sem este teto uma noite podia
+ * mostrar 23% com o dia em 12%. O teto vale só para a estimativa dos modelos; chuva medida ou vista no radar
+ * entra depois, e o veredito do dia já sobe junto nesses casos (avaliarDia, ctx.chegando).
+ */
+function tetoDoDia(c, ms) {
+  if (!valido(c.p) || !estado.prev) return c;
+  const data = partesLocais(ms, estado.prev.offset).data, k = datas().indexOf(data);
+  if (k < 0) return c;
+  const prob = analisarDia(data, k, k === 0).av.prob;
+  return valido(prob) && c.p > prob ? { ...c, p: prob } : c;
+}
+
+/**
  * O que se mede agora e vale para as próximas horas: chovendo (estação ou radar), chuva chegando pelo radar
  * ou janela seca garantida pelo radar. Calculado uma vez e passado a chanceHora.
  */
@@ -811,7 +825,7 @@ function situacaoAgora() {
  * @returns {{p:number|null, origem:string|null, medido?:boolean}}
  */
 function chanceHora(ms, sit = situacaoAgora()) {
-  const c = chanceHoraria(ms), agora = Date.now(), R = REGRAS.radar;
+  const c = tetoDoDia(chanceHoraria(ms), ms), agora = Date.now(), R = REGRAS.radar;
   if (sit.chovendo && agora >= ms && agora < ms + 3600000) return { p: 1, origem: 'medido', medido: true };
   if (sit.chegando && ms + 3600000 > sit.chegando.chegaMs && ms < sit.chegando.chegaMs + 2 * 3600000 && !(c.p >= R.probChegando)) return { p: R.probChegando, origem: 'radar' };
   if (sit.seco && ms + 3600000 <= sit.seco.ateMs && ms + 3600000 > agora && !(c.p <= R.probSeco)) return { p: R.probSeco, origem: 'radar seco' };
@@ -1514,8 +1528,10 @@ function renderAmanhaDetalhes(data) {
   // períodos
   const per = { madrugada: [], 'manhã': [], tarde: [], noite: [] };
   for (const i of a.idxTodo) per[periodoDoDia(partesLocais(p.horas[i], p.offset).hora)].push(i);
+  const sit = situacaoAgora();
   const caixas = Object.entries(per).map(([nome, idx]) => {
-    const prob = maximo(idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.precipitation_probability?.[i]))));
+    // mesma chance por hora do gráfico e da tabela de horas (cenários do ensemble), para nenhuma tela discordar da outra
+    const prob = maximo(idx.map((i) => { const c = chanceHora(p.horas[i], sit); return valido(c.p) ? c.p * 100 : null; }));
     const mm = idx.reduce((s, i) => { const v = mediana(mods.map((m) => p.modelos[m].vars.precipitation?.[i])); return valido(v) ? s + v : s; }, 0);
     const g = maximo(idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.wind_gusts_10m?.[i]))));
     const t = idx.map((i) => tempHora(p, 'temperature_2m', i, mods));

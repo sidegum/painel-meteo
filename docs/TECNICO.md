@@ -311,7 +311,7 @@ Funções puras em `analise.js`, com limites em `REGRAS.pressao`:
   |---|---|---|
   | Indica piora | Chuva possível ou provável (≥ 40%) | "Confirma a chuva prevista" |
   | Indica piora | Sem chuva (< 40%) | "Mudança no tempo, sem chuva prevista" (mais nuvens ou vento) |
-  | Estável ou subindo | Chuva possível ou provável | "Pressão estável": a chuva prevista não depende de queda de pressão (por exemplo, pancadas de calor) |
+  | Estável ou subindo | Chuva possível ou provável | "Pressão sem sinal de mudança": a chuva prevista não depende de queda de pressão (por exemplo, pancadas de calor) |
   | Subindo ou alta | Sem chuva | "Tempo firme" |
 
   O teste `pressão nunca contradiz a chance de chuva principal` percorre combinações de pressão e de chance e garante que a pressão nunca anuncia chuva quando a previsão não tem chuva, nem tempo firme quando a previsão tem chuva.
@@ -413,6 +413,7 @@ Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mí
 
 - **Chuva** (`graficoChance`):
   - A chance por hora vem de `chanceHoraria(ms)`: a fração de **todos** os membros de cenários com 0,2 mm ou mais na hora, se houver 10 ou mais. Sem isso, a mediana de `precipitation_probability` dos modelos.
+  - `tetoDoDia`: a chance de uma hora nunca passa a chance principal do dia (calibrada, 1 mm ou mais no total). Vale para o gráfico, a tabela de horas e os períodos de amanhã, que assim nunca mostram mais chance do que o cartão do dia. Chuva medida ou vista no radar entra depois do teto (e o dia já sobe junto nesses casos).
   - Se está chovendo agora (medido), a barra da hora atual vira 100%, em cor de medição.
   - O eixo vertical vai de 0 a `TETO_CHANCE` = 115%, com marcas a cada 20%. A folga evita que as barras cheias encostem no topo.
 - **Temperatura** (`graficoTemperatura`): a série do ECMWF. O eixo vai de pouco abaixo da mínima a pouco acima da máxima, em passos de 2, 3 ou 5 °C conforme a amplitude, com pelo menos dois passos.
