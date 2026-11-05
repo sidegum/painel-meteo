@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.6.1';
+const VERSAO = '1.6.2';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -680,18 +680,41 @@ function renderTudo() {
   renderPrimeira($('#hoje-primeira'), ds[0], 0, true);
   renderAgora(); observarAgora();
   if (ds[1]) renderPrimeira($('#amanha-primeira'), ds[1], 1, false);
-  // detalhes depois da primeira tela, sem travar a abertura
-  const depois = window.requestIdleCallback || ((fn) => setTimeout(fn, 30));
-  depois(() => {
-    const y = window.scrollY;
-    renderHojeDetalhes();
-    if (ds[1]) renderAmanhaDetalhes(ds[1]);
-    renderSemana();
-    renderModelos();
-    if (estado.aba === 'elnino') renderElNino();
-    window.scrollTo(0, y); // evita que a tela pule
-  });
+  // Detalhes de todas as abas depois da primeira tela, uma aba por vez em momentos ociosos:
+  // tudo fica pronto antes de ser aberto, sem uma tarefa longa que trave toque e rolagem.
+  const tarefas = { hoje: renderHojeDetalhes, amanha: () => ds[1] && renderAmanhaDetalhes(ds[1]), semana: renderSemana, modelos: renderModelos, elnino: renderElNino };
+  filaRender.pendentes = new Map([estado.aba, 'hoje', 'amanha', 'semana', 'modelos', 'elnino'].filter((n) => tarefas[n]).map((n) => [n, tarefas[n]]));
+  const geracao = ++filaRender.geracao;
+  const passo = () => {
+    if (geracao !== filaRender.geracao) return; // uma atualização mais nova assumiu a fila
+    const proxima = filaRender.pendentes.keys().next().value;
+    if (!proxima) { preCarregarGlobo(); return; }
+    renderPendente(proxima);
+    ocioso(passo);
+  };
+  ocioso(passo);
   atualizarCabecalho();
+}
+
+const filaRender = { geracao: 0, pendentes: new Map() };
+const ocioso = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 1500 }) : setTimeout(fn, 30));
+
+// Desenha agora a aba que ainda está na fila (chamada também quando o usuário abre a aba antes da vez dela).
+function renderPendente(aba) {
+  const fn = filaRender.pendentes.get(aba);
+  if (!fn) return;
+  filaRender.pendentes.delete(aba);
+  const y = window.scrollY;
+  fn();
+  if (aba === estado.aba) window.scrollTo(0, y); // evita que a tela pule
+}
+
+// Baixa e prepara o código do Globo sem executá-lo, para a aba abrir sem espera.
+let globoPreCarregado = false;
+function preCarregarGlobo() {
+  if (globoPreCarregado || navigator.connection?.saveData) return;
+  globoPreCarregado = true;
+  document.head.append(el('link', { rel: 'modulepreload', href: new URL('./globo.js', import.meta.url).href }));
 }
 
 function renderSemPrevisao() {
@@ -2073,7 +2096,8 @@ function irPara(aba, rolarTopo = true, direcao = 0) {
     if (atual) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   if (rolarTopo) window.scrollTo({ top: 0, behavior: 'instant' });
-  if (aba === 'elnino' && estado.prev !== undefined) renderElNino();
+  if (filaRender.pendentes.has(aba)) renderPendente(aba);
+  else if (aba === 'elnino' && estado.prev !== undefined) renderElNino();
   if (aba === 'avisos' && estado.alertas && !estado.alertas.indisponivel) { const meus = avisosOrdenados(); marcarAvisosVistos(meus); marcarBotaoAvisos(meus); }
   abrirOuFecharGlobo(aba);
   // Entrada suave da aba (só transform e opacidade, que a placa de vídeo faz sem travar).
