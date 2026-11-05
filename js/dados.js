@@ -300,7 +300,7 @@ export async function buscarEnso() {
 }
 /**
  * Calibração com o histórico (viés de temperatura, fatores de rajada e vento, pesos), gerada todo mês pelo
- * GitHub Actions (scripts/calibrar.mjs) e publicada pelo GitHub Pages junto com o app: mesma origem, sem
+ * GitHub Actions (scripts/calibrar.mjs) e publicada no Cloudflare Pages junto com o app: mesma origem, sem
  * Worker e sem CORS. Método em docs/CALIBRACAO.md.
  * @returns {Promise<object>} conteúdo de dados/calibracao.json
  */
