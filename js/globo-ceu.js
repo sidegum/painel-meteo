@@ -113,47 +113,97 @@ export function cartaoAstro(corpo, estadoApp, t = Date.now()) {
 
 // ------------------------------------------------------------------ estrelas
 
-const LETRAS_GREGAS = { 'α': 'alfa', 'β': 'beta', 'γ': 'gama', 'δ': 'delta', 'ε': 'épsilon', 'ζ': 'zeta', 'η': 'eta', 'θ': 'teta', 'ι': 'iota', 'κ': 'capa', 'λ': 'lambda', 'σ': 'sigma' };
-const corEstrela = (T) => (T >= 10000 ? 'branco-azulada' : T >= 7300 ? 'branca' : T >= 6000 ? 'branco-amarelada' : T >= 5000 ? 'amarelada' : T >= 3900 ? 'alaranjada' : 'avermelhada');
-const horasMin = (raGraus) => { const h = raGraus / 15, m = (h % 1) * 60; return `${Math.floor(h)}h ${fmt.n(m, 1)}min`; };
+const GREGAS = { Alp: ['α', 'alfa'], Bet: ['β', 'beta'], Gam: ['γ', 'gama'], Del: ['δ', 'delta'], Eps: ['ε', 'épsilon'], Zet: ['ζ', 'zeta'],
+  Eta: ['η', 'eta'], The: ['θ', 'teta'], Iot: ['ι', 'iota'], Kap: ['κ', 'capa'], Lam: ['λ', 'lambda'], Mu: ['μ', 'mi'], Nu: ['ν', 'ni'],
+  Xi: ['ξ', 'csi'], Omi: ['ο', 'ômicron'], Pi: ['π', 'pi'], Rho: ['ρ', 'rô'], Sig: ['σ', 'sigma'], Tau: ['τ', 'tau'], Ups: ['υ', 'ípsilon'],
+  Phi: ['φ', 'fi'], Chi: ['χ', 'qui'], Psi: ['ψ', 'psi'], Ome: ['ω', 'ômega'] };
+const SOBRESCRITO = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹'];
+const ANO_LUZ_PC = 3.26156;
+
+/** Designação de Bayer (α¹ Centauri), senão de Flamsteed (61 Cygni), senão HIP ou HD. */
+export function designacaoEstrela(e, genitivo) {
+  const gen = genitivo || e.sigla;
+  if (e.bayer) {
+    const [letra, indice] = e.bayer.split('-');
+    const g = GREGAS[letra];
+    if (g) return `${g[0]}${indice ? [...indice].map((c) => SOBRESCRITO[+c] || c).join('') : ''} ${gen}`;
+  }
+  if (e.flamsteed) return `${e.flamsteed} ${gen}`;
+  return e.hip ? `HIP ${e.hip}` : e.hd ? `HD ${e.hd}` : 'estrela sem designação';
+}
+
+/** Tipo espectral em palavras: classe (cor e temperatura típica) e classe de luminosidade (anã, gigante...). */
+export function tipoEspectral(esp) {
+  const s = String(esp || '').trim();
+  if (!s) return null;
+  if (/^D/.test(s)) return { curto: 'anã branca', longo: 'anã branca (núcleo exposto de uma estrela que já morreu)' };
+  const classes = { O: ['azul', 'azul', 'acima de 30.000 K'], B: ['branco-azulada', 'branco-azulada', '10.000 a 30.000 K'],
+    A: ['branca', 'branca', '7.500 a 10.000 K'], F: ['branco-amarelada', 'branco-amarelada', '6.000 a 7.500 K'],
+    G: ['amarela', 'amarela, como o Sol', '5.200 a 6.000 K'], K: ['laranja', 'laranja', '3.700 a 5.200 K'], M: ['vermelha', 'vermelha', '2.400 a 3.700 K'],
+    C: ['vermelha', 'vermelha, rica em carbono', 'abaixo de 3.500 K'], S: ['vermelha', 'vermelha, rica em zircônio', 'abaixo de 3.500 K'],
+    W: ['azul', 'azul, do tipo Wolf-Rayet', 'acima de 30.000 K'] };
+  const c = classes[s[0]];
+  const lum = /^[\d.\-/]*\s*(Ia\+|Iab|Ia|Ib|III|II|IV|VI|V|I)/.exec(s.slice(1))?.[1];
+  const [base, papel] = ({ 'Ia+': ['hipergigante', 'hipergigante, das estrelas mais luminosas que existem'], Ia: ['supergigante', 'supergigante muito luminosa'],
+    Iab: ['supergigante', 'supergigante'], Ib: ['supergigante', 'supergigante'], I: ['supergigante', 'supergigante'], II: ['gigante luminosa', 'gigante luminosa'],
+    III: ['gigante', 'gigante (já saiu da fase em que queima hidrogênio no núcleo)'], IV: ['subgigante', 'subgigante (começando a crescer)'],
+    V: ['estrela', 'anã da sequência principal: estrela comum que queima hidrogênio no núcleo, como o Sol'], VI: ['subanã', 'subanã'] })[lum] || ['estrela', null];
+  return {
+    curto: c ? `${base} ${c[0]}` : base,
+    longo: `${s}: ${c ? `classe ${s[0]} (${c[1]}, superfície de ${c[2]})` : 'classe especial'}${papel ? `; ${papel}` : ''}`,
+  };
+}
+
+const anosLuz = (pc) => pc * ANO_LUZ_PC;
+const distanciaTexto = (pc) => { const al = anosLuz(pc); return al < 100 ? `${fmt.n(al, 1)} anos-luz` : `${fmt.n(al < 1000 ? Math.round(al) : Math.round(al / 10) * 10)} anos-luz`; };
 
 /**
- * Cartão de uma estrela com nome (catálogo do céu de fundo), vista do local do usuário.
- * @param {{nome:string, letra:string, sigla:string, ra:number, dec:number, mag:number, bv:number, hip:number}} e
+ * Cartão de uma estrela do catálogo, vista do local do usuário.
+ * @param {object} e estrela de globo-estrelas.js
  * @param {{nome:string, genitivo:string}} constelacao nomes latinos da constelação
  */
 export function cartaoEstrela(e, constelacao, estadoApp, t = Date.now()) {
   const local = localDoObservador(estadoApp), off = fusoS(estadoApp);
   const obs = C.observador(local.lat, local.lon, 0);
   const i = C.infoEstrela(e.ra, e.dec, obs, t);
-  const designacao = `${e.letra} ${constelacao?.genitivo || e.sigla}`;
+  const designacao = designacaoEstrela(e, constelacao?.genitivo);
   const titulo = e.nome || designacao;
   const nomeConst = C.CONSTELACOES[e.sigla] || constelacao?.nome || e.sigla;
+  const tipo = tipoEspectral(e.espectro);
   const acima = i.altura > 0;
-  let frase = acima ? `Está ${C.alturaTexto(i.altura)} para o ${C.rumo(i.azimute)} (${Math.round(i.altura)}°).`
-    : i.sempre === 'abaixo' ? 'Daqui ela nunca aparece: fica sempre abaixo do horizonte.'
-    : `Agora está abaixo do horizonte${i.nasce ? `; nasce às ${hora(i.nasce, off)}` : ''}.`;
-  if (i.sempre === 'acima') frase += ' Daqui ela nunca se põe.';
-  const T = Number.isFinite(e.bv) ? C.temperaturaCor(e.bv) : null;
+  const quem = [tipo ? `${tipo.curto[0].toUpperCase()}${tipo.curto.slice(1)}` : 'Estrela', Number.isFinite(e.distPc) ? `a ${distanciaTexto(e.distPc)}` : null].filter(Boolean).join(' ');
+  let onde = acima ? `agora ${C.alturaTexto(i.altura)} para o ${C.rumo(i.azimute)} (${Math.round(i.altura)}°)`
+    : i.sempre === 'abaixo' ? 'daqui ela nunca aparece' : `agora abaixo do horizonte${i.nasce ? `; nasce às ${hora(i.nasce, off)}` : ''}`;
+  if (i.sempre === 'acima') onde += '; daqui ela nunca se põe';
+  const frase = `${quem}; ${onde}.`;
   const numeros = `Constelação de ${nomeConst} · magnitude ${fmt.n(e.mag, 1)}`;
-  const fonte = `Hipparcos · ${hora(t, off)} · visto de ${local.nome}`;
-  const letraLonga = LETRAS_GREGAS[e.letra?.[0]];
+  const fonte = `HYG/Hipparcos · ${hora(t, off)} · visto de ${local.nome}`;
+  const T = Number.isFinite(e.bv) ? C.temperaturaCor(e.bv) : null;
+  const outras = [e.nome ? designacao : null, e.flamsteed && e.bayer ? `${e.flamsteed} ${constelacao?.genitivo || e.sigla}` : null, e.hip ? `HIP ${e.hip}` : null, e.hd ? `HD ${e.hd}` : null].filter(Boolean);
+  const letraLonga = e.bayer ? GREGAS[e.bayer.split('-')[0]]?.[1] : null;
   const linhas = [
-    linha('Designação', `${designacao}${letraLonga ? ` (${letraLonga})` : ''} · HIP ${e.hip}`),
+    linha('Designações', `${outras.join(' · ') || designacao}${letraLonga ? ` (${letraLonga})` : ''}`),
     linha('Constelação', `${nomeConst} (${constelacao?.nome || e.sigla})`),
-    linha('Brilho', `magnitude ${fmt.n(e.mag, 2)}: ${C.brilhoTexto(e.mag)}`),
-    linha('Cor', T ? `${corEstrela(T)}; superfície a cerca de ${fmt.n(Math.round(T / 100) * 100)} K (estimada pelo índice de cor B−V ${fmt.n(e.bv, 2)})` : null),
+    linha('Brilho aparente', `magnitude ${fmt.n(e.mag, 2)}: ${C.brilhoTexto(e.mag)}`),
+    linha('Distância', Number.isFinite(e.distPc) ? `${distanciaTexto(e.distPc)} (${fmt.n(e.distPc, e.distPc < 100 ? 2 : 0)} parsecs); a luz que você vê saiu dela há ${fmt.n(Math.round(anosLuz(e.distPc)))} anos` : 'sem paralaxe confiável no catálogo'),
+    linha('Brilho real', Number.isFinite(e.magAbs) ? `magnitude absoluta ${fmt.n(e.magAbs, 2)}${Number.isFinite(e.lum) ? `; ${e.lum >= 1 ? `${fmt.n(e.lum, e.lum < 10 ? 1 : 0)} vezes` : `${fmt.n(e.lum, 3)} da`} luminosidade do Sol (no visível)` : ''}` : null),
+    linha('Tipo', tipo ? tipo.longo : null),
+    linha('Cor e temperatura', T ? `${corEstrela(T)}; superfície a cerca de ${fmt.n(Math.round(T / 100) * 100)} K (pelo índice de cor B−V ${fmt.n(e.bv, 2)})` : null),
+    linha('Variável', e.variavel ? 'sim: o brilho dela muda com o tempo' : 'não consta como variável'),
     linha('Agora', `${fmt.n(i.altura, 1)}° de altura, azimute ${fmt.n(i.azimute, 0)}° (${C.rumo(i.azimute)})`),
     linha('Nasce e se põe', i.sempre === 'acima' ? 'nunca se põe neste local' : i.sempre === 'abaixo' ? 'nunca nasce neste local' : [i.nasce && `nasce ${diaHora(i.nasce, off, t)}`, i.poe && `se põe ${diaHora(i.poe, off, t)}`].filter(Boolean).join('; ')),
     linha('Ponto mais alto', i.culmina.altura > 0 ? `${diaHora(i.culmina.ms, off, t)}, a ${fmt.n(i.culmina.altura, 1)}° de altura` : null),
-    linha('Coordenadas (J2000)', `ascensão reta ${horasMin(e.ra)}, declinação ${e.dec >= 0 ? '+' : '−'}${fmt.n(Math.abs(e.dec), 2)}°`),
+    linha('Coordenadas', `ascensão reta ${horasMin(e.ra)}, declinação ${e.dec >= 0 ? '+' : '−'}${fmt.n(Math.abs(e.dec), 2)}° (equinócio J2000, época 2026)`),
   ];
   return {
     titulo, frase, numeros, fonte,
     detalhes: () => mostrarInfo(titulo, el('table', { class: 'tabela-detalhe' }, el('tbody', {}, ...linhas)),
-      el('p', { class: 'nota', text: `Catálogo Hipparcos e Yale Bright Star (via d3-celestial); posição de hoje com precessão, aberração e refração pelo Astronomy Engine 2.1.19, vista de ${local.nome}. Horários no fuso do local.` })),
+      el('p', { class: 'nota', text: `Catálogo HYG v4.1 (Hipparcos, Yale Bright Star e Gliese), com movimento próprio até 2026; posição de agora com precessão, nutação, aberração e refração pelo Astronomy Engine 2.1.19, vista de ${local.nome}. Horários no fuso do local.` })),
   };
 }
+
+const corEstrela = (T) => (T >= 10000 ? 'branco-azulada' : T >= 7300 ? 'branca' : T >= 6000 ? 'branco-amarelada' : T >= 5000 ? 'amarelada' : T >= 3900 ? 'alaranjada' : 'avermelhada');
+const horasMin = (raGraus) => { const h = raGraus / 15, m = (h % 1) * 60; return `${Math.floor(h)}h ${fmt.n(m, 1)}min`; };
 
 // ------------------------------------------------------------------ satélites: identificação
 

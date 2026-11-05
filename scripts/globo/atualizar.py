@@ -23,6 +23,7 @@ Saída (pasta SAIDA, publicada no branch "globo-dados"):
   ciclones.json           lista de ciclones ativos com posição, vento e fonte
   satelites.json          elementos orbitais (OMM) por grupo
   sondas.json             trajetória e posição de agora de cada sonda (heliocêntrica, eclíptica J2000, UA e UA/dia)
+  corpos.json             elementos orbitais de luas (Horizons), corpos menores e populações dos cinturões (SBDB)
 
 Cada canal é um inteiro de 0 a 255 que o app converte de volta pela faixa [min, max] gravada no manifest. O PNG
 nunca usa o canal alfa, porque o navegador pré-multiplica a transparência e isso corromperia os valores.
@@ -465,6 +466,110 @@ def gerar_sondas(agora):
     return sondas
 
 
+# ------------------------------------------------------------------ luas, corpos menores e cinturões (JPL)
+
+# Luas: elementos osculantes do JPL Horizons em relação ao centro do planeta (eclíptica J2000), para o app propagar
+# a órbita kepleriana. As luas de Júpiter (Io, Europa, Ganimedes e Calisto) e a nossa Lua vêm do Astronomy Engine.
+LUAS = [
+    ('fobos', '401', '499'), ('deimos', '402', '499'),
+    ('mimas', '601', '699'), ('encelado', '602', '699'), ('tetis', '603', '699'), ('dione', '604', '699'),
+    ('reia', '605', '699'), ('tita', '606', '699'), ('japeto', '608', '699'),
+    ('miranda', '705', '799'), ('ariel', '701', '799'), ('umbriel', '702', '799'), ('titania', '703', '799'), ('oberon', '704', '799'),
+    ('tritao', '801', '899'), ('caronte', '901', '999'),
+]
+# Corpos menores pelo SBDB (Small-Body Database): elementos heliocêntricos da eclíptica J2000 e diâmetro, quando há.
+PEQUENOS = [
+    ('ceres', '1', 'anao'), ('eris', '136199', 'anao'), ('haumea', '136108', 'anao'), ('makemake', '136472', 'anao'),
+    ('gonggong', '225088', 'anao'), ('quaoar', '50000', 'anao'), ('orco', '90482', 'anao'), ('sedna', '90377', 'anao'),
+    ('vesta', '4', 'asteroide'), ('palas', '2', 'asteroide'), ('higia', '10', 'asteroide'), ('psique', '16', 'asteroide'),
+    ('eros', '433', 'asteroide'), ('bennu', '101955', 'asteroide'), ('apofis', '99942', 'asteroide'), ('didymos', '65803', 'asteroide'),
+    ('ryugu', '162173', 'asteroide'), ('itokawa', '25143', 'asteroide'), ('patroclo', '617', 'asteroide'), ('eurybates', '3548', 'asteroide'),
+    ('arrokoth', '486958', 'asteroide'),
+    ('halley', '1P', 'cometa'), ('encke', '2P', 'cometa'), ('churyumov', '67P', 'cometa'), ('swifttuttle', '109P', 'cometa'),
+    ('tempeltuttle', '55P', 'cometa'), ('hartley', '103P', 'cometa'), ('ponsbrooks', '12P', 'cometa'),
+]
+# Populações reais (pontos dos cinturões): asteroides numerados do cinturão principal, troianos de Júpiter e TNOs.
+POPULACOES = [('principal', 'MBA', 6000), ('troianos', 'TJN', 1500), ('kuiper', 'TNO', 1500)]
+SBDB = 'https://ssd-api.jpl.nasa.gov/sbdb.api'
+SBDB_CONSULTA = 'https://ssd-api.jpl.nasa.gov/sbdb_query.api'
+JD_UNIX = 2440587.5
+
+
+def horizons_elementos(alvo, centro, agora):
+    """Elementos osculantes (a em UA, e, i, Ω, ω, M em graus, n em graus/dia) no instante de hoje à 0 h TDB."""
+    dia = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+    q = {'format': 'json', 'COMMAND': f"'{alvo}'", 'OBJ_DATA': 'NO', 'MAKE_EPHEM': 'YES', 'EPHEM_TYPE': 'ELEMENTS', 'CENTER': f"'500@{centro}'",
+         'START_TIME': f"'{dia:%Y-%m-%d}'", 'STOP_TIME': f"'{dia + timedelta(days=1):%Y-%m-%d}'", 'STEP_SIZE': "'1 d'",
+         'REF_PLANE': 'ECLIPTIC', 'REF_SYSTEM': 'ICRF', 'OUT_UNITS': 'AU-D', 'CSV_FORMAT': 'YES'}
+    j = json.loads(baixar(HORIZONS + '?' + urllib.parse.urlencode(q), timeout=90, binario=False))
+    texto = j.get('result', '')
+    if '$$SOE' not in texto:
+        raise RuntimeError(f"Horizons {alvo}: sem elementos ({(texto + j.get('error', ''))[:300]})")
+    antes = texto.split('$$SOE', 1)[0].strip().splitlines()
+    cab = next((ln for ln in reversed(antes) if 'JDTDB' in ln), '')
+    nomes = [c.strip() for c in cab.split(',')]
+    linha = texto.split('$$SOE', 1)[1].split('$$EOE', 1)[0].strip().splitlines()[0]
+    val = dict(zip(nomes, [c.strip() for c in linha.split(',')]))
+    nome = re.search(r'Target body name:\s*([^{\n]+?)\s*(?:\{|$)', texto, re.M)
+    return {'nome': nome.group(1).strip() if nome else alvo, 'epoca': round((float(val['JDTDB']) - JD_UNIX) * 86400000),
+            'a': float(val['A']), 'e': float(val['EC']), 'i': float(val['IN']), 'om': float(val['OM']), 'w': float(val['W']),
+            'ma': float(val['MA']), 'n': float(val['N'])}
+
+
+def sbdb_corpo(sstr):
+    """Elementos e diâmetro de um corpo menor pelo SBDB (valores em UA, graus e dias; época em JD TDB)."""
+    j = json.loads(baixar(SBDB + '?' + urllib.parse.urlencode({'sstr': sstr, 'phys-par': '1'}), timeout=60, binario=False))
+    if 'orbit' not in j:
+        raise RuntimeError(f"SBDB {sstr}: {str(j)[:200]}")
+    el = {e['name']: e['value'] for e in j['orbit']['elements']}
+    fis = {p['name']: p['value'] for p in j.get('phys_par') or []}
+    item = {'nome': j['object'].get('fullname', sstr), 'epoca': round((float(j['orbit']['epoch']) - JD_UNIX) * 86400000),
+            'a': float(el['a']) if el.get('a') else None, 'e': float(el['e']), 'i': float(el['i']), 'om': float(el['om']), 'w': float(el['w']),
+            'q': float(el['q']), 'tp': round((float(el['tp']) - JD_UNIX) * 86400000) if el.get('tp') else None,
+            'ma': float(el['ma']) if el.get('ma') else None, 'n': float(el['n']) if el.get('n') else None}
+    if fis.get('diameter'):
+        item['diametro_km'] = float(fis['diameter'])
+    return item
+
+
+def sbdb_populacao(classe, limite):
+    """Elementos dos primeiros `limite` asteroides numerados de uma classe orbital do SBDB."""
+    q = {'fields': 'a,e,i,om,w,ma,epoch', 'sb-kind': 'a', 'sb-ns': 'n', 'sb-class': classe, 'limit': str(limite)}
+    j = json.loads(baixar(SBDB_CONSULTA + '?' + urllib.parse.urlencode(q), timeout=120, binario=False))
+    saida = []
+    for d in j.get('data') or []:
+        try:
+            a, e, i, om, w, ma, ep = (float(x) for x in d)
+        except (TypeError, ValueError):
+            continue
+        saida.append([round(a, 4), round(e, 4), round(i, 3), round(om, 3), round(w, 3), round(ma, 3), round(ep - 2460000, 1)])
+    return saida
+
+
+def gerar_corpos(agora):
+    luas, pequenos, populacoes = {}, {}, {}
+    for chave, alvo, centro in LUAS:
+        try:
+            luas[chave] = dict(horizons_elementos(alvo, centro, agora), pai=centro, id=alvo)
+            time.sleep(1)
+        except Exception as e:
+            log(f'Lua {chave} falhou: {e}')
+    for chave, sstr, tipo in PEQUENOS:
+        try:
+            pequenos[chave] = dict(sbdb_corpo(sstr), tipo=tipo, id=sstr)
+            time.sleep(0.5)
+        except Exception as e:
+            log(f'SBDB {sstr} falhou: {e}')
+    for chave, classe, limite in POPULACOES:
+        try:
+            populacoes[chave] = sbdb_populacao(classe, limite)
+            time.sleep(1)
+        except Exception as e:
+            log(f'SBDB {classe} falhou: {e}')
+    log(f'corpos: {len(luas)} luas, {len(pequenos)} corpos menores, ' + ', '.join(f'{k} {len(v)}' for k, v in populacoes.items()))
+    return {'luas': luas, 'pequenos': pequenos, 'populacoes': populacoes, 'epocaPopulacoes': 'JD 2460000 + valor'}
+
+
 # ------------------------------------------------------------------ principal
 
 def main():
@@ -526,6 +631,17 @@ def main():
                 json.dump({'gerado': manifest['gerado'], 'fonte': 'JPL Horizons (NASA/JPL)', 'referencia': 'heliocêntrica, eclíptica J2000; UA e UA/dia',
                            'sondas': sondas}, f, separators=(',', ':'))
             manifest['sondas'] = {'arquivo': 'sondas.json', 'gerado': manifest['gerado'], 'lista': sorted(sondas)}
+
+    # luas, corpos menores e cinturões: uma vez por dia, junto das sondas, ou quando pedido
+    ultima = (anterior.get('corpos') or {}).get('gerado', '')
+    manifest['corpos'] = anterior.get('corpos')
+    if (so and 'corpos' in so) or (not so and ultima[:10] != manifest['gerado'][:10]):
+        corpos = gerar_corpos(agora)
+        if corpos['luas'] or corpos['pequenos']:
+            with open(os.path.join(saida, 'corpos.json'), 'w', encoding='utf-8') as f:
+                json.dump(dict(corpos, gerado=manifest['gerado'], fonte='JPL Horizons e JPL Small-Body Database (NASA/JPL)',
+                               referencia='eclíptica J2000; luas em relação ao centro do planeta; UA, graus e graus/dia'), f, ensure_ascii=False, separators=(',', ':'))
+            manifest['corpos'] = {'arquivo': 'corpos.json', 'gerado': manifest['gerado']}
 
     with open(os.path.join(saida, 'manifest.json'), 'w', encoding='utf-8') as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)

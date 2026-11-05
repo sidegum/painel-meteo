@@ -53,6 +53,7 @@ const G = {
   texturas: {}, relogio: null, quadro: 0, ultimoQuadro: 0, tempos: [], nivelQualidade: 0, pixelRatio: 1,
   particulas: null, tocado: null, erroDados: null, anim: 0, tempoLinha: { tocando: false, timer: null },
   espaco: null, espacoAberto: false, sistema: false,
+  foco: null, focoAlvo: null, animFoco: null, focoDistMin: 0.3, // sistema solar: ponto em volta do qual a câmera gira
 };
 
 const latLonVec = (lat, lon, r = RAIO, alvo = new THREE.Vector3()) => {
@@ -365,6 +366,7 @@ function montarCena() {
   G.renderer = renderer;
   G.cena = new THREE.Scene();
   G.camera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
+  G.foco = new THREE.Vector3();
 
   // Malha fina: a esfera desenhada é um poliedro, e no zoom de cidade a face fica abaixo da esfera ideal
   // (com 96 x 72 faces, até 3,5 km no meio da face), o que desloca o mapa visto em relação a marcadores e toques.
@@ -477,6 +479,14 @@ function instanteMostrado() {
 
 function posicionarCamera() {
   const c = G.cam;
+  if (G.sistema) { // sistema solar: a câmera gira em volta do foco (o Sol ou o corpo escolhido)
+    const near = Math.max(0.0002, Math.min(0.05, c.dist * 0.02));
+    if (Math.abs(near - G.camera.near) > near * 0.25) { G.camera.near = near; G.camera.updateProjectionMatrix(); }
+    latLonVec(c.lat, c.lon, c.dist, G.camera.position).add(G.foco);
+    G.camera.up.set(0, 1, 0);
+    G.camera.lookAt(G.foco);
+    return;
+  }
   // plano próximo proporcional à altura: perto da superfície (25 km) a Terra não pode ser cortada
   const near = Math.max(0.0004, Math.min(0.05, (c.dist - 1) * 0.25));
   if (Math.abs(near - G.camera.near) > near * 0.25) { G.camera.near = near; G.camera.updateProjectionMatrix(); }
@@ -535,7 +545,7 @@ function configurarGestos() {
     if (toque) toque.moveu += Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y);
     p.x = e.clientX; p.y = e.clientY;
     const c = centro();
-    if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(1 + (gesto.dist0 - 1) * (gesto.d0 / c.d)); // a pinça escala a altura
+    if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(G.sistema ? gesto.dist0 * (gesto.d0 / c.d) : 1 + (gesto.dist0 - 1) * (gesto.d0 / c.d)); // a pinça escala a altura (no sistema, a distância ao foco)
     if (!gesto.ancora || !levarPontoA(gesto.ancora, c.x, c.y)) {
       // âncora fora da Terra (dedo no espaço) ou sistema solar: giro proporcional à altura
       const k = G.sistema ? 0.3 : 0.22 * Math.max(0.0015, (G.cam.dist - 1) / (DIST.inicial - 1));
@@ -550,7 +560,7 @@ function configurarGestos() {
     const agora = performance.now();
     if (ponteiros.size > 0) { ancorar(); historico = []; return; } // de dois dedos para um: recomeça a âncora sem pular
     if (toque && toque.moveu < 8 && agora - toque.t < 400 && e.type === 'pointerup') {
-      if (agora - ultimoToque < 320) { aproximar(e.clientX, e.clientY); ultimoToque = 0; }
+      if (agora - ultimoToque < 320) { if (G.sistema) G.espaco?.focarNoToque(e.clientX, e.clientY); else aproximar(e.clientX, e.clientY); ultimoToque = 0; }
       else { ultimoToque = agora; tocarPonto(e.clientX, e.clientY); }
     } else if (historico.length >= 2 && agora - historico[historico.length - 1].t < 60) {
       const a = historico[0], b = historico[historico.length - 1], dt = Math.max(16, b.t - a.t);
@@ -563,7 +573,7 @@ function configurarGestos() {
   cv.addEventListener('wheel', (e) => {
     e.preventDefault(); G.autoGira = false; G.animCam = null; G.cam.vLat = G.cam.vLon = 0;
     const ancora = pontoNaTela(e.clientX, e.clientY);
-    definirDist(1 + (G.cam.dist - 1) * Math.exp(e.deltaY * 0.0012));
+    definirDist(G.sistema ? G.cam.dist * Math.exp(e.deltaY * 0.0012) : 1 + (G.cam.dist - 1) * Math.exp(e.deltaY * 0.0012));
     if (ancora) levarPontoA(ancora, e.clientX, e.clientY); // a roda aproxima em direção ao cursor
   }, { passive: false });
   cv.addEventListener('dblclick', (e) => e.preventDefault());
@@ -571,7 +581,7 @@ function configurarGestos() {
     const passo = 5;
     if (e.key === 'ArrowLeft') G.cam.lon -= passo; else if (e.key === 'ArrowRight') G.cam.lon += passo;
     else if (e.key === 'ArrowUp') G.cam.lat = Math.min(85, G.cam.lat + passo); else if (e.key === 'ArrowDown') G.cam.lat = Math.max(-85, G.cam.lat - passo);
-    else if (e.key === '+' || e.key === '=') definirDist(1 + (G.cam.dist - 1) / 1.2); else if (e.key === '-') definirDist(1 + (G.cam.dist - 1) * 1.2);
+    else if (e.key === '+' || e.key === '=') definirDist(G.sistema ? G.cam.dist / 1.2 : 1 + (G.cam.dist - 1) / 1.2); else if (e.key === '-') definirDist(G.sistema ? G.cam.dist * 1.2 : 1 + (G.cam.dist - 1) * 1.2);
     else return;
     e.preventDefault(); G.autoGira = false;
   });
@@ -608,7 +618,32 @@ function distanciaQueCabe() {
   return Math.min(DIST.max, 1 / Math.sin(Math.min(fovV, fovH) / 2 * 0.86));
 }
 
-function definirDist(d) { G.cam.dist = G.sistema ? Math.max(0.6, Math.min(32, d)) : Math.max(DIST.min, Math.min(DIST.max, d)); } // no sistema solar a câmera vai de perto do Sol até além das Voyager
+function definirDist(d) { G.cam.dist = G.sistema ? Math.max(G.focoDistMin || 0.3, Math.min(40, d)) : Math.max(DIST.min, Math.min(DIST.max, d)); } // no sistema solar, de rente ao corpo em foco até além das Voyager
+
+/**
+ * Sistema solar: leva o foco da câmera até um corpo e passa a segui-lo (ele se move com o tempo).
+ * @param {(()=>THREE.Vector3)|null} posicao posição atual do corpo na cena; null volta ao Sol
+ * @param {number} dist distância da câmera ao chegar; distMin o mais perto que o zoom deixa chegar
+ */
+function focarSistema(posicao, dist, distMin = 0.3) {
+  G.focoAlvo = posicao;
+  G.focoDistMin = distMin;
+  G.animFoco = MOVIMENTO_REDUZIDO ? null : { de: G.foco.clone(), dist0: G.cam.dist, dist, t0: performance.now(), ms: 1100 };
+  if (MOVIMENTO_REDUZIDO) { G.cam.dist = dist; G.foco.copy(posicao ? posicao() : new THREE.Vector3()); }
+  G.cam.vLat = G.cam.vLon = 0;
+}
+
+/** A cada quadro: o foco acompanha o corpo escolhido (com a viagem suave até ele quando o foco acabou de mudar). */
+function moverFoco(agora) {
+  const alvo = G.focoAlvo ? G.focoAlvo() : ORIGEM;
+  const a = G.animFoco;
+  if (!a) { G.foco.copy(alvo); return; }
+  const t = Math.min(1, (agora - a.t0) / a.ms), e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  G.foco.lerpVectors(a.de, alvo, e);
+  G.cam.dist = Math.exp(Math.log(a.dist0) + (Math.log(a.dist) - Math.log(a.dist0)) * e); // zoom em escala logarítmica: a viagem parece uniforme
+  if (t >= 1) G.animFoco = null;
+}
+const ORIGEM = new THREE.Vector3();
 
 /** Ponto da esfera sob a posição da tela (interseção analítica raio x esfera), ou null fora da Terra. */
 function pontoSob(cx, cy) {
@@ -869,7 +904,7 @@ function montarDom(secao) {
   secao.append(raiz);
   G.dom = { raiz, canvas, chips, aviso, legenda, fonte, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
   montarCidades();
-  G.mostrarPainel = mostrarPainelTexto; G.modoSistema = modoSistema;
+  G.mostrarPainel = mostrarPainelTexto; G.fecharPainel = fecharPainel; G.modoSistema = modoSistema; G.focarSistema = focarSistema; G.distanciaVisaoGeral = distanciaVisaoGeral;
   window.__globo = G; G.pontoNaTela = pontoNaTela; G.pontoDesenhado = pontoDesenhado; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
   montarLegenda(CAMADAS.find((c) => c.id === G.camada), null);
@@ -1204,6 +1239,14 @@ function mostrarPainelTexto(titulo, frase, numeros, fonte, acoes = [], aoFechar 
   G.aoFecharPainel = aoFechar;
 }
 
+const OBLIQUIDADE_J2000 = 23.4392911; // inclinação do equador sobre a eclíptica em J2000 (IAU 2006), em graus
+
+/** Distância da visão geral do sistema solar: a órbita de Saturno (3,5 na escala da cena) cabe na largura da tela. */
+function distanciaVisaoGeral() {
+  const meiaLargura = Math.atan(Math.tan(G.camera.fov * Math.PI / 360) * G.camera.aspect);
+  return Math.max(9.5, Math.min(18, 3.9 / Math.tan(meiaLargura)));
+}
+
 /** Troca entre a Terra e o sistema solar: esconde a Terra, as nuvens, os marcadores e a interface do tempo. */
 function modoSistema(ligar) {
   G.sistema = ligar;
@@ -1213,11 +1256,15 @@ function modoSistema(ligar) {
   G.dom.rodape.hidden = ligar; G.dom.chips.parentElement.hidden = ligar;
   G.marcadorUsuario.visible = !ligar && !!G.estadoApp?.local;
   fecharPainel();
+  G.foco.set(0, 0, 0); G.focoAlvo = null; G.animFoco = null; G.focoDistMin = 0.3;
+  // estrelas: no sistema solar a cena está na eclíptica J2000 (y para o polo norte da eclíptica); fora dele, no equador
+  G.estrelas.grupo.rotation.set(ligar ? -OBLIQUIDADE_J2000 * RAD : 0, 0, 0);
   if (ligar) { // de cima, inclinado, com a órbita de Saturno (3,5 na escala da cena) cabendo na largura da tela
-    const meiaLargura = Math.atan(Math.tan(G.camera.fov * Math.PI / 360) * G.camera.aspect);
-    G.camAntes = { ...G.cam }; G.cam.lat = 50; G.cam.dist = Math.max(9.5, Math.min(18, 3.9 / Math.tan(meiaLargura))); G.animCam = null;
+    G.camAntes = { ...G.cam }; G.cam.lat = 50; G.cam.dist = distanciaVisaoGeral(); G.animCam = null;
+  } else {
+    if (G.camAntes) { G.cam.lat = G.camAntes.lat; G.cam.lon = G.camAntes.lon; G.cam.dist = Math.min(G.camAntes.dist, 5.5); G.animCam = null; }
+    atualizarAstros();
   }
-  else if (G.camAntes) { G.cam.lat = G.camAntes.lat; G.cam.lon = G.camAntes.lon; G.cam.dist = Math.min(G.camAntes.dist, 5.5); G.animCam = null; }
 }
 
 // ------------------------------------------------------------------ 9. laço de animação e qualidade
@@ -1255,6 +1302,7 @@ function laco(agora) {
     const base = opacidadeNuvens();
     G.nuvens.material.uniforms.opacNuvem.value = base * Math.max(0, Math.min(1, (c.dist - 1.03) / 0.15));
   }
+  if (G.sistema) moverFoco(agora);
   posicionarCamera();
   const pulso = (Math.sin(agora / 500) + 1) / 2;
   if (!G.sistema) {
