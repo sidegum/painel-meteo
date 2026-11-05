@@ -11,10 +11,14 @@
 //   3. carregamento progressivo 6. camadas de dados e linha do tempo                        9. laço de animação e qualidade
 import * as THREE from '../vendor/three/three.module.min.js';
 import { el, svg, fmt, prefs, mostrarInfo, linkExterno } from './ui.js';
-import { buscarManifest, buscarCampo, buscarSatelite, lerPontoGfs, buscarPonto, textoCodigoTempo, valorDoByte, amostrar } from './globo-dados.js';
+import { buscarManifest, buscarCampo, buscarSatelite, buscarSatelites, lerPontoGfs, buscarPonto, textoCodigoTempo, valorDoByte, amostrar } from './globo-dados.js';
 import { criarRegiao } from './globo-regiao.js';
 import { CIDADES } from './globo-cidades.js';
 import { pontoSubsolar, pontoSublunar } from './globo-astro.js';
+import { faseLua, registroSatelite } from './ceu.js';
+import { cartaoAstro, criarBlocoCeu } from './globo-ceu.js';
+import { texturaPlaneta, texturaBrilho } from './globo-texturas.js';
+import { criarEstrelas, ajustarEscalaEstrelas } from './globo-estrelas.js';
 import { valido, direcaoTexto, partesLocais } from './analise.js';
 
 // ------------------------------------------------------------------ 1. estado e constantes
@@ -27,14 +31,15 @@ const CELULAR = matchMedia('(pointer: coarse)').matches;
 
 /** Camadas visíveis no seletor. canal: canal do PNG (0 R, 1 G, 2 B, 3 = módulo de RG, para vento). */
 const CAMADAS = [
-  { id: 'nuvens', nome: 'Nuvens', legenda: null },
-  { id: 'vento', nome: 'Vento', arquivo: 'vento', canal: 3, faixaCor: [0, 120], unidade: 'km/h', fator: 3.6, legenda: 'Vento a 10 m. As linhas mostram para onde ele sopra.',
+  { id: 'diaenoite', nome: 'Dia e noite', limpa: true },
+  { id: 'nuvens', nome: 'Nuvens' },
+  { id: 'vento', nome: 'Vento', arquivo: 'vento', canal: 3, faixaCor: [0, 120], unidade: 'km/h', fator: 3.6,
     cores: [[0, 90, 200, 190, 0], [15, 90, 200, 190, 0.25], [30, 90, 220, 140, 0.45], [50, 240, 210, 70, 0.6], [75, 240, 130, 50, 0.7], [100, 220, 50, 50, 0.78], [120, 140, 20, 110, 0.85]] },
-  { id: 'chuva', nome: 'Chuva', arquivo: 'campo', canal: 2, faixaCor: [0, 30], unidade: 'mm/h', fator: 1, legenda: 'Chuva prevista pelo modelo, em milímetros por hora.',
+  { id: 'chuva', nome: 'Chuva', arquivo: 'campo', canal: 2, faixaCor: [0, 30], unidade: 'mm/h', fator: 1,
     cores: [[0, 80, 170, 230, 0], [0.3, 80, 170, 230, 0.35], [1, 60, 130, 230, 0.6], [4, 40, 80, 210, 0.75], [10, 120, 50, 190, 0.85], [20, 200, 40, 150, 0.9], [30, 255, 90, 120, 0.95]] },
-  { id: 'temp', nome: 'Temperatura', arquivo: 'campo', canal: 0, faixaCor: [-40, 45], unidade: '°C', fator: 1, legenda: 'Temperatura do ar a 2 m do chão.',
+  { id: 'temp', nome: 'Temperatura', arquivo: 'campo', canal: 0, faixaCor: [-40, 45], unidade: '°C', fator: 1,
     cores: [[-40, 120, 40, 170, 0.8], [-20, 60, 70, 200, 0.8], [-5, 70, 150, 220, 0.8], [5, 90, 200, 200, 0.8], [15, 110, 200, 110, 0.8], [25, 240, 210, 70, 0.8], [32, 240, 130, 50, 0.8], [40, 215, 50, 50, 0.82], [45, 150, 20, 90, 0.85]] },
-  { id: 'pressao', nome: 'Pressão', arquivo: 'campo', canal: 1, faixaCor: [960, 1050], unidade: 'hPa', fator: 1, legenda: 'Pressão ao nível do mar. Linhas a cada 4 hPa; azul é baixa (tempo instável), laranja é alta.',
+  { id: 'pressao', nome: 'Pressão', arquivo: 'campo', canal: 1, faixaCor: [960, 1050], unidade: 'hPa', fator: 1,
     cores: [[960, 110, 40, 180, 0.8], [985, 60, 90, 210, 0.75], [1000, 80, 160, 220, 0.6], [1013, 190, 200, 210, 0.45], [1025, 240, 190, 90, 0.6], [1040, 235, 120, 50, 0.75], [1050, 200, 50, 40, 0.8]] },
 ];
 
@@ -65,7 +70,12 @@ const vecLatLon = (v) => ({ lat: Math.asin(Math.max(-1, Math.min(1, v.y / v.leng
  */
 export function abrirGlobo(secao, estadoApp) {
   G.estadoApp = estadoApp;
-  if (!G.dom) montarDom(secao);
+  if (!G.dom) {
+    montarDom(secao);
+    G.dadosProntos = new Promise((ok) => { G.marcarDadosProntos = ok; });
+    G.blocoCeu = criarBlocoCeu(secao, () => G.estadoApp, estacoesDoCeu, ajustarTamanho);
+  }
+  G.blocoCeu.atualizar();
   G.aberto = true;
   if (!G.renderer) {
     try { montarCena(); } catch (e) { mostrarAviso('Este aparelho não conseguiu abrir o globo em 3D (WebGL indisponível).', true); return; }
@@ -123,9 +133,36 @@ async function carregarTudo() {
   } catch { mostrarAviso('Não foi possível carregar a imagem da Terra. Verifique a conexão e toque em atualizar.', true); return; }
   textura('vendor/texturas/terra-dia-4096.jpg', { cor: true }).then((t) => { u.tDia.value = t; }).catch(() => {});
   textura('vendor/texturas/terra-normal-2048.jpg').then((t) => { u.tNormal.value = t; u.temNormal.value = 1; }).catch(() => {});
-  textura('vendor/texturas/terra-noite-2048.jpg', { cor: true }).then((t) => { u.tNoite.value = t; u.temNoite.value = 1; }).catch(() => {});
+  textura('vendor/texturas/terra-noite-2048.jpg', { cor: true }).then((t) => { u.tNoite.value = t; u.temNoite.value = 1; return textura('vendor/texturas/terra-noite-4096.jpg', { cor: true }); })
+    .then((t) => { u.tNoite.value = t; }).catch(() => {});
   textura('vendor/texturas/terra-mascaras-2048.png').then((t) => { u.tMascaras.value = t; u.temMascaras.value = 1; }).catch(() => {});
   await carregarDados(); // o painel de um ponto só abre com toque (não abre sozinho na chegada)
+  G.marcarDadosProntos();
+  prepararEspacoAntes();
+}
+
+/** ISS e Tiangong para o bloco "Céu de hoje" (mesmos elementos do CelesTrak que o espaço usa). */
+async function estacoesDoCeu() {
+  await Promise.race([G.dadosProntos, new Promise((ok) => setTimeout(ok, 15000))]); // sem Terra ou sem rede, segue sem as estações
+  if (!G.manifest) throw new Error('sem dados do globo');
+  const dados = await buscarSatelites(G.manifest);
+  return [['iss', 'ISS (ZARYA)'], ['css', 'CSS (TIANHE)']].map(([id, nome]) => {
+    const omm = (dados.grupos.estacoes || []).find((o) => o.OBJECT_NAME === nome);
+    const rec = omm && registroSatelite(omm);
+    return rec ? { id, rec, omm } : null;
+  }).filter(Boolean);
+}
+
+/**
+ * Pré-carrega o espaço (módulo, satélites, sondas, texturas e a cena do sistema solar) logo depois que a Terra e os
+ * dados aparecem, num momento ocioso: quando o usuário tocar em Espaço, tudo já está pronto.
+ */
+function prepararEspacoAntes() {
+  const ir = () => {
+    if (!G.espacoModulo) G.espacoModulo = import('./globo-espaco.js').catch(() => null);
+    G.espacoModulo.then((m) => { if (m) { G.espaco = m; m.prepararEspaco(G, THREE); } });
+  };
+  if (window.requestIdleCallback) requestIdleCallback(ir, { timeout: 2500 }); else setTimeout(ir, 600);
 }
 
 /** Lê o manifest do branch globo-dados e carrega a hora mais próxima de agora. */
@@ -189,8 +226,12 @@ async function carregarNuvens(hora) {
   G.nuvens.userData.satelite = !!sat;
   G.terra.material.uniforms.tNuvens.value = t;
   G.terra.material.uniforms.temNuvens.value = 1;
-  if (G.camada === 'nuvens') { montarLegenda(CAMADAS[0], null); atualizarNotaFonte(); }
+  G.terra.material.uniforms.temNuvens.value = G.camada === 'diaenoite' ? 0 : 1;
+  if (G.camada === 'nuvens') { montarLegenda(CAMADAS.find((c) => c.id === 'nuvens'), null); atualizarNotaFonte(); }
 }
+
+/** Opacidade das nuvens pela camada: nenhuma em Dia e noite, discreta com dados por cima, cheia em Nuvens. */
+function opacidadeNuvens() { const c = CAMADAS.find((x) => x.id === G.camada); return c?.limpa ? 0 : c?.arquivo ? 0.3 : 1; }
 
 const suave = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -205,9 +246,9 @@ const VERTEX_TERRA = /* glsl */`
 
 const FRAGMENT_TERRA = /* glsl */`
   uniform sampler2D tDia, tNoite, tNormal, tMascaras, tNuvens, tCamada, tEscala, tRegiao;
-  uniform float temNormal, temNoite, temMascaras, temNuvens, temCamada, opacidade, raiz, isobaras, temRegiao;
+  uniform float temNormal, temNoite, temMascaras, temNuvens, temCamada, opacidade, raiz, isobaras, temRegiao, luzLua, realce;
   uniform vec2 regLon, regMerc; // mosaico da região (globo-regiao.js): longitudes e limites Mercator do mosaico
-  uniform vec3 sol, olho; uniform vec2 faixaCanal, faixaCor, desloc; uniform int canal;
+  uniform vec3 sol, lua, olho; uniform vec2 faixaCanal, faixaCor, desloc; uniform int canal;
   varying vec2 vUv; varying vec3 vN; varying vec3 vP;
   uniform vec2 grade; // colunas e linhas da grade de dados (coluna 0 em -180°, linha 0 em +90°, última linha em -90°)
   vec2 uvDados(vec2 uv) { return vec2(fract(uv.x + 0.5 / grade.x), ((1.0 - uv.y) * (grade.y - 1.0) + 0.5) / grade.y); }
@@ -224,27 +265,11 @@ const FRAGMENT_TERRA = /* glsl */`
     vec3 Nd = N;
     if (temNormal > 0.5) { vec3 nm = texture2D(tNormal, vUv).xyz * 2.0 - 1.0; Nd = normalize(T * nm.x + B * nm.y + N * (nm.z * 1.6)); }
     float cosSol = dot(N, sol);
-    float dia = smoothstep(-0.10, 0.14, cosSol);
-    vec3 cDia = texture2D(tDia, vUv).rgb;
-    float lamb = mix(max(dot(Nd, sol), 0.0), max(cosSol, 0.0), 0.45);
-    vec3 cor = cDia * (0.035 + 1.05 * lamb);
-    float tw = exp(-pow(cosSol / 0.13, 2.0));
-    cor = mix(cor, cor * vec3(1.3, 0.82, 0.55) + vec3(0.06, 0.02, 0.0), tw * 0.5);
-    float agua = temMascaras > 0.5 ? texture2D(tMascaras, vUv).r : 0.0;
-    vec3 H = normalize(sol + V);
-    float brilho = pow(max(dot(Nd, H), 0.0), 140.0) * agua * dia;
-    cor += vec3(1.0, 0.93, 0.8) * brilho * 1.1;
-    cor += vec3(0.5, 0.7, 1.0) * pow(max(dot(N, H), 0.0), 10.0) * agua * dia * 0.06;
-    float nuvem = 0.0;
-    if (temNuvens > 0.5) { nuvem = texture2D(tNuvens, vec2(fract(vUv.x + desloc.x), 1.0 - vUv.y + desloc.y)).r; cor *= 1.0 - 0.42 * nuvem * dia; }
-    float noite = 1.0 - dia;
-    if (temNoite > 0.5) {
-      vec3 luzes = texture2D(tNoite, vUv).rgb;
-      float nuvemAqui = temNuvens > 0.5 ? texture2D(tNuvens, vec2(vUv.x, 1.0 - vUv.y)).r : 0.0;
-      cor += pow(luzes, vec3(0.8)) * vec3(1.0, 0.88, 0.7) * noite * 3.2 * (1.0 - 0.6 * nuvemAqui);
-    }
-    cor += cDia * vec3(0.18, 0.25, 0.4) * noite * 0.7;
-    if (temRegiao > 0.0) { // mapa detalhado da região sob a câmera (zoom próximo), em Mercator
+    float dia = smoothstep(-0.10, 0.14, cosSol); // crepúsculo suave: o Sol 6° abaixo do horizonte ainda tinge o céu
+    // cor da superfície: imagem da NASA ou, no zoom próximo, o mapa detalhado (os dois recebem a mesma luz do Sol e da Lua)
+    vec3 alb = texture2D(tDia, vUv).rgb;
+    float noMapa = 0.0;
+    if (temRegiao > 0.0) { // mapa detalhado da região sob a câmera, em Mercator
       // latitude e longitude pela direção do fragmento (não pela UV interpolada na face): o mapa fica exatamente
       // onde estão os marcadores, os rótulos e o ponto tocado (pontoDesenhado usa a mesma direção)
       vec3 dir = normalize(vP);
@@ -253,10 +278,33 @@ const FRAGMENT_TERRA = /* glsl */`
       float merc = log(tan(0.78539816 + lat * 0.5));
       float w = (regMerc.x - merc) / (regMerc.x - regMerc.y);
       if (u > 0.0 && u < 1.0 && w > 0.0 && w < 1.0) {
-        vec3 mapa = texture2D(tRegiao, vec2(u, w)).rgb;
         float borda = smoothstep(0.0, 0.06, u) * smoothstep(0.0, 0.06, 1.0 - u) * smoothstep(0.0, 0.06, w) * smoothstep(0.0, 0.06, 1.0 - w);
-        cor = mix(cor, mapa * (0.5 + 0.5 * max(lamb, 0.0)), temRegiao * borda);
+        noMapa = temRegiao * borda;
+        alb = mix(alb, texture2D(tRegiao, vec2(u, w)).rgb, noMapa);
       }
+    }
+    float lamb = mix(max(dot(Nd, sol), 0.0), max(cosSol, 0.0), 0.45 + 0.55 * noMapa);
+    vec3 cor = alb * (0.035 + 1.15 * lamb);
+    float tw = exp(-pow(cosSol / 0.13, 2.0));
+    cor = mix(cor, cor * vec3(1.3, 0.82, 0.55) + vec3(0.06, 0.02, 0.0), tw * 0.5);
+    float agua = temMascaras > 0.5 ? texture2D(tMascaras, vUv).r * (1.0 - noMapa) : 0.0;
+    vec3 H = normalize(sol + V);
+    float brilho = pow(max(dot(Nd, H), 0.0), 140.0) * agua * dia;
+    cor += vec3(1.0, 0.93, 0.8) * brilho * 1.1;
+    cor += vec3(0.5, 0.7, 1.0) * pow(max(dot(N, H), 0.0), 10.0) * agua * dia * 0.06;
+    float nuvemAqui = 0.0;
+    if (temNuvens > 0.5) {
+      float sombra = texture2D(tNuvens, vec2(fract(vUv.x + desloc.x), 1.0 - vUv.y + desloc.y)).r;
+      nuvemAqui = texture2D(tNuvens, vec2(vUv.x, 1.0 - vUv.y)).r;
+      cor *= 1.0 - 0.42 * sombra * dia;
+    }
+    float noite = 1.0 - dia;
+    // luar: a Lua clareia o lado escuro pela fase (luzLua = fração iluminada) e pela altura dela em cada ponto
+    float luar = luzLua * max(dot(Nd, lua), 0.0);
+    cor += alb * (vec3(0.025, 0.035, 0.065) + vec3(0.20, 0.25, 0.36) * luar) * noite;
+    if (temNoite > 0.5) { // luzes das cidades (NASA Black Marble), mais fortes no modo Dia e noite
+      vec3 luzes = texture2D(tNoite, vUv).rgb;
+      cor += pow(luzes, vec3(0.85)) * vec3(1.0, 0.86, 0.62) * noite * (3.0 + 1.8 * realce) * (1.0 - 0.6 * nuvemAqui);
     }
     if (temCamada > 0.5) {
       vec2 ud = uvDados(vUv);
@@ -325,8 +373,8 @@ function montarCena() {
   const uniTerra = {
     tDia: { value: null }, tNoite: { value: null }, tNormal: { value: null }, tMascaras: { value: null }, tNuvens: { value: null }, tCamada: { value: null }, tEscala: { value: null },
     temNormal: { value: 0 }, temNoite: { value: 0 }, temMascaras: { value: 0 }, temNuvens: { value: 0 }, temCamada: { value: 0 },
-    opacidade: { value: 0 }, raiz: { value: 0 }, isobaras: { value: 0 }, canal: { value: 0 },
-    sol: { value: new THREE.Vector3(1, 0, 0) }, olho: { value: new THREE.Vector3() }, faixaCanal: { value: new THREE.Vector2(0, 1) }, faixaCor: { value: new THREE.Vector2(0, 1) }, grade: { value: new THREE.Vector2(720, 361) },
+    opacidade: { value: 0 }, raiz: { value: 0 }, isobaras: { value: 0 }, canal: { value: 0 }, luzLua: { value: 0 }, realce: { value: 0 },
+    sol: { value: new THREE.Vector3(1, 0, 0) }, lua: { value: new THREE.Vector3(0, 0, 1) }, olho: { value: new THREE.Vector3() }, faixaCanal: { value: new THREE.Vector2(0, 1) }, faixaCor: { value: new THREE.Vector2(0, 1) }, grade: { value: new THREE.Vector2(720, 361) },
     desloc: { value: new THREE.Vector2(0.0025, 0.0025) },
   };
   G.regiao = criarRegiao(THREE, uniTerra);
@@ -345,25 +393,19 @@ function montarCena() {
   }));
   G.cena.add(G.atmosfera);
 
-  // estrelas de fundo (posições fixas por semente, para o céu não mudar a cada abertura)
-  const n = 2200, pos = new Float32Array(n * 3), cor = new Float32Array(n * 3);
-  let s = 7;
-  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  for (let i = 0; i < n; i++) {
-    const z = rnd() * 2 - 1, a = rnd() * Math.PI * 2, r = Math.sqrt(1 - z * z);
-    pos.set([r * Math.cos(a) * 60, z * 60, r * Math.sin(a) * 60], i * 3);
-    const b = 0.35 + rnd() * 0.65, q = rnd();
-    cor.set([b * (q < 0.2 ? 0.85 : 1), b * (q < 0.2 ? 0.9 : q > 0.85 ? 0.95 : 1), b * (q > 0.85 ? 0.8 : 1)], i * 3);
-  }
-  const ge = new THREE.BufferGeometry();
-  ge.setAttribute('position', new THREE.BufferAttribute(pos, 3)); ge.setAttribute('color', new THREE.BufferAttribute(cor, 3));
-  G.estrelas = new THREE.Points(ge, new THREE.PointsMaterial({ size: CELULAR ? 1.6 : 1.3, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }));
-  G.cena.add(G.estrelas);
+  // céu de fundo: estrelas reais do catálogo, giradas pelo tempo sideral em atualizarAstros
+  G.estrelas = criarEstrelas(THREE, G.pixelRatio);
+  G.cena.add(G.estrelas.grupo);
+  G.estrelas.pronto.then(() => G.estrelas.girar(instanteMostrado())).catch(() => {});
 
-  // Lua: esfera pequena na direção real, fora de escala de distância (fica a 14 raios da Terra)
-  G.lua = new THREE.Mesh(new THREE.SphereGeometry(0.27 * 0.5, 32, 24), new THREE.MeshLambertMaterial({ color: 0xcfcbc2 }));
-  const luzSol = new THREE.DirectionalLight(0xffffff, 2.2); luzSol.name = 'sol';
-  G.cena.add(G.lua, luzSol, new THREE.AmbientLight(0x202430, 0.5));
+  // Lua: esfera na direção real, iluminada pelo Sol (a fase aparece sozinha), mais perto que a real (14 raios em vez
+  // de 60) e com o dobro do tamanho aparente, para ser vista e tocada.
+  G.lua = new THREE.Mesh(new THREE.SphereGeometry(0.135, 48, 32), new THREE.MeshStandardMaterial({ map: texturaPlaneta(THREE, 'Lua'), roughness: 1, metalness: 0 }));
+  const luzSol = new THREE.DirectionalLight(0xffffff, 2.6); luzSol.name = 'sol';
+  // Sol: brilho na direção real, atrás de tudo (a Terra o encobre quando está do outro lado)
+  G.solBrilho = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaBrilho(THREE), color: 0xfff1d0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  G.solBrilho.scale.setScalar(5.5);
+  G.cena.add(G.lua, G.solBrilho, luzSol, new THREE.AmbientLight(0x202430, 0.18));
 
   G.marcadorUsuario = criarMarcador(0xf2d16b, 0.022);
   G.marcadorToque = criarMarcador(0xffffff, 0.018); G.marcadorToque.visible = false;
@@ -418,9 +460,12 @@ function atualizarAstros() {
   const sol = G.terra.material.uniforms.sol.value;
   latLonVec(ss.lat, ss.lon, 1, sol);
   G.cena.getObjectByName('sol').position.copy(sol).multiplyScalar(50);
+  G.solBrilho.position.copy(sol).multiplyScalar(50);
   const sl = pontoSublunar(ms);
   latLonVec(sl.lat, sl.lon, 14, G.lua.position);
-  G.dom.sol.textContent = `Sol a pino em ${fmtLat(ss.lat)} ${fmtLon(ss.lon)}`;
+  latLonVec(sl.lat, sl.lon, 1, G.terra.material.uniforms.lua.value);
+  G.terra.material.uniforms.luzLua.value = faseLua(ms).fracao;
+  G.estrelas.girar(ms);
 }
 
 function instanteMostrado() {
@@ -479,7 +524,7 @@ function configurarGestos() {
   cv.addEventListener('pointerdown', (e) => {
     try { cv.setPointerCapture(e.pointerId); } catch { /* ponteiro já encerrado pelo sistema */ }
     ponteiros.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    G.cam.vLat = G.cam.vLon = 0; G.animCam = null; G.autoGira = false;
+    G.cam.vLat = G.cam.vLon = 0; G.animCam = null; G.autoGira = false; G.seguir = null;
     historico = [];
     toque = ponteiros.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now(), moveu: 0 } : null;
     ancorar();
@@ -492,8 +537,8 @@ function configurarGestos() {
     const c = centro();
     if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(1 + (gesto.dist0 - 1) * (gesto.d0 / c.d)); // a pinça escala a altura
     if (!gesto.ancora || !levarPontoA(gesto.ancora, c.x, c.y)) {
-      // âncora fora da Terra (dedo no espaço): giro proporcional à altura, como antes
-      const k = 0.22 * Math.max(0.0015, (G.cam.dist - 1) / (DIST.inicial - 1));
+      // âncora fora da Terra (dedo no espaço) ou sistema solar: giro proporcional à altura
+      const k = G.sistema ? 0.3 : 0.22 * Math.max(0.0015, (G.cam.dist - 1) / (DIST.inicial - 1));
       G.cam.lon -= (c.x - gesto.ultimo.x) * k / Math.max(0.2, Math.cos(G.cam.lat * RAD));
       G.cam.lat = Math.max(-85, Math.min(85, G.cam.lat + (c.y - gesto.ultimo.y) * k));
     }
@@ -534,6 +579,7 @@ function configurarGestos() {
 
 /** Ponto da Terra sob a posição da tela com a câmera atual (atualiza a matriz antes de medir). */
 function pontoNaTela(cx, cy) {
+  if (G.sistema) return null; // no sistema solar não há Terra sob o dedo: o arrasto gira a vista
   posicionarCamera();
   G.camera.updateMatrixWorld();
   return pontoSob(cx, cy);
@@ -562,7 +608,7 @@ function distanciaQueCabe() {
   return Math.min(DIST.max, 1 / Math.sin(Math.min(fovV, fovH) / 2 * 0.86));
 }
 
-function definirDist(d) { G.cam.dist = Math.max(DIST.min, Math.min(G.sistema ? 24 : DIST.max, d)); } // no sistema solar a câmera pode ir mais longe
+function definirDist(d) { G.cam.dist = G.sistema ? Math.max(0.6, Math.min(32, d)) : Math.max(DIST.min, Math.min(DIST.max, d)); } // no sistema solar a câmera vai de perto do Sol até além das Voyager
 
 /** Ponto da esfera sob a posição da tela (interseção analítica raio x esfera), ou null fora da Terra. */
 function pontoSob(cx, cy) {
@@ -625,7 +671,9 @@ async function carregarCamada(id, hora) {
   G.camada = id;
   for (const b of G.dom.chips.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.camada === id));
   prefs.gravar('globoCamada', id);
-  G.nuvens.material.uniforms.opacNuvem.value = cam.arquivo ? 0.3 : 1; // com dados por cima, as nuvens ficam discretas
+  // Dia e noite: Terra limpa, sem nuvens, com as luzes das cidades realçadas; com dados por cima, nuvens discretas
+  u.temNuvens.value = cam.limpa || !G.nuvens.material.uniforms.temNuvem.value ? 0 : 1;
+  u.realce.value = cam.limpa ? 1 : 0;
   if (!cam.arquivo) { u.temCamada.value = 0; pararParticulas(); montarLegenda(cam, null); atualizarNotaFonte(); return; }
   if (!G.manifest?.gfs) { montarLegenda(cam, null); return; }
   let campo;
@@ -798,7 +846,6 @@ function montarDom(secao) {
   const aviso = el('p', { class: 'globo-aviso', role: 'status', text: 'Carregando o globo…' });
   const legenda = el('div', { class: 'globo-legenda' });
   const fonte = el('p', { class: 'globo-fonte' });
-  const sol = el('p', { class: 'globo-sol' });
   const ciclones = el('p', { class: 'globo-ciclones' });
   const faixa = el('input', { type: 'range', class: 'globo-faixa', min: '0', max: '0', value: '0', disabled: true, 'aria-label': 'Hora da previsão' });
   faixa.addEventListener('input', () => { pararLinhaDoTempo(); definirHora(G.manifest.gfs.horas[Number(faixa.value)]); });
@@ -816,11 +863,11 @@ function montarDom(secao) {
     el('button', { type: 'button', title: 'Ajuda', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda },
       icone(svg('path', { d: 'M9.2 9a2.9 2.9 0 1 1 4.3 2.5c-.9.5-1.5 1.1-1.5 2.1v.6' }), svg('circle', { cx: 12, cy: 17.6, r: 1.1, class: 'cheio' }))));
   const relogio = el('p', { class: 'globo-relogio', 'aria-live': 'off' });
-  const rodape = el('div', { class: 'globo-rodape' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, relogio, sol, ciclones));
+  const rodape = el('div', { class: 'globo-rodape' }, legenda, linha, el('div', { class: 'globo-notas' }, fonte, relogio, ciclones));
   const cidades = el('div', { class: 'globo-cidades', 'aria-hidden': 'true' });
   const raiz = el('div', { class: 'globo' }, canvas, cidades, el('div', { class: 'globo-topo' }, chips), botoes, aviso, painel, rodape);
   secao.append(raiz);
-  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, sol, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
+  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
   montarCidades();
   G.mostrarPainel = mostrarPainelTexto; G.modoSistema = modoSistema;
   window.__globo = G; G.pontoNaTela = pontoNaTela; G.pontoDesenhado = pontoDesenhado; // só para testes automáticos de tela
@@ -881,7 +928,7 @@ const VERIFICA_MS = 60000; // a cada minuto: hora "agora" da linha do tempo; a c
 function atualizarRelogio() {
   const agora = new Date();
   const hh = String(agora.getHours()).padStart(2, '0'), mm = String(agora.getMinutes()).padStart(2, '0'), ss = String(agora.getSeconds()).padStart(2, '0');
-  G.dom.relogio.textContent = G.hora === G.horaAgora || G.hora === null ? `Tempo real · ${hh}:${mm}:${ss} · Sol, Lua e satélites na posição de agora` : `Mostrando a previsão para ${G.dom.rotuloHora.textContent}; o Sol acompanha esse horário`;
+  G.dom.relogio.textContent = G.hora === G.horaAgora || G.hora === null ? `Tempo real · ${hh}:${mm}:${ss}` : '';
 }
 
 function horaMaisProxima(manifest) {
@@ -891,7 +938,9 @@ function horaMaisProxima(manifest) {
 
 /** Chamado a cada minuto com a aba aberta: avança a hora "agora" e, a cada 5 min, procura rodada ou satélite novos. */
 async function verificarAtualizacao() {
-  if (!G.aberto || document.hidden || !G.manifest?.gfs) return;
+  if (!G.aberto || document.hidden) return;
+  G.blocoCeu?.atualizar(); // recalcula sozinho a cada 10 min ou quando o local muda
+  if (!G.manifest?.gfs) return;
   const agora = Date.now();
   if (agora - (G.ultimaVerificacao || 0) >= 5 * VERIFICA_MS) {
     G.ultimaVerificacao = agora;
@@ -920,7 +969,7 @@ function ajustarTamanho() {
   if (!G.dom || !G.renderer) return;
   const r = G.dom.raiz;
   const cabeca = document.querySelector('.cabeca');
-  const alturaTela = (window.visualViewport?.height || window.innerHeight) - (cabeca?.offsetHeight || 0);
+  const alturaTela = (window.visualViewport?.height || window.innerHeight) - (cabeca?.offsetHeight || 0) - (G.blocoCeu?.el.offsetHeight || 0);
   r.style.height = `${Math.max(360, Math.floor(alturaTela))}px`;
   const w = r.clientWidth, h = r.clientHeight;
   if (!w || !h) return;
@@ -928,21 +977,19 @@ function ajustarTamanho() {
   G.camera.aspect = w / h; G.camera.updateProjectionMatrix();
 }
 
+/** Legenda da camada: só a barra de cores com os valores e a unidade (as telas autoexplicativas não levam texto). */
 function montarLegenda(cam, campo) {
   const L = G.dom.legenda;
   L.replaceChildren();
-  if (!cam.cores) {
-    const sat = G.nuvens?.userData?.satelite;
-    L.append(el('p', { class: 'globo-legenda-texto', text: sat ? 'Nuvens vistas pelos satélites agora. Onde não há satélite, entra o modelo.' : 'Nuvens previstas pelo modelo (baixas, médias e altas).' }));
-    return;
-  }
+  if (!cam.cores) return;
   const barra = el('div', { class: 'globo-barra' });
   const paradas = cam.cores.map((p) => `rgba(${Math.round(p[1])},${Math.round(p[2])},${Math.round(p[3])},${Math.max(0.15, p[4])}) ${((p[0] - cam.faixaCor[0]) / (cam.faixaCor[1] - cam.faixaCor[0]) * 100).toFixed(0)}%`);
   barra.style.background = `linear-gradient(to right, ${paradas.join(', ')})`;
   const rotulos = el('div', { class: 'globo-rotulos' });
   const n = cam.id === 'pressao' ? [960, 990, 1013, 1030, 1050] : cam.id === 'temp' ? [-40, -20, 0, 20, 45] : cam.id === 'vento' ? [0, 30, 60, 90, 120] : [0, 5, 10, 20, 30];
   for (const v of n) rotulos.append(el('span', { text: fmt.n(v) }));
-  L.append(el('p', { class: 'globo-legenda-texto', text: `${cam.legenda}${campo ? '' : ' Carregando…'}` }), barra, rotulos, el('span', { class: 'globo-unidade', text: cam.unidade }));
+  rotulos.append(el('span', { class: 'globo-unidade', text: cam.unidade }));
+  L.append(campo ? null : el('p', { class: 'globo-legenda-texto', text: 'Carregando…' }), barra, rotulos);
 }
 
 function atualizarNotaFonte() {
@@ -965,6 +1012,10 @@ const fmtLon = (v) => `${fmt.n(Math.abs(v), 1)}°${v < 0 ? 'O' : 'L'}`;
 
 /** Toque num ponto: marca, mostra o que o GFS diz na hora (instantâneo) e completa com a Open-Meteo. */
 function tocarPonto(cx, cy) {
+  if (G.espaco && G.espacoAberto && G.espaco.tocarEspaco(cx, cy)) { G.marcadorToque.visible = false; G.tocado = null; return; }
+  if (G.sistema) { fecharPainel(); return; }
+  const astro = astroSob(cx, cy);
+  if (astro) { mostrarCartaoAstro(astro); return; }
   const p = pontoDesenhado(cx, cy);
   if (!p) { fecharPainel(); return; }
   G.tocado = p;
@@ -972,7 +1023,34 @@ function tocarPonto(cx, cy) {
   mostrarPontoTocado(p.lat, p.lon, false);
 }
 
-function fecharPainel() { G.dom.painel.hidden = true; G.marcadorToque.visible = false; G.tocado = null; }
+function fecharPainel() {
+  G.dom.painel.hidden = true; G.marcadorToque.visible = false; G.tocado = null; G.seguir = null;
+  const aoFechar = G.aoFecharPainel; G.aoFecharPainel = null; aoFechar?.();
+}
+
+/** Sol ou Lua sob o dedo (na tela, com folga de 22 px), se não estiverem atrás da Terra. */
+function astroSob(cx, cy) {
+  const r = G.dom.canvas.getBoundingClientRect();
+  posicionarCamera(); G.camera.updateMatrixWorld();
+  for (const [corpo, obj, raio] of [['Moon', G.lua, 0.135], ['Sun', G.solBrilho, 1.2]]) {
+    if (!obj.visible) continue;
+    const p = obj.position, c = G.camera.position;
+    const d = p.clone().sub(c), a = d.dot(d), b = 2 * c.dot(d), disc = b * b - 4 * a * (c.dot(c) - 1);
+    if (disc > 0 && (-b - Math.sqrt(disc)) / (2 * a) > 0 && (-b - Math.sqrt(disc)) / (2 * a) < 1) continue; // atrás da Terra
+    const v = p.clone().project(G.camera);
+    if (v.z > 1) continue;
+    const x = r.left + (v.x + 1) / 2 * r.width, y = r.top + (1 - v.y) / 2 * r.height;
+    const raioPx = raio / d.length() / Math.tan(G.camera.fov * RAD / 2) * r.height / 2;
+    if (Math.hypot(x - cx, y - cy) <= Math.max(22, raioPx + 8)) return corpo;
+  }
+  return null;
+}
+
+function mostrarCartaoAstro(corpo) {
+  const c = cartaoAstro(corpo, G.estadoApp);
+  G.marcadorToque.visible = false; G.tocado = null;
+  mostrarPainelTexto(c.titulo, c.frase, c.numeros, c.fonte, [{ texto: 'Ver detalhes', onclick: c.detalhes }]);
+}
 
 async function mostrarPontoTocado(lat, lon, soGfs) {
   const P = G.dom.painel;
@@ -1067,15 +1145,15 @@ function detalhesPonto(lat, lon, gfs, om, cic) {
 
 function mostrarAjuda() {
   const m = G.manifest;
-  mostrarInfo('Globo do tempo',
-    el('p', { text: 'Arraste para girar, pince ou use a roda para aproximar, toque duas vezes para chegar perto. Toque num ponto para ver o tempo lá, com detalhes num segundo toque.' }),
-    el('p', { text: 'O lado escuro é a noite real: o terminador é calculado pela posição do Sol neste instante. As luzes são das cidades (NASA Black Marble). Ao mudar a hora na linha do tempo, o Sol acompanha.' }),
+  mostrarInfo('Globo',
+    el('p', { text: 'Arraste para girar, pince ou use a roda para aproximar, toque duas vezes para chegar perto. Toque num ponto da Terra para ver o tempo lá; toque no Sol, na Lua, num satélite, num planeta ou numa sonda para ver o que é, onde está e quando dá para ver daqui.' }),
     el('ul', {},
+      el('li', {}, 'Dia e noite: o lado iluminado e o escuro pela posição real do Sol agora; a Lua clareia a noite conforme a fase e as luzes das cidades (NASA Black Marble) acendem no escuro. Ao mudar a hora na linha do tempo, o Sol acompanha.'),
       el('li', {}, 'Nuvens: imagem infravermelha dos satélites GOES-Leste, GOES-Oeste e Himawari (NASA GIBS), onde há cobertura; no resto, nuvens previstas pelo GFS.'),
-      el('li', {}, 'Vento, chuva, temperatura e pressão: modelo GFS 0,5° da NOAA, a cada 3 h até 48 h.'),
-      el('li', {}, 'Ponto tocado: ECMWF IFS pela Open-Meteo, com fuso horário local.'),
-      el('li', {}, 'Ciclones: NHC e GDACS. Raios em tempo real não têm fonte pública gratuita que o app possa usar.'),
-      el('li', {}, 'Espaço: ISS, Tiangong e satélites (CelesTrak, SGP4) em escala real de altura; sistema solar com as posições de hoje (JPL), distâncias fora de escala.')),
+      el('li', {}, 'Vento (linhas mostram para onde ele sopra, a 10 m), chuva (mm/h), temperatura (a 2 m) e pressão ao nível do mar (isóbaras a cada 4 hPa ao aproximar): modelo GFS 0,5° da NOAA, a cada 3 h até 48 h.'),
+      el('li', {}, 'Ponto tocado: ECMWF IFS pela Open-Meteo, com fuso horário local. Ciclones: NHC e GDACS.'),
+      el('li', {}, 'Céu de hoje: o que dá para ver a olho nu do seu local até o amanhecer, com horário, direção e altura, já com as nuvens previstas.'),
+      el('li', {}, 'Espaço: ISS, Tiangong e satélites (CelesTrak, SGP4) em escala real de altura; planetas na direção real. Sistema solar com posições reais (Astronomy Engine), sondas pelo JPL Horizons e distâncias comprimidas para caber na tela.')),
     el('p', { class: 'nota', text: `Texturas: NASA Visible Earth (Blue Marble e Black Marble, domínio público). Dados gerados ${m?.gerado ? fmt.idade(Date.parse(m.gerado)) : '–'}. Este globo é um painel pessoal, não uma fonte oficial. Em situação de risco, siga a Defesa Civil e o INMET.` }));
 }
 
@@ -1091,8 +1169,9 @@ async function alternarEspaco() {
   }
   G.espacoAberto = true; b.setAttribute('aria-pressed', 'true'); G.dom.raiz.classList.add('com-espaco');
   if (!G.espaco) {
-    try { G.espaco = await import('./globo-espaco.js'); }
-    catch (e) { G.espacoAberto = false; b.setAttribute('aria-pressed', 'false'); mostrarAviso(`Não foi possível carregar o espaço (${e?.message || 'falha'}).`, false); return; }
+    if (!G.espacoModulo) G.espacoModulo = import('./globo-espaco.js').catch(() => null);
+    G.espaco = await G.espacoModulo;
+    if (!G.espaco) { G.espacoModulo = null; G.espacoAberto = false; b.setAttribute('aria-pressed', 'false'); G.dom.raiz.classList.remove('com-espaco'); mostrarAviso('Não foi possível carregar o espaço. Verifique a conexão e toque de novo.', false); return; }
   }
   if (!G.espacoAberto) return;
   fecharPainel();
@@ -1100,24 +1179,44 @@ async function alternarEspaco() {
   G.espaco.abrirEspaco(G, THREE);
 }
 
-/** Painel simples reutilizado pelo espaço (ISS, Tiangong): título, frase, números e fonte. */
-function mostrarPainelTexto(titulo, frase, numeros, fonte) {
+/**
+ * Cartão de um objeto do céu (Sol, Lua, planeta, satélite, sonda): título, frase simples, números, fonte e ações.
+ * @param {{texto:string, onclick:Function, alternar?:boolean}[]} [acoes] botões (alternar: liga e desliga, como "Seguir")
+ * @param {Function} [aoFechar] chamado quando o cartão fecha (por exemplo, para tirar o destaque do satélite)
+ */
+function mostrarPainelTexto(titulo, frase, numeros, fonte, acoes = [], aoFechar = null) {
   const P = G.dom.painel;
+  const aoFecharAntes = G.aoFecharPainel; G.aoFecharPainel = null; aoFecharAntes?.(); // o cartão anterior fecha antes
+  G.seguir = null;
+  const botoes = acoes.map((a) => {
+    const b = el('button', { type: 'button', class: 'globo-detalhe', text: a.texto, 'aria-pressed': a.alternar ? 'false' : null });
+    b.addEventListener('click', () => {
+      if (!a.alternar) { a.onclick(); return; }
+      const ativo = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(ativo)); a.onclick(ativo);
+    });
+    return b;
+  });
   P.replaceChildren(
     el('div', { class: 'globo-painel-topo' }, el('b', { text: titulo }), el('button', { type: 'button', class: 'globo-fechar', 'aria-label': 'Fechar', text: '×', onclick: fecharPainel })),
-    el('p', { class: 'globo-frase', text: frase }), el('p', { class: 'globo-numeros', text: numeros }), el('p', { class: 'globo-quando', text: fonte }));
+    el('p', { class: 'globo-frase globo-frase-media', text: frase }), numeros ? el('p', { class: 'globo-numeros', text: numeros }) : null, el('p', { class: 'globo-quando', text: fonte }),
+    botoes.length ? el('div', { class: 'globo-acoes' }, ...botoes) : null);
   P.hidden = false;
+  G.aoFecharPainel = aoFechar;
 }
 
 /** Troca entre a Terra e o sistema solar: esconde a Terra, as nuvens, os marcadores e a interface do tempo. */
 function modoSistema(ligar) {
   G.sistema = ligar;
-  for (const o of [G.terra, G.nuvens, G.atmosfera, G.lua, G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) o.visible = !ligar;
+  for (const o of [G.terra, G.nuvens, G.atmosfera, G.lua, G.solBrilho, G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) o.visible = !ligar;
+  G.dom.cidades.hidden = ligar;
   if (G.particulas) G.particulas.linhas.visible = !ligar;
   G.dom.rodape.hidden = ligar; G.dom.chips.parentElement.hidden = ligar;
   G.marcadorUsuario.visible = !ligar && !!G.estadoApp?.local;
   fecharPainel();
-  if (ligar) { G.camAntes = { ...G.cam }; G.cam.lat = 52; G.cam.dist = 13; G.animCam = null; }
+  if (ligar) { // de cima, inclinado, com a órbita de Saturno (3,5 na escala da cena) cabendo na largura da tela
+    const meiaLargura = Math.atan(Math.tan(G.camera.fov * Math.PI / 360) * G.camera.aspect);
+    G.camAntes = { ...G.cam }; G.cam.lat = 50; G.cam.dist = Math.max(9.5, Math.min(18, 3.9 / Math.tan(meiaLargura))); G.animCam = null;
+  }
   else if (G.camAntes) { G.cam.lat = G.camAntes.lat; G.cam.lon = G.camAntes.lon; G.cam.dist = Math.min(G.camAntes.dist, 5.5); G.animCam = null; }
 }
 
@@ -1133,6 +1232,9 @@ function laco(agora) {
     const a = G.animCam, t = Math.min(1, (agora - a.t0) / a.ms), e = 1 - Math.pow(1 - t, 3);
     c.lat = a.de.lat + (a.para.lat - a.de.lat) * e; c.lon = a.de.lon + (a.para.lon - a.de.lon) * e; c.dist = a.de.dist + (a.para.dist - a.de.dist) * e;
     if (t >= 1) G.animCam = null;
+  } else if (G.seguir) { // seguindo um satélite: a câmera persegue o ponto sob ele, suavemente
+    const alvo = G.seguir();
+    if (alvo) { let dl = alvo.lon - c.lon; dl = ((dl + 540) % 360) - 180; const k = 1 - Math.pow(0.9, dt / 16); c.lon += dl * k; c.lat += (Math.max(-85, Math.min(85, alvo.lat)) - c.lat) * k; }
   } else {
     if (G.autoGira) c.lon += 0.004 * dt;
     if (Math.abs(c.vLon) > 0.001 || Math.abs(c.vLat) > 0.001) {
@@ -1150,7 +1252,7 @@ function laco(agora) {
     G.regiao.atualizar(c, agora);
     if (antes !== G.regiao.estado.ativa) atualizarNotaFonte();
     // a esfera de nuvens fica a 40 km de altura: perto do chão ela some aos poucos, para não tapar o mapa nem cortar a câmera
-    const base = CAMADAS.find((x) => x.id === G.camada)?.arquivo ? 0.3 : 1;
+    const base = opacidadeNuvens();
     G.nuvens.material.uniforms.opacNuvem.value = base * Math.max(0, Math.min(1, (c.dist - 1.03) / 0.15));
   }
   posicionarCamera();
@@ -1174,6 +1276,7 @@ function medirQualidade(dt) {
     G.nivelQualidade++;
     G.pixelRatio = Math.max(1, G.pixelRatio - 0.4);
     G.renderer.setPixelRatio(G.pixelRatio);
+    ajustarEscalaEstrelas(G.estrelas, G.pixelRatio);
     if (G.particulas && G.nivelQualidade >= 2) iniciarParticulas(G.particulas.campo);
     if (G.nivelQualidade >= 3) { G.atmosfera.visible = false; }
   }

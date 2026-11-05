@@ -127,7 +127,18 @@ async function lerImagemCampo(url, largura, altura) {
 }
 
 /** Elementos orbitais (OMM) por grupo, do CelesTrak via branch globo-dados. */
-export async function buscarSatelites(manifest) {
+const satelitesEmMemoria = new Map(); // versão (gerado) -> Promise: o bloco do céu e o espaço usam a mesma leitura
+export function buscarSatelites(manifest) {
+  const chave = manifest?.satelites?.gerado || '';
+  if (!satelitesEmMemoria.has(chave)) {
+    const p = lerSatelites(manifest);
+    p.catch(() => satelitesEmMemoria.delete(chave));
+    satelitesEmMemoria.set(chave, p);
+  }
+  return satelitesEmMemoria.get(chave);
+}
+
+async function lerSatelites(manifest) {
   if (!manifest?.satelites) throw new ErroFonte(FONTE, 'formato', 'sem elementos orbitais');
   const r = await fetchComTempo(BASE + manifest.satelites.arquivo + '?g=' + encodeURIComponent(manifest.satelites.gerado), 30000);
   const j = await r.json();
@@ -137,6 +148,27 @@ export async function buscarSatelites(manifest) {
     grupos[g] = lista.filter((s) => s && typeof s.OBJECT_NAME === 'string' && typeof s.MEAN_MOTION === 'number').slice(0, 400);
   }
   return { gerado: String(j?.gerado || '').slice(0, 30), grupos };
+}
+
+/**
+ * Trajetórias das sondas (JPL Horizons, gerado uma vez por dia). Só entram listas de números finitos com 7 colunas.
+ * O arquivo é lido mesmo sem entrada no manifest (o workflow antigo da main pode ter regravado o manifest sem ela).
+ * @returns {Promise<{gerado:string, sondas:Object<string,{alvo:string, rota:number[][], recente:number[][], perto:number[][], geo?:number[][]}>}>}
+ */
+export async function buscarSondas(manifest) {
+  const versao = manifest?.sondas?.gerado || new Date().toISOString().slice(0, 10);
+  const r = await fetchComTempo(BASE + 'sondas.json?g=' + encodeURIComponent(versao), 30000);
+  const j = await r.json();
+  const pontos = (l) => (Array.isArray(l) ? l.filter((p) => Array.isArray(p) && p.length >= 7 && p.slice(0, 7).every((v) => typeof v === 'number' && Number.isFinite(v))).map((p) => p.slice(0, 7)) : []);
+  const sondas = {};
+  for (const [k, s] of Object.entries(j?.sondas || {})) {
+    if (!/^[a-z0-9]{2,20}$/.test(k) || !s || typeof s !== 'object') continue;
+    const rota = pontos(s.rota), perto = pontos(s.perto);
+    if (!rota.length && !perto.length) continue;
+    sondas[k] = { alvo: String(s.alvo || k).slice(0, 80), rota, recente: pontos(s.recente), perto, geo: pontos(s.geo) };
+  }
+  if (!Object.keys(sondas).length) throw new ErroFonte(FONTE, 'formato', 'sem sondas');
+  return { gerado: String(j?.gerado || '').slice(0, 30), sondas };
 }
 
 // ---------- leitura de valores ----------

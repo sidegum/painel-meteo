@@ -12,6 +12,7 @@ Fontes (nenhuma libera CORS para o navegador, por isso passam por aqui):
     composta num mosaico global. Domínio público (NASA/NOAA/JMA).
   - Ciclones: NHC (Atlântico e Pacífico Leste) e GDACS (resto do mundo).
   - Satélites: elementos orbitais do CelesTrak (grupos estações, mais brilhantes, meteorológicos e GPS).
+  - Sondas e telescópios espaciais: vetores de estado do JPL Horizons (API oficial, NASA/JPL), uma vez por dia.
 
 Saída (pasta SAIDA, publicada no branch "globo-dados"):
   manifest.json           descrição da rodada, horas, grade e escala de cada canal
@@ -21,6 +22,7 @@ Saída (pasta SAIDA, publicada no branch "globo-dados"):
   satelite.png            RGB 2048 x 1024: R = transparência da nuvem (0-255), G = peso da cobertura, B = brilho infravermelho
   ciclones.json           lista de ciclones ativos com posição, vento e fonte
   satelites.json          elementos orbitais (OMM) por grupo
+  sondas.json             trajetória e posição de agora de cada sonda (heliocêntrica, eclíptica J2000, UA e UA/dia)
 
 Cada canal é um inteiro de 0 a 255 que o app converte de volta pela faixa [min, max] gravada no manifest. O PNG
 nunca usa o canal alfa, porque o navegador pré-multiplica a transparência e isso corromperia os valores.
@@ -340,6 +342,129 @@ def gerar_satelites():
     return grupos
 
 
+# ------------------------------------------------------------------ sondas e telescópios (JPL Horizons)
+
+# id: código do alvo no Horizons (negativo = nave); de: lançamento (a trajetória começa 2 dias depois).
+# O Horizons devolve o nome oficial do alvo, gravado em "alvo" para conferir que o código é o esperado.
+SONDAS = [
+    {'id': '-170', 'chave': 'jwst', 'de': '2021-12-27'},
+    {'id': '-31', 'chave': 'voyager1', 'de': '1977-09-08'},
+    {'id': '-32', 'chave': 'voyager2', 'de': '1977-08-23'},
+    {'id': '-98', 'chave': 'newhorizons', 'de': '2006-01-21'},
+    {'id': '-96', 'chave': 'parker', 'de': '2018-08-14'},
+    {'id': '-61', 'chave': 'juno', 'de': '2011-08-07'},
+    {'id': '-159', 'chave': 'europaclipper', 'de': '2024-10-16'},
+    {'id': '-28', 'chave': 'juice', 'de': '2023-04-16'},
+    {'id': '-255', 'chave': 'psyche', 'de': '2023-10-15'},
+    {'id': '-49', 'chave': 'lucy', 'de': '2021-10-18'},
+    {'id': '-121', 'chave': 'bepicolombo', 'de': '2018-10-22'},
+    {'id': '-144', 'chave': 'solarorbiter', 'de': '2020-02-12'},
+    {'id': '-64', 'chave': 'osirisapex', 'de': '2016-09-10'},
+    {'id': '-91', 'chave': 'hera', 'de': '2024-10-09'},
+    {'id': '-23', 'chave': 'pioneer10', 'de': '1972-03-05'},
+    {'id': '-24', 'chave': 'pioneer11', 'de': '1973-04-08'},
+]
+HORIZONS = 'https://ssd.jpl.nasa.gov/api/horizons.api'
+MESES = {m: i + 1 for i, m in enumerate(['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'])}
+
+
+def horizons_vetores(alvo, inicio, fim, passo, centro='500@10'):
+    """Vetores de estado (x, y, z em UA; vx, vy, vz em UA/dia) na eclíptica J2000. Se o pedido passar da cobertura
+    da efeméride, o Horizons avisa a data limite; o intervalo é cortado nela e o pedido refeito (uma vez por lado)."""
+    for _ in range(8):
+        q = {'format': 'json', 'COMMAND': f"'{alvo}'", 'OBJ_DATA': 'NO', 'MAKE_EPHEM': 'YES', 'EPHEM_TYPE': 'VECTORS', 'CENTER': f"'{centro}'",
+             'START_TIME': f"'{inicio:%Y-%m-%d %H:%M}'", 'STOP_TIME': f"'{fim:%Y-%m-%d %H:%M}'", 'STEP_SIZE': f"'{passo}'",
+             'VEC_TABLE': '2', 'REF_PLANE': 'ECLIPTIC', 'REF_SYSTEM': 'ICRF', 'OUT_UNITS': 'AU-D', 'CSV_FORMAT': 'YES', 'VEC_LABELS': 'NO'}
+        url = HORIZONS + '?' + urllib.parse.urlencode(q)
+        try:
+            j = json.loads(baixar(url, timeout=90, binario=False))
+        except RuntimeError as e:
+            raise RuntimeError(f'Horizons {alvo}: {e}')
+        texto = j.get('result', '') + ' ' + j.get('error', '')
+        m = re.search(r'(prior to|after) A\.D\. (\d{4})-([A-Z]{3})-(\d{2}) (\d{2}):(\d{2})', texto)
+        lacuna = re.search(r'Insufficient ephemeris data.*?epoch (\d{4}) ([A-Z]{3}) (\d{2})', texto, re.S)
+        if '$$SOE' not in texto and lacuna:  # buraco no meio da efeméride (ex.: Lucy em 2023): recomeça depois dele
+            inicio = datetime(int(lacuna.group(1)), MESES[lacuna.group(2)], int(lacuna.group(3)), tzinfo=timezone.utc) + timedelta(days=3)
+            if fim <= inicio:
+                raise RuntimeError(f'Horizons {alvo}: sem efeméride no intervalo')
+            continue
+        if '$$SOE' not in texto and m:
+            limite = datetime(int(m.group(2)), MESES[m.group(3)], int(m.group(4)), int(m.group(5)), int(m.group(6)), tzinfo=timezone.utc)
+            if m.group(1) == 'prior to':
+                inicio = limite + timedelta(hours=1)
+            else:
+                fim = limite - timedelta(hours=1)
+            if fim <= inicio:
+                raise RuntimeError(f'Horizons {alvo}: sem efeméride no intervalo')
+            continue
+        if '$$SOE' not in texto:
+            raise RuntimeError(f'Horizons {alvo}: resposta sem dados ({texto[:300]})')
+        nome = re.search(r'Target body name:\s*([^{\n]+?)\s*(?:\{|$)', texto, re.M)
+        linhas = texto.split('$$SOE', 1)[1].split('$$EOE', 1)[0].strip().splitlines()
+        pontos = []
+        for ln in linhas:
+            c = [x.strip() for x in ln.split(',')]
+            if len(c) < 8:
+                continue
+            jd = float(c[0])
+            pontos.append([round((jd - 2440587.5) * 86400000)] + [float(v) for v in c[2:8]])
+        return (nome.group(1).strip() if nome else str(alvo)), pontos
+    raise RuntimeError(f'Horizons {alvo}: intervalo não resolvido')
+
+
+def gerar_sondas(agora):
+    """Trajetória desde o lançamento até 2 anos à frente (até ~600 pontos), o trecho recente de 200 dias para cada
+    lado com passo de 1 dia (12 h para a Parker) e um trecho fino em volta de agora (de 6 em 6 h, 3 dias antes e 4
+    depois), para o app desenhar curvas lisas e interpolar a posição do instante com precisão."""
+    sondas = {}
+    hoje = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+    for s in SONDAS:
+        try:
+            de = datetime.fromisoformat(s['de']).replace(tzinfo=timezone.utc)
+            ate = hoje + timedelta(days=730)
+            dias = (ate - de).days
+            passo = f'{max(1, math.ceil(dias / 600))} d'
+            try:
+                nome, rota = horizons_vetores(s['id'], de, ate, passo)
+            except RuntimeError as e:  # lacunas na efeméride (ex.: Lucy): pede por ano e junta os trechos que existem
+                log(f"Horizons {s['id']}: rota inteira falhou ({e}); pedindo por ano")
+                nome, rota, ini = str(s['id']), [], de
+                while ini < ate:
+                    fim_t = min(ate, ini + timedelta(days=365))
+                    try:
+                        nome, trecho = horizons_vetores(s['id'], ini, fim_t, passo)
+                        rota += [p for p in trecho if not rota or p[0] > rota[-1][0]]
+                    except RuntimeError as e2:
+                        log(f"Horizons {s['id']}: sem trecho {ini:%Y-%m-%d} a {fim_t:%Y-%m-%d} ({e2})")
+                    ini = fim_t
+                    time.sleep(1)
+                if len(rota) < 2:
+                    raise RuntimeError('rota vazia')
+            time.sleep(1)
+            _, perto = horizons_vetores(s['id'], hoje - timedelta(days=3), hoje + timedelta(days=4), '6 h')
+            time.sleep(1)
+            arred = lambda p: [p[0]] + [round(v, 7) for v in p[1:]]
+            # trecho recente (meio ano para trás e para a frente) com passo curto: no periélio a Parker dá meia volta no
+            # Sol em poucos dias, e a rota longa (passo de dias) não desenha essa curva
+            ini_r = max(de, hoje - timedelta(days=200))
+            try:
+                _, recente = horizons_vetores(s['id'], ini_r, hoje + timedelta(days=200), '12 h' if s['chave'] == 'parker' else '1 d')
+            except Exception as e:  # sem o trecho recente o app desenha pela rota longa
+                log(f"Horizons {s['id']}: trecho recente indisponível ({e})")
+                recente = []
+            time.sleep(1)
+            item = {'alvo': nome, 'id': s['id'], 'rota': [arred(p) for p in rota], 'recente': [arred(p) for p in recente], 'perto': [arred(p) for p in perto]}
+            if s['chave'] == 'jwst':  # em volta da Terra: distância e órbita de halo em torno de L2, no último ano
+                _, geo = horizons_vetores(s['id'], hoje - timedelta(days=365), hoje + timedelta(days=4), '2 d', centro='500@399')
+                item['geo'] = [arred(p) for p in geo]
+                time.sleep(1)
+            sondas[s['chave']] = item
+            log(f"Horizons {s['id']} ({nome}): {len(rota)} pontos de rota, {len(recente)} recentes, {len(perto)} perto de agora")
+        except Exception as e:
+            log(f"Horizons {s['id']} falhou: {e}")
+    return sondas
+
+
 # ------------------------------------------------------------------ principal
 
 def main():
@@ -356,6 +481,7 @@ def main():
         'gerado': agora.strftime('%Y-%m-%dT%H:%M:%SZ'), 'versao': 1,
         'grade': {'largura': LARG, 'altura': ALT, 'lat0': 90, 'lat1': -90, 'lon0': -180, 'lon1': 179.5},
         'canais': CANAIS, 'gfs': anterior.get('gfs'), 'satelite': anterior.get('satelite'), 'ciclones': [], 'satelites': anterior.get('satelites'),
+        'sondas': anterior.get('sondas'),
     }
     so = os.environ.get('GLOBO_SO', '').split(',') if os.environ.get('GLOBO_SO') else None
 
@@ -390,6 +516,16 @@ def main():
             with open(os.path.join(saida, 'satelites.json'), 'w', encoding='utf-8') as f:
                 json.dump({'gerado': manifest['gerado'], 'fonte': 'CelesTrak', 'grupos': grupos}, f, separators=(',', ':'))
             manifest['satelites'] = {'arquivo': 'satelites.json', 'gerado': manifest['gerado'], 'grupos': {k: len(v) for k, v in grupos.items()}}
+
+    # sondas: uma vez por dia (as trajetórias mudam devagar; poupa o Horizons) ou quando pedido
+    ultima = (anterior.get('sondas') or {}).get('gerado', '')
+    if (so and 'sondas' in so) or (not so and ultima[:10] != manifest['gerado'][:10]):
+        sondas = gerar_sondas(agora)
+        if sondas:
+            with open(os.path.join(saida, 'sondas.json'), 'w', encoding='utf-8') as f:
+                json.dump({'gerado': manifest['gerado'], 'fonte': 'JPL Horizons (NASA/JPL)', 'referencia': 'heliocêntrica, eclíptica J2000; UA e UA/dia',
+                           'sondas': sondas}, f, separators=(',', ':'))
+            manifest['sondas'] = {'arquivo': 'sondas.json', 'gerado': manifest['gerado'], 'lista': sorted(sondas)}
 
     with open(os.path.join(saida, 'manifest.json'), 'w', encoding='utf-8') as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)
