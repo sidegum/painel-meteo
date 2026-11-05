@@ -309,7 +309,7 @@ const horaria = await temperaturaHoraria();
  */
 function orvalhoESensacao() {
   if (!tabelaHoraria) return { orvalho: null, sensacao: null };
-  const orvalho = { modelos: {} }, sensacao = { formula: 'Steadman (1994), forma da Bureau of Meteorology, à sombra: T + 0,33·e − 0,70·v − 4,00', modelos: {} };
+  const orvalho = { modelos: {} }, sensacao = { formula: 'NWS: índice de calor (Rothfusz/WPC) e vento frio (≤ 10 °C, transição até 15 °C)', modelos: {} };
   for (const m of MODELOS_HORARIO) {
     const o = calibrarOrvalho(tabelaHoraria, m);
     if (o) {
