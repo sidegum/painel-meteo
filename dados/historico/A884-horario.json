@@ -8,7 +8,7 @@
     "ecmwf_aifs025_single",
     "ukmo_global_deterministic_10km"
   ],
-  "atualizadoEm": "2026-11-05T01:42:58.249Z",
+  "atualizadoEm": "2026-11-05T02:52:29.467Z",
   "fontes": {
     "o": "INMET A884, temperatura do ar (bulbo seco) na hora cheia; od: ponto de orvalho; ow: vento médio (km/h)",
     "h0": "Open-Meteo Historical Forecast API (CC BY 4.0): primeiras horas de cada rodada",
