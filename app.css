@@ -338,7 +338,7 @@ td.n, th.n { text-align: right; }
 
 /* navegação entre os dias: logo abaixo do topo, fixa junto com ele */
 .nav {
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   background: var(--fundo); border-bottom: 1px solid var(--linha); height: 44px;
 }
 .nav button {
@@ -514,3 +514,45 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
   background: var(--sup2); color: var(--texto); font: inherit; font-weight: 560; font-size: 13px; line-height: 1.3; text-align: left; border-left: 3px solid var(--linha); }
 .linha-placar .lt-txt { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
 .linha-placar .lt-txt small { font-size: 12px; font-weight: 500; color: var(--fraco); }
+
+/* ---------- aba Globo: cena 3D ocupa a tela abaixo do topo; a interface flutua sobre ela ---------- */
+.aba-globo { padding: 0; }
+.globo { position: relative; width: 100%; height: 70vh; background: #04060b; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; color: #eceef0; }
+.globo-canvas { display: block; width: 100%; height: 100%; outline: none; cursor: grab; }
+.globo-canvas:active { cursor: grabbing; }
+.globo-topo { position: absolute; left: 0; right: 0; top: 0; padding: 10px 12px 0; pointer-events: none; }
+.globo-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; pointer-events: auto; padding-bottom: 6px; }
+.globo-chips::-webkit-scrollbar { display: none; }
+.globo-chips button { flex: none; min-height: 36px; padding: 0 11px; border-radius: 18px; border: 1px solid rgba(255,255,255,.22); background: rgba(10,14,22,.62); color: #dfe4ea; font-size: 13px; font-weight: 560; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-chips button[aria-checked="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
+.globo-botoes { position: absolute; right: 10px; top: 60px; display: flex; flex-direction: column; gap: 6px; }
+.globo-botoes button { min-width: 40px; min-height: 40px; padding: 0 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,.22); background: rgba(10,14,22,.62); color: #dfe4ea; font-size: 15px; font-weight: 620; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-botoes button:first-child { font-size: 12px; }
+.globo-aviso { position: absolute; left: 12px; right: 12px; top: 58px; margin: 0; padding: 10px 14px; border-radius: 10px; background: rgba(10,14,22,.78); color: #eceef0; font-size: 14px; max-width: 420px; }
+.globo-aviso.grave { border-left: 3px solid #ee8a6a; }
+.globo-rodape { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px calc(8px + var(--safe-b)); background: linear-gradient(to top, rgba(4,6,11,.92), rgba(4,6,11,.55) 70%, rgba(4,6,11,0)); pointer-events: none; }
+.globo-rodape > * { pointer-events: auto; }
+.globo-legenda-texto { margin: 0 0 4px; font-size: 13px; color: #dfe4ea; }
+.globo-barra { height: 8px; border-radius: 4px; background: #333; max-width: 420px; }
+.globo-rotulos { display: flex; justify-content: space-between; max-width: 420px; font-size: 11px; color: #b7c0c9; margin-top: 2px; }
+.globo-unidade { font-size: 11px; color: #b7c0c9; }
+.globo-linha { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; }
+.globo-hora { min-width: 64px; font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.globo-faixa { flex: 1; min-width: 0; accent-color: #eceef0; height: 28px; margin: 0; }
+.globo-tocar { min-height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.6); color: #eceef0; font-size: 13px; font-weight: 600; }
+.globo-tocar[aria-pressed="true"] { background: #eceef0; color: #0b0f16; }
+.globo-notas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
+.globo-notas p { margin: 0; font-size: 11.5px; color: #aab3bd; }
+.globo-ciclones { color: #ff9a8a !important; font-weight: 600; }
+.globo-painel { position: absolute; left: 12px; right: 12px; bottom: 150px; max-width: 420px; margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(10,14,22,.86); color: #eceef0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12); }
+.globo-painel-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: #b7c0c9; }
+.globo-painel-topo b { color: #eceef0; font-weight: 640; }
+.globo-fechar { min-width: 36px; min-height: 36px; border: 0; background: none; color: #dfe4ea; font-size: 22px; line-height: 1; }
+.globo-frase { margin: 4px 0 2px; font-size: 19px; font-weight: 700; font-stretch: 108%; line-height: 1.2; }
+.globo-numeros { margin: 0; font-size: 15px; font-weight: 560; }
+.globo-quando { margin: 4px 0 6px; font-size: 12.5px; color: #b7c0c9; }
+.globo-detalhe { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: none; color: #eceef0; font-size: 13px; font-weight: 600; }
+.tabela-detalhe { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabela-detalhe th { text-align: left; font-weight: 560; color: var(--fraco); padding: 5px 8px 5px 0; vertical-align: top; width: 46%; }
+.tabela-detalhe td { padding: 5px 0; border-bottom: 1px solid var(--linha); }
+@media (min-width: 760px) { .globo { border-radius: 0 0 10px 10px; } }
