@@ -11,11 +11,11 @@ import {
   buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
   salvarCache, lerCache, workerConfigurado, MODELOS_ENSEMBLE, buscarAlertasDireto, buscarObservacoesDireto, buscarChuvaRadar, buscarChegadaChuva,
 } from './dados.js';
-import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno } from './ui.js';
+import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor } from './ui.js';
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.8.1';
+const VERSAO = '1.8.2';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -46,6 +46,8 @@ async function iniciar() {
   configurarLocal();
   configurarRodape();
   configurarPuxar();
+  configurarCabecalho();
+  document.body.dataset.aba = estado.aba || 'hoje';
 
   estado.local = prefs.ler('local', null);
   // 1. mostra o que houver em cache imediatamente
@@ -1157,14 +1159,15 @@ function renderHojeDetalhes() {
   const alvo = $('#hoje-detalhes');
   const p = estado.prev;
   const filhos = [];
+  // Ordem: o que vem pela frente (horas e radar), o que se mede agora, e por fim os detalhes.
   filhos.push(proximasHoras());
-  filhos.push(instrumentos());
-  const pm = secao('Previsto x medido', null);
-  filhos.push(pm);
   const mapa = secao('Mapa', null);
   mapa.classList.add('largura-total');
   filhos.push(mapa);
-  const met = secao('Meteograma', null);
+  filhos.push(instrumentos());
+  const pm = secao('Previsto x medido', null);
+  filhos.push(pm);
+  const met = secao('Hora a hora', null);
   met.classList.add('largura-total');
   filhos.push(met);
   filhos.push(estadoFontes());
@@ -1198,7 +1201,9 @@ function proximasHoras() {
       el('div', { class: 'v', text: valido(vento[i]) ? `${Math.round(vento[i])}` : '–' }),
       el('div', { class: 'g', text: valido(raj[i]) ? `${Math.round(raj[i])}` : '–' })));
   }
-  return secao('Próximas horas', null, lista);
+  // A faixa não tem rótulos por linha: a legenda é necessária para ler os números.
+  const legenda = el('p', { class: 'legenda-horas' }, el('span', { class: 'p', text: 'chance' }), ' · ', el('span', { class: 'mm', text: 'chuva' }), ' · vento · ', el('span', { class: 'g', text: 'rajada' }), ' (km/h)');
+  return secao('Próximas horas', null, legenda, lista);
 }
 
 // Sensação medida: a mesma fórmula da prevista (js/analise.js, sensacaoTermica). Vapor pela umidade ou,
@@ -1431,7 +1436,7 @@ function textoWmo(c) {
 // ------------------------------------------------------------------ meteograma
 
 const PAINEIS = {
-  chuva: 'Chuva', vento: 'Vento', temperatura: 'Temperatura', pressao: 'Pressão', umidade: 'Umidade', nuvens: 'Nuvens', cape: 'CAPE',
+  chuva: 'Chuva', vento: 'Vento', temperatura: 'Temperatura', pressao: 'Pressão', umidade: 'Umidade', nuvens: 'Nuvens', cape: 'Instabilidade',
 };
 
 function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
@@ -1440,8 +1445,10 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
   const x = idx.map((i) => p.horas[i]);
   const C = (v) => { const c = consensoHorario(p, v, mods); return { med: idx.map((i) => c.med[i]), lo: idx.map((i) => c.lo[i]), hi: idx.map((i) => c.hi[i]) }; };
   const disponivel = (v) => mods.some((m) => p.modelos[m].vars[v]);
-  let abertos = prefs.ler('paineis-v2', ['chuva']);
-  const chips = el('div', { class: 'paineis', role: 'group', 'aria-label': 'Painéis do meteograma' });
+  // Um gráfico por vez, escolhido num seletor compacto (antes eram 7 botões sempre à vista).
+  const salvo = prefs.ler('paineis-v2', ['chuva'])[0];
+  let abertos = [PAINEIS[salvo] ? salvo : 'chuva'];
+  const chips = el('div', { class: 'paineis' });
   const area = el('div');
   container.append(chips, area);
   const noites = noitesDe(p.diario, iniMs, fimMs);
@@ -1450,10 +1457,7 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
   function desenhar() {
     limparGraficos(area);
     area.replaceChildren();
-    chips.replaceChildren(...Object.entries(PAINEIS).map(([k, nome]) => el('button', { type: 'button', class: 'chip', 'aria-pressed': String(abertos.includes(k)), onclick: () => {
-      abertos = abertos.includes(k) ? abertos.filter((a) => a !== k) : [...abertos, k];
-      prefs.gravar('paineis-v2', abertos); desenhar();
-    } }, nome)));
+    chips.replaceChildren(seletor('Gráfico', Object.entries(PAINEIS), abertos[0], (k) => { abertos = [k]; prefs.gravar('paineis-v2', abertos); desenhar(); }));
     const fonte = notaPrevisao(p.offset);
     if (abertos.includes('chuva')) {
       const ch = C('precipitation'), pr = C('precipitation_probability');
@@ -1657,7 +1661,7 @@ function renderAmanhaDetalhes(data) {
       el('div', {}, el('span', { class: 'tmin', text: fmt.c(minimo(t)) || '–' }), ' a ', el('span', { class: 'tmax', text: fmt.c(maximo(t)) || '–' })));
   });
   filhos.push(secao('Períodos', notaPrevisao(p.offset), el('div', { class: 'periodos' }, ...caixas)));
-  const met = secao('Meteograma de amanhã', null);
+  const met = secao('Hora a hora', null);
   met.classList.add('largura-total');
   filhos.push(met);
   filhos.push(secao('Probabilidades de chuva e rajadas', notaConcordancia(a), tabelaLimites([a])));
@@ -1665,7 +1669,7 @@ function renderAmanhaDetalhes(data) {
   filhos.push(secao('Sol e UV', null,
     el('p', {}, `Nascer do sol ${fmt.horaMin(p.diario.nascer[k], p.offset)}, pôr do sol ${fmt.horaMin(p.diario.por[k], p.offset)}.`),
     el('p', {}, 'Índice UV máximo: ', valido(p.diario.uvMax[k]) ? el('b', { text: `${fmt.n(p.diario.uvMax[k], 0)} (${textoUv(p.diario.uvMax[k])})` }) : ausente('sem dado'))));
-  filhos.push(secao('Confiança e divergência entre modelos', null, tabelaModelosDia(a), el('ul', {}, ...(a.av.confianca.motivos.length ? a.av.confianca.motivos : ['modelos e cenários concordam']).map((m) => el('li', { text: m }))),
+  filhos.push(secao('Confiança', null, el('ul', {}, ...(a.av.confianca.motivos.length ? a.av.confianca.motivos : ['modelos e cenários concordam']).map((m) => el('li', { text: m }))),
     el('button', { type: 'button', class: 'chip', onclick: () => explicarConfianca(a) }, 'Como a confiança é calculada')));
   alvo.replaceChildren(...filhos);
   meteograma(met, p.horas[a.idxTodo[0]], p.horas[a.idxTodo[a.idxTodo.length - 1]], null, 'amanha');
@@ -1675,15 +1679,6 @@ function renderAmanhaDetalhes(data) {
 function notaConcordancia(a) { return a && a.limites.origem !== 'cenários do ensemble' ? 'Sem cenários agora: mostra concordância, não probabilidade.' : null; }
 
 function textoUv(u) { return u < 3 ? 'baixo' : u < 6 ? 'moderado' : u < 8 ? 'alto' : u < 11 ? 'muito alto' : 'extremo'; }
-
-function tabelaModelosDia(a) {
-  return el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', {},
-    el('thead', {}, el('tr', {}, el('th', { text: 'Modelo' }), el('th', { class: 'n', text: 'Chuva' }), el('th', { class: 'n', text: 'Rajada' }), el('th', { class: 'n', text: 'Mín/Máx' }))),
-    el('tbody', {}, ...a.resumos.map((r) => el('tr', {}, el('td', { text: MODELOS[r.modelo].nome }),
-      el('td', { class: 'n' }, valido(r.chuva) ? fmt.mm(r.chuva) : ausente('sem dado')),
-      el('td', { class: 'n' }, valido(r.rajada?.valor) ? `${Math.round(r.rajada.valor)} km/h` : ausente('não fornece')),
-      el('td', { class: 'n' }, valido(r.tmin) ? `${fmt.c(r.tmin)}/${fmt.c(r.tmax)}` : ausente('sem dado')))))));
-}
 
 function tabelaLimites(dias) {
   const p = estado.prev;
@@ -2100,6 +2095,7 @@ function irPara(aba, rolarTopo = true, direcao = 0) {
   else if (aba === 'elnino' && estado.prev !== undefined) renderElNino();
   if (aba === 'avisos' && estado.alertas && !estado.alertas.indisponivel) { const meus = avisosOrdenados(); marcarAvisosVistos(meus); marcarBotaoAvisos(meus); }
   abrirOuFecharGlobo(aba);
+  cabecalho.aoMudarAba(aba);
   // Entrada suave da aba (só transform e opacidade, que a placa de vídeo faz sem travar).
   // Gráficos e faixas se ajustam sozinhos pelo ResizeObserver quando a aba aparece; nada é redesenhado à força.
   if (mudou) {
@@ -2126,6 +2122,7 @@ function configurarNavegacao() {
   for (const b of document.querySelectorAll('.nav button[data-ir]')) b.addEventListener('click', () => irPara(b.dataset.ir));
   const mais = $('#dlg-mais');
   $('#btn-mais').addEventListener('click', () => mais.showModal());
+  for (const b of document.querySelectorAll('[data-voltar-mais]')) b.addEventListener('click', () => mais.showModal()); // caminho de volta das telas do menu
   for (const b of mais.querySelectorAll('.mais-item')) b.addEventListener('click', () => { mais.close(); irPara(b.dataset.ir); });
   // Deslizar entre Hoje, Amanhã e Semana. Para não trocar de aba sem querer, o gesto só vale quando:
   // é um único dedo, rápido (até 450 ms), claramente horizontal (80 px ou mais, e 3 vezes mais que o vertical),
@@ -2159,6 +2156,50 @@ function configurarNavegacao() {
     const n = dx < 0 ? k + 1 : k - 1;
     if (n >= 0 && n < trio.length) irPara(trio[n], true, dx < 0 ? 1 : -1);
   }, { passive: true });
+}
+
+// Barra de cima recolhível: some ao rolar para baixo e, no Globo, depois de alguns segundos sem uso;
+// volta ao rolar para cima, ao trocar de aba ou pela alça, que também recolhe e mostra quando o usuário quiser.
+const cabecalho = { aoMudarAba() {} };
+function configurarCabecalho() {
+  const cab = $('#cabeca'), alca = $('#alca-cabeca'), raiz = document.documentElement;
+  const OCIOSO_GLOBO_MS = 4000;
+  let oculta = false, fixa = false, timer = 0, ultimoY = window.scrollY, quadro = 0;
+  const altura = () => (cab.hasAttribute('data-recolhida') ? null : cab.offsetHeight);
+  const medir = () => { const h = altura(); if (h) raiz.style.setProperty('--alt-cab', `${h}px`); if (!oculta && h) raiz.style.setProperty('--cab-vis', `${h}px`); };
+  new ResizeObserver(medir).observe(cab);
+  medir();
+  const avisarGlobo = () => { if (estado.aba === 'globo') requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); };
+  const aplicar = (v) => {
+    if (v === oculta) return;
+    oculta = v;
+    clearTimeout(timer);
+    cab.removeAttribute('data-recolhida');
+    if (v) cab.setAttribute('data-oculta', ''); else cab.removeAttribute('data-oculta');
+    document.body.dataset.cab = v ? 'oculta' : 'visivel';
+    raiz.style.setProperty('--cab-vis', v ? 'var(--safe-t)' : `${cab.offsetHeight}px`);
+    alca.setAttribute('aria-expanded', String(!v));
+    alca.setAttribute('aria-label', v ? 'Mostrar barra de cima' : 'Ocultar barra de cima');
+    if (!v) avisarGlobo();
+  };
+  // Depois de sair da tela, a barra perde a altura: só assim o Globo, que mede a barra, ocupa o espaço dela.
+  cab.addEventListener('transitionend', () => { if (oculta) { cab.setAttribute('data-recolhida', ''); avisarGlobo(); } });
+  const ocultar = () => { if (!document.querySelector('dialog[open]')) aplicar(true); };
+  const armarOcioso = () => { clearTimeout(timer); if (estado.aba === 'globo' && !fixa && !oculta) timer = setTimeout(ocultar, OCIOSO_GLOBO_MS); };
+  alca.addEventListener('click', () => { fixa = oculta; aplicar(!oculta); });
+  cab.addEventListener('pointerdown', armarOcioso, { passive: true });
+  window.addEventListener('scroll', () => {
+    if (quadro) return;
+    quadro = requestAnimationFrame(() => {
+      quadro = 0;
+      const y = window.scrollY, dy = y - ultimoY;
+      if (y < (cab.offsetHeight || 100)) aplicar(false);
+      else if (dy > 6) ocultar();
+      else if (dy < -6) aplicar(false);
+      if (Math.abs(dy) > 6 || y < 10) ultimoY = y;
+    });
+  }, { passive: true });
+  cabecalho.aoMudarAba = (aba) => { document.body.dataset.aba = aba; fixa = false; aplicar(false); armarOcioso(); };
 }
 
 function configurarPuxar() {

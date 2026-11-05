@@ -3,7 +3,7 @@
 //   radar RainViewer (chuva agora, passado, zoom nativo máximo 7);
 //   grade Open-Meteo de 11 x 11 pontos (chuva prevista, nuvens, temperatura, calor, frio, vento);
 //   polígonos dos avisos do INMET (todos, ou só os de calor ou de frio nas camadas correspondentes).
-import { el, fmt, linkExterno, prefs } from './ui.js';
+import { el, fmt, linkExterno, prefs, seletor } from './ui.js';
 import { buscarRadar, buscarGradeMapa } from './dados.js';
 import { CONFIG } from './config.js';
 
@@ -160,7 +160,7 @@ function gestosDoisDedos(L, mapa, caixa) {
 
 export function secaoMapa(container, estado) {
   const caixa = el('div', { class: 'mapa', role: 'region', 'aria-label': 'Mapa do tempo' }, el('p', { class: 'nota', style: { padding: '16px' }, text: 'O mapa carrega quando esta parte aparece na tela.' }));
-  const escolha = el('div', { class: 'camadas', role: 'radiogroup', 'aria-label': 'Camada do mapa', 'data-hscroll': '' });
+  const escolha = el('div', { class: 'camadas' });
   const titulo = el('p', { class: 'mapa-titulo', 'aria-live': 'polite' });
   const barra = el('div', { class: 'mapa-barra', hidden: true });
   const rotulos = el('div', { class: 'mapa-rotulos', hidden: true });
@@ -172,10 +172,11 @@ export function secaoMapa(container, estado) {
   container.append(escolha, titulo, barra, rotulos, caixa, legenda, rodape, nota);
 
   let atual = CAMADAS.some((c) => c.id === prefs.ler('mapaCamada', 'radar')) ? prefs.ler('mapaCamada', 'radar') : 'radar';
-  const botoes = CAMADAS.map((c) => el('button', { type: 'button', role: 'radio', 'data-camada': c.id }, c.nome));
-  escolha.append(...botoes);
-  const marcar = () => botoes.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.camada === atual)));
-  marcar();
+  // Camada num seletor compacto (antes, 8 botões numa fileira). O mapa liga o aoMudar quando carrega.
+  let aoMudar = () => {};
+  const sel = seletor('Camada do mapa', CAMADAS.map((c) => [c.id, c.nome]), atual, (id) => aoMudar(id));
+  escolha.append(sel);
+  const marcar = () => { sel.firstChild.value = atual; };
 
   // A seção é montada de novo a cada atualização do painel: o retorno desliga o mapa anterior
   // (temporizadores do radar, ouvinte de visibilidade e o próprio Leaflet) para não acumular na memória.
@@ -344,7 +345,7 @@ export function secaoMapa(container, estado) {
         if (atual === id) legenda.textContent = `${c.nome} indisponível agora: ${e.message}`;
       }
     }
-    botoes.forEach((b) => { b.onclick = () => { if (b.dataset.camada !== atual) trocar(b.dataset.camada); }; });
+    aoMudar = (id) => { if (id !== atual) trocar(id); };
     await trocar(atual);
   }
 }

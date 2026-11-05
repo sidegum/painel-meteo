@@ -93,3 +93,17 @@ export const prefs = {
 };
 
 export const cor = (nome) => getComputedStyle(document.documentElement).getPropertyValue(nome).trim() || '#888';
+
+/**
+ * Seletor compacto: um único botão com a opção atual que abre a lista nativa do sistema
+ * (no iPhone, a roleta). Substitui fileiras de botões de filtro que poluem a tela.
+ * @param {string} rotulo nome acessível
+ * @param {Array<[string,string]>} opcoes pares [valor, nome]
+ * @param {string} atual valor escolhido
+ * @param {(valor:string)=>void} aoMudar
+ */
+export function seletor(rotulo, opcoes, atual, aoMudar) {
+  const s = el('select', { 'aria-label': rotulo, onchange: () => aoMudar(s.value) },
+    ...opcoes.map(([v, nome]) => el('option', { value: v, selected: v === atual }, nome)));
+  return el('label', { class: 'seletor' }, s);
+}
