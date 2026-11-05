@@ -894,25 +894,49 @@ export function prepararCorrecaoDia(valores, horas, viesHora, extremos) {
 // ---------- umidade e sensação térmica ----------
 
 /**
- * Pressão de vapor em hPa a uma temperatura (fórmula de Tetens/Bolton, a mesma da Bureau of Meteorology no
- * cálculo da sensação). Com o ponto de orvalho, dá a pressão de vapor do ar; com a temperatura, a de saturação.
+ * Pressão de vapor em hPa a uma temperatura (fórmula de Tetens/Bolton). Com o ponto de orvalho, dá a pressão de vapor do ar; com a temperatura, a de saturação.
  * @param {number} t °C
  */
 export const pressaoVapor = (t) => 6.105 * Math.exp((17.27 * t) / (237.7 + t));
 
 /**
- * Sensação térmica à sombra (temperatura aparente de Steadman, 1994, na forma da Bureau of Meteorology da
- * Austrália): AT = T + 0,33·e − 0,70·v − 4,00, com e = pressão de vapor (hPa) e v = vento a 10 m (m/s).
- * Junta, numa conta só, o abafamento da umidade e o frio do vento. É a mesma fórmula para a sensação medida
- * e para a prevista, então as duas são comparáveis.
+ * Sensação térmica ("feels like") no padrão do serviço meteorológico dos EUA (NWS), o mesmo usado pela maior
+ * parte dos apps de tempo:
+ * - frio com vento (T ≤ 10 °C e vento > 4,8 km/h): índice de vento frio NWS/Environment Canada (2001),
+ *   13,12 + 0,6215·T − 11,37·v^0,16 + 0,3965·T·v^0,16, com v em km/h. Entre 10 e 15 °C o efeito do vento
+ *   diminui em linha reta até zero (escolha do painel, fora do padrão NWS, para não saltar 3 °C em 10 °C);
+ * - demais casos: índice de calor NWS (algoritmo do WPC). Primeiro a forma simples de Steadman,
+ *   0,5·(T + 61 + 1,2·(T − 68) + 0,094·UR) em °F; se a média dela com T passa de 80 °F, a regressão de
+ *   Rothfusz com os dois ajustes do NWS (ar muito seco; ar muito úmido entre 80 e 87 °F). Abaixo de 80 °F a
+ *   umidade só pode somar: o resultado nunca fica abaixo de T.
+ * Substitui a temperatura aparente de Steadman/BoM (T + 0,33·e − 0,7·v − 4), que exagerava o abafamento em
+ * temperaturas amenas e úmidas (21 °C com 100% de umidade virava 25 °C). Mesma conta para sensação medida
+ * e prevista, então as duas são comparáveis.
  * @param {number} t temperatura (°C)
  * @param {number} e pressão de vapor (hPa): pressaoVapor(orvalho) ou umidade/100 · pressaoVapor(t)
- * @param {number} ventoKmh vento médio (km/h)
+ * @param {number} ventoKmh vento médio (km/h); só pesa no frio
  * @returns {number|null} °C com uma casa
  */
 export function sensacaoTermica(t, e, ventoKmh) {
   if (![t, e, ventoKmh].every(valido)) return null;
-  return Math.round((t + 0.33 * e - 0.7 * (ventoKmh / 3.6) - 4) * 10) / 10;
+  const arred = (c) => Math.round(c * 10) / 10;
+  if (t < 15) {
+    if (ventoKmh <= 4.8) return arred(t);
+    const p = ventoKmh ** 0.16;
+    const frio = Math.min(t, 13.12 + 0.6215 * t - 11.37 * p + 0.3965 * t * p);
+    const peso = t <= 10 ? 1 : (15 - t) / 5; // transição até 15 °C, sem salto em 10 °C
+    return arred(peso * frio + (1 - peso) * t);
+  }
+  const ur = Math.min(100, Math.max(0, (100 * e) / pressaoVapor(t)));
+  const f = t * 1.8 + 32;
+  let hi = 0.5 * (f + 61 + (f - 68) * 1.2 + ur * 0.094);
+  if ((hi + f) / 2 >= 80) {
+    hi = -42.379 + 2.04901523 * f + 10.14333127 * ur - 0.22475541 * f * ur - 0.00683783 * f * f
+      - 0.05481717 * ur * ur + 0.00122874 * f * f * ur + 0.00085282 * f * ur * ur - 0.00000199 * f * f * ur * ur;
+    if (ur < 13 && f >= 80 && f <= 112) hi -= ((13 - ur) / 4) * Math.sqrt((17 - Math.abs(f - 95)) / 17);
+    else if (ur > 85 && f >= 80 && f <= 87) hi += ((ur - 85) / 10) * ((87 - f) / 5);
+  }
+  return arred(Math.max(t, (hi - 32) / 1.8));
 }
 
 /**

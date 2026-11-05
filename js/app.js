@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
-  horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, ancorarTemperatura, periodoDoDia, classeRajada,
+  horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
   calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor,
 } from './analise.js';
@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.2.27';
+const VERSAO = '1.2.29';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -362,24 +362,22 @@ function atualizarCabecalho() {
 }
 
 /**
- * Sensação térmica de agora, uma só para todas as telas. Medida: calculada com temperatura, umidade e vento
- * da mesma estação (até 25 km) pela mesma fórmula da sensação prevista (sensacaoTermica, Steadman/BoM à
- * sombra), para que agora e previsão saiam da mesma conta. Reserva: a sensação que o INMET publica (fórmula
- * não documentada). Sem medição, a sensação prevista para esta hora (já calibrada e ancorada na medição).
+ * Sensação térmica de agora, uma só para todas as telas. Medida: calculada pela mesma fórmula da sensação
+ * prevista (sensacaoTermica, padrão NWS) com a temperatura mostrada em "Agora" (estação mais próxima, até
+ * 25 km) e a umidade (ou o ponto de orvalho) e o vento da mesma estação e da mesma leitura. O vento só pesa
+ * no frio: acima de 15 °C, falta de vento não impede a conta. A sensação que o INMET publica não é usada
+ * (fórmula não documentada, dava 2 a 3 °C a mais em noites úmidas). Sem medição, a sensação prevista para
+ * esta hora (já calibrada e ancorada na medição).
  * @returns {{valor:number, medida:boolean, title:string}|null}
  */
 function sensacaoAgora() {
   const pt = pontoExato(), agora = Date.now();
   if (estado.obs && pt) {
-    const fontes = fontesNormalizadas();
-    const pega = (v) => escolherFonte(fontes, v, pt.lat, pt.lon, agora, CONFIG.idadeMaxMedicaoMin).escolhida;
-    const t = pega('temperatura'), u = pega('umidade'), ve = pega('vento');
-    if (t && u && ve && t.distancia <= 25 && t.fonte.id === u.fonte.id && u.fonte.id === ve.fonte.id) {
-      const v = apparente(t.valor, u.valor, ve.valor);
-      if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome}, ${fmt.idade(t.ms)}` };
-    }
-    const inmet = pega('sensacao');
-    if (inmet && inmet.distancia <= 25) return { valor: inmet.valor, medida: true, title: `Medida em ${inmet.fonte.nome}, ${fmt.idade(inmet.ms)}` };
+    const t = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, agora, CONFIG.idadeMaxMedicaoMin).escolhida;
+    const l = t && t.distancia <= 25 ? t.fonte.leituras : null;
+    const mesma = (k) => (l?.[k] && l[k].ms === t.ms && leituraValida(k, l[k].valor) ? l[k].valor : null);
+    const v = l ? sensacaoMedida(t.valor, mesma('umidade'), mesma('orvalho'), mesma('vento')) : null;
+    if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome}, ${fmt.idade(t.ms)}` };
   }
   const p = estado.prev;
   const i = p ? p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000) : -1;
@@ -1221,9 +1219,12 @@ function proximasHoras() {
   return secao('Próximas horas', 'Chance de chuva, volume, vento e rajada (km/h).', lista);
 }
 
-// sensação medida: a mesma fórmula da prevista (js/analise.js, sensacaoTermica)
-function apparente(t, rh, kmh) {
-  return valido(t) && valido(rh) ? sensacaoTermica(t, (rh / 100) * pressaoVapor(t), kmh) : null;
+// Sensação medida: a mesma fórmula da prevista (js/analise.js, sensacaoTermica). Vapor pela umidade ou,
+// sem ela, pelo ponto de orvalho; sem vento, só acima de 15 °C (onde o vento não entra na conta).
+function sensacaoMedida(t, ur, orvalho, kmh) {
+  if (!valido(t)) return null;
+  const e = valido(ur) ? (ur / 100) * pressaoVapor(t) : valido(orvalho) ? pressaoVapor(Math.min(orvalho, t)) : null;
+  return sensacaoTermica(t, e, valido(kmh) ? kmh : t >= 15 ? 0 : null);
 }
 
 function instrumentos() {
@@ -1238,7 +1239,6 @@ function instrumentos() {
   const val = (k) => pegar(k).escolhida;
 
   const t = val('temperatura'), u = val('umidade'), ve = val('vento');
-  const sensInmet = linhaSilenciosa(fontes, 'sensacao', p, agora);
   const sa = sensacaoAgora();
   const sens = sa?.medida ? sa.valor : null; // a mesma do resumo; aqui só a medida
   const pr = val('pressao');
@@ -1261,7 +1261,7 @@ function instrumentos() {
 
   const grade = el('div', { class: 'medicoes' },
     bloco('Temperatura', t, t ? fmt.c1(t.valor) : null),
-    bloco('Sensação', sensInmet || t, valido(sens) ? fmt.c1(sens) : null),
+    bloco('Sensação', t, valido(sens) ? fmt.c1(sens) : null),
     bloco('Umidade', u, u ? `${Math.round(u.valor)}%` : null),
     bloco('Ponto de orvalho', val('orvalho'), val('orvalho') ? fmt.c1(val('orvalho').valor) : null),
     bloco('Vento', ve, ve ? `${fmt.kmh(ve.valor)}${dir ? ' ' + direcaoTexto(dir.valor) : ''}` : null),
@@ -1425,10 +1425,6 @@ function painelPressao(pr) {
     det.append(el('p', { class: 'nota', text: `Como é calculado: queda em 3 h soma 1 ponto (2 se rápida); queda de ${R.queda24hForte} hPa em 24 h, queda prevista de ${R.variacaoPrevForte} hPa em ${R.previsaoHoras} h e pressão abaixo de ${R.baixa} hPa somam 1 cada; subidas e pressão acima de ${R.alta} hPa tiram pontos. A conclusão sempre parte da chance de chuva do topo da tela.` }));
   });
   return caixa;
-}
-
-function linhaSilenciosa(fontes, v, p, agora) {
-  return escolherFonte(fontes, v, p.lat, p.lon, agora, CONFIG.idadeMaxMedicaoMin).escolhida;
 }
 
 function textoWmo(c) {
