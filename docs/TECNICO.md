@@ -451,6 +451,11 @@ A ordem é:
 
 - **Amanhã** (`renderAmanhaDetalhes`): a mesma primeira tela, com `desdeAgora = false`, mais a tabela por modelo (`tabelaModelosDia`) e o índice UV (`textoUv`).
 - **Semana** (`renderSemana`, `tabelaLimites`, `tabelaFaixas`): um dia por linha com resumo, números e confiança, sem fontes nem tabela de modelos (o detalhe por modelo fica na aba Modelos). Gráficos e tabelas sem subdescrição.
+- **Dia** (aba `dia`, fora da barra; desde a 1.8.3). Tocar num dia da Semana chama `abrirDia(data)`: o dia de hoje vai para a aba Hoje e o de amanhã para a aba Amanhã. Os outros abrem o mesmo painel da Amanhã para aquele dia: `renderPrimeira` com `diaIndice` e `renderDiaDetalhes(alvo, data, diaIndice, id)`, a mesma função que a Amanhã usa.
+  - A tela abre mesmo nos dias distantes; a imprecisão aparece na confiança, calculada com o `diaIndice` real.
+  - O botão "Semana" (`[data-voltar-semana]`) volta, e a barra mantém Semana marcada.
+  - Deslizar passa para o dia seguinte ou anterior (do 3º dia anterior volta para Amanhã).
+  - O dia aberto fica em `estado.diaAberto` e é redesenhado na fila de `renderTudo`. Se a data sair da previsão, a tela volta para a Semana.
 - **Subdescrições**: um bloco autoexplicativo não leva texto abaixo do título. Ficam só a nota de fonte ("Fonte · Horário") onde ela existe e avisos que mudam a leitura do dado, como `notaConcordancia` (sem ensemble, a fração de modelos é concordância, não probabilidade).
 - **Modelos** (`renderModelos`, `resumoAprendizado`, `tabelaAcerto`): os pesos atuais, o que já foi aprendido e o acerto por modelo e antecedência.
 - **El Niño** (`renderElNino`, `painelEnso`, `intensidade`, `barrasProb`, `comparacaoHistorica`): os índices ONI e RONI, a discussão do CPC, as probabilidades do CPC e do IRI, e a estimativa diária do Niño 3.4.

@@ -681,3 +681,8 @@ button.globo-rotulo { cursor: pointer; }
   border-right: 2px solid var(--fraco); border-bottom: 2px solid var(--fraco); transform: translateY(-70%) rotate(45deg);
 }
 .seletor select:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
+
+/* dia da Semana: tocável, abre o painel do dia */
+.dia > .cab { position: relative; padding-right: 36px; color: inherit; font: inherit; }
+.dia > .cab::after { content: ''; position: absolute; right: 18px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--fraco); border-top: 2px solid var(--fraco); transform: translateY(-50%) rotate(45deg); }
+.dia > .cab:active { background: var(--sup); }
