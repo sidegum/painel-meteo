@@ -590,6 +590,7 @@ Nenhuma chave contém a localização ou o IP do usuário.
 ## 10. Automação, scripts e testes
 
 - `.github/workflows/testes.yml`: roda `npm test`, `npm audit` e a busca por segredos em cada push e PR.
+- `.github/workflows/globo.yml`: a cada hora gera os dados da aba Globo (`scripts/globo/atualizar.py`) e publica no branch `globo-dados` (ver seção 12).
 - `.github/workflows/worker.yml`: publica o Worker quando `worker/**` muda na `main`.
 - `.github/workflows/enso.yml`: a cada 3 h, roda `scripts/atualizar-enso.mjs`.
   - O script reaproveita `atualizarEnso` do Worker com um "KV" de arquivo.
@@ -600,9 +601,10 @@ Nenhuma chave contém a localização ou o IP do usuário.
   - `scripts/calibrar.mjs`: calcula `dados/calibracao.json` e `docs/calibracao-resultado.md` (`scripts/lib/calibracao.mjs`). Detalhes em CALIBRACAO.md.
 - `scripts/configurar.mjs`: grava a URL do Worker em `js/config.js`.
 - `test/analise.test.mjs`: 21 testes das funções puras.
+- `test/ceu.test.mjs`: cálculos do céu conferidos com fatos publicados (equinócio, solstício, Gemínidas, eclipses de 2026, estrelas circumpolares).
 - `worker/test/worker.test.mjs`: 24 testes dos parsers e das regras do Worker, com fixtures reais.
 - `test/calibracao.test.mjs`: leitor de ZIP e CSV do INMET, agregação diária, viés, fator, validação fora da amostra e aplicação no app (séries, cenários, pesos).
-- O comando `npm test` roda os três.
+- O comando `npm test` roda os quatro.
 
 ---
 
@@ -613,3 +615,42 @@ Nenhuma chave contém a localização ou o IP do usuário.
 3. Rodar `npm test` e conferir no navegador, no celular (390 px) e no computador.
 4. Atualizar este documento na seção afetada.
 5. Abrir um PR para a `main`. O Pages publica em cerca de 1 min, e o Worker é publicado pelo workflow quando `worker/**` muda.
+
+---
+
+## 12. Aba Globo (`js/globo*.js` e `js/ceu.js`)
+
+Módulos, todos ES modules carregados só quando a aba abre:
+
+| Módulo | Papel |
+|---|---|
+| `globo.js` | cena Three.js, shaders da Terra (dia, noite com luzes das cidades, luar, nuvens, atmosfera), camadas, gestos, painel de toque, laço e qualidade adaptativa |
+| `globo-dados.js` | leitura dos arquivos do branch `globo-dados` (manifest, campos GFS, satélite, elementos orbitais, sondas) com validação |
+| `globo-regiao.js`, `globo-cidades.js` | mapa detalhado sob a câmera e rótulos de cidades |
+| `ceu.js` | cálculo puro do céu (sem DOM, testado): Sol, Lua, planetas e estrelas pelo Astronomy Engine; satélites pelo SGP4; passagens visíveis, chuvas de meteoros (IMO, por longitude solar), eclipses, fases, estações e o resumo "Céu de hoje" |
+| `globo-ceu.js` | textos: bloco "Céu de hoje" e cartões de Sol, Lua, planetas, estrelas, satélites e sondas |
+| `globo-astro.js` | pontos subsolar e sublunar e posições para o sistema solar |
+| `globo-estrelas.js` | céu de fundo com o catálogo real (precessão para a data, giro pelo tempo sideral, cor pelo B−V) e linhas das constelações |
+| `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra e o sistema solar com as sondas |
+| `globo-sondas.js` | fichas das missões e interpolação de Hermite dos vetores do JPL Horizons |
+| `globo-texturas.js` | texturas procedurais dos astros |
+
+Referencial da cena: fixo na Terra, raio 1 = 6.371 km, `latLonVec(lat, lon) = (cos·cos, sen, −cos·sen)`. Sol, Lua e
+planetas entram pelo ponto sob o astro (ascensão reta menos o tempo sideral, do Astronomy Engine), as estrelas pelo
+grupo girado de −GST. No sistema solar, coordenadas heliocêntricas da eclíptica J2000 com distância comprimida
+(`1,25·UA^0,45`) e direção real.
+
+Regras de visibilidade (constantes `VIS` em `ceu.js`): céu escuro com Sol a −6° ou menos (planetas muito brilhantes a
+partir de −1° a −4°, pela magnitude); pelo menos 10° de altura; satélite visível só iluminado pelo Sol (sombra
+cilíndrica da Terra) com o céu do observador escuro; elementos orbitais com mais de 3 dias são descartados. As nuvens
+de cada item usam a mesma mediana dos modelos e os mesmos limites (45% e 75%) da aba Hoje.
+
+Dados gerados pelo `globo.yml` (`scripts/globo/atualizar.py`): GFS 0,5° (NOMADS), mosaico infravermelho (NASA GIBS),
+ciclones (GDACS e NHC), elementos orbitais (CelesTrak) e, uma vez por dia, os vetores das 16 sondas pelo JPL Horizons
+(`sondas.json`: rota desde o lançamento até 2 anos à frente, trecho recente de 200 dias para cada lado com passo de 1
+dia, ou 12 h para a Parker, e trecho fino de 6 h em volta de agora; para o James Webb, também os vetores em relação à
+Terra no último ano). `workflow_dispatch` com `so=sondas` força a regeração.
+
+Pré-carregamento: assim que a Terra aparece, `prepararEspaco` monta em tempo ocioso os satélites, os planetas no céu e
+o sistema solar com as sondas, tudo escondido; abrir Espaço ou Sistema solar só torna visível.
+
