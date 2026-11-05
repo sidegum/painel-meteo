@@ -263,21 +263,22 @@ export function atualizarEspaco(agora) {
     if (G.quadro % 120 === 0) atualizarCeu();
   }
   const rect = G.dom.canvas.getBoundingClientRect();
+  const topo = E.dom.raiz.getBoundingClientRect().bottom - rect.top + 8; // rótulos não passam por cima dos botões do espaço
   for (const r of E.rotulos) {
     if (!E.ativos.has('estacoes') || !posicaoCena(r.s.rec, data, v)) { r.el.hidden = true; continue; }
     const tela = naTela(v, rect);
-    r.el.hidden = !tela;
+    r.el.hidden = !tela || tela.y < topo;
     if (tela) r.el.style.transform = `translate(${tela.x.toFixed(0)}px, ${tela.y.toFixed(0)}px)`;
   }
   for (const c of E.ceu) {
     const tela = naTela(c.sprite.position, rect);
-    c.rotulo.hidden = !tela || tela.y < 110;
+    c.rotulo.hidden = !tela || tela.y < topo;
     if (tela) c.rotulo.style.transform = `translate(${tela.x.toFixed(0)}px, ${tela.y.toFixed(0)}px)`;
   }
   for (const s of E.estrelas) {
     if (!s.rotulo) continue;
     const tela = naTela(estrelaNaCena(s), rect);
-    s.rotulo.hidden = !tela || tela.y < 110;
+    s.rotulo.hidden = !tela || tela.y < topo;
     if (tela) s.rotulo.style.transform = `translate(${tela.x.toFixed(0)}px, ${tela.y.toFixed(0)}px)`;
   }
   if (E.selecao) {
