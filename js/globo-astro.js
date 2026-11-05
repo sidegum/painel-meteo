@@ -27,8 +27,8 @@ export function pontoSubsolar(ms) {
   return { lat: declinacao / RAD, lon, declinacao: declinacao / RAD, ascensaoReta: ascensaoReta / RAD };
 }
 
-/** Longitude do ponto sublunar e latitude, pela série curta de Meeus (erro de cerca de 0,3°). */
-export function pontoSublunar(ms) {
+/** Posição geocêntrica da Lua em coordenadas eclípticas da data (graus, km), pela série curta de Meeus (erro ~0,3°). */
+export function posicaoLua(ms) {
   const n = diaJuliano(ms) - J2000;
   const T = n / 36525;
   const Lp = norm360(218.3164477 + 481267.88123421 * T);         // longitude média
@@ -39,12 +39,44 @@ export function pontoSublunar(ms) {
   const lon = Lp + 6.289 * Math.sin(Mp) - 1.274 * Math.sin(2 * D - Mp) + 0.658 * Math.sin(2 * D) - 0.214 * Math.sin(2 * Mp) - 0.186 * Math.sin(M) - 0.114 * Math.sin(2 * F);
   const lat = 5.128 * Math.sin(F) + 0.281 * Math.sin(Mp + F) - 0.278 * Math.sin(F - Mp) - 0.173 * Math.sin(2 * D - F);
   const dist = 385001 - 20905 * Math.cos(Mp) - 3699 * Math.cos(2 * D - Mp) - 2956 * Math.cos(2 * D);
-  const eps = (23.439 - 0.0000004 * n) * RAD;
-  const l = lon * RAD, b = lat * RAD;
+  return { lon: norm360(lon), lat, distanciaKm: dist, elongacao: norm360(D / RAD) };
+}
+
+/** Longitude do ponto sublunar e latitude. */
+export function pontoSublunar(ms) {
+  const n = diaJuliano(ms) - J2000;
+  const { lon, lat, distanciaKm } = posicaoLua(ms);
+  const eq = eclipticaParaEquatorial(lon, lat, n);
+  const gmst = norm360((18.697374558 + 24.06570982441908 * n) * 15);
+  return { lat: eq.dec, lon: norm180(eq.ra - gmst), distanciaKm };
+}
+
+/** Fase da Lua: fração iluminada (0 a 1) e nome, pela elongação média Lua-Sol. */
+export function faseLua(ms) {
+  const e = posicaoLua(ms).elongacao;
+  const fracao = (1 - Math.cos(e * RAD)) / 2;
+  const nome = e < 22.5 ? 'nova' : e < 67.5 ? 'crescente' : e < 112.5 ? 'quarto crescente' : e < 157.5 ? 'crescente gibosa'
+    : e < 202.5 ? 'cheia' : e < 247.5 ? 'minguante gibosa' : e < 292.5 ? 'quarto minguante' : e < 337.5 ? 'minguante' : 'nova';
+  return { fracao, nome, elongacao: e };
+}
+
+/** Eclíptica (graus) para equatorial (ascensão reta e declinação em graus), com a obliquidade da data. */
+export function eclipticaParaEquatorial(lonG, latG, n) {
+  const eps = (23.439 - 0.0000004 * n) * RAD, l = lonG * RAD, b = latG * RAD;
   const ra = Math.atan2(Math.sin(l) * Math.cos(eps) - Math.tan(b) * Math.sin(eps), Math.cos(l));
   const dec = Math.asin(Math.sin(b) * Math.cos(eps) + Math.cos(b) * Math.sin(eps) * Math.sin(l));
-  const gmst = norm360((18.697374558 + 24.06570982441908 * n) * 15);
-  return { lat: dec / RAD, lon: norm180(ra / RAD - gmst), distanciaKm: dist };
+  return { ra: norm360(ra / RAD), dec: dec / RAD };
+}
+
+/**
+ * Altura e azimute de um astro (ascensão reta e declinação em graus) visto de (lat, lon) no instante dado.
+ * Azimute de 0° (norte) a 360°, pelo leste. Altura negativa = abaixo do horizonte.
+ */
+export function alturaAzimute(ra, dec, lat, lon, ms) {
+  const H = (tempoSideralGreenwich(ms) + lon - ra) * RAD, f = lat * RAD, d = dec * RAD;
+  const alt = Math.asin(Math.sin(f) * Math.sin(d) + Math.cos(f) * Math.cos(d) * Math.cos(H));
+  const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(f) - Math.tan(d) * Math.cos(f)) / RAD + 180;
+  return { altura: alt / RAD, azimute: norm360(az) };
 }
 
 // ---------- planetas (elementos keplerianos aproximados do JPL, época J2000, taxas por século) ----------
@@ -64,11 +96,11 @@ export const PLANETAS = [
  * Posição heliocêntrica de um planeta em coordenadas eclípticas J2000 (UA), pelos elementos keplerianos aproximados.
  * @returns {{x:number, y:number, z:number, r:number}}
  */
-export function posicaoPlaneta(planeta, ms) {
+export function posicaoPlaneta(planeta, ms, anomaliaMedia = null) {
   const T = (diaJuliano(ms) - J2000) / 36525;
   const [a, e, i, L, varpi, Omega] = planeta.el.map((v, k) => v + planeta.taxa[k] * T);
   const omega = varpi - Omega;                 // argumento do periélio
-  const M = norm180(L - varpi) * RAD;          // anomalia média
+  const M = (anomaliaMedia === null ? norm180(L - varpi) : anomaliaMedia) * RAD; // anomalia média (ou a pedida, para traçar a órbita)
   let E = M + e * Math.sin(M);                  // equação de Kepler (Newton)
   for (let k = 0; k < 8; k++) { const dE = (M - (E - e * Math.sin(E))) / (1 - e * Math.cos(E)); E += dE; if (Math.abs(dE) < 1e-8) break; }
   const xp = a * (Math.cos(E) - e), yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
