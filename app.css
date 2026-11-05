@@ -51,7 +51,7 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: var(--cab-vis, 110px); }
 body {
   margin: 0; background: var(--fundo); color: var(--texto);
   font-family: 'Archivo', system-ui, sans-serif; font-size: 16px; line-height: 1.4;
@@ -93,7 +93,17 @@ button { cursor: pointer; }
 .agora .rot-agora { font-size: 11px; font-weight: 600; color: var(--fraco); margin-bottom: 2px; }
 .agora b { font-size: 26px; font-weight: 650; letter-spacing: -.02em; }
 .agora small { font-size: 12px; color: var(--fraco); margin-top: 3px; white-space: nowrap; }
-.cabeca { position: sticky; top: 0; z-index: 20; background: var(--fundo); }
+/* Barra de cima fixa e recolhível: o corpo reserva a altura dela (--alt-cab), então recolher não move o conteúdo.
+   No Globo, recolhida, a reserva some e o globo ganha a tela toda. */
+.cabeca { position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: var(--fundo); transition: transform .22s ease; will-change: transform; }
+body { padding-top: var(--alt-cab, 110px); }
+.cabeca[data-oculta] { transform: translateY(calc(-100% + var(--safe-t))); }
+.cabeca[data-recolhida] { height: var(--safe-t); overflow: hidden; }
+body[data-aba="globo"][data-cab="oculta"] { padding-top: var(--safe-t); }
+.alca { position: fixed; z-index: 21; left: 50%; top: calc(var(--cab-vis, 110px) - 11px); transform: translateX(-50%); width: 64px; height: 22px; padding: 0; border: 0; background: none; display: flex; align-items: center; justify-content: center; transition: top .22s ease; }
+.alca i { width: 36px; height: 5px; border-radius: 3px; background: var(--fraco); opacity: .55; }
+.alca[aria-expanded="false"] { top: var(--safe-t); }
+.alca[aria-expanded="false"] i { opacity: .9; }
 
 .puxar { position: fixed; left: 50%; top: 64px; z-index: 30; transform: translate(-50%, 0); opacity: 0; pointer-events: none;
   padding: 8px 14px; border-radius: 18px; background: var(--sup2, var(--sup)); color: var(--texto); font-size: 14px; transition: opacity .12s; will-change: transform; }
@@ -208,6 +218,11 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 /* ---------- seções de detalhe ---------- */
 .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { padding: 0 16px; }
 .titulo-aba { font-size: 24px; font-stretch: 112%; font-weight: 720; margin: 8px 16px 8px; }
+.voltar-mais { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin: 4px 0 -8px; padding: 0 16px 0 10px; background: none; border: 0; color: var(--fraco); font: inherit; font-size: 15px; font-weight: 600; }
+.voltar-mais::before { content: ''; width: 8px; height: 8px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); margin-right: 2px; }
+.legenda-horas { margin: -2px 0 6px; font-size: 14px; color: var(--fraco); }
+.legenda-horas .p, .legenda-horas .mm { color: var(--chuva-txt); font-weight: 600; }
+.legenda-horas .g { color: var(--rajada-txt); font-weight: 600; }
 .secao { padding: 18px 0 8px; border-top: 6px solid var(--sup); margin-top: 14px; }
 .secao h2 { font-size: 19px; font-stretch: 105%; font-weight: 700; margin: 0 0 4px; }
 .secao .fonte { font-size: 13px; color: var(--fraco); margin: 2px 0 8px; }
@@ -313,10 +328,6 @@ td.n, th.n { text-align: right; }
 .mapa-dica { position: absolute; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px;
   background: rgba(0,0,0,.45); color: #fff; font-weight: 600; font-size: 15px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .mapa-dica.ver { opacity: 1; }
-.camadas { display: flex; gap: 6px; overflow-x: auto; margin: 4px -16px 8px; padding: 0 16px 4px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; scrollbar-width: none; }
-.camadas::-webkit-scrollbar { display: none; }
-.camadas button { flex: none; min-height: 38px; padding: 0 13px; border-radius: 19px; border: 1.5px solid var(--linha); background: none; font-size: 14px; color: var(--fraco); }
-.camadas button[aria-checked="true"] { background: var(--texto); color: var(--fundo); border-color: var(--texto); font-weight: 600; }
 .mapa-titulo { margin: 4px 0 6px; font-weight: 600; font-size: 15px; }
 .mapa-barra { height: 8px; border-radius: 4px; max-width: 360px; }
 .mapa-rotulos { display: flex; justify-content: space-between; max-width: 360px; font-size: 12px; color: var(--fraco); margin: 2px 0 4px; }
@@ -658,3 +669,15 @@ button.globo-rotulo { cursor: pointer; }
 .avisos-outros { margin-top: 14px; }
 .avisos-outros summary { color: var(--fraco); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 .avisos-outros li { margin: 6px 0; }
+
+/* seletor compacto (uma opção visível; a lista abre no seletor nativo do sistema) */
+.seletor { position: relative; display: inline-flex; align-items: center; margin: 4px 0 8px; }
+.seletor select {
+  appearance: none; -webkit-appearance: none; min-height: 40px; padding: 0 36px 0 14px; border-radius: 20px;
+  border: 1.5px solid var(--linha); background: var(--sup); color: var(--texto); font: inherit; font-size: 15px; font-weight: 600;
+}
+.seletor::after {
+  content: ''; position: absolute; right: 15px; top: 50%; width: 7px; height: 7px; pointer-events: none;
+  border-right: 2px solid var(--fraco); border-bottom: 2px solid var(--fraco); transform: translateY(-70%) rotate(45deg);
+}
+.seletor select:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
