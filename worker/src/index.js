@@ -10,7 +10,7 @@
 // - INMET_TOKEN nunca aparece em respostas, erros ou logs.
 // - Nenhuma localização ou IP é gravado no KV ou em logs.
 
-const VERSAO = '1.2.0';
+const VERSAO = '1.2.1';
 
 export const DESTINOS = new Set([
   'apitempo.inmet.gov.br',
@@ -600,7 +600,8 @@ export async function atualizarEnso(env) {
 
 async function rotaEnso(env) {
   let d = env.KV ? await env.KV.get('enso:ultimo', 'json') : null;
-  if (!d || Date.now() - d.verificadoEm > 7 * 3600000) d = await atualizarEnso(env);
+  // sem a parte de notícias (gravada por uma versão anterior do Worker), atualiza já em vez de esperar o cron
+  if (!d || Date.now() - d.verificadoEm > 7 * 3600000 || !d.partes?.noticias) d = await atualizarEnso(env);
   return json({ ...d, fontes: {
     cpc: 'https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml',
     cpcProb: 'https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/probabilities/',
