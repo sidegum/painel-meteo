@@ -118,7 +118,7 @@ O `setInterval` de 60 s reescreve o cabeçalho ("Atualizado às HH:MM", com ", d
 
 1. Destrói faixas e gráficos anteriores (`limparGraficos`) para não vazar memória nem observadores.
 2. Desenha a primeira tela de Hoje e de Amanhã com `renderPrimeira`, que é o caminho crítico.
-3. Em `requestIdleCallback`, desenha os detalhes: `renderHojeDetalhes`, `renderAmanhaDetalhes`, `renderSemana`, `renderModelos` e, se a aba estiver aberta, `renderElNino`. Depois restaura `scrollY` para a tela não pular.
+3. Pré-desenha os detalhes de todas as abas numa fila (`filaRender`), uma aba por `requestIdleCallback` (prazo de 1,5 s): primeiro a aba aberta, depois Hoje, Amanhã, Semana, Modelos e El Niño. Assim nenhuma tarefa longa trava o toque. Se o usuário abrir uma aba antes da vez dela, `irPara` a desenha na hora (`renderPendente`). Uma atualização nova invalida a fila anterior (`geracao`). Ao esvaziar a fila, `preCarregarGlobo` insere um `<link rel=modulepreload>` do `globo.js`, que baixa e prepara o código sem executá-lo, exceto com economia de dados ligada. Quando a aba desenhada é a aberta, `scrollY` é restaurado para a tela não pular.
 
 ### 2.5 Objeto `estado`
 
