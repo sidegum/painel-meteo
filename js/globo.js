@@ -125,10 +125,7 @@ async function carregarTudo() {
   textura('vendor/texturas/terra-normal-2048.jpg').then((t) => { u.tNormal.value = t; u.temNormal.value = 1; }).catch(() => {});
   textura('vendor/texturas/terra-noite-2048.jpg', { cor: true }).then((t) => { u.tNoite.value = t; u.temNoite.value = 1; }).catch(() => {});
   textura('vendor/texturas/terra-mascaras-2048.png').then((t) => { u.tMascaras.value = t; u.temMascaras.value = 1; }).catch(() => {});
-  await carregarDados();
-  // com localização, o painel do seu local já abre sozinho: o globo chega mostrando o tempo onde você está
-  const l = G.estadoApp?.local;
-  if (l && !G.tocado && G.aberto) { G.tocado = { lat: l.lat, lon: l.lon }; mostrarPontoTocado(l.lat, l.lon, false); }
+  await carregarDados(); // o painel de um ponto só abre com toque (não abre sozinho na chegada)
 }
 
 /** Lê o manifest do branch globo-dados e carrega a hora mais próxima de agora. */
@@ -248,7 +245,10 @@ const FRAGMENT_TERRA = /* glsl */`
     }
     cor += cDia * vec3(0.18, 0.25, 0.4) * noite * 0.7;
     if (temRegiao > 0.0) { // mapa detalhado da região sob a câmera (zoom próximo), em Mercator
-      float lon = (vUv.x - 0.5) * 360.0, lat = (vUv.y - 0.5) * 3.14159265;
+      // latitude e longitude pela direção do fragmento (não pela UV interpolada na face): o mapa fica exatamente
+      // onde estão os marcadores, os rótulos e o ponto tocado (pontoDesenhado usa a mesma direção)
+      vec3 dir = normalize(vP);
+      float lat = asin(clamp(dir.y, -1.0, 1.0)), lon = -atan(dir.z, dir.x) * 57.2957795;
       float u = (lon - regLon.x) / (regLon.y - regLon.x);
       float merc = log(tan(0.78539816 + lat * 0.5));
       float w = (regMerc.x - merc) / (regMerc.x - regMerc.y);
@@ -318,7 +318,10 @@ function montarCena() {
   G.cena = new THREE.Scene();
   G.camera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
 
-  const seg = CELULAR ? [96, 72] : [160, 120];
+  // Malha fina: a esfera desenhada é um poliedro, e no zoom de cidade a face fica abaixo da esfera ideal
+  // (com 96 x 72 faces, até 3,5 km no meio da face), o que desloca o mapa visto em relação a marcadores e toques.
+  // Com 256 x 192 a diferença cai para menos de 0,5 km; são 98 mil triângulos, folgado para a placa do celular.
+  const seg = [256, 192];
   const uniTerra = {
     tDia: { value: null }, tNoite: { value: null }, tNormal: { value: null }, tMascaras: { value: null }, tNuvens: { value: null }, tCamada: { value: null }, tEscala: { value: null },
     temNormal: { value: 0 }, temNoite: { value: 0 }, temMascaras: { value: 0 }, temNuvens: { value: 0 }, temCamada: { value: 0 },
@@ -383,7 +386,7 @@ function criarMarcador(corHex, raio) {
   return g;
 }
 
-function posicionarMarcador(m, lat, lon, altura = 1.004) {
+function posicionarMarcador(m, lat, lon, altura = 1.00005) { // rente ao chão (300 m): no zoom de cidade, altura vira deslocamento na tela
   latLonVec(lat, lon, RAIO * altura, m.position);
   m.lookAt(latLonVec(lat, lon, 2));
   m.userData.lat = lat; m.userData.lon = lon;
@@ -401,7 +404,7 @@ function marcarCiclones() {
   G.ciclones = [];
   for (const c of G.manifest?.ciclones || []) {
     const m = criarMarcador(0xff6a5a, 0.03);
-    posicionarMarcador(m, c.lat, c.lon, 1.006);
+    posicionarMarcador(m, c.lat, c.lon);
     m.userData.ciclone = c;
     G.cena.add(m); G.ciclones.push(m);
   }
@@ -573,6 +576,20 @@ function pontoSob(cx, cy) {
   if (t < 0) return null;
   const p = o.clone().addScaledVector(d, t);
   return vecLatLon(p);
+}
+
+/**
+ * Ponto tocado exatamente como está desenhado: raio contra a malha da Terra e coordenada pela direção do ponto
+ * atingido (a mesma que o shader usa para o mapa detalhado). Assim o toque marca o lugar que se vê.
+ * Fora da malha, cai no cálculo analítico (pontoSob).
+ */
+function pontoDesenhado(cx, cy) {
+  const r = G.dom.canvas.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+  posicionarCamera(); G.camera.updateMatrixWorld();
+  const rc = new THREE.Raycaster(); rc.setFromCamera(ndc, G.camera);
+  const hit = rc.intersectObject(G.terra, false)[0];
+  return hit ? vecLatLon(hit.point) : pontoSob(cx, cy);
 }
 
 function aproximar(cx, cy) {
@@ -806,7 +823,7 @@ function montarDom(secao) {
   G.dom = { raiz, canvas, chips, aviso, legenda, fonte, sol, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
   montarCidades();
   G.mostrarPainel = mostrarPainelTexto; G.modoSistema = modoSistema;
-  window.__globo = G; G.pontoNaTela = pontoNaTela; // só para testes automáticos de tela
+  window.__globo = G; G.pontoNaTela = pontoNaTela; G.pontoDesenhado = pontoDesenhado; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
   montarLegenda(CAMADAS.find((c) => c.id === G.camada), null);
 }
@@ -817,7 +834,7 @@ function montarCidades() {
   G.cidades = CIDADES.map((c) => {
     const elc = el('span', { class: 'globo-cidade', hidden: true, text: c.n });
     G.dom.cidades.append(elc);
-    return { ...c, el: elc, pos: latLonVec(c.lat, c.lon, RAIO * 1.002), temp: null };
+    return { ...c, el: elc, pos: latLonVec(c.lat, c.lon, RAIO * 1.00005), temp: null }; // rente ao chão, como os marcadores
   });
 }
 
@@ -948,7 +965,7 @@ const fmtLon = (v) => `${fmt.n(Math.abs(v), 1)}°${v < 0 ? 'O' : 'L'}`;
 
 /** Toque num ponto: marca, mostra o que o GFS diz na hora (instantâneo) e completa com a Open-Meteo. */
 function tocarPonto(cx, cy) {
-  const p = pontoSob(cx, cy);
+  const p = pontoDesenhado(cx, cy);
   if (!p) { fecharPainel(); return; }
   G.tocado = p;
   posicionarMarcador(G.marcadorToque, p.lat, p.lon); G.marcadorToque.visible = true;
