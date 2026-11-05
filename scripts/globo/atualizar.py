@@ -194,18 +194,24 @@ def gerar_gfs(saida, rodada):
 # ------------------------------------------------------------------ satélite (NASA GIBS)
 
 GIBS_WMS = 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi'
-CAMADAS_IR = ['GOES-East_ABI_Band13_Clean_Infrared', 'GOES-West_ABI_Band13_Clean_Infrared', 'Himawari_AHI_Band13_Clean_Infrared']
+# Satélites geoestacionários: camada no GIBS e longitude do ponto subsatélite (para pesar o mosaico pelo ângulo de visão).
+SATELITES_IR = [
+    {'camada': 'GOES-East_ABI_Band13_Clean_Infrared', 'lon': -75.2},
+    {'camada': 'GOES-West_ABI_Band13_Clean_Infrared', 'lon': -137.0},
+    {'camada': 'Himawari_AHI_Band13_Clean_Infrared', 'lon': 140.7},
+]
+ZENITE_MAX = 70.0  # graus a partir do ponto subsatélite: além disso a imagem fica distorcida demais
 
 
 def tempos_gibs():
-    """Lê o GetCapabilities e devolve {camada: último instante disponível (ISO)} para as camadas infravermelhas."""
+    """Lê o GetCapabilities e devolve {camada: último instante disponível (ISO)} das camadas infravermelhas."""
     xml = baixar(GIBS_WMS + '?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0', timeout=120, binario=False)
     raiz = ElementTree.fromstring(xml)
     ns = {'w': 'http://www.opengis.net/wms'}
     tempos = {}
     for camada in raiz.iter('{http://www.opengis.net/wms}Layer'):
         nome = camada.findtext('w:Name', default='', namespaces=ns)
-        if 'Infrared' in nome or 'Band13' in nome:
+        if re.search(r'Band13|Meteosat|SEVIRI|Himawari|GOES', nome):
             dim = camada.find('w:Dimension', ns)
             texto = (dim.text or '').strip() if dim is not None else ''
             fim = None
@@ -217,36 +223,54 @@ def tempos_gibs():
     return tempos
 
 
+def peso_zenite(larg, alt, lon_sat):
+    """Peso de cada pixel pelo cosseno do ângulo entre a vertical local e a direção do satélite (0 além de ZENITE_MAX)."""
+    lon = np.radians(np.linspace(-180 + 180 / larg, 180 - 180 / larg, larg))
+    lat = np.radians(np.linspace(90 - 90 / alt, -90 + 90 / alt, alt))
+    cosd = np.cos(lat)[:, None] * np.cos(lon - np.radians(lon_sat))[None, :]
+    limite = math.cos(math.radians(ZENITE_MAX))
+    w = np.clip((cosd - limite) / (1 - limite), 0, 1)
+    return (w * w).astype(np.float32)
+
+
 def gerar_satelite(saida):
     tempos = tempos_gibs()
-    log('GIBS camadas infravermelhas:', json.dumps(tempos)[:1500])
+    log('GIBS camadas:', json.dumps(tempos)[:1500])
     larg, alt = 2048, 1024
-    brilho = np.zeros((alt, larg), dtype=np.uint8)
-    cobertura = np.zeros((alt, larg), dtype=np.uint8)
+    soma = np.zeros((alt, larg), dtype=np.float32)
+    pesos = np.zeros((alt, larg), dtype=np.float32)
     usadas = []
-    for camada in CAMADAS_IR:
-        info = tempos.get(camada)
-        if not info or not (info.get('ultimo') or info.get('padrao')):
-            log(f'GIBS: camada {camada} sem tempo disponível')
-            continue
-        instante = info.get('ultimo') or info.get('padrao')
-        q = {'SERVICE': 'WMS', 'REQUEST': 'GetMap', 'VERSION': '1.3.0', 'LAYERS': camada, 'CRS': 'EPSG:4326',
-             'BBOX': '-90,-180,90,180', 'WIDTH': larg, 'HEIGHT': alt, 'FORMAT': 'image/png', 'TRANSPARENT': 'TRUE', 'TIME': instante}
-        try:
-            png = baixar(GIBS_WMS + '?' + urllib.parse.urlencode(q), timeout=180)
-            im = Image.open(io.BytesIO(png)).convert('RGBA')
-            a = np.asarray(im)
-            cinza = (0.299 * a[..., 0] + 0.587 * a[..., 1] + 0.114 * a[..., 2]).astype(np.uint8)
-            tem = a[..., 3] > 0
-            brilho = np.where(tem, np.maximum(brilho, cinza), brilho)
-            cobertura = np.where(tem, 255, cobertura)
-            usadas.append({'camada': camada, 'instante': instante, 'pixelsComDado': int(tem.sum())})
-            log(f'GIBS {camada} @ {instante}: {int(tem.sum())} px com dado')
-        except Exception as e:
-            log(f'GIBS {camada} falhou: {e}')
+    for sat in SATELITES_IR:
+        camada = sat['camada']
+        info = tempos.get(camada) or {}
+        candidatos = [t for t in (info.get('ultimo'), info.get('padrao'), None) if t is not None] + [None]
+        for instante in candidatos:
+            q = {'SERVICE': 'WMS', 'REQUEST': 'GetMap', 'VERSION': '1.3.0', 'LAYERS': camada, 'CRS': 'EPSG:4326',
+                 'BBOX': '-90,-180,90,180', 'WIDTH': larg, 'HEIGHT': alt, 'FORMAT': 'image/png', 'TRANSPARENT': 'TRUE'}
+            if instante:
+                q['TIME'] = instante
+            try:
+                png = baixar(GIBS_WMS + '?' + urllib.parse.urlencode(q), timeout=180)
+                a = np.asarray(Image.open(io.BytesIO(png)).convert('RGBA'))
+                cinza = (0.299 * a[..., 0] + 0.587 * a[..., 1] + 0.114 * a[..., 2]).astype(np.float32)
+                tem = a[..., 3] > 0
+                if tem.sum() < 10000:
+                    log(f'GIBS {camada} @ {instante}: sem dado ({int(tem.sum())} px)')
+                    continue
+                w = peso_zenite(larg, alt, sat['lon']) * tem
+                soma += cinza * w
+                pesos += w
+                usadas.append({'camada': camada, 'instante': instante or 'padrão', 'pixelsComDado': int(tem.sum())})
+                log(f'GIBS {camada} @ {instante}: {int(tem.sum())} px com dado')
+                break
+            except Exception as e:
+                log(f'GIBS {camada} @ {instante} falhou: {e}')
     if not usadas:
         raise RuntimeError('nenhuma camada infravermelha disponível no GIBS')
-    Image.fromarray(np.dstack([brilho, cobertura, np.zeros_like(brilho)]), 'RGB').save(os.path.join(saida, 'satelite.png'), optimize=True)
+    com = pesos > 0.02
+    brilho = np.where(com, soma / np.maximum(pesos, 1e-6), 0).astype(np.uint8)
+    cobertura = np.clip(pesos / 0.3, 0, 1) * 255  # transição suave até 255 para o app misturar com o modelo
+    Image.fromarray(np.dstack([brilho, cobertura.astype(np.uint8), np.zeros_like(brilho)]), 'RGB').save(os.path.join(saida, 'satelite.png'), optimize=True)
     return usadas
 
 
@@ -264,19 +288,23 @@ def gerar_ciclones():
     except Exception as e:
         log(f'NHC falhou: {e}')
     try:
-        j = json.loads(baixar('https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP?eventtypes=TC', binario=False))
+        xml = baixar('https://www.gdacs.org/xml/rss.xml', binario=False)
+        raiz = ElementTree.fromstring(xml)
         n = 0
-        for f in j.get('features', []):
-            p = f.get('properties', {})
-            if p.get('iscurrent') not in (True, 'true', 'True', 1):
+        for item in raiz.iter('item'):
+            g = {el.tag.split('}')[-1]: (el.text or '').strip() for el in item}
+            if g.get('eventtype') != 'TC' or g.get('iscurrent', '').lower() != 'true':
                 continue
-            geo = f.get('geometry', {}).get('coordinates', [None, None])
+            try:
+                lat, lon = float(g.get('lat')), float(g.get('long'))
+            except (TypeError, ValueError):
+                continue
             vento = None
-            m = re.search(r'(\d+)\s*km/h', str(p.get('description', '')) + str(p.get('severitydata', {}).get('severitytext', '')))
+            m = re.search(r'(\d+)\s*km/h', g.get('severity', '') + ' ' + g.get('description', ''))
             if m:
                 vento = int(m.group(1))
-            lista.append({'nome': p.get('eventname') or p.get('name'), 'tipo': p.get('episodealertlevel') or 'TC', 'lat': geo[1], 'lon': geo[0],
-                          'ventoKmh': vento, 'pressaoHpa': None, 'bacia': p.get('country'), 'fonte': 'GDACS', 'atualizado': p.get('todate') or p.get('datemodified')})
+            lista.append({'nome': g.get('eventname') or g.get('title', 'Ciclone')[:40], 'tipo': g.get('alertlevel', 'TC'), 'lat': lat, 'lon': lon,
+                          'ventoKmh': vento, 'pressaoHpa': None, 'bacia': g.get('country'), 'fonte': 'GDACS', 'atualizado': g.get('pubDate')})
             n += 1
         log(f'GDACS: {n} ciclones atuais')
     except Exception as e:
