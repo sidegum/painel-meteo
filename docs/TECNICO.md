@@ -440,7 +440,7 @@ A ordem é:
 2. Medições agora (`instrumentos`), com a pressão atmosférica em destaque no topo (`painelPressao`, seção 3.10).
 3. **Previsto x medido.**
 4. Mapa.
-5. Meteograma.
+5. Hora a hora (meteograma, um gráfico por vez).
 6. Fontes de dados.
 
 - `previstoMedido(s)` mostra três gráficos sincronizados: temperatura (prevista pelo ECMWF), chuva acumulada e rajadas. A linha tracejada é a previsão e a linha cheia com pontos é a medição. A medição de cada hora é a leitura a até ±30 min. Na chuva acumulada, uma hora sem leitura interrompe a linha medida, para não somar lacunas como zero. Sem histórico de medições, a seção não aparece.
@@ -468,6 +468,14 @@ A ordem é:
 ### 5.7 Navegação e gestos
 
 - Barra com Hoje, Amanhã, Semana e **Ver mais** (`#btn-mais`), que abre o diálogo `#dlg-mais` com Avisos, Globo, El Niño e Modelos (`ABAS_MAIS`). Nessas abas o botão Ver mais fica marcado.
+- Avisos, El Niño e Modelos têm o botão "Ver mais" (`[data-voltar-mais]`) acima do título, que reabre o menu: é o caminho de volta das telas do menu.
+- **Barra de cima recolhível** (`configurarCabecalho`, desde a 1.8.2). A `.cabeca` é `position: fixed`, e o `body` reserva a altura dela em `--alt-cab`, medida por `ResizeObserver`; por isso recolher não move o conteúdo.
+  - Recolhe quando a página rola mais de 6 px para baixo depois da altura da barra. No Globo, recolhe também depois de 4 s sem toque na barra (`OCIOSO_GLOBO_MS`).
+  - Volta ao rolar para cima, ao chegar ao topo ou ao trocar de aba (`cabecalho.aoMudarAba`).
+  - A alça `#alca-cabeca`, centrada na borda de baixo da barra, mostra e oculta a qualquer momento. Mostrada pela alça, a barra não se recolhe sozinha no Globo até a próxima troca de aba.
+  - Fora da tela, a barra perde a altura (`data-recolhida`). No Globo, o `body` deixa de reservar o espaço (`body[data-aba=globo][data-cab=oculta]`) e um evento `resize` avisa o globo para ocupar a tela.
+- Filtros com muitas opções usam `seletor()` (`js/ui.js`): um único botão com a opção atual, que abre a lista nativa do sistema. Hoje isso vale para a camada do mapa e para o gráfico "Hora a hora", que mostra um gráfico por vez (`prefs 'paineis-v2'` guarda o escolhido).
+- Ordem de Hoje: Próximas horas (com legenda chance, chuva, vento e rajada), Mapa, Medições agora, Previsto x medido, Hora a hora e Fontes de dados. Os títulos das telas são os mesmos das abas (Semana, não "Próximos 7 dias"). Na Amanhã, o bloco "Confiança" não tem mais a tabela de modelos, que fica na aba Modelos.
 - `irPara(aba, rolarTopo, direcao)`: troca a aba visível, atualiza `aria-current` (barra e itens do menu) e aplica a animação de entrada (`entra`, `entra-dir`, `entra-esq`). A animação usa só `transform` e `opacity`, que são compostas na GPU.
 - `configurarNavegacao()`: deslizar entre Hoje, Amanhã e Semana. O gesto só vale com:
   - um dedo;
