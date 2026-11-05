@@ -2,10 +2,10 @@
 // Dados de previsão ficam no cache "painel-dados-v1", gravado pelo próprio app (dados públicos).
 // Funciona em qualquer endereço base (subpasta do GitHub Pages ou raiz do domínio no Cloudflare Pages): todos os
 // caminhos são relativos à pasta do próprio sw.js.
-const VERSAO = 'painel-app-v1.8.8';
+const VERSAO = 'painel-app-v1.8.9';
 const ARQUIVOS = [
   './', './index.html', './app.css', './manifest.json', './privacidade.html',
-  './js/app.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js',
+  './js/app.js', './js/mudanca.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js',
   './vendor/uplot/uPlot.iife.min.js', './vendor/uplot/uPlot.min.css',
   './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css',
   './vendor/fontes/archivo-latin-standard-normal.woff2', './vendor/fontes/archivo-latin-ext-standard-normal.woff2',
