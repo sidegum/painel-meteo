@@ -86,7 +86,7 @@ export function cartaoAstro(corpo, estadoApp, t = Date.now()) {
       linha('Nasce e se põe', nascePoe), linha('Ponto mais alto', i.culmina ? `${hora(i.culmina.ms, off)}, a ${fmt.n(i.culmina.altura, 1)}°` : null),
       linha('Distância', `${fmt.n(i.distKm, 0)} km; a luz leva ${tempoLuz(i.distKm)}`), linha('Tamanho no céu', `${fmt.n(i.diametroAparente, 1)}′`),
       linha('Brilho', `magnitude ${fmt.n(i.mag, 1)}`), linha('Constelação', i.constelacao), linha('Próximas fases', fases),
-      linha('Próximo eclipse lunar visível daqui', ecl ? `${fmt.dataCurta(ecl.ms, off)}/${new Date(ecl.ms).getUTCFullYear()} ${hora(ecl.ms, off)}: ${ecl.titulo}` : 'nenhum nos próximos 3 anos'),
+      linha('Próximo eclipse lunar visível daqui', ecl ? `${fmt.dataCurta(ecl.ms, off)}/${new Date(ecl.ms + off * 1000).getUTCFullYear()} ${hora(ecl.ms, off)}: ${ecl.titulo}` : 'nenhum nos próximos 3 anos'),
       linha('Diâmetro real', `${fmt.n(C.CORPOS.Moon.diametroKm)} km`), linha('Rotação', C.CORPOS.Moon.rotacao));
   } else {
     const j = C.janelaVisivel(corpo, obs, C.janelaDaNoite(obs, t));
@@ -315,7 +315,7 @@ export function criarBlocoCeu(pai, estadoApp, estacoes, aoMudarAltura) {
     const obs = C.observador(local.lat, local.lon, 0);
     const itens = ultimo.itens.map((it) => el('li', {}, el('b', { text: `${it.quando} · ${it.titulo}` }), el('p', { text: it.frase })));
     const s = ultimo.sol;
-    const prox = C.proximosEventos(obs, Date.now(), 45).slice(0, 10).map((e) => el('li', { class: e.fraca ? 'fraco' : null }, el('b', { text: `${fmt.diaSemana(e.ms, off)} ${fmt.dataCurta(e.ms, off)}${e.tipo === 'estacao' || e.tipo === 'lua' || e.tipo === 'eclipse' ? ` ${hora(e.ms, off)}` : ''}${new Date(e.ms).getUTCFullYear() !== new Date().getUTCFullYear() ? `/${new Date(e.ms).getUTCFullYear()}` : ''} · ${e.titulo}` }), e.detalhe ? el('p', { text: e.detalhe }) : null));
+    const prox = C.proximosEventos(obs, Date.now(), 45).slice(0, 10).map((e) => el('li', { class: e.fraca ? 'fraco' : null }, el('b', { text: `${fmt.diaSemana(e.ms, off)} ${fmt.dataCurta(e.ms, off)}${new Date(e.ms + off * 1000).getUTCFullYear() !== new Date(Date.now() + off * 1000).getUTCFullYear() ? `/${new Date(e.ms + off * 1000).getUTCFullYear()}` : ''}${e.tipo === 'estacao' || e.tipo === 'lua' || e.tipo === 'eclipse' ? ` ${hora(e.ms, off)}` : ''} · ${e.titulo}` }), e.detalhe ? el('p', { text: e.detalhe }) : null));
     mostrarInfo(`Céu de hoje · ${local.nome}`,
       el('p', { class: 'ceu-frase', text: `Sol: nasce ${hora(s.nasce, off)}, se põe ${hora(s.poe, off)}; céu escuro das ${s.escurece ? hora(s.escurece, off) : '–'} até ${ultimo.janela.clareia ? hora(ultimo.janela.clareia, off) : '–'}.` }),
       itens.length ? el('ul', { class: 'ceu-lista' }, ...itens) : el('p', { text: 'Nada especial a olho nu até o amanhecer além das estrelas.' }),
