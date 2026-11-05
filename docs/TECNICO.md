@@ -506,7 +506,15 @@ A ordem é:
 - `configurarPuxar()`: puxar para atualizar. O indicador flutua (`transform`) sem empurrar o conteúdo. Dispara com mais de 110 px a partir do topo e é cancelado com movimento lateral acima de 40 px.
 - `html { overscroll-behavior-y: none }` desliga o "puxar" nativo do navegador. Os botões usam `touch-action: manipulation`, sem atraso de duplo toque.
 
-### 5.8 Tema e dados locais
+#- **Telas largas (1.8.12):** até 1099 px tudo fica como no celular (coluna de 720 px). A partir de 1100 px:
+  - a coluna cresce até 1240 px, ou até 1440 px a partir de 1600 px;
+  - os blocos de Hoje, Amanhã, dia, Semana, Modelos e El Niño ficam em duas colunas (grid);
+  - mapa, faixa de horas, gráficos largos, tabelas, títulos e notas (`.largura-total` ou filhos que não são `.secao`) ocupam a linha inteira;
+  - o mapa fica mais alto e a barra de abas continua com 720 px;
+  - no resumo do El Niño, o aviso para o local vai para a coluna da direita;
+  - com o Globo aberto, `main` perde o limite de largura e o Globo ocupa a janela inteira.
+
+## 5.8 Tema e dados locais
 
 - `aplicarTema()` alterna entre automático, claro e escuro (`data-tema` em `<html>`) e atualiza `theme-color`.
 - `configurarRodape()`: o botão "Apagar dados" remove os service workers, o Cache Storage, o `localStorage` e o `sessionStorage`.
