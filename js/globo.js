@@ -52,7 +52,7 @@ const G = {
   camada: 'nuvens', hora: null, horaAgora: null, manifest: null, manifestAntigo: false, satelite: null,
   texturas: {}, relogio: null, quadro: 0, ultimoQuadro: 0, tempos: [], nivelQualidade: 0, pixelRatio: 1,
   particulas: null, tocado: null, erroDados: null, anim: 0, tempoLinha: { tocando: false, timer: null },
-  espaco: null, espacoAberto: false, sistema: false,
+  espaco: null, espacoAberto: false, sistema: false, livre: null,
   foco: null, focoAlvo: null, animFoco: null, focoDistMin: 0.3, // sistema solar: ponto em volta do qual a câmera gira
 };
 
@@ -479,6 +479,15 @@ function instanteMostrado() {
 
 function posicionarCamera() {
   const c = G.cam;
+  if (G.livre) { // navegação livre: câmera solta no espaço, apontada por guinada e arfagem
+    const L = G.livre;
+    const near = Math.max(1e-6, Math.min(0.05, L.escala * 0.1)), far = Math.max(200, Math.min(1e5, L.pos.length() * 3));
+    if (Math.abs(near - G.camera.near) > near * 0.25 || G.camera.far !== far) { G.camera.near = near; G.camera.far = far; G.camera.updateProjectionMatrix(); }
+    G.camera.position.copy(L.pos);
+    G.camera.rotation.set(L.pitch, L.yaw, 0, 'YXZ');
+    return;
+  }
+  if (G.camera.far !== 200) { G.camera.far = 200; G.camera.updateProjectionMatrix(); }
   if (G.sistema) { // sistema solar: a câmera gira em volta do foco (o Sol ou o corpo escolhido)
     const near = Math.max(0.0002, Math.min(0.05, c.dist * 0.02));
     if (Math.abs(near - G.camera.near) > near * 0.25) { G.camera.near = near; G.camera.updateProjectionMatrix(); }
@@ -545,6 +554,14 @@ function configurarGestos() {
     if (toque) toque.moveu += Math.abs(e.clientX - p.x) + Math.abs(e.clientY - p.y);
     p.x = e.clientX; p.y = e.clientY;
     const c = centro();
+    if (G.livre) { // olhar em volta com um dedo; afastar os dedos avança, juntar recua
+      const k = G.camera.fov * RAD / G.dom.canvas.clientHeight;
+      G.livre.yaw += (c.x - gesto.ultimo.x) * k; G.livre.pitch = Math.max(-1.55, Math.min(1.55, G.livre.pitch + (c.y - gesto.ultimo.y) * k));
+      if (gesto.n > 1 && gesto.ultimo.d > 0 && c.d > 0) avancarLivre(c.d / gesto.ultimo.d);
+      G.livre.anim = null;
+      gesto.ultimo = c;
+      return;
+    }
     if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(G.sistema ? gesto.dist0 * (gesto.d0 / c.d) : 1 + (gesto.dist0 - 1) * (gesto.d0 / c.d)); // a pinça escala a altura (no sistema, a distância ao foco)
     if (!gesto.ancora || !levarPontoA(gesto.ancora, c.x, c.y)) {
       // âncora fora da Terra (dedo no espaço) ou sistema solar: giro proporcional à altura
@@ -560,7 +577,7 @@ function configurarGestos() {
     const agora = performance.now();
     if (ponteiros.size > 0) { ancorar(); historico = []; return; } // de dois dedos para um: recomeça a âncora sem pular
     if (toque && toque.moveu < 8 && agora - toque.t < 400 && e.type === 'pointerup') {
-      if (agora - ultimoToque < 320) { if (G.sistema) G.espaco?.focarNoToque(e.clientX, e.clientY); else aproximar(e.clientX, e.clientY); ultimoToque = 0; }
+      if (agora - ultimoToque < 320) { if (G.livre) irLivre(e.clientX, e.clientY); else if (G.sistema) G.espaco?.focarNoToque(e.clientX, e.clientY); else aproximar(e.clientX, e.clientY); ultimoToque = 0; }
       else { ultimoToque = agora; tocarPonto(e.clientX, e.clientY); }
     } else if (historico.length >= 2 && agora - historico[historico.length - 1].t < 60) {
       const a = historico[0], b = historico[historico.length - 1], dt = Math.max(16, b.t - a.t);
@@ -572,6 +589,7 @@ function configurarGestos() {
   cv.addEventListener('pointerup', soltar); cv.addEventListener('pointercancel', soltar);
   cv.addEventListener('wheel', (e) => {
     e.preventDefault(); G.autoGira = false; G.animCam = null; G.cam.vLat = G.cam.vLon = 0;
+    if (G.livre) { avancarLivre(Math.exp(-e.deltaY * 0.0015)); return; }
     const ancora = pontoNaTela(e.clientX, e.clientY);
     definirDist(G.sistema ? G.cam.dist * Math.exp(e.deltaY * 0.0012) : 1 + (G.cam.dist - 1) * Math.exp(e.deltaY * 0.0012));
     if (ancora) levarPontoA(ancora, e.clientX, e.clientY); // a roda aproxima em direção ao cursor
@@ -579,6 +597,13 @@ function configurarGestos() {
   cv.addEventListener('dblclick', (e) => e.preventDefault());
   cv.addEventListener('keydown', (e) => {
     const passo = 5;
+    if (G.livre) {
+      const L = G.livre;
+      if (e.key === 'ArrowUp' || e.key === 'w') avancarLivre(1.25); else if (e.key === 'ArrowDown' || e.key === 's') avancarLivre(0.8);
+      else if (e.key === 'ArrowLeft' || e.key === 'a') L.yaw += 0.08; else if (e.key === 'ArrowRight' || e.key === 'd') L.yaw -= 0.08;
+      else return;
+      L.anim = null; e.preventDefault(); return;
+    }
     if (e.key === 'ArrowLeft') G.cam.lon -= passo; else if (e.key === 'ArrowRight') G.cam.lon += passo;
     else if (e.key === 'ArrowUp') G.cam.lat = Math.min(85, G.cam.lat + passo); else if (e.key === 'ArrowDown') G.cam.lat = Math.max(-85, G.cam.lat - passo);
     else if (e.key === '+' || e.key === '=') definirDist(G.sistema ? G.cam.dist / 1.2 : 1 + (G.cam.dist - 1) / 1.2); else if (e.key === '-') definirDist(G.sistema ? G.cam.dist * 1.2 : 1 + (G.cam.dist - 1) * 1.2);
@@ -631,6 +656,78 @@ function focarSistema(posicao, dist, distMin = 0.3) {
   G.animFoco = MOVIMENTO_REDUZIDO ? null : { de: G.foco.clone(), dist0: G.cam.dist, dist, t0: performance.now(), ms: 1100 };
   if (MOVIMENTO_REDUZIDO) { G.cam.dist = dist; G.foco.copy(posicao ? posicao() : new THREE.Vector3()); }
   G.cam.vLat = G.cam.vLon = 0;
+}
+
+// ------------------------------------------------------------------ navegação livre
+
+const LIVRE_MAX = 7000; // cerca de 1.000 parsecs: além disso o catálogo, que é em volta do Sol, fica vazio
+/**
+ * Liga ou desliga a navegação livre (só no sistema solar). Ao ligar, a câmera fica onde está e passa a ser movida pelo
+ * usuário; ao desligar, volta a girar em volta do Sol, do ponto em que parou.
+ */
+function navegacaoLivre(ligar) {
+  if (ligar && G.sistema && !G.livre) {
+    const dir = G.camera.getWorldDirection(new THREE.Vector3());
+    G.livre = { pos: G.camera.position.clone(), yaw: Math.atan2(-dir.x, -dir.z), pitch: Math.asin(Math.max(-1, Math.min(1, dir.y))), escala: 1, anim: null };
+    G.animFoco = null; G.focoAlvo = null;
+    medirEscalaLivre();
+  } else if (!ligar && G.livre) {
+    const p = G.livre.pos, d = Math.max(0.3, Math.min(40, p.length()));
+    G.cam.dist = d; G.cam.lat = Math.asin(Math.max(-1, Math.min(1, p.y / (p.length() || 1)))) / RAD; G.cam.lon = Math.atan2(-p.z, p.x) / RAD;
+    G.cam.lat = Math.max(-85, Math.min(85, G.cam.lat));
+    G.livre = null; G.foco.set(0, 0, 0); G.focoDistMin = 0.3;
+  }
+}
+
+/** Escala de movimento: distância até a superfície do corpo mais próximo (planetas, luas, sondas, Sol, estrelas). */
+function medirEscalaLivre() {
+  const L = G.livre; if (!L) return;
+  L.escala = Math.max(2e-5, Math.min(L.pos.length(), G.espaco?.distanciaProxima?.(L.pos) ?? Infinity));
+}
+
+/** Avança (r > 1) ou recua (r < 1) na direção do olhar; para a frente, nunca mais que a distância ao corpo mais próximo. */
+function avancarLivre(r) {
+  const L = G.livre; if (!L || !(r > 0)) return;
+  medirEscalaLivre();
+  const passo = r >= 1 ? L.escala * (1 - 1 / r) * 0.9 : -Math.max(L.escala, L.pos.length() * 0.05) * (1 / r - 1);
+  const dir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(L.pitch, L.yaw, 0, 'YXZ'));
+  L.pos.addScaledVector(dir, passo);
+  if (L.pos.length() > LIVRE_MAX) L.pos.setLength(LIVRE_MAX);
+}
+
+/** Dois toques na navegação livre: vira para o ponto tocado e voa até o objeto (ou um trecho na direção dele). */
+function irLivre(cx, cy) {
+  const L = G.livre; if (!L) return;
+  const r = G.dom.canvas.getBoundingClientRect();
+  posicionarCamera(); G.camera.updateMatrixWorld();
+  const alvo = G.espaco?.alvoNoToque?.(cx, cy);
+  if (alvo) { voarLivreAte(alvo.posicao, alvo.raio); return; }
+  const dir = new THREE.Vector3(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1, 0.5).unproject(G.camera).sub(L.pos).normalize();
+  medirEscalaLivre();
+  voarLivreAte(L.pos.clone().addScaledVector(dir, L.escala * 0.8), 0);
+}
+
+/** Vira para o ponto e voa até ele, parando a 6 raios do objeto (raio 0: até o próprio ponto). */
+function voarLivreAte(posicao, raio) {
+  const L = G.livre; if (!L) return;
+  const dir = posicao.clone().sub(L.pos);
+  const dist = dir.length(); if (!(dist > 0)) return;
+  dir.divideScalar(dist);
+  const para = L.pos.clone().addScaledVector(dir, Math.max(0, dist - Math.max(raio * 6, raio ? 1e-4 : 0)));
+  let yaw = Math.atan2(-dir.x, -dir.z); yaw = L.yaw + (((yaw - L.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  L.anim = { de: L.pos.clone(), para, yaw0: L.yaw, yaw1: yaw, pitch0: L.pitch, pitch1: Math.asin(Math.max(-1, Math.min(1, dir.y))), t0: performance.now(), ms: MOVIMENTO_REDUZIDO ? 1 : 1600 };
+}
+
+/** A cada quadro na navegação livre: viagem suave do dois toques (distância em escala logarítmica). */
+function moverLivre(agora) {
+  const L = G.livre, a = L.anim;
+  if (G.quadro % 6 === 0) medirEscalaLivre();
+  if (!a) return;
+  const t = Math.min(1, (agora - a.t0) / a.ms), e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  L.pos.lerpVectors(a.de, a.para, e);
+  const v = Math.min(1, t * 2.2), ev = 1 - Math.pow(1 - v, 3); // primeiro vira, depois voa
+  L.yaw = a.yaw0 + (a.yaw1 - a.yaw0) * ev; L.pitch = a.pitch0 + (a.pitch1 - a.pitch0) * ev;
+  if (t >= 1) L.anim = null;
 }
 
 /** A cada quadro: o foco acompanha o corpo escolhido (com a viagem suave até ele quando o foco acabou de mudar). */
@@ -904,7 +1001,7 @@ function montarDom(secao) {
   secao.append(raiz);
   G.dom = { raiz, canvas, chips, aviso, legenda, fonte, ciclones, faixa, rotuloHora, tocar, linha, painel, rodape, botoes, relogio, cidades };
   montarCidades();
-  G.mostrarPainel = mostrarPainelTexto; G.fecharPainel = fecharPainel; G.modoSistema = modoSistema; G.focarSistema = focarSistema; G.distanciaVisaoGeral = distanciaVisaoGeral;
+  G.mostrarPainel = mostrarPainelTexto; G.fecharPainel = fecharPainel; G.modoSistema = modoSistema; G.focarSistema = focarSistema; G.distanciaVisaoGeral = distanciaVisaoGeral; G.navegacaoLivre = navegacaoLivre; G.voarLivreAte = voarLivreAte;
   window.__globo = G; G.pontoNaTela = pontoNaTela; G.pontoDesenhado = pontoDesenhado; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
   montarLegenda(CAMADAS.find((c) => c.id === G.camada), null);
@@ -1256,7 +1353,9 @@ function modoSistema(ligar) {
   G.dom.rodape.hidden = ligar; G.dom.chips.parentElement.hidden = ligar;
   G.marcadorUsuario.visible = !ligar && !!G.estadoApp?.local;
   fecharPainel();
+  if (!ligar) navegacaoLivre(false);
   G.foco.set(0, 0, 0); G.focoAlvo = null; G.animFoco = null; G.focoDistMin = 0.3;
+  G.estrelas.definir3d(ligar); // no sistema solar as estrelas ficam na distância real (comprimida) e o brilho é o visto da câmera
   // estrelas: no sistema solar a cena está na eclíptica J2000 (y para o polo norte da eclíptica); fora dele, no equador
   G.estrelas.grupo.rotation.set(ligar ? -OBLIQUIDADE_J2000 * RAD : 0, 0, 0);
   if (ligar) { // de cima, inclinado, com a órbita de Saturno (3,5 na escala da cena) cabendo na largura da tela
@@ -1302,8 +1401,9 @@ function laco(agora) {
     const base = opacidadeNuvens();
     G.nuvens.material.uniforms.opacNuvem.value = base * Math.max(0, Math.min(1, (c.dist - 1.03) / 0.15));
   }
-  if (G.sistema) moverFoco(agora);
+  if (G.livre) moverLivre(agora); else if (G.sistema) moverFoco(agora);
   posicionarCamera();
+  G.estrelas.acompanharCamera(G.camera, G.dom.canvas.clientHeight * G.pixelRatio);
   const pulso = (Math.sin(agora / 500) + 1) / 2;
   if (!G.sistema) {
     const esc = Math.max(0.012, Math.min(1, (c.dist - 1) / (DIST.inicial - 1))); // marcadores encolhem com a aproximação (tamanho fixo na tela)
