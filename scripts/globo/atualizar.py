@@ -424,7 +424,22 @@ def gerar_sondas(agora):
             ate = hoje + timedelta(days=730)
             dias = (ate - de).days
             passo = f'{max(1, math.ceil(dias / 600))} d'
-            nome, rota = horizons_vetores(s['id'], de, ate, passo)
+            try:
+                nome, rota = horizons_vetores(s['id'], de, ate, passo)
+            except RuntimeError as e:  # lacunas na efeméride (ex.: Lucy): pede por ano e junta os trechos que existem
+                log(f"Horizons {s['id']}: rota inteira falhou ({e}); pedindo por ano")
+                nome, rota, ini = str(s['id']), [], de
+                while ini < ate:
+                    fim_t = min(ate, ini + timedelta(days=365))
+                    try:
+                        nome, trecho = horizons_vetores(s['id'], ini, fim_t, passo)
+                        rota += [p for p in trecho if not rota or p[0] > rota[-1][0]]
+                    except RuntimeError as e2:
+                        log(f"Horizons {s['id']}: sem trecho {ini:%Y-%m-%d} a {fim_t:%Y-%m-%d} ({e2})")
+                    ini = fim_t
+                    time.sleep(1)
+                if len(rota) < 2:
+                    raise RuntimeError('rota vazia')
             time.sleep(1)
             _, perto = horizons_vetores(s['id'], hoje - timedelta(days=3), hoje + timedelta(days=4), '6 h')
             time.sleep(1)
