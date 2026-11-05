@@ -326,10 +326,15 @@ test('chuva: modelo que chove demais fica com a frequência certa fora da amostr
 import { calibrarOrvalho, conferirSensacao } from '../scripts/lib/sensacao.mjs';
 import { sensacaoTermica, pressaoVapor, umidadeESensacao } from '../js/analise.js';
 
-test('sensação térmica: fórmula de Steadman/BoM, igual para medida e prevista', () => {
+test('sensação térmica: padrão NWS (índice de calor e vento frio), igual para medida e prevista', () => {
   // 30 °C, orvalho 24 °C (abafado), vento 10 km/h: e ≈ 29,9 hPa → 30 + 9,9 − 1,9 − 4 ≈ 33,9
-  assert.equal(sensacaoTermica(30, pressaoVapor(24), 10), 33.9);
-  assert.ok(sensacaoTermica(10, pressaoVapor(5), 30) < 5);     // frio com vento: sensação bem abaixo
+  assert.equal(sensacaoTermica(30, pressaoVapor(24), 10), 35.1); // abafado: índice de calor (Rothfusz)
+  assert.equal(sensacaoTermica(21.1, pressaoVapor(21.1), 1), 21.9); // noite úmida amena: quase a temperatura
+  assert.equal(sensacaoTermica(15, 0.5 * pressaoVapor(15), 10), 15); // ameno e seco: a própria temperatura
+  assert.equal(sensacaoTermica(5, pressaoVapor(0), 30), 0.1);     // frio com vento: vento frio NWS
+  assert.equal(sensacaoTermica(5, pressaoVapor(0), 3), 5);        // frio sem vento: a temperatura
+  const a = sensacaoTermica(10, pressaoVapor(5), 30), b = sensacaoTermica(10.1, pressaoVapor(5), 30);
+  assert.ok(Math.abs(a - b) < 0.5);                               // sem salto na transição de 10 °C
   assert.equal(sensacaoTermica(null, 10, 5), null);
 });
 

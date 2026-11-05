@@ -112,15 +112,20 @@ No app, `correcaoTemperaturaDia` decide por modelo, antecedência e mês: horár
 
 ### 4.7 Ponto de orvalho e sensação térmica (`scripts/lib/sensacao.mjs`)
 
-A sensação térmica não é medida por um instrumento: é uma conta com temperatura, umidade e vento. O painel usa uma conta só, para a previsão e para a medição (`sensacaoTermica`, em js/analise.js): a temperatura aparente de Steadman (1994), na forma da Bureau of Meteorology da Austrália, à sombra:
+A sensação térmica não é medida por um instrumento: é uma conta com temperatura, umidade e vento. O painel usa uma conta só, para a previsão e para a medição (`sensacaoTermica`, em js/analise.js), no padrão do serviço meteorológico dos EUA (NWS), o mesmo da maioria dos apps de tempo:
 
 ```
-sensação = T + 0,33·e − 0,70·v − 4,00
-e = pressão de vapor (hPa) = 6,105·exp(17,27·Td / (237,7 + Td))   Td = ponto de orvalho (°C)
-v = vento médio a 10 m (m/s)
+frio (T ≤ 10 °C, vento > 4,8 km/h):  13,12 + 0,6215·T − 11,37·v^0,16 + 0,3965·T·v^0,16   v em km/h
+                                     entre 10 e 15 °C o efeito do vento cai em linha reta até zero
+demais casos (índice de calor, °F):   HI = 0,5·(T + 61 + 1,2·(T − 68) + 0,094·UR)
+                                     se (HI + T)/2 ≥ 80 °F: regressão de Rothfusz com os ajustes do NWS
+                                     resultado nunca abaixo de T
+UR = 100·e / es(T)    e = 6,105·exp(17,27·Td / (237,7 + Td))   Td = ponto de orvalho (°C)
 ```
 
-Exemplo: 30 °C, orvalho 24 °C (abafado) e vento de 10 km/h dão e ≈ 29,9 hPa e sensação de 33,9 °C.
+Exemplos: 30 °C com orvalho 24 °C dá 35,1 °C; 21,1 °C com 100% de umidade dá 21,9 °C; 5 °C com vento de 30 km/h dá 0,1 °C.
+
+Até a versão 1.2.26 o painel usava a temperatura aparente de Steadman na forma da Bureau of Meteorology (T + 0,33·e − 0,70·v − 4,00). Ela exagerava o abafamento em temperaturas amenas e úmidas: na madrugada de 05/11/2026, com 21,1 °C, 100% de umidade e vento de 1 km/h na A884, dava 25,1 °C (o INMET publicou 23,9 °C). O NWS dá 21,9 °C. A sensação que o INMET publica (`TEM_SEN`) não é usada: a fórmula dela não é documentada.
 
 No app (`umidadeESensacao`, chamada em `calibrarPrevisao`), a sensação prevista é refeita hora a hora com a temperatura corrigida (4.1 e 4.6), o vento corrigido (4.2) e o ponto de orvalho corrigido pelo viés da hora do dia e estação do ano, quando aprovado. A umidade relativa é refeita com o mesmo vapor: com a temperatura corrigida para cima e o mesmo orvalho, a umidade cai, como no ar de verdade. A `apparent_temperature` da Open-Meteo não é usada, porque a fórmula dela não é a mesma da sensação medida.
 
