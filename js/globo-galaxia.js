@@ -655,7 +655,7 @@ function desenharSobreposicao(ctx, pr) {
   // créditos quebrados em linhas que cabem na largura, embaixo; a barra de escala fica acima deles
   ctx.font = `${10 * pr}px system-ui, -apple-system, sans-serif`;
   const largura = ctx.canvas.width - 2 * m, linhas = [];
-  for (const parte of ['Via Láctea: modelo de Reid et al. 2019, Wegg et al. 2015 e Bland-Hawthorn & Gerhard 2016', 'Estrelas: HYG e Gaia DR3 (ESA/Gaia/DPAC) · galáxias: OpenNGC', `Painel Meteo · ${new Date().toLocaleDateString('pt-BR')}`]) {
+  for (const parte of ['Via Láctea: modelo de Reid et al. 2019, Wegg et al. 2015 e Bland-Hawthorn & Gerhard 2016', 'Estrelas: HYG e Gaia DR3 (ESA/Gaia/DPAC) · masers: Reid et al. 2019 · aglomerados globulares: Baumgardt & Vasiliev 2021', 'Grupo Local: McConnachie 2012 · galáxias: OpenNGC', `Painel Meteo · ${new Date().toLocaleDateString('pt-BR')}`]) {
     let atual = '';
     for (const palavra of parte.split(' ')) {
       const tentativa = atual ? `${atual} ${palavra}` : palavra;
@@ -673,7 +673,7 @@ function desenharSobreposicao(ctx, pr) {
 }
 
 export function notasFontes() {
-  return ['Via Láctea: modelo (Reid et al. 2019, Wegg et al. 2015, Bland-Hawthorn & Gerhard 2016)', 'Grupo Local: McConnachie 2012', 'Aglomerados globulares: Baumgardt & Vasiliev 2021', 'Galáxias: OpenNGC'];
+  return ['Via Láctea: modelo (Reid et al. 2019, Wegg et al. 2015, Bland-Hawthorn & Gerhard 2016)', 'Masers: Reid et al. 2019', 'Grupo Local: McConnachie 2012', 'Aglomerados globulares: Baumgardt & Vasiliev 2021', 'Galáxias: OpenNGC'];
 }
 
 export const estado = () => GX;
