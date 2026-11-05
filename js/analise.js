@@ -761,6 +761,9 @@ export function ancorarTemperatura(prev, medida, modeloRef, agoraMs) {
  *   correção (hora a hora quando o histórico horário foi aprovado para o modelo; senão, só máxima e mínima) e
  *   prepararCorrecaoDia a aplica. A máxima do gráfico horário é exatamente a máxima corrigida do dia.
  * - Rajada e vento (wind_gusts_10m, wind_speed_10m): multiplicados pelo fator da antecedência e estação do ano.
+ * - Ponto de orvalho (dew_point_2m): menos o viés da hora do dia (orvalhoHorario), quando aprovado; umidade
+ *   relativa e sensação térmica (apparent_temperature) recalculadas com temperatura, orvalho e vento corrigidos
+ *   (umidadeESensacao). Sempre, mesmo sem calibração: a sensação usa a fórmula do painel, não a da Open-Meteo.
  * - Chuva (precipitation): o total de cada dia local passa pela tabela de quantis do modelo (mapearChuva) e as
  *   horas do dia são escaladas na mesma proporção; a soma do dia no gráfico é o total corrigido.
  * A antecedência de um dia é a distância em dias do dia de referência (o dia em que a previsão foi buscada),
@@ -772,7 +775,7 @@ export function ancorarTemperatura(prev, medida, modeloRef, agoraMs) {
  * @returns {object} nova previsão, com `calibracao` descrevendo o que foi aplicado
  */
 export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs }) {
-  if (!prev?.horas || (!calib && !aprendizado)) return prev;
+  if (!prev?.horas) return prev;
   const hoje = partesLocais(refMs, prev.offset).data;
   const diaMs = (d) => Date.parse(d + 'T00:00:00Z');
   const leadDoDia = (d) => Math.max(1, Math.round((diaMs(d) - diaMs(hoje)) / 86400000));
@@ -781,7 +784,7 @@ export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs
   const indicesDia = new Map();
   datas.forEach((d, i) => { if (!indicesDia.has(d)) indicesDia.set(d, []); indicesDia.get(d).push(i); });
   const modelos = {};
-  const aplicado = { temperatura: [], temperaturaHoraria: [], vento: [], chuva: [] };
+  const aplicado = { temperatura: [], temperaturaHoraria: [], vento: [], chuva: [], orvalho: [] };
   const atualTemp = { ...(prev.atual?.temp || {}) };
   const atualLocal = prev.atual?.ms ? partesLocais(prev.atual.ms, prev.offset) : null;
 
@@ -821,6 +824,9 @@ export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs
         if (nova !== vars.precipitation) { vars.precipitation = nova; aplicado.chuva.push(m); }
       }
     }
+    // Umidade e sensação térmica refeitas com a temperatura, o orvalho e o vento já corrigidos, pela mesma
+    // fórmula da sensação medida (sensacaoTermica): previsão e medição falam a mesma língua.
+    if (umidadeESensacao(vars, dados.vars, locais, calib, m)) aplicado.orvalho.push(m);
     modelos[m] = { ...dados, vars };
   }
   return {
@@ -883,6 +889,68 @@ export function prepararCorrecaoDia(valores, horas, viesHora, extremos) {
     const w = max > min ? Math.min(1, Math.max(0, (x - min) / (max - min))) : 0.5;
     return Math.round((x - (cn + w * (ct - cn))) * 10) / 10;
   };
+}
+
+// ---------- umidade e sensação térmica ----------
+
+/**
+ * Pressão de vapor em hPa a uma temperatura (fórmula de Tetens/Bolton, a mesma da Bureau of Meteorology no
+ * cálculo da sensação). Com o ponto de orvalho, dá a pressão de vapor do ar; com a temperatura, a de saturação.
+ * @param {number} t °C
+ */
+export const pressaoVapor = (t) => 6.105 * Math.exp((17.27 * t) / (237.7 + t));
+
+/**
+ * Sensação térmica à sombra (temperatura aparente de Steadman, 1994, na forma da Bureau of Meteorology da
+ * Austrália): AT = T + 0,33·e − 0,70·v − 4,00, com e = pressão de vapor (hPa) e v = vento a 10 m (m/s).
+ * Junta, numa conta só, o abafamento da umidade e o frio do vento. É a mesma fórmula para a sensação medida
+ * e para a prevista, então as duas são comparáveis.
+ * @param {number} t temperatura (°C)
+ * @param {number} e pressão de vapor (hPa): pressaoVapor(orvalho) ou umidade/100 · pressaoVapor(t)
+ * @param {number} ventoKmh vento médio (km/h)
+ * @returns {number|null} °C com uma casa
+ */
+export function sensacaoTermica(t, e, ventoKmh) {
+  if (![t, e, ventoKmh].every(valido)) return null;
+  return Math.round((t + 0.33 * e - 0.7 * (ventoKmh / 3.6) - 4) * 10) / 10;
+}
+
+/**
+ * Viés horário aprovado do ponto de orvalho de um modelo (calib.orvalhoHorario), ou null. Medido na véspera e
+ * usado em todas as antecedências: a umidade do ar muda pouco de erro com a antecedência (docs/CALIBRACAO.md).
+ * @returns {number[]|null} 24 valores, previsto − medido
+ */
+export function viesOrvalho(calib, modelo, mes) {
+  const x = calib?.orvalhoHorario?.modelos?.[modelo];
+  const v = x?.usar ? x.vies?.[estacaoDoAno(mes)] : null;
+  return Array.isArray(v) && v.length === 24 && v.every(valido) ? v : null;
+}
+
+/**
+ * Corrige o ponto de orvalho e refaz umidade relativa e sensação térmica de uma série de modelo.
+ * Sem orvalho previsto, a pressão de vapor sai da umidade e da temperatura brutas (a quantidade de vapor no ar
+ * não muda quando só a temperatura é corrigida). O orvalho nunca passa da temperatura.
+ * @param {object} vars variáveis já com temperatura e vento corrigidos (alteradas aqui)
+ * @param {object} brutas variáveis originais do modelo
+ * @param {{hora:number, mes:number}[]} locais partes locais de cada hora
+ * @returns {boolean} true se o orvalho recebeu correção histórica
+ */
+export function umidadeESensacao(vars, brutas, locais, calib, modelo) {
+  const t = vars.temperature_2m, td0 = brutas.dew_point_2m, ur0 = brutas.relative_humidity_2m, t0 = brutas.temperature_2m;
+  if (!t) return false;
+  let corrigido = false;
+  const td = t.map((tc, i) => {
+    let x = td0?.[i];
+    if (!valido(x)) return null;
+    const vh = calib ? viesOrvalho(calib, modelo, locais[i].mes) : null;
+    if (vh) { x -= vh[locais[i].hora]; corrigido = true; }
+    return valido(tc) ? Math.round(Math.min(x, tc) * 10) / 10 : x;
+  });
+  const e = t.map((_, i) => (valido(td[i]) ? pressaoVapor(td[i]) : valido(ur0?.[i]) && valido(t0?.[i]) ? (ur0[i] / 100) * pressaoVapor(t0[i]) : null));
+  if (td0) vars.dew_point_2m = td;
+  if (ur0 || td0) vars.relative_humidity_2m = t.map((tc, i) => (valido(tc) && valido(e[i]) ? Math.round(Math.min(100, (100 * e[i]) / pressaoVapor(tc))) : ur0?.[i] ?? null));
+  if (vars.wind_speed_10m && e.some(valido)) vars.apparent_temperature = t.map((tc, i) => sensacaoTermica(tc, e[i], vars.wind_speed_10m[i]) ?? brutas.apparent_temperature?.[i] ?? null);
+  return corrigido;
 }
 
 // Cenários: cada sistema usa a correção (rajada e chuva) do modelo determinístico mais próximo dele (mesma origem e

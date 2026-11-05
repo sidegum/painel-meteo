@@ -5,7 +5,7 @@ import {
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, correcaoTemperatura, consensoHorario, escolherFonte, ancorarTemperatura, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
-  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico,
+  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor,
 } from './analise.js';
 import {
   buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
@@ -362,9 +362,10 @@ function atualizarCabecalho() {
 }
 
 /**
- * Sensação térmica de agora, uma só para todas as telas. Medida: a que o INMET publica ou, sem ela, a
- * temperatura aparente (mesma fórmula da previsão, Steadman/BoM) com temperatura, umidade e vento da mesma
- * estação. Sem medição, a sensação prevista para esta hora (já calibrada e ancorada na medição).
+ * Sensação térmica de agora, uma só para todas as telas. Medida: calculada com temperatura, umidade e vento
+ * da mesma estação (até 25 km) pela mesma fórmula da sensação prevista (sensacaoTermica, Steadman/BoM à
+ * sombra), para que agora e previsão saiam da mesma conta. Reserva: a sensação que o INMET publica (fórmula
+ * não documentada). Sem medição, a sensação prevista para esta hora (já calibrada e ancorada na medição).
  * @returns {{valor:number, medida:boolean, title:string}|null}
  */
 function sensacaoAgora() {
@@ -372,13 +373,13 @@ function sensacaoAgora() {
   if (estado.obs && pt) {
     const fontes = fontesNormalizadas();
     const pega = (v) => escolherFonte(fontes, v, pt.lat, pt.lon, agora, CONFIG.idadeMaxMedicaoMin).escolhida;
-    const inmet = pega('sensacao');
-    if (inmet && inmet.distancia <= 25) return { valor: inmet.valor, medida: true, title: `Medida em ${inmet.fonte.nome}, ${fmt.idade(inmet.ms)}` };
     const t = pega('temperatura'), u = pega('umidade'), ve = pega('vento');
     if (t && u && ve && t.distancia <= 25 && t.fonte.id === u.fonte.id && u.fonte.id === ve.fonte.id) {
       const v = apparente(t.valor, u.valor, ve.valor);
       if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome}, ${fmt.idade(t.ms)}` };
     }
+    const inmet = pega('sensacao');
+    if (inmet && inmet.distancia <= 25) return { valor: inmet.valor, medida: true, title: `Medida em ${inmet.fonte.nome}, ${fmt.idade(inmet.ms)}` };
   }
   const p = estado.prev;
   const i = p ? p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000) : -1;
@@ -1220,10 +1221,9 @@ function proximasHoras() {
   return secao('Próximas horas', 'Chance de chuva, volume, vento e rajada (km/h).', lista);
 }
 
+// sensação medida: a mesma fórmula da prevista (js/analise.js, sensacaoTermica)
 function apparente(t, rh, kmh) {
-  if (![t, rh, kmh].every(valido)) return null;
-  const e = (rh / 100) * 6.105 * Math.exp((17.27 * t) / (237.7 + t));
-  return t + 0.33 * e - 0.7 * (kmh / 3.6) - 4;
+  return valido(t) && valido(rh) ? sensacaoTermica(t, (rh / 100) * pressaoVapor(t), kmh) : null;
 }
 
 function instrumentos() {

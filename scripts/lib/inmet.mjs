@@ -79,6 +79,7 @@ const COLUNAS = {
   hora: ['HORA'],
   chuva: ['PRECIPITACAO TOTAL'],
   temp: ['TEMPERATURA DO AR - BULBO SECO'],
+  orvalho: ['TEMPERATURA DO PONTO DE ORVALHO'],
   tmaxHora: ['TEMPERATURA MAXIMA NA HORA ANT'],
   tminHora: ['TEMPERATURA MINIMA NA HORA ANT'],
   rajada: ['VENTO, RAJADA MAXIMA'],
@@ -91,7 +92,7 @@ const normalizar = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase
 /**
  * Interpreta o CSV de uma estação do INMET.
  * @param {string} texto conteúdo já decodificado de Latin-1
- * @returns {{meta: object, horas: {ms: number, chuva: ?number, temp: ?number, tmax: ?number, tmin: ?number,
+ * @returns {{meta: object, horas: {ms: number, chuva: ?number, temp: ?number, orvalho: ?number, tmax: ?number, tmin: ?number,
  *   rajada: ?number, vento: ?number, direcao: ?number}[]}}
  *   `ms` é o instante UTC do fim da hora; vento e rajada já em km/h (o INMET publica em m/s).
  */
@@ -122,7 +123,7 @@ export function lerCsvInmet(texto) {
     const kmh = (v) => (v === null ? null : Math.round(v * 3.6 * 10) / 10);
     horas.push({
       ms,
-      chuva: pega(cel, 'chuva'), temp: pega(cel, 'temp'), tmax: pega(cel, 'tmaxHora'), tmin: pega(cel, 'tminHora'),
+      chuva: pega(cel, 'chuva'), temp: pega(cel, 'temp'), orvalho: pega(cel, 'orvalho'), tmax: pega(cel, 'tmaxHora'), tmin: pega(cel, 'tminHora'),
       rajada: kmh(pega(cel, 'rajada')), vento: kmh(pega(cel, 'vento')), direcao: pega(cel, 'direcao'),
     });
   }
@@ -147,7 +148,7 @@ export function instanteUtc(data, hora) {
 
 // Limites físicos e de salto entre horas consecutivas. Valores fora disso são descartados (não corrigidos).
 export const QC = {
-  temp: [-10, 45], chuvaHoraMax: 120, rajada: [0, 200], vento: [0, 150],
+  temp: [-10, 45], orvalho: [-30, 35], chuvaHoraMax: 120, rajada: [0, 200], vento: [0, 150],
   saltoTemp: 8,          // °C entre horas consecutivas: acima disso, a leitura é tratada como pico espúrio
 };
 
@@ -156,7 +157,7 @@ export const QC = {
  * @param {ReturnType<typeof lerCsvInmet>['horas']} horas em ordem cronológica
  */
 export function controleQualidade(horas) {
-  const descartes = { temp: 0, chuva: 0, rajada: 0, vento: 0 };
+  const descartes = { temp: 0, orvalho: 0, chuva: 0, rajada: 0, vento: 0 };
   const fora = (v, [a, b]) => v !== null && (v < a || v > b);
   const out = horas.map((h) => ({ ...h }));
   for (let i = 0; i < out.length; i++) {
@@ -172,6 +173,8 @@ export function controleQualidade(horas) {
       h.temp = null; h.tmax = null; h.tmin = null; descartes.temp++;
     }
     if (h.rajada !== null && h.vento !== null && h.rajada < h.vento) { h.rajada = null; descartes.rajada++; }
+    // ponto de orvalho fora da faixa ou acima da temperatura da mesma hora (meio grau de tolerância do sensor)
+    if (h.orvalho != null && (fora(h.orvalho, QC.orvalho) || (h.temp != null && h.orvalho > h.temp + 0.5))) { h.orvalho = null; descartes.orvalho++; }
   }
   return { horas: out, descartes };
 }

@@ -15,6 +15,7 @@ on:
       - 'scripts/lib/calibracao.mjs'
       - 'scripts/lib/temperatura-horaria.mjs'
       - 'scripts/lib/chuva.mjs'
+      - 'scripts/lib/sensacao.mjs'
       - '.github/workflows/calibracao.yml'
 
 permissions:

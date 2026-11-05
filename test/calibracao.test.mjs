@@ -320,3 +320,45 @@ test('chuva: modelo que chove demais fica com a frequência certa fora da amostr
   assert.ok(v.total.depois.acerto > v.total.antes.acerto);
   assert.equal(v.usar, true);
 });
+
+// ------------------------------------------------------------------ orvalho e sensação térmica
+
+import { calibrarOrvalho, conferirSensacao } from '../scripts/lib/sensacao.mjs';
+import { sensacaoTermica, pressaoVapor, umidadeESensacao } from '../js/analise.js';
+
+test('sensação térmica: fórmula de Steadman/BoM, igual para medida e prevista', () => {
+  // 30 °C, orvalho 24 °C (abafado), vento 10 km/h: e ≈ 29,9 hPa → 30 + 9,9 − 1,9 − 4 ≈ 33,9
+  assert.equal(sensacaoTermica(30, pressaoVapor(24), 10), 33.9);
+  assert.ok(sensacaoTermica(10, pressaoVapor(5), 30) < 5);     // frio com vento: sensação bem abaixo
+  assert.equal(sensacaoTermica(null, 10, 5), null);
+});
+
+test('sensação prevista segue a temperatura e o vento corrigidos; umidade coerente com o orvalho', () => {
+  const locais = Array.from({ length: 3 }, (_, h) => ({ hora: 15 + h, mes: 1 }));
+  const brutas = { temperature_2m: [26, 27, 28], dew_point_2m: [20, 20, 20], relative_humidity_2m: [70, 66, 63], apparent_temperature: [99, 99, 99] };
+  const vars = { ...brutas, temperature_2m: [28, 29, 30], wind_speed_10m: [6, 6, 6] };
+  umidadeESensacao(vars, brutas, locais, null, 'ecmwf_ifs');
+  assert.equal(vars.apparent_temperature[0], sensacaoTermica(28, pressaoVapor(20), 6));
+  assert.ok(vars.relative_humidity_2m[0] < 70);                 // mais quente com o mesmo vapor: umidade menor
+  const vh = Array(24).fill(-2);                                // modelo seca demais o ar: orvalho sobe 2 °C
+  const calib = { orvalhoHorario: { modelos: { ecmwf_ifs: { usar: true, vies: { verao: vh, outono: vh, inverno: vh, primavera: vh } } } } };
+  const v2 = { ...brutas, temperature_2m: [28, 29, 30], wind_speed_10m: [6, 6, 6] };
+  assert.equal(umidadeESensacao(v2, brutas, locais, calib, 'ecmwf_ifs'), true);
+  assert.equal(v2.dew_point_2m[0], 22);
+  assert.ok(v2.apparent_temperature[0] > vars.apparent_temperature[0]);
+});
+
+test('orvalho hora a hora e conferência da sensação com dados sintéticos', () => {
+  const horario = { dias: {} };
+  for (let k = 0; k < 200; k++) {
+    const d = new Date(Date.UTC(2025, 0, 1) + k * 86400000).toISOString().slice(0, 10);
+    const o = Array.from({ length: 24 }, (_, h) => 20 + 6 * Math.max(0, Math.sin((h - 7) / 14 * Math.PI)));
+    const od = o.map(() => 17 + ((k * 3) % 5) / 5), ow = o.map(() => 8);
+    horario.dias[d] = { o, od, ow, ecmwf_ifs: { p1: o.map((v) => v - 1), d1: od.map((v) => v - 1.5), w1: ow.map((v) => v / 0.6) } };
+  }
+  const orv = calibrarOrvalho(horario, 'ecmwf_ifs');
+  assert.equal(orv.usar, true);
+  assert.ok(Math.abs(orv.vies.verao[12] + 1.5) < 0.05);
+  const c = conferirSensacao(horario, 'ecmwf_ifs', { orvalho: orv.porDia, fatorVento: () => 0.6 });
+  assert.ok(c.hora.corrigida.mae < c.hora.bruta.mae);
+});
