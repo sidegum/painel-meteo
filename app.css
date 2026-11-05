@@ -317,7 +317,7 @@ td.n, th.n { text-align: right; }
 .tmax { color: var(--quente); }
 
 /* barras de probabilidade (El Niño e semana) */
-.pbar { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.pbar { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
 .pbar .trilho { display: flex; height: 26px; background: var(--sup); }
 .pbar .trilho i { display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 13px; font-weight: 650; overflow: hidden; color: #fff; }
 .pbar .ln { background: #2457A6; }
@@ -703,3 +703,18 @@ button.globo-rotulo { cursor: pointer; }
 .noticias { list-style: none; margin: 0; padding: 0; }
 .noticias li { padding: 10px 0; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; gap: 2px; }
 .noticias a { font-weight: 600; text-decoration: none; }
+.enso-tecnico { margin-top: 16px; border-top: 6px solid var(--sup); padding-top: 6px; }
+.enso-tecnico > summary { min-height: 44px; display: flex; align-items: center; font-weight: 650; cursor: pointer; }
+
+/* Aviso antecipado do El Niño (resumo do El Niño e aba Avisos) */
+.alerta-local { margin: 14px 0 4px; padding: 12px 14px; background: var(--sup); border-radius: 8px; }
+.alerta-local h3 { margin: 0 0 6px; font-size: 17px; }
+.alerta-titulo { margin: 10px 0 4px; font-weight: 650; }
+.alerta-dias, .alerta-epocas { list-style: none; margin: 0; padding: 0; }
+.alerta-dias button { all: unset; box-sizing: border-box; width: 100%; min-height: 44px; display: grid; grid-template-columns: 5.5em 1fr; column-gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--linha); cursor: pointer; }
+.alerta-dias button:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
+.alerta-dias .cf { grid-column: 2; font-size: 14px; color: var(--fraco); }
+.alerta-epocas li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid var(--linha); }
+.alerta-epocas span { color: var(--fraco); font-size: 15px; }
+.link-aviso { all: unset; cursor: pointer; color: var(--quente); font-weight: 650; min-height: 44px; display: inline-flex; align-items: center; }
+.aviso-card.painel-aviso { border-left-color: var(--chuva); }
