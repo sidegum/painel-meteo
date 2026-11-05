@@ -263,7 +263,7 @@ Implementado em `app.js` (`MODELO_TEMP = 'ecmwf_ifs'`):
 - **Mínima e máxima do dia** (`analisarDia`): a do ECMWF IFS, lida da série já corrigida (3.7). Se o IFS não tiver dado, entra a mediana ponderada dos demais modelos. `tminFaixa` e `tmaxFaixa` guardam o intervalo entre os modelos, como informação de dispersão.
 - **Temperatura por hora** (`tempHora` e `serieTemp`): o valor horário do IFS, já corrigido. Se faltar, a mediana ponderada dos modelos.
 - **Temperatura "agora"** (`renderAgora`), em ordem de preferência:
-  1. A medição da estação mais próxima, a até 25 km e com até 2 h.
+  1. A medição da estação mais próxima, a até 25 km e com até 2 h, levada até o minuto atual (`temperaturaAgora`, desde a 1.5.1). O INMET publica com 40 a 70 min de atraso; o valor é a previsão sem ancoragem (`estado.prevSemAncora`) interpolada entre as horas para este minuto, mais a diferença entre medição e previsão no horário da leitura, que cai linearmente a zero em `REGRAS.ancoragem.horas` (a mesma regra de `ancorarTemperatura`). No instante da leitura o valor é a própria medição. Atualizado a cada minuto pelo relógio de `agendar`. A sensação de agora usa essa temperatura com o vapor e o vento da leitura. No bloco "Medições agora", temperatura e sensação continuam sendo as da leitura, com a nota "agora cerca de X°" quando a diferença passa de 0,5 °C. Sem ancoragem válida, fica a leitura pura.
   2. O campo `current` do IFS, em resolução de 15 min, corrigido.
   3. A mediana ponderada dos `current` dos modelos.
   4. A hora cheia mais recente.
@@ -461,7 +461,7 @@ A ordem é:
   - Para outros locais, testa se o ponto está dentro do polígono do aviso. `dentroPoligono` usa *ray casting* e roda no aparelho, sem enviar a posição.
   - Sem área (RSS), aceita avisos que citam o RS e os marca como `incerto`.
 - `avisosOrdenados()`: do mais grave ao menos grave; na mesma gravidade, o que começa antes.
-- Aba **Avisos** (`renderAvisos`, chamada no início de `renderTudo`, sem depender da previsão): um cartão por aviso do local (`cartaoAviso`: título, gravidade e período visíveis; riscos e orientações em `details`), a nota "INMET · HH:MM" da consulta, os outros avisos do RS recolhidos e os links oficiais. Desde a 1.5.0 os avisos não aparecem mais na primeira tela de Hoje e Amanhã; ficam só o cartão de risco de temporal e o ponto vermelho no botão "Ver mais" (`data-avisos`, com o número no `aria-label` e no item do menu).
+- Aba **Avisos** (`renderAvisos`, chamada no início de `renderTudo`, sem depender da previsão): um cartão por aviso do local (`cartaoAviso`: título, gravidade e período visíveis; riscos e orientações em `details`), a nota "INMET · HH:MM" da consulta, os outros avisos do RS recolhidos e os links oficiais. Desde a 1.5.0 os avisos não aparecem mais na primeira tela de Hoje e Amanhã; ficam só o cartão de risco de temporal e o ponto vermelho no botão "Ver mais" (`data-avisos`), só para aviso do local ainda não visto: ao abrir a aba Avisos, os identificadores dos avisos ativos vão para `prefs 'avisosVistos'` (`marcarAvisosVistos`) e o ponto some até chegar um aviso novo (`marcarBotaoAvisos`).
 - As listas `riscos` e `instrucoes` chegam do INMET como array JSON; `listaPython` (app e Worker) aceita também o formato antigo em texto `"['a', 'b']"`.
 
 ### 5.7 Navegação e gestos

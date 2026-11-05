@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.5.0';
+const VERSAO = '1.5.1';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -247,6 +247,7 @@ function agendar() {
   // Não há busca com a página escondida nem automática ao reconectar.
   setInterval(() => {
     atualizarCabecalho();
+    if (estado.prev) renderAgora(); // temperatura de agora avança a cada minuto (temperaturaAgora)
     const venceu = Date.now() - ultimaRodada >= CONFIG.atualizarTelaAbertaMin * 60000;
     if (venceu && !document.hidden && navigator.onLine !== false) atualizarTudo();
   }, 60000);
@@ -324,14 +325,49 @@ function atualizarCabecalho() {
  * esta hora (já calibrada e ancorada na medição).
  * @returns {{valor:number, medida:boolean, title:string}|null}
  */
-function sensacaoAgora() {
+/**
+ * Temperatura de agora em tempo real. A estação (a até 25 km, leitura de até 2 h) publica com 40 a 70 min de
+ * atraso; por isso o valor parte da leitura e segue a previsão até este minuto, com a mesma regra da ancoragem
+ * do gráfico (ancorarTemperatura): previsão do minuto (interpolada entre as horas) + diferença medida na leitura,
+ * que cai linearmente a zero em REGRAS.ancoragem.horas. No instante da leitura o valor é a própria medição.
+ * Sem ancoragem válida (diferença grande demais com a previsão), fica a leitura pura.
+ * @returns {{valor:number, med:object, ajuste:number}|null} med: leitura escolhida; ajuste: °C somados à leitura
+ */
+function temperaturaAgora() {
   const pt = pontoExato(), agora = Date.now();
-  if (estado.obs && pt) {
-    const t = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, agora, CONFIG.idadeMaxMedicaoMin).escolhida;
-    const l = t && t.distancia <= 25 ? t.fonte.leituras : null;
+  if (!estado.obs || !pt) return null;
+  const med = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, agora, REGRAS.ancoragem.idadeMaxMin).escolhida;
+  if (!med || med.distancia > REGRAS.ancoragem.distanciaKm) return null;
+  const p = estado.prevSemAncora, anc = estado.ancoragem;
+  if (!p || !anc || anc.medida.ms !== med.ms || agora <= med.ms) return { valor: med.valor, med, ajuste: 0 };
+  const curva = (ms) => {
+    const k = p.horas.findIndex((h, i) => h <= ms && p.horas[i + 1] > ms);
+    if (k < 0) return null;
+    const a = tempHora(p, 'temperature_2m', k, modelosAtivos()), b = tempHora(p, 'temperature_2m', k + 1, modelosAtivos());
+    return valido(a) && valido(b) ? a + (b - a) * (ms - p.horas[k]) / (p.horas[k + 1] - p.horas[k]) : null;
+  };
+  const naLeitura = curva(med.ms), agoraPrev = curva(agora);
+  if (!valido(naLeitura) || !valido(agoraPrev)) return { valor: med.valor, med, ajuste: 0 };
+  const peso = Math.max(0, 1 - (agora - med.ms) / (REGRAS.ancoragem.horas * 3600000));
+  const valor = agoraPrev + (med.valor - naLeitura) * peso;
+  return { valor, med, ajuste: valor - med.valor };
+}
+
+/**
+ * Sensação de agora: fórmula do NWS com a temperatura de agora (temperaturaAgora) e o vapor e o vento da mesma leitura.
+ * @param {boolean} [daLeitura] true: com a temperatura da própria leitura (bloco "Medições agora", que mostra a leitura)
+ */
+function sensacaoAgora(daLeitura = false) {
+  const ta0 = temperaturaAgora();
+  const ta = ta0 && daLeitura ? { ...ta0, valor: ta0.med.valor, ajuste: 0 } : ta0;
+  if (ta) {
+    const t = ta.med, l = t.fonte.leituras;
     const mesma = (k) => (l?.[k] && l[k].ms === t.ms && leituraValida(k, l[k].valor) ? l[k].valor : null);
-    const v = l ? sensacaoMedida(t.valor, mesma('umidade'), mesma('orvalho'), mesma('vento')) : null;
-    if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome}, ${fmt.idade(t.ms)}` };
+    // vapor d'água da leitura (umidade ou orvalho), mantido; só a temperatura avança até agora
+    const ur = mesma('umidade'), orv = mesma('orvalho'), vento = mesma('vento');
+    const e = valido(ur) ? (ur / 100) * pressaoVapor(t.valor) : valido(orv) ? pressaoVapor(Math.min(orv, t.valor)) : null;
+    const v = valido(e) || ta.valor >= 15 ? sensacaoTermica(ta.valor, e, valido(vento) ? vento : ta.valor >= 15 ? 0 : null) : null;
+    if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome} (leitura ${fmt.idade(t.ms)})${ta.ajuste ? ', com a temperatura levada até agora' : ''}` };
   }
   const p = estado.prev;
   const i = p ? p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000) : -1;
@@ -351,13 +387,14 @@ function renderAgora() {
   const alvo = $('#agora');
   const noResumo = document.getElementById('agora-hoje');
   const p = estado.prev;
-  const pt = pontoExato();
-  const med = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, Date.now(), 120).escolhida;
-  if (med && med.distancia <= 25) {
-    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(med.valor) }));
-    alvo.title = `Medido em ${med.fonte.nome}, ${fmt.n(med.distancia, 0)} km, ${fmt.idade(med.ms)}`;
-    alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(med.valor)}, ${alvo.title}`);
-    if (noResumo) { noResumo.replaceChildren(el('b', { text: fmt.c(med.valor) }), el('span', { class: 'rot-agora', text: 'agora' }), sensacaoResumo()); noResumo.title = alvo.title; }
+  const ta = temperaturaAgora();
+  if (ta) {
+    const med = ta.med;
+    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(ta.valor) }));
+    alvo.title = `${nomeEstacao(med.fonte)} · ${fmt.horaMin(med.ms, p?.offset ?? -10800)}: ${fmt.c1(med.valor)} medidos a ${fmt.n(med.distancia, 0)} km`
+      + (Math.abs(ta.ajuste) >= 0.05 ? `, ${ta.ajuste > 0 ? '+' : '−'}${fmt.n(Math.abs(ta.ajuste), 1)} °C pela variação prevista até agora` : '');
+    alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(ta.valor)}. ${alvo.title}`);
+    if (noResumo) { noResumo.replaceChildren(el('b', { text: fmt.c(ta.valor) }), el('span', { class: 'rot-agora', text: 'agora' }), sensacaoResumo()); noResumo.title = alvo.title; }
     return;
   }
   if (!p) { alvo.replaceChildren(); return; }
@@ -448,11 +485,12 @@ function recalibrar() {
   const apr = aprendizadoLocal()?.porModelo || null;
   const ref = estado.prevEm || Date.now();
   estado.prev = calibrarPrevisao(bruta, { calib, aprendizado: apr, refMs: ref });
+  estado.prevSemAncora = estado.prev; // usada por temperaturaAgora, que aplica a ancoragem no minuto exato
   // próximas horas ancoradas na temperatura medida agora (some em REGRAS.ancoragem.horas)
   const medida = temperaturaMedida(REGRAS.ancoragem.idadeMaxMin, REGRAS.ancoragem.distanciaKm);
   const anc = medida ? ancorarTemperatura(estado.prev, medida, MODELO_TEMP, Date.now()) : null;
   if (anc) estado.prev = anc.prev;
-  estado.ancoragem = anc?.delta ? { delta: anc.delta, medida } : null;
+  estado.ancoragem = anc && anc.delta !== null ? { delta: anc.delta, medida } : null; // delta 0: previsão já igual à medição
   estado.ens = estado.ensBruto ? calibrarEnsemble(estado.ensBruto, calib, ref, bruta.offset) : null;
   cacheDias.clear();
 }
@@ -1005,6 +1043,20 @@ function cartaoAviso(a) {
       ...(a.instrucoes || []).map((t) => el('p', { class: 'nota', text: t }))) : null);
 }
 
+// Ponto vermelho em "Ver mais": só para aviso do local que ainda não foi visto na aba Avisos. Os avisos vistos
+// ficam guardados neste aparelho (prefs 'avisosVistos', só os ainda ativos); um aviso novo faz o ponto voltar.
+const idAviso = (a) => String(a.id || `${a.titulo}|${a.inicio}|${a.fim}`);
+function marcarAvisosVistos(meus) { prefs.gravar('avisosVistos', meus.map(idAviso)); }
+function marcarBotaoAvisos(meus) {
+  const vistos = new Set(prefs.ler('avisosVistos', []));
+  const novos = meus.filter((a) => !vistos.has(idAviso(a))).length;
+  const botao = $('#btn-mais'), item = $('#mais-avisos');
+  if (novos) botao.dataset.avisos = String(novos); else delete botao.dataset.avisos;
+  botao.setAttribute('aria-label', novos ? `Ver mais (${novos} ${novos > 1 ? 'avisos novos' : 'aviso novo'} para o local)` : 'Ver mais');
+  item.textContent = meus.length ? `${meus.length} ${meus.length > 1 ? 'avisos ativos' : 'aviso ativo'} para o local` : 'Avisos oficiais do INMET para o local';
+  item.parentElement.classList.toggle('com-aviso', novos > 0);
+}
+
 /**
  * Aba Avisos: avisos do INMET válidos para o local (alertasDoLocal, do mais grave ao menos grave), os demais
  * avisos do RS recolhidos e a orientação oficial. Também marca o botão "Ver mais" quando há aviso para o local.
@@ -1012,11 +1064,8 @@ function cartaoAviso(a) {
 function renderAvisos() {
   const alvo = $('#avisos-conteudo');
   const meus = estado.alertas && !estado.alertas.indisponivel ? avisosOrdenados() : [];
-  const botao = $('#btn-mais'), item = $('#mais-avisos');
-  if (meus.length) botao.dataset.avisos = String(meus.length); else delete botao.dataset.avisos;
-  botao.setAttribute('aria-label', meus.length ? `Ver mais (${meus.length} ${meus.length > 1 ? 'avisos' : 'aviso'} para o local)` : 'Ver mais');
-  item.textContent = meus.length ? `${meus.length} ${meus.length > 1 ? 'avisos ativos' : 'aviso ativo'} para o local` : 'Avisos oficiais do INMET para o local';
-  item.parentElement.classList.toggle('com-aviso', meus.length > 0);
+  if (estado.aba === 'avisos') marcarAvisosVistos(meus);
+  marcarBotaoAvisos(meus);
   const fonte = estado.alertasEm ? el('p', { class: 'nota', text: `INMET · ${fmt.horaMin(estado.alertasEm, estado.prev?.offset ?? -10800)}` }) : null;
   const oficial = el('p', { class: 'oficial', text: 'Este painel não é fonte oficial. Em situação de risco, siga a Defesa Civil (199) e o INMET.' });
   const links = el('p', {}, linkExterno('https://alertas2.inmet.gov.br/', 'Avisos no site do INMET'), ' · ', linkExterno('https://www.defesacivil.rs.gov.br/', 'Defesa Civil RS'));
@@ -1151,8 +1200,9 @@ function instrumentos() {
   const val = (k) => pegar(k).escolhida;
 
   const t = val('temperatura'), u = val('umidade'), ve = val('vento');
-  const sa = sensacaoAgora();
-  const sens = sa?.medida ? sa.valor : null; // a mesma do resumo; aqui só a medida
+  const sa = sensacaoAgora(true);
+  const sens = sa?.medida ? sa.valor : null; // calculada com a própria leitura mostrada aqui (o topo leva a leitura até agora)
+  const saAgora = sensacaoAgora();
   const pr = val('pressao');
   const dir = val('direcao');
 
@@ -1172,8 +1222,11 @@ function instrumentos() {
     (nota || outra(c)) ? el('span', { class: 'med-nota', text: nota || outra(c) }) : null);
 
   const grade = el('div', { class: 'medicoes' },
-    bloco('Temperatura', t, t ? fmt.c1(t.valor) : null),
-    bloco('Sensação', t, valido(sens) ? fmt.c1(sens) : null),
+    bloco('Temperatura', t, t ? fmt.c1(t.valor) : null, (() => { // a leitura tem atraso: diz quanto deve estar agora (o mesmo valor do topo)
+      const ta = t ? temperaturaAgora() : null;
+      return ta && ta.med.ms === t.ms && Math.abs(ta.ajuste) >= 0.5 ? `agora cerca de ${fmt.c(ta.valor)}` : null;
+    })()),
+    bloco('Sensação', t, valido(sens) ? fmt.c1(sens) : null, saAgora?.medida && valido(sens) && Math.abs(saAgora.valor - sens) >= 0.5 ? `agora cerca de ${fmt.c(saAgora.valor)}` : null),
     bloco('Umidade', u, u ? `${Math.round(u.valor)}%` : null),
     bloco('Ponto de orvalho', val('orvalho'), val('orvalho') ? fmt.c1(val('orvalho').valor) : null),
     bloco('Vento', ve, ve ? `${fmt.kmh(ve.valor)}${dir ? ' ' + direcaoTexto(dir.valor) : ''}` : null),
@@ -2028,6 +2081,7 @@ function irPara(aba, rolarTopo = true, direcao = 0) {
   });
   if (rolarTopo) window.scrollTo({ top: 0, behavior: 'instant' });
   if (aba === 'elnino' && estado.prev !== undefined) renderElNino();
+  if (aba === 'avisos' && estado.alertas && !estado.alertas.indisponivel) { const meus = avisosOrdenados(); marcarAvisosVistos(meus); marcarBotaoAvisos(meus); }
   abrirOuFecharGlobo(aba);
   // Entrada suave da aba (só transform e opacidade, que a placa de vídeo faz sem travar).
   // Gráficos e faixas se ajustam sozinhos pelo ResizeObserver quando a aba aparece; nada é redesenhado à força.
