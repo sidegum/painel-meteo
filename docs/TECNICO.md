@@ -459,6 +459,10 @@ A ordem é:
 - **Subdescrições**: um bloco autoexplicativo não leva texto abaixo do título. Ficam só a nota de fonte ("Fonte · Horário") onde ela existe e avisos que mudam a leitura do dado, como `notaConcordancia` (sem ensemble, a fração de modelos é concordância, não probabilidade).
 - **Modelos** (`renderModelos`, `resumoAprendizado`, `tabelaAcerto`): os pesos atuais, o que já foi aprendido e o acerto por modelo e antecedência.
 - **El Niño** (`renderElNino`, `painelEnso`, `intensidade`, `barrasProb`, `comparacaoHistorica`): os índices ONI e RONI, a discussão do CPC, as probabilidades do CPC e do IRI, e a estimativa diária do Niño 3.4.
+  - Desde a 1.8.5, a aba mostra também o que o El Niño faz no RS.
+  - **O que o El Niño costuma causar no RS** (`efeitosNoRs`): o padrão de chuva no estado (`ENSO_RS_EFEITOS`, de Fontana e Berlato 1997 e do resumo do CPTEC/INPE). Com episódio em curso, inclui a tendência para a primavera do ano de início e para abril a junho do ano seguinte. As fontes ficam em "De onde vem isso".
+  - **Nas notícias do RS** (`noticiasRs`): até 5 notícias dos últimos 45 dias, com título, veículo, data e link, marcadas como conteúdo de terceiros. Vêm da parte `noticias` de `atualizarEnso` (Worker 1.2.0 e GitHub Actions). A busca RSS do Google Notícias (`URL_NOTICIAS_ENSO`) exige "El Niño", o RS e um termo de tempo severo, nos últimos 30 dias. `parseNoticias` tira o veículo do título, aceita só links `https://news.google.com/`, descarta repetidas e devolve as 8 mais recentes.
+  - **El Niños marcantes e o que houve no RS** (`comparacaoHistorica` com `eventosEnso`): os episódios fortes pelo pico do índice, mais os de `ENSO_RS_EPISODIOS` (1982, 1997, 2015 e 2023), com o que foi registrado no RS. Um ano pertence ao episódio mais forte que passa por ele. Esses textos são fixos e verificados; revisá-los a cada novo episódio forte.
 
 ### 5.6 Alertas
 
