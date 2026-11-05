@@ -19,3 +19,5 @@ jobs:
       - name: Procura segredos óbvios
         run: |
           ! grep -rInE "INMET_TOKEN\s*=\s*['\"][^'\"]+" --exclude-dir=.git --exclude-dir=node_modules .
+      - name: Site do Cloudflare Pages monta sem faltar arquivo do service worker
+        run: scripts/montar-site.sh "$RUNNER_TEMP/site"

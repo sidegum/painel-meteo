@@ -6,7 +6,7 @@ Painel de chuva e vento para celular, com Campo Bom (RS) como local padrão. Com
 
 | Parte | Onde | Para quê |
 |---|---|---|
-| App | `index.html`, `app.css`, `js/` | Frontend estático, publicado no GitHub Pages |
+| App | `index.html`, `app.css`, `js/` | Frontend estático, publicado no GitHub Pages e no Cloudflare Pages |
 | Regras de confiança | `js/analise.js` (objeto `REGRAS`) | Todos os limites ajustáveis num lugar só |
 | Worker | `worker/` | Cloudflare Worker gratuito: METAR, INMET, El Niño, acerto dos modelos, tarefas agendadas |
 | Instalação | `manifest.json`, `sw.js`, `icones/` | Instalar na tela inicial e abrir sem internet |
@@ -21,6 +21,10 @@ O app funciona sem o Worker: previsão, cenários, busca de cidades, radar, avis
 2. No repositório: Settings > Pages > Source: "Deploy from a branch", branch `main`, pasta `/ (root)`.
 3. O endereço será `https://sidegum.github.io/painel-meteo/`. O HTTPS é obrigatório para o GPS.
 4. Em Settings > Code security, ative "Secret scanning", "Push protection" e "Dependabot alerts".
+
+## 1b. Publicar no domínio próprio (Cloudflare Pages)
+
+O mesmo app também é publicado no Cloudflare Pages, num subdomínio próprio, pelo GitHub Actions (`.github/workflows/pages.yml`), sem passo de compilação. Continua funcionando com o repositório privado. Passo a passo em [docs/CLOUDFLARE-PAGES.md](docs/CLOUDFLARE-PAGES.md).
 
 ## 2. Publicar o Worker (Cloudflare, plano gratuito)
 

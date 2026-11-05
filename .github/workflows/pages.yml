@@ -1,0 +1,51 @@
+name: Publicar no Cloudflare Pages
+
+# Publica o app no Cloudflare Pages (Direct Upload, sem compilação) sempre que a main muda.
+# - push na main: mudanças feitas por pessoas (os commits dos robôs não disparam "push" com o GITHUB_TOKEN).
+# - workflow_run: depois dos robôs que gravam na main com pouca frequência (calibração diária, endereço do Worker).
+# - Os campos do Globo (a cada hora) e o El Niño (só quando muda) são publicados no próprio job que os gera, para
+#   gastar menos minutos do GitHub Actions.
+# Segredos: CLOUDFLARE_API_TOKEN (com "Cloudflare Pages: Edit") e CLOUDFLARE_ACCOUNT_ID.
+# Variável opcional do repositório: PAGES_PROJETO (padrão painel-meteo). Passo a passo em docs/CLOUDFLARE-PAGES.md.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'worker/**'
+      - 'docs/**'
+      - 'test/**'
+      - 'README.md'
+  workflow_run:
+    workflows: ['Calibração com histórico', 'Publicar Worker']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PAGES_PROJETO: ${{ vars.PAGES_PROJETO }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Montar e publicar (app da main + campos do Globo)
+        run: scripts/publicar-pages.sh

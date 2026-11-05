@@ -3,7 +3,7 @@
   "short_name": "Tempo",
   "description": "Chuva e vento com comparação de modelos, para uso pessoal.",
   "lang": "pt-BR",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
