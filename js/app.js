@@ -13,9 +13,10 @@ import {
 } from './dados.js';
 import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor } from './ui.js';
 import { criarFaixa } from './faixa.js';
+import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.3';
+const VERSAO = '1.9.4';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -595,10 +596,16 @@ function ceuAgora() {
   // entre os METAR válidos dentro da distância, o boletim mais recente (o céu muda mais rápido que a distância pesa)
   const { escolhida, outras } = escolherFonte(fontesNormalizadas(), 'nuvens', pt.lat, pt.lon, agora, REGRAS.ceuMedido.idadeMin);
   const medido = [escolhida, ...outras].filter((c) => c?.ok && c.distancia <= REGRAS.ceuMedido.distanciaKm).sort((x, y) => y.ms - x.ms)[0] || null;
-  const cobertura = medido ? medido.valor : (i < 0 ? null : consensoHorario(p, 'cloud_cover', mods).med[i]);
+  const modelo = (v) => (i < 0 ? null : consensoHorario(p, v, mods).med[i]);
+  // O METAR só informa nuvens até alguns km de altura (CAVOK e NSC não dizem nada acima de 1.500 m). As nuvens
+  // médias e altas vêm dos modelos, e vale a maior cobertura: sem isso, um céu de nuvens altas virava "Ensolarado".
+  const acima = medido ? maximo([modelo('cloud_cover_mid'), modelo('cloud_cover_high')].filter(valido)) : null;
+  const cobertura = medido ? Math.max(medido.valor, valido(acima) ? acima : 0) : modelo('cloud_cover');
   const ceu = condicaoCeu([cobertura], [valido(dia) ? Math.round(dia) : null], null);
   if (!ceu) return null;
-  const origem = medido ? `nuvens medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}` : 'nuvens pela previsão para esta hora';
+  const origem = !medido ? 'nuvens pela previsão para esta hora'
+    : valido(acima) && acima > medido.valor ? `nuvens baixas medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}; médias e altas pela previsão`
+      : `nuvens medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}`;
   return { ...ceu, origem };
 }
 
@@ -730,6 +737,7 @@ function renderSemPrevisao() {
 // ------------------------------------------------------------------ primeira tela (Hoje e Amanhã)
 
 function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
+  for (const t of alvo.querySelectorAll('canvas.ceu-fundo')) observadorCeu?.unobserve(t);
   const p = estado.prev;
   const a = analisarDia(data, diaIndice, desdeAgora);
   const av = a.av;
@@ -767,7 +775,13 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   // e os horários dos avisos do local ao tocar. Os avisos do INMET em si ficam na aba Avisos (menu Ver mais).
   const risco = avaliarRisco(a, chovendo, !!chegando);
   const fundo = fundoDoResumo({ ceu, chovendo, chegando: !!chegando, risco, diaIndice, rajada: av.rajada?.mediana ?? a.rajadaPico?.valor });
+  const telaCeu = el('canvas', { class: 'ceu-fundo', 'aria-hidden': 'true' });
+  pintarCeu(telaCeu, {
+    cobertura: ceu?.cobertura ?? null, fase: faseDoCeu(ceu, diaIndice, data),
+    chuva: fundo === 'chuva', temporal: fundo === 'temporal', vento: fundo === 'vento', semente: Number(data.replaceAll('-', '')) % 100000,
+  });
   const resumo = el('div', { class: 'resumo', 'data-fundo': fundo, 'data-ceu': ceu?.nivel || 'sem', 'data-chuva': ceu?.chuva || (temChuva ? 'pouca' : 'nao') },
+    telaCeu,
     el('div', { class: 'resumo-topo' }, el('p', { class: 'resumo-quando', text: quando }), botaoConf),
     diaIndice === 0 ? el('div', { class: 'resumo-agora', id: 'agora-hoje', 'aria-hidden': 'true' }) : null,
     el('div', { class: 'resumo-ceu' },
@@ -835,6 +849,34 @@ function fundoDoResumo({ ceu, chovendo, chegando, risco, diaIndice, rajada }) {
   if (!ceu) return 'sem';
   if (ceu.noite) return ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'noite' : 'noite-nuvens';
   return ceu.nivel === 'limpo' ? 'sol' : ceu.nivel === 'nublado' ? 'nublado' : 'sol-nuvens';
+}
+
+// Fase do céu desenhado: noite pela condição mostrada; hoje, "sol baixo" da hora antes do pôr do sol até
+// 15 min depois e de 15 min antes do nascer até 1 h depois. Nos outros dias, o céu do dia.
+function faseDoCeu(ceu, diaIndice, data) {
+  if (ceu?.noite) return 'noite';
+  if (diaIndice !== 0) return 'dia';
+  const d = estado.prev.diario, k = d.datas.indexOf(data), agora = Date.now(), min = 60000;
+  const nascer = d.nascer[k], por = d.por[k];
+  if ((valido(por) && agora >= por - 60 * min && agora <= por + 15 * min) || (valido(nascer) && agora >= nascer - 15 * min && agora <= nascer + 60 * min)) return 'baixo';
+  return 'dia';
+}
+
+// O céu é desenhado quando o bloco ganha tamanho e de novo só se a largura ou a altura mudar
+// (aba escondida tem tamanho zero; ao aparecer, o observador desenha).
+const ceusDesenhados = new WeakMap();
+const observadorCeu = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entradas) => {
+  for (const e of entradas) {
+    const tela = e.target, info = ceusDesenhados.get(tela);
+    const w = Math.round(e.contentRect.width), h = Math.round(e.contentRect.height);
+    if (!info || !w || !h || (info.w === w && info.h === h)) continue;
+    info.w = w; info.h = h;
+    desenharCeu(tela, info.c);
+  }
+});
+function pintarCeu(tela, c) {
+  ceusDesenhados.set(tela, { c, w: 0, h: 0 });
+  observadorCeu?.observe(tela);
 }
 
 // Quanto ainda deve chover: soma a mediana ponderada dos modelos a partir de agora (só o que falta da hora
