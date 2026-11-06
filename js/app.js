@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.1';
+const VERSAO = '1.9.2';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -369,7 +369,7 @@ function sensacaoAgora(daLeitura = false) {
     const v = valido(e) || ta.valor >= 15 ? sensacaoTermica(ta.valor, e, valido(vento) ? vento : ta.valor >= 15 ? 0 : null) : null;
     if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome} (leitura ${fmt.idade(t.ms)})${ta.ajuste ? ', com a temperatura levada até agora' : ''}` };
   }
-  const p = estado.prev;
+  const p = estado.prev, agora = Date.now();
   const i = p ? p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000) : -1;
   const v = i < 0 ? null : tempHora(p, 'apparent_temperature', i, modelosAtivos());
   return valido(v) ? { valor: v, medida: false, title: 'Prevista para esta hora' } : null;
