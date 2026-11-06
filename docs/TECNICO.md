@@ -506,13 +506,11 @@ A ordem é:
 - `configurarPuxar()`: puxar para atualizar. O indicador flutua (`transform`) sem empurrar o conteúdo. Dispara com mais de 110 px a partir do topo e é cancelado com movimento lateral acima de 40 px.
 - `html { overscroll-behavior-y: none }` desliga o "puxar" nativo do navegador. Os botões usam `touch-action: manipulation`, sem atraso de duplo toque.
 
-#- **Fundo do bloco principal (1.9.3):** `fundoDoResumo` escolhe `data-fundo` no `.resumo` de Hoje, Amanhã e do dia. A ordem de prioridade é:
-  1. temporal: cartão de risco moderado ou alto; em Hoje, só com chuva agora ou chegando;
-  2. chuva: chovendo ou chegando; nos outros dias, chuva provável;
-  3. vento: rajada da classe "fortes" ou mais;
-  4. céu: noite, noite com nuvens, sol, sol com nuvens ou nublado, pela mesma condição mostrada no bloco.
-
-  O CSS usa só gradientes estáticos com `light-dark()`, então segue o tema claro ou escuro sem animação. Em navegador sem `light-dark()`, o bloco fica com o fundo neutro.
+#- **Céu do bloco principal (1.9.4):** o `.resumo` de Hoje, Amanhã e do dia tem um canvas `.ceu-fundo` desenhado por `desenharCeu` (`js/fundo-ceu.js`).
+  - O desenho combina o degradê do céu pela fase (`faseDoCeu`: dia; sol baixo, de 1 h antes do pôr até 15 min depois e de 15 min antes do nascer até 1 h depois; noite), as nuvens procedurais na cobertura real (`ceu.cobertura`), o brilho do sol, estrelas e a chuva, e o tom de temporal ou de vento (`fundoDoResumo`, mesma prioridade da 1.9.3).
+  - É calculado uma vez por tamanho, em cerca de 5 ms. Não tem animação. Um `ResizeObserver` redesenha quando o bloco aparece ou muda de tamanho.
+  - O céu é igual nos dois temas. Por isso o bloco redefine `--texto`, `--fraco`, `--linha` e as cores de mínima, máxima e chuva para tons claros.
+- **Céu de agora com METAR (1.9.4):** o METAR só informa nuvens baixas e médias (CAVOK e NSC não dizem nada acima de 1.500 m). Por isso `ceuAgora` usa a maior cobertura entre o METAR e as nuvens médias e altas dos modelos. Antes, um céu de nuvens altas com CAVOK aparecia como "Ensolarado".
 - **Valores ausentes nunca viram texto (1.9.2):** `ui.js` envolve `append`, `prepend`, `replaceChildren`, `before`, `after` e `replaceWith` para ignorar `null`, `undefined` e `false`, que o DOM converteria no texto "null". Envolve também o `textContent` e os textos de `el()` (incluindo `title` e `aria-*`): as palavras soltas null, undefined e NaN viram "–", com um aviso "Valor ausente" no console. O caso que motivou a regra foi a sensação ao lado de "agora (prevista)". `sensacaoAgora` usava `agora` sem declarar; no navegador, isso pegava o elemento `#agora` (acesso por id em `window`), a busca da hora falhava e o `null` ia para `replaceChildren`. O workflow Testes roda o ESLint com `no-undef` (`scripts/eslint-indefinidas.json`) em `js/` e `sw.js`.
 - **Telas largas (1.8.12):** até 1099 px tudo fica como no celular (coluna de 720 px). A partir de 1100 px:
   - a coluna cresce até 1240 px, ou até 1440 px a partir de 1600 px;
