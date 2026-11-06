@@ -15,7 +15,7 @@ import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkE
 import { criarFaixa } from './faixa.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.2';
+const VERSAO = '1.9.3';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -763,7 +763,11 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
 
   const botaoConf = el('button', { type: 'button', class: 'confianca', 'data-n': av.confianca.geral, onclick: () => explicarConfianca(a) },
     el('span', { class: 'nivel', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), `Confiança ${av.confianca.geral}`);
-  const resumo = el('div', { class: 'resumo', 'data-ceu': ceu?.nivel || 'sem', 'data-chuva': ceu?.chuva || (temChuva ? 'pouca' : 'nao') },
+  // Risco de temporal (moderado ou alto): um cartão só, com a fonte (INMET quando há aviso de tempestade)
+  // e os horários dos avisos do local ao tocar. Os avisos do INMET em si ficam na aba Avisos (menu Ver mais).
+  const risco = avaliarRisco(a, chovendo, !!chegando);
+  const fundo = fundoDoResumo({ ceu, chovendo, chegando: !!chegando, risco, diaIndice, rajada: av.rajada?.mediana ?? a.rajadaPico?.valor });
+  const resumo = el('div', { class: 'resumo', 'data-fundo': fundo, 'data-ceu': ceu?.nivel || 'sem', 'data-chuva': ceu?.chuva || (temChuva ? 'pouca' : 'nao') },
     el('div', { class: 'resumo-topo' }, el('p', { class: 'resumo-quando', text: quando }), botaoConf),
     diaIndice === 0 ? el('div', { class: 'resumo-agora', id: 'agora-hoje', 'aria-hidden': 'true' }) : null,
     el('div', { class: 'resumo-ceu' },
@@ -778,9 +782,6 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
       el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
 
-  // Risco de temporal (moderado ou alto): um cartão só, com a fonte (INMET quando há aviso de tempestade)
-  // e os horários dos avisos do local ao tocar. Os avisos do INMET em si ficam na aba Avisos (menu Ver mais).
-  const risco = avaliarRisco(a, chovendo, !!chegando);
   const filhos = [resumo];
   if (risco && risco.nivel !== 'baixo') filhos.push(cartaoTemporal(risco));
 
@@ -817,6 +818,23 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   filhos.push(botoes, caixa);
   alvo.replaceChildren(...filhos);
   desenharModo();
+}
+
+/**
+ * Fundo do bloco principal conforme o tempo, com os mesmos dados que o bloco mostra (nada novo é inferido):
+ * temporal (cartão de risco moderado ou alto; hoje, só com chuva agora ou chegando, porque o quadro mostra o céu
+ * de agora) > chuva (chovendo ou chegando agora; nos outros dias, chuva provável) > vento (rajada forte ou muito forte, REGRAS.rajadaClasses) > céu (noite, sol, sol com nuvens, nublado).
+ * @returns {'temporal'|'chuva'|'vento'|'sol'|'sol-nuvens'|'nublado'|'noite'|'noite-nuvens'|'sem'}
+ */
+function fundoDoResumo({ ceu, chovendo, chegando, risco, diaIndice, rajada }) {
+  // hoje o quadro mostra o céu de agora: o temporal só pinta o fundo quando a chuva já está aqui ou chegando
+  const chuvaAgora = chovendo || chegando;
+  if (risco && risco.nivel !== 'baixo' && (diaIndice > 0 || chuvaAgora)) return 'temporal';
+  if (chuvaAgora || (diaIndice > 0 && ceu?.chuva === 'provavel')) return 'chuva';
+  if (['fortes', 'muito fortes'].includes(classeRajada(rajada))) return 'vento';
+  if (!ceu) return 'sem';
+  if (ceu.noite) return ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'noite' : 'noite-nuvens';
+  return ceu.nivel === 'limpo' ? 'sol' : ceu.nivel === 'nublado' ? 'nublado' : 'sol-nuvens';
 }
 
 // Quanto ainda deve chover: soma a mediana ponderada dos modelos a partir de agora (só o que falta da hora

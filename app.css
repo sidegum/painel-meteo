@@ -772,3 +772,54 @@ button.globo-rotulo { cursor: pointer; }
   .cabeca > .topo, main, .faixa-aviso { max-width: 1440px; }
   .mapa { height: 620px; }
 }
+
+/* Fundo do bloco principal conforme o tempo (fundoDoResumo): só esse quadro muda. Cores claras no tema claro e
+   escuras no escuro (light-dark segue o color-scheme do tema); o texto mantém as cores do tema. Sem animação:
+   só gradientes estáticos, que não custam nada à rolagem. Navegador sem light-dark fica com o fundo neutro. */
+.resumo[data-fundo] { position: relative; isolation: isolate; margin: 6px 0 4px; padding: 12px 14px 12px; border-radius: 14px; background: var(--sup); overflow: hidden; }
+.resumo[data-fundo]::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+:root[data-visual="a"] .resumo[data-fundo] .resumo-temp { border-color: color-mix(in srgb, var(--texto) 14%, transparent); }
+.resumo[data-fundo="sol"] {
+  background: radial-gradient(circle at 88% 8%, light-dark(rgba(255, 196, 61, .55), rgba(255, 180, 70, .28)) 0, transparent 46%),
+    linear-gradient(165deg, light-dark(#FFF6DA, #33270F), light-dark(#FFE6A8, #241D10));
+}
+.resumo[data-fundo="sol-nuvens"] {
+  background: radial-gradient(circle at 88% 8%, light-dark(rgba(255, 196, 61, .4), rgba(255, 180, 70, .18)) 0, transparent 40%),
+    radial-gradient(ellipse 60% 35% at 30% 20%, light-dark(rgba(255, 255, 255, .7), rgba(255, 255, 255, .05)) 0, transparent 70%),
+    linear-gradient(165deg, light-dark(#EEF5FB, #1D2732), light-dark(#FBEFCF, #262213));
+}
+.resumo[data-fundo="nublado"] {
+  background: radial-gradient(ellipse 70% 40% at 25% 15%, light-dark(rgba(255, 255, 255, .55), rgba(255, 255, 255, .05)) 0, transparent 70%),
+    radial-gradient(ellipse 60% 35% at 80% 30%, light-dark(rgba(150, 162, 172, .25), rgba(255, 255, 255, .04)) 0, transparent 70%),
+    linear-gradient(170deg, light-dark(#E6EBEF, #23282D), light-dark(#CFD7DD, #2D333A));
+}
+.resumo[data-fundo="chuva"] { background: linear-gradient(170deg, light-dark(#DDE9F3, #132231), light-dark(#C2D6E6, #1B2D3E)); }
+.resumo[data-fundo="chuva"]::before, .resumo[data-fundo="temporal"]::before {
+  background: repeating-linear-gradient(105deg, transparent 0 13px, light-dark(rgba(31, 110, 170, .14), rgba(120, 185, 235, .16)) 13px 14.5px);
+  -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+}
+.resumo[data-fundo="temporal"] {
+  background: radial-gradient(ellipse 70% 40% at 70% 0%, light-dark(rgba(90, 80, 130, .25), rgba(150, 130, 220, .14)) 0, transparent 70%),
+    linear-gradient(170deg, light-dark(#DCDDE8, #191A26), light-dark(#BEC2D3, #262439));
+}
+.resumo[data-fundo="vento"] { background: linear-gradient(165deg, light-dark(#E5F2F1, #15262A), light-dark(#CFE4E3, #1C3236)); }
+.resumo[data-fundo="vento"]::before {
+  opacity: .3;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='90' fill='none' stroke='%237f9fa3' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M10 22h120c14 0 18-14 6-16'/%3E%3Cpath d='M40 48h150c16 0 20 16 6 18'/%3E%3Cpath d='M0 74h90c10 0 14-10 4-12'/%3E%3C/svg%3E") 100% 10% / 220px 90px repeat-y;
+}
+.resumo[data-fundo="noite"] {
+  background: radial-gradient(circle at 86% 12%, light-dark(rgba(120, 130, 190, .25), rgba(200, 210, 255, .12)) 0, transparent 30%),
+    linear-gradient(170deg, light-dark(#E2E5F4, #0F1630), light-dark(#CDD3EC, #1A2142));
+}
+.resumo[data-fundo="noite"]::before {
+  opacity: .7;
+  background:
+    radial-gradient(1.2px 1.2px at 12% 18%, light-dark(rgba(58, 74, 122, .55), #fff) 99%, transparent), radial-gradient(1px 1px at 34% 9%, light-dark(rgba(58, 74, 122, .55), #fff) 99%, transparent),
+    radial-gradient(1.4px 1.4px at 58% 22%, light-dark(rgba(58, 74, 122, .55), #fff) 99%, transparent), radial-gradient(1px 1px at 72% 6%, light-dark(rgba(58, 74, 122, .55), #fff) 99%, transparent),
+    radial-gradient(1.2px 1.2px at 93% 30%, light-dark(rgba(58, 74, 122, .55), #fff) 99%, transparent), radial-gradient(1px 1px at 46% 38%, light-dark(rgba(58, 74, 122, .55), #fff) 99%, transparent),
+    radial-gradient(1px 1px at 24% 44%, light-dark(rgba(58, 74, 122, .55), #fff) 99%, transparent), radial-gradient(1.3px 1.3px at 82% 52%, light-dark(rgba(58, 74, 122, .55), #fff) 99%, transparent);
+}
+.resumo[data-fundo="noite-nuvens"] {
+  background: radial-gradient(ellipse 70% 40% at 30% 20%, light-dark(rgba(255, 255, 255, .45), rgba(255, 255, 255, .05)) 0, transparent 70%),
+    linear-gradient(170deg, light-dark(#E0E3EC, #161B27), light-dark(#CBD0DC, #222733));
+}

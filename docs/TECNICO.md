@@ -506,7 +506,14 @@ A ordem é:
 - `configurarPuxar()`: puxar para atualizar. O indicador flutua (`transform`) sem empurrar o conteúdo. Dispara com mais de 110 px a partir do topo e é cancelado com movimento lateral acima de 40 px.
 - `html { overscroll-behavior-y: none }` desliga o "puxar" nativo do navegador. Os botões usam `touch-action: manipulation`, sem atraso de duplo toque.
 
-#- **Valores ausentes nunca viram texto (1.9.2):** `ui.js` envolve `append`, `prepend`, `replaceChildren`, `before`, `after` e `replaceWith` para ignorar `null`, `undefined` e `false`, que o DOM converteria no texto "null". Envolve também o `textContent` e os textos de `el()` (incluindo `title` e `aria-*`): as palavras soltas null, undefined e NaN viram "–", com um aviso "Valor ausente" no console. O caso que motivou a regra foi a sensação ao lado de "agora (prevista)". `sensacaoAgora` usava `agora` sem declarar; no navegador, isso pegava o elemento `#agora` (acesso por id em `window`), a busca da hora falhava e o `null` ia para `replaceChildren`. O workflow Testes roda o ESLint com `no-undef` (`scripts/eslint-indefinidas.json`) em `js/` e `sw.js`.
+#- **Fundo do bloco principal (1.9.3):** `fundoDoResumo` escolhe `data-fundo` no `.resumo` de Hoje, Amanhã e do dia. A ordem de prioridade é:
+  1. temporal: cartão de risco moderado ou alto; em Hoje, só com chuva agora ou chegando;
+  2. chuva: chovendo ou chegando; nos outros dias, chuva provável;
+  3. vento: rajada da classe "fortes" ou mais;
+  4. céu: noite, noite com nuvens, sol, sol com nuvens ou nublado, pela mesma condição mostrada no bloco.
+
+  O CSS usa só gradientes estáticos com `light-dark()`, então segue o tema claro ou escuro sem animação. Em navegador sem `light-dark()`, o bloco fica com o fundo neutro.
+- **Valores ausentes nunca viram texto (1.9.2):** `ui.js` envolve `append`, `prepend`, `replaceChildren`, `before`, `after` e `replaceWith` para ignorar `null`, `undefined` e `false`, que o DOM converteria no texto "null". Envolve também o `textContent` e os textos de `el()` (incluindo `title` e `aria-*`): as palavras soltas null, undefined e NaN viram "–", com um aviso "Valor ausente" no console. O caso que motivou a regra foi a sensação ao lado de "agora (prevista)". `sensacaoAgora` usava `agora` sem declarar; no navegador, isso pegava o elemento `#agora` (acesso por id em `window`), a busca da hora falhava e o `null` ia para `replaceChildren`. O workflow Testes roda o ESLint com `no-undef` (`scripts/eslint-indefinidas.json`) em `js/` e `sw.js`.
 - **Telas largas (1.8.12):** até 1099 px tudo fica como no celular (coluna de 720 px). A partir de 1100 px:
   - a coluna cresce até 1240 px, ou até 1440 px a partir de 1600 px;
   - os blocos de Hoje, Amanhã, dia, Semana, Modelos e El Niño ficam em duas colunas (grid);
