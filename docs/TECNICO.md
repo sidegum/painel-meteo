@@ -506,7 +506,8 @@ A ordem é:
 - `configurarPuxar()`: puxar para atualizar. O indicador flutua (`transform`) sem empurrar o conteúdo. Dispara com mais de 110 px a partir do topo e é cancelado com movimento lateral acima de 40 px.
 - `html { overscroll-behavior-y: none }` desliga o "puxar" nativo do navegador. Os botões usam `touch-action: manipulation`, sem atraso de duplo toque.
 
-#- **Telas largas (1.8.12):** até 1099 px tudo fica como no celular (coluna de 720 px). A partir de 1100 px:
+#- **Valores ausentes nunca viram texto (1.9.2):** `ui.js` envolve `append`, `prepend`, `replaceChildren`, `before`, `after` e `replaceWith` para ignorar `null`, `undefined` e `false`, que o DOM converteria no texto "null". Envolve também o `textContent` e os textos de `el()` (incluindo `title` e `aria-*`): as palavras soltas null, undefined e NaN viram "–", com um aviso "Valor ausente" no console. O caso que motivou a regra foi a sensação ao lado de "agora (prevista)". `sensacaoAgora` usava `agora` sem declarar; no navegador, isso pegava o elemento `#agora` (acesso por id em `window`), a busca da hora falhava e o `null` ia para `replaceChildren`. O workflow Testes roda o ESLint com `no-undef` (`scripts/eslint-indefinidas.json`) em `js/` e `sw.js`.
+- **Telas largas (1.8.12):** até 1099 px tudo fica como no celular (coluna de 720 px). A partir de 1100 px:
   - a coluna cresce até 1240 px, ou até 1440 px a partir de 1600 px;
   - os blocos de Hoje, Amanhã, dia, Semana, Modelos e El Niño ficam em duas colunas (grid);
   - mapa, faixa de horas, gráficos largos, tabelas, títulos e notas (`.largura-total` ou filhos que não são `.secao`) ocupam a linha inteira;
