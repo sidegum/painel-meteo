@@ -16,7 +16,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.4';
+const VERSAO = '1.9.5';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -820,8 +820,8 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     // hoje: escolher entre as horas que faltam e o dia todo (a escolha fica salva no aparelho)
     const todas = desdeAgora && prefs.ler('horasTodas', false);
     const iniUsado = todas ? iniDia : ini;
-    botoes.replaceChildren(...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
-      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome)),
+    botoes.replaceChildren(el('span', { class: 'troca-modo' }, ...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome))),
     desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
       el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : '');
     caixa.replaceChildren();
@@ -977,7 +977,7 @@ function graficoChance(iniMs, fimMs) {
     pct: (x) => (valido(x.p) ? pos(x.p) : null), medido: (x) => x.medido,
     ticks: [0, 20, 40, 60, 80, 100].map((v) => [pos(v / 100), `${v}%`]),
     agoraPct: atual && valido(atual.p) ? pos(atual.p) : null,
-    inicial: sit.chovendo ? 'Chovendo agora. Toque num horário para ver a chance de chuva.' : 'Toque num horário para ver a chance de chuva.',
+    inicial: sit.chovendo ? 'Chovendo agora.' : '\u00a0', // a linha só ganha texto ao tocar num horário
     detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' + ({ radar: ' (chuva chegando pelo radar)', 'radar seco': ' (radar sem chuva por perto)' }[x.origem] || '') : 'sem dado'}${valido(x.mm) && x.origem !== 'radar seco' ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
   });
 }
@@ -1034,7 +1034,7 @@ function graficoTemperatura(iniMs, fimMs) {
     pontos, classe: 'temp', titulo: 'Previsão Open-Meteo', nome: 'Temperatura por hora',
     pct: (x) => (valido(x.t) ? pct(x.t) : null), ticks,
     agoraPct: atual && valido(atual.t) ? pct(atual.t) : null,
-    inicial: 'Toque num horário para ver a temperatura.',
+    inicial: '\u00a0',
     detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${valido(x.t) ? `${fmt.n(x.t, 1)} °C` : 'sem dado'}${valido(x.st) ? `, sensação de ${fmt.n(x.st, 0)} °C` : ''}`,
   });
 }
