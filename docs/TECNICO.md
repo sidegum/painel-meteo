@@ -506,7 +506,13 @@ A ordem é:
 - `configurarPuxar()`: puxar para atualizar. O indicador flutua (`transform`) sem empurrar o conteúdo. Dispara com mais de 110 px a partir do topo e é cancelado com movimento lateral acima de 40 px.
 - `html { overscroll-behavior-y: none }` desliga o "puxar" nativo do navegador. Os botões usam `touch-action: manipulation`, sem atraso de duplo toque.
 
-#- **Céu do bloco principal (1.9.4):** o `.resumo` de Hoje, Amanhã e do dia tem um canvas `.ceu-fundo` desenhado por `desenharCeu` (`js/fundo-ceu.js`).
+#- **Estilo nativo (1.9.5):** bloco de regras no fim do `app.css`.
+  - Seções `.secao` viram cartões agrupados (fundo `--sup`, cantos de 16 px), com título pequeno em maiúsculas.
+  - Os seletores Chuva/Temperatura/Céu e Restantes/Dia todo viram controles segmentados (`.troca-modo` e `.troca-horas`).
+  - Faixa de aviso e linha de temporal perdem a barra colorida lateral. Botões `.chip` e `.mais-item` perdem o contorno.
+  - A lista de dias da Semana vira um cartão.
+  - Os textos "Toque num horário…" saíram; a linha só ganha texto ao tocar.
+- **Céu do bloco principal (1.9.4):** o `.resumo` de Hoje, Amanhã e do dia tem um canvas `.ceu-fundo` desenhado por `desenharCeu` (`js/fundo-ceu.js`).
   - O desenho combina o degradê do céu pela fase (`faseDoCeu`: dia; sol baixo, de 1 h antes do pôr até 15 min depois e de 15 min antes do nascer até 1 h depois; noite), as nuvens procedurais na cobertura real (`ceu.cobertura`), o brilho do sol, estrelas e a chuva, e o tom de temporal ou de vento (`fundoDoResumo`, mesma prioridade da 1.9.3).
   - É calculado uma vez por tamanho, em cerca de 5 ms. Não tem animação. Um `ResizeObserver` redesenha quando o bloco aparece ou muda de tamanho.
   - O céu é igual nos dois temas. Por isso o bloco redefine `--texto`, `--fraco`, `--linha` e as cores de mínima, máxima e chuva para tons claros.
