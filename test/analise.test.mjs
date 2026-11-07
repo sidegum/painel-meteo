@@ -264,3 +264,18 @@ test('ancoragem: a diferença medida some em 6 h e não mexe no passado', async 
   // diferença absurda: leitura ignorada
   assert.equal(ancorarTemperatura(prev, { valor: 40, ms: t0 }, 'ecmwf_ifs', agora).delta, null);
 });
+
+test('sinaisGranizo: aviso do INMET que cita granizo, código do UKMO e ambiente só com temporal', async () => {
+  const { sinaisGranizo } = await import('../js/analise.js');
+  const tempestade = { titulo: 'Tempestade', riscos: ['Chuva entre 20 e 30 mm/h ou até 50 mm/dia, ventos intensos (40-60 km/h), e queda de granizo.'] };
+  assert.equal(sinaisGranizo({ avisos: [tempestade] }).fonte, 'inmet');
+  assert.equal(sinaisGranizo({ avisos: [{ titulo: 'Baixa Umidade', riscos: ['Umidade entre 30% e 20%.'] }] }), null);
+  assert.equal(sinaisGranizo({ codigosUkmo: [3, 95, 96] }).fonte, 'modelo');
+  assert.equal(sinaisGranizo({ codigosUkmo: [95, 97] }), null); // trovoada sem granizo
+  // ambiente: precisa de temporal moderado ou alto, CAPE alto e nível de congelamento baixo
+  assert.equal(sinaisGranizo({ cape: 2500, congelamento: 3800, nivelTemporal: 'moderado' }).fonte, 'ambiente');
+  assert.equal(sinaisGranizo({ cape: 2500, congelamento: 3800, nivelTemporal: 'baixo' }), null);
+  assert.equal(sinaisGranizo({ cape: 2500, congelamento: 4600, nivelTemporal: 'alto' }), null);
+  assert.equal(sinaisGranizo({ cape: 1500, congelamento: 3800, nivelTemporal: 'alto' }), null);
+  assert.equal(sinaisGranizo({ cape: null, congelamento: null, nivelTemporal: 'alto' }), null);
+});
