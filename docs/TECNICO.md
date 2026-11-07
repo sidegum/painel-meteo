@@ -506,7 +506,13 @@ A ordem é:
 - `configurarPuxar()`: puxar para atualizar. O indicador flutua (`transform`) sem empurrar o conteúdo. Dispara com mais de 110 px a partir do topo e é cancelado com movimento lateral acima de 40 px.
 - `html { overscroll-behavior-y: none }` desliga o "puxar" nativo do navegador. Os botões usam `touch-action: manipulation`, sem atraso de duplo toque.
 
-#- **Estilo nativo (1.9.5):** bloco de regras no fim do `app.css`.
+#- **Granizo (1.9.6):** `sinaisGranizo` (analise.js, regras em `REGRAS.granizo`, testado) entra no cartão de temporal como "Risco … de temporal e granizo possível". O motivo aparece ao tocar. As fontes, da mais forte para a mais fraca:
+  1. Um aviso do INMET válido no dia cujo texto cita granizo. Os avisos de Tempestade dizem "queda de granizo".
+  2. Código de tempo 96 ou 99 do UKMO. Pela documentação da Open-Meteo, os códigos 96 e 99 só vêm de modelos com previsão explícita de granizo (ICON, UKMO). Os ECMWF só informam 95 e 97.
+  3. Ambiente favorável, só com risco de temporal moderado ou alto: CAPE ≥ 2000 J/kg e nível de congelamento ≤ 4200 m nas horas de CAPE alto.
+
+  Para isso, `VARS_HORA` ganhou `weather_code` e `freezing_level_height`. Com granizo, o cartão aparece no mínimo como risco moderado. O cartão também passou a listar só os avisos válidos no dia dele (`avisosDia`).
+- **Estilo nativo (1.9.5):** bloco de regras no fim do `app.css`.
   - Seções `.secao` viram cartões agrupados (fundo `--sup`, cantos de 16 px), com título pequeno em maiúsculas.
   - Os seletores Chuva/Temperatura/Céu e Restantes/Dia todo viram controles segmentados (`.troca-modo` e `.troca-horas`).
   - Faixa de aviso e linha de temporal perdem a barra colorida lateral. Botões `.chip` e `.mais-item` perdem o contorno.

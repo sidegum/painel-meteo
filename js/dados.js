@@ -91,6 +91,7 @@ export const VARS_HORA = [
   'precipitation', 'precipitation_probability', 'wind_speed_10m', 'wind_gusts_10m', 'wind_direction_10m',
   'temperature_2m', 'apparent_temperature', 'relative_humidity_2m', 'dew_point_2m', 'pressure_msl',
   'cloud_cover', 'cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high', 'visibility', 'cape', 'uv_index', 'is_day',
+  'weather_code', 'freezing_level_height', // granizo (sinaisGranizo): código 96/99 do UKMO e nível de congelamento
 ];
 const VARS_DIA = ['sunrise', 'sunset', 'uv_index_max'];
 

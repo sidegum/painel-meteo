@@ -5,7 +5,7 @@ import {
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
-  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor,
+  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
 } from './analise.js';
 import {
   buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
@@ -16,7 +16,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.5';
+const VERSAO = '1.9.6';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -1071,9 +1071,10 @@ function iconeCeu(ceu) {
  * Ao tocar: horário de cada aviso do INMET do local (o mais grave primeiro), o motivo pela previsão e a orientação.
  */
 function cartaoTemporal(risco) {
-  const avisos = avisosOrdenados();
+  const avisos = risco.avisosDia ?? avisosOrdenados(); // só os avisos válidos no dia do cartão
   const motivos = risco.motivos.filter((m) => !/aviso de tempestade do INMET/.test(m));
   const abrir = () => mostrarInfo(`Risco ${risco.nivel} de temporal`,
+    risco.granizo ? el('p', {}, el('b', { text: 'Granizo possível. ' }), risco.granizo.texto) : null,
     avisos.length ? el('ul', { class: 'lt-avisos' }, ...avisos.map((x) => el('li', {},
       el('b', { text: `${x.titulo}${x.severidade ? ` (${x.severidade.toLowerCase()})` : ''}` }), el('br'), periodoAviso(x) || 'horário não informado'))) : null,
     motivos.length ? el('p', { text: `Pela previsão: ${motivos.join('; ')}.` }) : null,
@@ -1081,7 +1082,7 @@ function cartaoTemporal(risco) {
     avisos.length ? linkExterno('https://alertas2.inmet.gov.br/', 'Avisos no INMET') : null);
   return el('button', { type: 'button', class: `linha-temporal ${risco.nivel}`, onclick: abrir },
     svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })),
-    el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal`, el('small', { text: `· ${risco.aviso ? 'INMET' : 'Previsão'}` })));
+    el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal${risco.granizo ? ' e granizo possível' : ''}`, el('small', { text: `· ${risco.aviso || risco.granizo?.fonte === 'inmet' ? 'INMET' : 'Previsão'}` })));
 }
 
 // Avisos do INMET válidos para o local, do mais grave ao menos grave; na mesma gravidade, o que começa antes.
@@ -1418,8 +1419,8 @@ function dadosPressao(pr = undefined) {
 function avaliarRisco(a, chovendo, chegando) {
   const p = estado.prev, mods = modelosAtivos();
   const maxNoDia = (v) => maximo(a.idx.map((i) => consensoHorario(p, v, mods).med[i]));
-  const avisos = alertasDoLocal().filter((x) => /tempestade|granizo|vendaval/i.test(x.titulo || '')
-    && (!x.inicio || x.inicio.slice(0, 10) <= a.data) && (!x.fim || x.fim.slice(0, 10) >= a.data));
+  const doDia = alertasDoLocal().filter((x) => (!x.inicio || x.inicio.slice(0, 10) <= a.data) && (!x.fim || x.fim.slice(0, 10) >= a.data));
+  const avisos = doDia.filter((x) => /tempestade|granizo|vendaval/i.test(x.titulo || ''));
   const ordem = ['perigo potencial', 'perigo', 'grande perigo'];
   const grau = (x) => ordem.indexOf(String(x.severidade || '').trim().toLowerCase());
   const maisGrave = avisos.sort((x, y) => grau(y) - grau(x))[0] || null;
@@ -1431,7 +1432,19 @@ function avaliarRisco(a, chovendo, chegando) {
     d3Pressao: a.diaIndice === 0 ? dadosPressao().v3?.delta ?? null : null,
     aviso,
   });
-  return r && { ...r, aviso: maisGrave };
+  // granizo: aviso do INMET que o cita, código de granizo do UKMO ou ambiente favorável (REGRAS.granizo)
+  const capeH = consensoHorario(p, 'cape', mods).med, congH = consensoHorario(p, 'freezing_level_height', mods).med;
+  const horasCape = a.idx.filter((i) => valido(capeH[i]) && capeH[i] >= REGRAS.granizo.cape);
+  const ukmo = p.modelos.ukmo_global_deterministic_10km?.vars.weather_code;
+  const granizo = sinaisGranizo({
+    avisos: doDia, codigosUkmo: ukmo ? a.idx.map((i) => ukmo[i]).filter(valido) : [],
+    cape: maxNoDia('cape'), congelamento: minimo(horasCape.map((i) => congH[i]).filter(valido)), nivelTemporal: r?.nivel ?? null,
+  });
+  if (!r && !granizo) return null;
+  // granizo sempre vem com tempestade: o cartão aparece pelo menos como risco moderado
+  const base = r && r.nivel !== 'baixo' ? r : { nivel: 'moderado', pontos: r?.pontos ?? 0, motivos: r?.motivos ?? [] };
+  const grauAv = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
+  return { ...(granizo ? base : r), aviso: maisGrave, granizo, avisosDia: [...doDia].sort((x, y) => grauAv(y) - grauAv(x)) };
 }
 
 /**
@@ -1931,7 +1944,7 @@ function renderModelos() {
 }
 
 function nomeVar(v) {
-  return { precipitation_probability: 'probabilidade', wind_gusts_10m: 'rajadas', visibility: 'visibilidade', cape: 'CAPE', uv_index: 'UV', cloud_cover_low: 'nuvens baixas', cloud_cover_mid: 'nuvens médias', cloud_cover_high: 'nuvens altas', precipitation: 'chuva', pressure_msl: 'pressão', is_day: 'dia/noite', apparent_temperature: 'sensação', dew_point_2m: 'orvalho', relative_humidity_2m: 'umidade' }[v] || v;
+  return { precipitation_probability: 'probabilidade', wind_gusts_10m: 'rajadas', visibility: 'visibilidade', cape: 'CAPE', uv_index: 'UV', weather_code: 'código do tempo', freezing_level_height: 'nível de congelamento', cloud_cover_low: 'nuvens baixas', cloud_cover_mid: 'nuvens médias', cloud_cover_high: 'nuvens altas', precipitation: 'chuva', pressure_msl: 'pressão', is_day: 'dia/noite', apparent_temperature: 'sensação', dew_point_2m: 'orvalho', relative_humidity_2m: 'umidade' }[v] || v;
 }
 
 /**
