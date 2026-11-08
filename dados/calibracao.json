@@ -1,6 +1,6 @@
 {
  "versao": 1,
- "geradoEm": "2026-11-07T16:40:20.777Z",
+ "geradoEm": "2026-11-08T16:50:26.278Z",
  "estacao": {
   "id": "A884",
   "nome": "Campo Bom",
@@ -29,33 +29,33 @@
  "cobertura": {
   "ecmwf_ifs": {
    "ini": "2022-01-01",
-   "fim": "2026-11-06",
-   "dias": 1771
+   "fim": "2026-11-07",
+   "dias": 1772
   },
   "ecmwf_aifs025_single": {
    "ini": "2025-02-18",
-   "fim": "2026-11-06",
-   "dias": 627
+   "fim": "2026-11-07",
+   "dias": 628
   },
   "ukmo_global_deterministic_10km": {
    "ini": "2022-03-01",
-   "fim": "2026-11-06",
-   "dias": 1712
+   "fim": "2026-11-07",
+   "dias": 1713
   },
   "ecmwf_ifs025": {
    "ini": "2024-02-04",
-   "fim": "2026-11-06",
-   "dias": 1007
+   "fim": "2026-11-07",
+   "dias": 1008
   },
   "ncep_gfs_seamless": {
    "ini": "2021-03-24",
-   "fim": "2026-11-06",
-   "dias": 2054
+   "fim": "2026-11-07",
+   "dias": 2055
   },
   "dwd_icon_global": {
    "ini": "2022-11-17",
-   "fim": "2026-11-06",
-   "dias": 1451
+   "fim": "2026-11-07",
+   "dias": 1452
   }
  },
  "pesos": {
@@ -409,8 +409,8 @@
    },
    "periodo": {
     "ini": "2021-03-01",
-    "fim": "2026-11-06",
-    "diasComMedicao": 2077
+    "fim": "2026-11-07",
+    "diasComMedicao": 2078
    },
    "fontes": {
     "medicoes": "METAR SBCO Canoas, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
@@ -436,7 +436,7 @@
       "n": 378,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.55,
+      "maeTmax": 1.54,
       "maeRajada": null
      },
      "4": {
@@ -487,7 +487,7 @@
       "n": 604,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.68,
+      "maeTmax": 1.69,
       "maeRajada": null
      }
     },
@@ -497,35 +497,35 @@
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.28,
-      "maeRajada": 22.07
+      "maeRajada": 22.08
      },
      "2": {
       "n": 698,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.43,
+      "maeTmax": 1.42,
       "maeRajada": 11.2
      },
      "3": {
       "n": 658,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.51,
+      "maeTmax": 1.5,
       "maeRajada": 25.22
      },
      "4": {
       "n": 606,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.69,
-      "maeRajada": 11.73
+      "maeTmax": 1.68,
+      "maeRajada": 11.74
      },
      "5": {
       "n": 652,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.93,
-      "maeRajada": 21.99
+      "maeRajada": 21.97
      }
     }
    }
@@ -540,8 +540,8 @@
    },
    "periodo": {
     "ini": "2021-03-01",
-    "fim": "2026-11-06",
-    "diasComMedicao": 1920
+    "fim": "2026-11-07",
+    "diasComMedicao": 1921
    },
    "fontes": {
     "medicoes": "METAR SBPA Porto Alegre aeroporto, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
@@ -553,7 +553,7 @@
       "n": 383,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.21,
+      "maeTmax": 1.2,
       "maeRajada": null
      },
      "2": {
@@ -567,7 +567,7 @@
       "n": 379,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.47,
+      "maeTmax": 1.46,
       "maeRajada": null
      },
      "4": {
@@ -581,7 +581,7 @@
       "n": 375,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.75,
+      "maeTmax": 1.74,
       "maeRajada": null
      }
     },
@@ -590,7 +590,7 @@
       "n": 623,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.25,
+      "maeTmax": 1.24,
       "maeRajada": null
      },
      "2": {
@@ -628,27 +628,27 @@
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.18,
-      "maeRajada": 12.63
+      "maeRajada": 12.64
      },
      "2": {
       "n": 647,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.33,
-      "maeRajada": 12.37
+      "maeRajada": 12.39
      },
      "3": {
       "n": 574,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.43,
-      "maeRajada": 12.69
+      "maeTmax": 1.42,
+      "maeRajada": 12.72
      },
      "4": {
       "n": 567,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.59,
+      "maeTmax": 1.58,
       "maeRajada": 13.1
      },
      "5": {
@@ -656,7 +656,7 @@
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.85,
-      "maeRajada": 13.13
+      "maeRajada": 13.14
      }
     }
    }
