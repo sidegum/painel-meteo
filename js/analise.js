@@ -103,6 +103,17 @@ export const REGRAS = {
     aviso: { 'perigo potencial': 'moderado', perigo: 'alto', 'grande perigo': 'alto' },
     niveis: { moderado: 2, alto: 4 },
   },
+  // Granizo (sinaisGranizo). Fontes, da mais forte para a mais fraca:
+  // 1) aviso do INMET para o dia cujo texto cita granizo (os de Tempestade citam "queda de granizo");
+  // 2) código de tempo 96 ou 99 ("trovoada com granizo") do UKMO, que, segundo a documentação da Open-Meteo,
+  //    é um dos modelos com previsão explícita de granizo (os ECMWF só informam 95 e 97);
+  // 3) ambiente favorável, só com risco de temporal moderado ou alto: energia (CAPE) alta e nível de
+  //    congelamento baixo, que deixa o granizo chegar ao chão sem derreter.
+  granizo: {
+    codigos: [96, 99],
+    cape: 2000,                // J/kg
+    congelamentoMaxM: 4200,    // m acima do nível do mar
+  },
 };
 
 export const MODELOS = {
@@ -1384,4 +1395,24 @@ export function riscoTemporal({ prob = null, chovendo = false, chegando = false,
   let nivel = pontos >= T.niveis.alto ? 'alto' : pontos >= T.niveis.moderado ? 'moderado' : 'baixo';
   if (nivelAviso) { nivel = nivelAviso; motivos.unshift(`aviso de tempestade do INMET em vigor (${String(aviso).toLowerCase()})`); }
   return { nivel, pontos, motivos };
+}
+
+/**
+ * Sinais de granizo no dia (regras e fontes em REGRAS.granizo). Não é previsão própria de granizo: junta só
+ * o que as fontes dizem. Sem sinal, null.
+ * @param {{avisos?:object[], codigosUkmo?:number[], cape?:number|null, congelamento?:number|null, nivelTemporal?:string|null}} d
+ *   avisos: avisos do INMET do local válidos no dia; codigosUkmo: códigos de tempo horários do UKMO no dia;
+ *   cape: máximo do dia; congelamento: menor nível de congelamento (m) nas horas de CAPE alto; nivelTemporal: riscoTemporal().nivel
+ * @returns {{fonte:'inmet'|'modelo'|'ambiente', texto:string}|null}
+ */
+export function sinaisGranizo({ avisos = [], codigosUkmo = [], cape = null, congelamento = null, nivelTemporal = null } = {}) {
+  const G = REGRAS.granizo;
+  const cita = (a) => /granizo/i.test([a.titulo, a.descricao, ...(a.riscos || [])].join(' '));
+  const aviso = avisos.find(cita);
+  if (aviso) return { fonte: 'inmet', texto: `O aviso de ${String(aviso.titulo || 'tempestade').toLowerCase()} do INMET cita queda de granizo.` };
+  if (codigosUkmo.some((c) => G.codigos.includes(c))) return { fonte: 'modelo', texto: 'O modelo do Met Office (UKMO), que prevê granizo diretamente, indica trovoada com granizo.' };
+  if ((nivelTemporal === 'moderado' || nivelTemporal === 'alto') && valido(cape) && cape >= G.cape && valido(congelamento) && congelamento <= G.congelamentoMaxM) {
+    return { fonte: 'ambiente', texto: `Energia para tempestades alta (${Math.round(cape)} J/kg) e nível de congelamento baixo (${(congelamento / 1000).toFixed(1).replace('.', ',')} km).` };
+  }
+  return null;
 }

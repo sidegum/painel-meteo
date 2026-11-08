@@ -772,3 +772,49 @@ button.globo-rotulo { cursor: pointer; }
   .cabeca > .topo, main, .faixa-aviso { max-width: 1440px; }
   .mapa { height: 620px; }
 }
+
+/* Bloco principal com o céu desenhado atrás (js/fundo-ceu.js, condição em fundoDoResumo e faseDoCeu).
+   O céu é o mesmo nos temas claro e escuro, então o texto do bloco é sempre claro: as cores do tema são
+   redefinidas só dentro dele. Temperatura grande e fina; o resto como antes. */
+.resumo[data-fundo] {
+  --texto: #FFFFFF; --fraco: rgba(255, 255, 255, .8); --linha: rgba(255, 255, 255, .28);
+  --fria: #D3E6FF; --quente: #FFD9C7; --chuva-txt: #DDF0FF; --chuva: #CFE8FF; --fundo: rgba(255, 255, 255, .0);
+  position: relative; isolation: isolate; overflow: hidden; margin: 6px 0 4px; padding: 14px 16px 14px; border-radius: 18px;
+  background: #4F7DB3; color: var(--texto); text-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+}
+.resumo[data-fundo] > .ceu-fundo { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+.resumo[data-fundo] .resumo-agora b { font-size: 64px; font-weight: 300; letter-spacing: -.04em; }
+.resumo[data-fundo] .resumo-agora .sens-agora b { font-size: 22px; font-weight: 500; }
+.resumo[data-fundo] .resumo-ceu .cond { font-weight: 600; }
+.resumo[data-fundo] .confianca { border: 0; background: rgba(255, 255, 255, .18); color: var(--texto); text-shadow: none; }
+:root[data-visual="a"] .resumo[data-fundo] .resumo-temp { border-color: var(--linha); }
+.resumo[data-fundo] .icone-ceu .tr { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .18)); }
+
+/* Estilo nativo (1.9.5): menos "cara de painel gerado". Seções viram cartões agrupados com título pequeno e
+   discreto; seletores viram controles segmentados; avisos e faixas sem barra colorida lateral; botões sem contorno.
+   Regras finais do arquivo: valem para o app todo (o Globo tem estilo próprio e não usa estas classes). */
+.secao { margin: 12px 0; padding: 14px 16px 12px; border: 0; border-radius: 16px; background: var(--sup); overflow: clip; }
+.secao h2 { font-size: 13px; font-weight: 620; font-stretch: 100%; letter-spacing: .03em; text-transform: uppercase; color: var(--fraco); margin: 0 0 10px; }
+.secao h3 { font-size: 15px; }
+.secao .secao { padding: 0; margin: 14px 0 0; background: none; border-radius: 0; }
+.secao .mapa { margin-left: -16px; margin-right: -16px; border-radius: 0; }
+.faixa-aviso { border-left: 0; border-radius: 12px; }
+.linha-temporal, .linha-temporal.alto { border-left: 0; border-radius: 12px; padding: 10px 12px; margin: 8px 0 4px; font-size: 14px; background: var(--sup); }
+.linha-temporal.alto { background: var(--alerta-fundo); }
+.chip, .mais-item { border: 0; background: var(--sup2); border-radius: 12px; }
+.chip[aria-pressed="true"] { background: var(--texto); color: var(--fundo); }
+.mais-item[aria-current="page"] { box-shadow: inset 0 0 0 1.5px var(--texto); }
+/* controle segmentado: grupo com fundo, opção escolhida destacada; sem contornos */
+.troca { gap: 8px; align-items: center; justify-content: space-between; }
+.troca-modo, .troca-horas { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--sup); flex: none; }
+.troca button { border: 0; border-radius: 8px; min-height: 32px; padding: 0 10px; color: var(--fraco); background: none; font-weight: 560; }
+.troca button[aria-pressed="true"] { color: var(--texto); background: var(--sup2); font-weight: 650; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.troca-horas { border: 0; margin-left: 0; }
+.troca-horas button[aria-pressed="true"] { background: var(--sup2); }
+/* lista de dias da Semana como um cartão, linhas com divisória recuada */
+.dias { margin: 0; border-radius: 16px; background: var(--sup); overflow: hidden; }
+.dia { border-bottom: 0; }
+.dia + .dia { box-shadow: inset 0 1px 0 var(--linha); }
+@media (min-width: 1100px) {
+  .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { column-gap: 16px; }
+}

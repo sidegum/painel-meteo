@@ -5,7 +5,7 @@ import {
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
-  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor,
+  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
 } from './analise.js';
 import {
   buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
@@ -13,9 +13,10 @@ import {
 } from './dados.js';
 import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor } from './ui.js';
 import { criarFaixa } from './faixa.js';
+import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.1';
+const VERSAO = '1.9.6';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -369,7 +370,7 @@ function sensacaoAgora(daLeitura = false) {
     const v = valido(e) || ta.valor >= 15 ? sensacaoTermica(ta.valor, e, valido(vento) ? vento : ta.valor >= 15 ? 0 : null) : null;
     if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome} (leitura ${fmt.idade(t.ms)})${ta.ajuste ? ', com a temperatura levada até agora' : ''}` };
   }
-  const p = estado.prev;
+  const p = estado.prev, agora = Date.now();
   const i = p ? p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000) : -1;
   const v = i < 0 ? null : tempHora(p, 'apparent_temperature', i, modelosAtivos());
   return valido(v) ? { valor: v, medida: false, title: 'Prevista para esta hora' } : null;
@@ -595,10 +596,16 @@ function ceuAgora() {
   // entre os METAR válidos dentro da distância, o boletim mais recente (o céu muda mais rápido que a distância pesa)
   const { escolhida, outras } = escolherFonte(fontesNormalizadas(), 'nuvens', pt.lat, pt.lon, agora, REGRAS.ceuMedido.idadeMin);
   const medido = [escolhida, ...outras].filter((c) => c?.ok && c.distancia <= REGRAS.ceuMedido.distanciaKm).sort((x, y) => y.ms - x.ms)[0] || null;
-  const cobertura = medido ? medido.valor : (i < 0 ? null : consensoHorario(p, 'cloud_cover', mods).med[i]);
+  const modelo = (v) => (i < 0 ? null : consensoHorario(p, v, mods).med[i]);
+  // O METAR só informa nuvens até alguns km de altura (CAVOK e NSC não dizem nada acima de 1.500 m). As nuvens
+  // médias e altas vêm dos modelos, e vale a maior cobertura: sem isso, um céu de nuvens altas virava "Ensolarado".
+  const acima = medido ? maximo([modelo('cloud_cover_mid'), modelo('cloud_cover_high')].filter(valido)) : null;
+  const cobertura = medido ? Math.max(medido.valor, valido(acima) ? acima : 0) : modelo('cloud_cover');
   const ceu = condicaoCeu([cobertura], [valido(dia) ? Math.round(dia) : null], null);
   if (!ceu) return null;
-  const origem = medido ? `nuvens medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}` : 'nuvens pela previsão para esta hora';
+  const origem = !medido ? 'nuvens pela previsão para esta hora'
+    : valido(acima) && acima > medido.valor ? `nuvens baixas medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}; médias e altas pela previsão`
+      : `nuvens medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}`;
   return { ...ceu, origem };
 }
 
@@ -730,6 +737,7 @@ function renderSemPrevisao() {
 // ------------------------------------------------------------------ primeira tela (Hoje e Amanhã)
 
 function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
+  for (const t of alvo.querySelectorAll('canvas.ceu-fundo')) observadorCeu?.unobserve(t);
   const p = estado.prev;
   const a = analisarDia(data, diaIndice, desdeAgora);
   const av = a.av;
@@ -763,7 +771,17 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
 
   const botaoConf = el('button', { type: 'button', class: 'confianca', 'data-n': av.confianca.geral, onclick: () => explicarConfianca(a) },
     el('span', { class: 'nivel', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), `Confiança ${av.confianca.geral}`);
-  const resumo = el('div', { class: 'resumo', 'data-ceu': ceu?.nivel || 'sem', 'data-chuva': ceu?.chuva || (temChuva ? 'pouca' : 'nao') },
+  // Risco de temporal (moderado ou alto): um cartão só, com a fonte (INMET quando há aviso de tempestade)
+  // e os horários dos avisos do local ao tocar. Os avisos do INMET em si ficam na aba Avisos (menu Ver mais).
+  const risco = avaliarRisco(a, chovendo, !!chegando);
+  const fundo = fundoDoResumo({ ceu, chovendo, chegando: !!chegando, risco, diaIndice, rajada: av.rajada?.mediana ?? a.rajadaPico?.valor });
+  const telaCeu = el('canvas', { class: 'ceu-fundo', 'aria-hidden': 'true' });
+  pintarCeu(telaCeu, {
+    cobertura: ceu?.cobertura ?? null, fase: faseDoCeu(ceu, diaIndice, data),
+    chuva: fundo === 'chuva', temporal: fundo === 'temporal', vento: fundo === 'vento', semente: Number(data.replaceAll('-', '')) % 100000,
+  });
+  const resumo = el('div', { class: 'resumo', 'data-fundo': fundo, 'data-ceu': ceu?.nivel || 'sem', 'data-chuva': ceu?.chuva || (temChuva ? 'pouca' : 'nao') },
+    telaCeu,
     el('div', { class: 'resumo-topo' }, el('p', { class: 'resumo-quando', text: quando }), botaoConf),
     diaIndice === 0 ? el('div', { class: 'resumo-agora', id: 'agora-hoje', 'aria-hidden': 'true' }) : null,
     el('div', { class: 'resumo-ceu' },
@@ -778,9 +796,6 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
       el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
 
-  // Risco de temporal (moderado ou alto): um cartão só, com a fonte (INMET quando há aviso de tempestade)
-  // e os horários dos avisos do local ao tocar. Os avisos do INMET em si ficam na aba Avisos (menu Ver mais).
-  const risco = avaliarRisco(a, chovendo, !!chegando);
   const filhos = [resumo];
   if (risco && risco.nivel !== 'baixo') filhos.push(cartaoTemporal(risco));
 
@@ -805,8 +820,8 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     // hoje: escolher entre as horas que faltam e o dia todo (a escolha fica salva no aparelho)
     const todas = desdeAgora && prefs.ler('horasTodas', false);
     const iniUsado = todas ? iniDia : ini;
-    botoes.replaceChildren(...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
-      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome)),
+    botoes.replaceChildren(el('span', { class: 'troca-modo' }, ...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome))),
     desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
       el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : '');
     caixa.replaceChildren();
@@ -817,6 +832,51 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   filhos.push(botoes, caixa);
   alvo.replaceChildren(...filhos);
   desenharModo();
+}
+
+/**
+ * Fundo do bloco principal conforme o tempo, com os mesmos dados que o bloco mostra (nada novo é inferido):
+ * temporal (cartão de risco moderado ou alto; hoje, só com chuva agora ou chegando, porque o quadro mostra o céu
+ * de agora) > chuva (chovendo ou chegando agora; nos outros dias, chuva provável) > vento (rajada forte ou muito forte, REGRAS.rajadaClasses) > céu (noite, sol, sol com nuvens, nublado).
+ * @returns {'temporal'|'chuva'|'vento'|'sol'|'sol-nuvens'|'nublado'|'noite'|'noite-nuvens'|'sem'}
+ */
+function fundoDoResumo({ ceu, chovendo, chegando, risco, diaIndice, rajada }) {
+  // hoje o quadro mostra o céu de agora: o temporal só pinta o fundo quando a chuva já está aqui ou chegando
+  const chuvaAgora = chovendo || chegando;
+  if (risco && risco.nivel !== 'baixo' && (diaIndice > 0 || chuvaAgora)) return 'temporal';
+  if (chuvaAgora || (diaIndice > 0 && ceu?.chuva === 'provavel')) return 'chuva';
+  if (['fortes', 'muito fortes'].includes(classeRajada(rajada))) return 'vento';
+  if (!ceu) return 'sem';
+  if (ceu.noite) return ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'noite' : 'noite-nuvens';
+  return ceu.nivel === 'limpo' ? 'sol' : ceu.nivel === 'nublado' ? 'nublado' : 'sol-nuvens';
+}
+
+// Fase do céu desenhado: noite pela condição mostrada; hoje, "sol baixo" da hora antes do pôr do sol até
+// 15 min depois e de 15 min antes do nascer até 1 h depois. Nos outros dias, o céu do dia.
+function faseDoCeu(ceu, diaIndice, data) {
+  if (ceu?.noite) return 'noite';
+  if (diaIndice !== 0) return 'dia';
+  const d = estado.prev.diario, k = d.datas.indexOf(data), agora = Date.now(), min = 60000;
+  const nascer = d.nascer[k], por = d.por[k];
+  if ((valido(por) && agora >= por - 60 * min && agora <= por + 15 * min) || (valido(nascer) && agora >= nascer - 15 * min && agora <= nascer + 60 * min)) return 'baixo';
+  return 'dia';
+}
+
+// O céu é desenhado quando o bloco ganha tamanho e de novo só se a largura ou a altura mudar
+// (aba escondida tem tamanho zero; ao aparecer, o observador desenha).
+const ceusDesenhados = new WeakMap();
+const observadorCeu = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entradas) => {
+  for (const e of entradas) {
+    const tela = e.target, info = ceusDesenhados.get(tela);
+    const w = Math.round(e.contentRect.width), h = Math.round(e.contentRect.height);
+    if (!info || !w || !h || (info.w === w && info.h === h)) continue;
+    info.w = w; info.h = h;
+    desenharCeu(tela, info.c);
+  }
+});
+function pintarCeu(tela, c) {
+  ceusDesenhados.set(tela, { c, w: 0, h: 0 });
+  observadorCeu?.observe(tela);
 }
 
 // Quanto ainda deve chover: soma a mediana ponderada dos modelos a partir de agora (só o que falta da hora
@@ -917,7 +977,7 @@ function graficoChance(iniMs, fimMs) {
     pct: (x) => (valido(x.p) ? pos(x.p) : null), medido: (x) => x.medido,
     ticks: [0, 20, 40, 60, 80, 100].map((v) => [pos(v / 100), `${v}%`]),
     agoraPct: atual && valido(atual.p) ? pos(atual.p) : null,
-    inicial: sit.chovendo ? 'Chovendo agora. Toque num horário para ver a chance de chuva.' : 'Toque num horário para ver a chance de chuva.',
+    inicial: sit.chovendo ? 'Chovendo agora.' : '\u00a0', // a linha só ganha texto ao tocar num horário
     detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' + ({ radar: ' (chuva chegando pelo radar)', 'radar seco': ' (radar sem chuva por perto)' }[x.origem] || '') : 'sem dado'}${valido(x.mm) && x.origem !== 'radar seco' ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
   });
 }
@@ -974,7 +1034,7 @@ function graficoTemperatura(iniMs, fimMs) {
     pontos, classe: 'temp', titulo: 'Previsão Open-Meteo', nome: 'Temperatura por hora',
     pct: (x) => (valido(x.t) ? pct(x.t) : null), ticks,
     agoraPct: atual && valido(atual.t) ? pct(atual.t) : null,
-    inicial: 'Toque num horário para ver a temperatura.',
+    inicial: '\u00a0',
     detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${valido(x.t) ? `${fmt.n(x.t, 1)} °C` : 'sem dado'}${valido(x.st) ? `, sensação de ${fmt.n(x.st, 0)} °C` : ''}`,
   });
 }
@@ -1011,9 +1071,10 @@ function iconeCeu(ceu) {
  * Ao tocar: horário de cada aviso do INMET do local (o mais grave primeiro), o motivo pela previsão e a orientação.
  */
 function cartaoTemporal(risco) {
-  const avisos = avisosOrdenados();
+  const avisos = risco.avisosDia ?? avisosOrdenados(); // só os avisos válidos no dia do cartão
   const motivos = risco.motivos.filter((m) => !/aviso de tempestade do INMET/.test(m));
   const abrir = () => mostrarInfo(`Risco ${risco.nivel} de temporal`,
+    risco.granizo ? el('p', {}, el('b', { text: 'Granizo possível. ' }), risco.granizo.texto) : null,
     avisos.length ? el('ul', { class: 'lt-avisos' }, ...avisos.map((x) => el('li', {},
       el('b', { text: `${x.titulo}${x.severidade ? ` (${x.severidade.toLowerCase()})` : ''}` }), el('br'), periodoAviso(x) || 'horário não informado'))) : null,
     motivos.length ? el('p', { text: `Pela previsão: ${motivos.join('; ')}.` }) : null,
@@ -1021,7 +1082,7 @@ function cartaoTemporal(risco) {
     avisos.length ? linkExterno('https://alertas2.inmet.gov.br/', 'Avisos no INMET') : null);
   return el('button', { type: 'button', class: `linha-temporal ${risco.nivel}`, onclick: abrir },
     svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })),
-    el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal`, el('small', { text: `· ${risco.aviso ? 'INMET' : 'Previsão'}` })));
+    el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal${risco.granizo ? ' e granizo possível' : ''}`, el('small', { text: `· ${risco.aviso || risco.granizo?.fonte === 'inmet' ? 'INMET' : 'Previsão'}` })));
 }
 
 // Avisos do INMET válidos para o local, do mais grave ao menos grave; na mesma gravidade, o que começa antes.
@@ -1358,8 +1419,8 @@ function dadosPressao(pr = undefined) {
 function avaliarRisco(a, chovendo, chegando) {
   const p = estado.prev, mods = modelosAtivos();
   const maxNoDia = (v) => maximo(a.idx.map((i) => consensoHorario(p, v, mods).med[i]));
-  const avisos = alertasDoLocal().filter((x) => /tempestade|granizo|vendaval/i.test(x.titulo || '')
-    && (!x.inicio || x.inicio.slice(0, 10) <= a.data) && (!x.fim || x.fim.slice(0, 10) >= a.data));
+  const doDia = alertasDoLocal().filter((x) => (!x.inicio || x.inicio.slice(0, 10) <= a.data) && (!x.fim || x.fim.slice(0, 10) >= a.data));
+  const avisos = doDia.filter((x) => /tempestade|granizo|vendaval/i.test(x.titulo || ''));
   const ordem = ['perigo potencial', 'perigo', 'grande perigo'];
   const grau = (x) => ordem.indexOf(String(x.severidade || '').trim().toLowerCase());
   const maisGrave = avisos.sort((x, y) => grau(y) - grau(x))[0] || null;
@@ -1371,7 +1432,19 @@ function avaliarRisco(a, chovendo, chegando) {
     d3Pressao: a.diaIndice === 0 ? dadosPressao().v3?.delta ?? null : null,
     aviso,
   });
-  return r && { ...r, aviso: maisGrave };
+  // granizo: aviso do INMET que o cita, código de granizo do UKMO ou ambiente favorável (REGRAS.granizo)
+  const capeH = consensoHorario(p, 'cape', mods).med, congH = consensoHorario(p, 'freezing_level_height', mods).med;
+  const horasCape = a.idx.filter((i) => valido(capeH[i]) && capeH[i] >= REGRAS.granizo.cape);
+  const ukmo = p.modelos.ukmo_global_deterministic_10km?.vars.weather_code;
+  const granizo = sinaisGranizo({
+    avisos: doDia, codigosUkmo: ukmo ? a.idx.map((i) => ukmo[i]).filter(valido) : [],
+    cape: maxNoDia('cape'), congelamento: minimo(horasCape.map((i) => congH[i]).filter(valido)), nivelTemporal: r?.nivel ?? null,
+  });
+  if (!r && !granizo) return null;
+  // granizo sempre vem com tempestade: o cartão aparece pelo menos como risco moderado
+  const base = r && r.nivel !== 'baixo' ? r : { nivel: 'moderado', pontos: r?.pontos ?? 0, motivos: r?.motivos ?? [] };
+  const grauAv = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
+  return { ...(granizo ? base : r), aviso: maisGrave, granizo, avisosDia: [...doDia].sort((x, y) => grauAv(y) - grauAv(x)) };
 }
 
 /**
@@ -1871,7 +1944,7 @@ function renderModelos() {
 }
 
 function nomeVar(v) {
-  return { precipitation_probability: 'probabilidade', wind_gusts_10m: 'rajadas', visibility: 'visibilidade', cape: 'CAPE', uv_index: 'UV', cloud_cover_low: 'nuvens baixas', cloud_cover_mid: 'nuvens médias', cloud_cover_high: 'nuvens altas', precipitation: 'chuva', pressure_msl: 'pressão', is_day: 'dia/noite', apparent_temperature: 'sensação', dew_point_2m: 'orvalho', relative_humidity_2m: 'umidade' }[v] || v;
+  return { precipitation_probability: 'probabilidade', wind_gusts_10m: 'rajadas', visibility: 'visibilidade', cape: 'CAPE', uv_index: 'UV', weather_code: 'código do tempo', freezing_level_height: 'nível de congelamento', cloud_cover_low: 'nuvens baixas', cloud_cover_mid: 'nuvens médias', cloud_cover_high: 'nuvens altas', precipitation: 'chuva', pressure_msl: 'pressão', is_day: 'dia/noite', apparent_temperature: 'sensação', dew_point_2m: 'orvalho', relative_humidity_2m: 'umidade' }[v] || v;
 }
 
 /**

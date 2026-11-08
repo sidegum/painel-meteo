@@ -506,7 +506,25 @@ A ordem é:
 - `configurarPuxar()`: puxar para atualizar. O indicador flutua (`transform`) sem empurrar o conteúdo. Dispara com mais de 110 px a partir do topo e é cancelado com movimento lateral acima de 40 px.
 - `html { overscroll-behavior-y: none }` desliga o "puxar" nativo do navegador. Os botões usam `touch-action: manipulation`, sem atraso de duplo toque.
 
-#- **Telas largas (1.8.12):** até 1099 px tudo fica como no celular (coluna de 720 px). A partir de 1100 px:
+#- **Granizo (1.9.6):** `sinaisGranizo` (analise.js, regras em `REGRAS.granizo`, testado) entra no cartão de temporal como "Risco … de temporal e granizo possível". O motivo aparece ao tocar. As fontes, da mais forte para a mais fraca:
+  1. Um aviso do INMET válido no dia cujo texto cita granizo. Os avisos de Tempestade dizem "queda de granizo".
+  2. Código de tempo 96 ou 99 do UKMO. Pela documentação da Open-Meteo, os códigos 96 e 99 só vêm de modelos com previsão explícita de granizo (ICON, UKMO). Os ECMWF só informam 95 e 97.
+  3. Ambiente favorável, só com risco de temporal moderado ou alto: CAPE ≥ 2000 J/kg e nível de congelamento ≤ 4200 m nas horas de CAPE alto.
+
+  Para isso, `VARS_HORA` ganhou `weather_code` e `freezing_level_height`. Com granizo, o cartão aparece no mínimo como risco moderado. O cartão também passou a listar só os avisos válidos no dia dele (`avisosDia`).
+- **Estilo nativo (1.9.5):** bloco de regras no fim do `app.css`.
+  - Seções `.secao` viram cartões agrupados (fundo `--sup`, cantos de 16 px), com título pequeno em maiúsculas.
+  - Os seletores Chuva/Temperatura/Céu e Restantes/Dia todo viram controles segmentados (`.troca-modo` e `.troca-horas`).
+  - Faixa de aviso e linha de temporal perdem a barra colorida lateral. Botões `.chip` e `.mais-item` perdem o contorno.
+  - A lista de dias da Semana vira um cartão.
+  - Os textos "Toque num horário…" saíram; a linha só ganha texto ao tocar.
+- **Céu do bloco principal (1.9.4):** o `.resumo` de Hoje, Amanhã e do dia tem um canvas `.ceu-fundo` desenhado por `desenharCeu` (`js/fundo-ceu.js`).
+  - O desenho combina o degradê do céu pela fase (`faseDoCeu`: dia; sol baixo, de 1 h antes do pôr até 15 min depois e de 15 min antes do nascer até 1 h depois; noite), as nuvens procedurais na cobertura real (`ceu.cobertura`), o brilho do sol, estrelas e a chuva, e o tom de temporal ou de vento (`fundoDoResumo`, mesma prioridade da 1.9.3).
+  - É calculado uma vez por tamanho, em cerca de 5 ms. Não tem animação. Um `ResizeObserver` redesenha quando o bloco aparece ou muda de tamanho.
+  - O céu é igual nos dois temas. Por isso o bloco redefine `--texto`, `--fraco`, `--linha` e as cores de mínima, máxima e chuva para tons claros.
+- **Céu de agora com METAR (1.9.4):** o METAR só informa nuvens baixas e médias (CAVOK e NSC não dizem nada acima de 1.500 m). Por isso `ceuAgora` usa a maior cobertura entre o METAR e as nuvens médias e altas dos modelos. Antes, um céu de nuvens altas com CAVOK aparecia como "Ensolarado".
+- **Valores ausentes nunca viram texto (1.9.2):** `ui.js` envolve `append`, `prepend`, `replaceChildren`, `before`, `after` e `replaceWith` para ignorar `null`, `undefined` e `false`, que o DOM converteria no texto "null". Envolve também o `textContent` e os textos de `el()` (incluindo `title` e `aria-*`): as palavras soltas null, undefined e NaN viram "–", com um aviso "Valor ausente" no console. O caso que motivou a regra foi a sensação ao lado de "agora (prevista)". `sensacaoAgora` usava `agora` sem declarar; no navegador, isso pegava o elemento `#agora` (acesso por id em `window`), a busca da hora falhava e o `null` ia para `replaceChildren`. O workflow Testes roda o ESLint com `no-undef` (`scripts/eslint-indefinidas.json`) em `js/` e `sw.js`.
+- **Telas largas (1.8.12):** até 1099 px tudo fica como no celular (coluna de 720 px). A partir de 1100 px:
   - a coluna cresce até 1240 px, ou até 1440 px a partir de 1600 px;
   - os blocos de Hoje, Amanhã, dia, Semana, Modelos e El Niño ficam em duas colunas (grid);
   - mapa, faixa de horas, gráficos largos, tabelas, títulos e notas (`.largura-total` ou filhos que não são `.secao`) ocupam a linha inteira;
