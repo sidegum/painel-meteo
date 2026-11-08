@@ -20,7 +20,7 @@ const FONTE = 'globo-dados';
  */
 export async function buscarManifest() {
   try {
-    const r = await fetchComTempo(BASE + 'manifest.json', 12000);
+    const r = await comNovasTentativas(() => fetchComTempo(BASE + 'manifest.json', 15000));
     const j = await r.json();
     if (!j || typeof j !== 'object' || !j.grade || !j.canais) throw new ErroFonte(FONTE, 'formato', 'manifest inesperado');
     const m = normalizarManifest(j);
@@ -61,8 +61,24 @@ function normalizarManifest(j) {
   return { gerado: String(j.gerado || '').slice(0, 30), grade: { largura: num(j.grade.largura) || 720, altura: num(j.grade.altura) || 361 }, canais, gfs, satelite, ciclones, satelites };
 }
 
+/**
+ * Repete uma leitura que falhou por rede, tempo ou erro 5xx (até 3 tentativas, espera de 1,5 s e 4 s). Na abertura o globo
+ * baixa texturas e catálogos ao mesmo tempo, e uma leitura isolada pode esgotar o tempo numa conexão lenta.
+ */
+async function comNovasTentativas(ler, esperas = [1500, 4000]) {
+  for (let i = 0; ; i++) {
+    try { return await ler(); }
+    catch (e) {
+      const repetivel = !(e instanceof ErroFonte) || ['rede', 'tempo', 'offline'].includes(e.tipo) || /erro 5\d\d/.test(e.message);
+      if (!repetivel || i >= esperas.length) throw e;
+      await new Promise((ok) => setTimeout(ok, esperas[i]));
+    }
+  }
+}
+
 async function fetchComTempo(url, timeout = 20000) {
-  if (!navigator.onLine) throw new ErroFonte(FONTE, 'offline', 'sem conexão');
+  // navigator.onLine só serve como explicação: em adaptadores virtuais (VPN, máquinas virtuais) ele pode dizer
+  // "sem conexão" com a rede funcionando, então a leitura é sempre tentada
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), timeout);
   try {
     const r = await fetch(url, { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'default' });
@@ -70,7 +86,8 @@ async function fetchComTempo(url, timeout = 20000) {
     return r;
   } catch (e) {
     if (e instanceof ErroFonte) throw e;
-    throw new ErroFonte(FONTE, e.name === 'AbortError' ? 'tempo' : 'rede', e.name === 'AbortError' ? 'tempo esgotado' : 'falha de conexão');
+    if (e.name === 'AbortError') throw new ErroFonte(FONTE, 'tempo', 'tempo esgotado');
+    throw new ErroFonte(FONTE, navigator.onLine ? 'rede' : 'offline', navigator.onLine ? 'falha de conexão' : 'sem conexão');
   } finally { clearTimeout(t); }
 }
 
@@ -114,7 +131,7 @@ export function buscarSatelite(manifest) {
 }
 
 async function lerImagemCampo(url, largura, altura) {
-  const r = await fetchComTempo(url, 30000);
+  const r = await comNovasTentativas(() => fetchComTempo(url, 30000));
   const blob = await r.blob();
   if (blob.size > 8e6) throw new ErroFonte(FONTE, 'tamanho', 'imagem grande demais');
   const imagem = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
