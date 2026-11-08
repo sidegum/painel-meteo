@@ -686,7 +686,9 @@ Módulos, todos ES modules carregados só quando a aba abre:
 |---|---|
 | `globo.js` | cena Three.js, shaders da Terra (dia, noite com luzes das cidades, luar, nuvens, atmosfera), camadas, gestos, painel de toque, laço e qualidade adaptativa |
 | `globo-dados.js` | leitura dos arquivos do branch `globo-dados` (manifest, campos GFS, satélite, elementos orbitais, sondas) com validação |
-| `globo-regiao.js`, `globo-cidades.js` | mapa detalhado sob a câmera e rótulos de cidades |
+| `globo-regiao.js`, `globo-cidades.js` | mapa detalhado sob a câmera e cidades escolhidas à mão (RS e vizinhança) |
+| `globo-contornos.js` | litoral, lagos, fronteiras e divisas em vetor (Natural Earth 10 m) por cima de tudo, com profundidade puxada para a câmera |
+| `globo-grade.js` | grade de coordenadas: passo pelo zoom, rótulos nas bordas, obliquidade do dia para trópicos e círculos polares |
 | `ceu.js` | cálculo puro do céu (sem DOM, testado): Sol, Lua, planetas e estrelas pelo Astronomy Engine; satélites pelo SGP4; passagens visíveis, chuvas de meteoros (IMO, por longitude solar), eclipses, fases, estações, o resumo "Céu de hoje" e `ondeOlhar` (direção, altura em graus e em punhos, caminho no céu e a referência mais útil por perto: Lua, planeta brilhante ou uma das 24 estrelas e figuras de `REFERENCIAS`) |
 | `globo-ceu.js` | textos: bloco "Céu de hoje" e cartões de Sol, Lua, planetas, estrelas, satélites e sondas |
 | `globo-astro.js` | pontos subsolar e sublunar e posições para o sistema solar |
@@ -722,6 +724,25 @@ de kpc), toques e o render do laço vão para o módulo enquanto `G.galaxia` exi
   o zoom do foco ou 2,5× da câmera), por prioridade e sem sobrepor nomes nem botões.
 - `salvarImagem`: renderiza a vista com o lado maior em até 4.096 px (ou o limite da GPU), desenha nomes, escala e
   créditos num canvas 2D e entrega PNG (folha de compartilhar no celular, download no computador).
+
+Detalhes da Terra (1.9.7):
+- Contornos (`globo-contornos.js`, `vendor/terra/contornos.bin`): Int16 lon·32767/180, lat·32767/90 (passo de ~600 m),
+  fim de linha (−32768, −32768); 370 mil pontos em `LineSegments` de 1 pixel, a 130 m de altura, com a profundidade
+  puxada 0,05% em direção à câmera ao longo do raio de visão (a posição na tela não muda): nunca brigam com a malha
+  e o lado de trás continua escondido. Divisas de estados a partir de 2,4 raios; tudo some quando o mapa do OSM assume.
+- Grade (`globo-grade.js` e shader da Terra): passo escolhido para uma linha a cada ~160 px (de 3 a 8 linhas) (30° a 0,005°), linhas de
+  1 pixel por `fwidth`; equador e Greenwich mais fortes; trópicos e círculos polares tracejados na obliquidade do dia
+  (IAU 2006). Rótulos onde cada linha entra na tela (48 amostras por linha), recolhidos com os controles.
+- Cidades: as escolhidas à mão mais as 7.342 localidades do Natural Earth (sem repetir num raio de 0,12°), ordenadas
+  pelo zoom mínimo, capital e população. O zoom equivalente ao dos mapas da web sai da meia largura vista
+  (`meiaVisao`), +1,5 e a largura da tela; a lista é percorrida até o primeiro zoom que não cabe, com até 180 rótulos
+  reaproveitados (70 no celular) sem sobreposição. Temperatura do GFS em todas.
+- Leitura sob o cursor (só com mouse): coordenadas com 4 casas, distância até você, hora solar verdadeira (pelo ponto
+  subsolar), altura do Sol e período (crepúsculos civil, náutico e astronômico), temperatura, pressão, vento com
+  direção e rajadas, chuva e nuvens baixas, médias e altas do GFS da hora mostrada.
+- Dados de tempo robustos: cada leitura repete até 3 vezes em falha de rede, tempo ou 5xx; nuvens, camada e
+  temperaturas carregam independentes (`Promise.allSettled`); sem manifest, novas tentativas em 30 s, 1, 2 e até 5 min,
+  na volta da conexão e ao reabrir a aba; tocar na nota mostra o motivo e "Tentar agora".
 
 Mapa detalhado (1.9.1, `globo-regiao.js`): nível dos quadros do OSM e quantidade (até 16 × 16) calculados pelo tamanho do
 canvas em pixels de desenho, para ~0,85 pixel do mapa por pixel da tela, até o nível 17; zoom mínimo de ~3 km de altura.

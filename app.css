@@ -574,6 +574,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .globo-agora { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.3); background: rgba(236,238,240,.92); color: #0b0f16; font-size: 13px; font-weight: 680; }
 .globo-notas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
 .globo-notas p { margin: 0; font-size: 11.5px; color: #aab3bd; }
+.globo-notas .com-erro { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .globo-ciclones { color: #ff9a8a !important; font-weight: 600; }
 .globo-painel { z-index: 6; position: absolute; left: 12px; right: 12px; bottom: 150px; max-width: 420px; margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(10,14,22,.86); color: #eceef0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12); }
 .globo-painel-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: #b7c0c9; }
@@ -647,8 +648,21 @@ button.globo-rotulo { cursor: pointer; }
 .ceu-desenho-alvo { font-size: 12px; font-weight: 700; fill: #ffe1a0; }
 .ceu-aviso { font-size: 14px; font-weight: 600; color: var(--quente); }
 .globo-cidades { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.globo-cidade { position: absolute; left: 0; top: 0; margin: -7px 0 0 6px; padding-left: 8px; font-size: 12px; font-weight: 600; color: #f3f5f8; text-shadow: 0 0 3px #000, 0 1px 2px #000; white-space: nowrap; }
-.globo-cidade::before { content: ''; position: absolute; left: 0; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
+.globo-cidade { position: absolute; left: 0; top: 0; margin: -8px 0 0 -2.5px; padding-left: 9px; font-size: 12px; line-height: 16px; font-weight: 600; color: #f3f5f8; text-shadow: 0 0 3px #000, 0 1px 2px #000; white-space: nowrap; }
+.globo-cidade::before { content: ''; position: absolute; left: 0; top: 5.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
+.globo-cidade.capital { font-size: 13px; font-weight: 720; }
+.globo-cidade.capital::before { left: -1px; top: 4.5px; width: 5px; height: 5px; border-radius: 1px; background: #0b0f16; border: 1.5px solid #fff; }
+.globo-cidade.capital-estado::before { background: #0b0f16; border: 1.5px solid #fff; width: 4px; height: 4px; }
+.globo-cidade.pequena { font-size: 11px; font-weight: 520; color: #e2e7ee; }
+.globo-cidade.pequena::before { width: 4px; height: 4px; top: 6px; left: .5px; }
+.globo-cidade.so-temp { margin: -9px 0 0 6px; padding: 0 5px; border-radius: 9px; background: rgba(11,15,22,.82); font-size: 11.5px; line-height: 18px; text-shadow: none; }
+.globo-cidade.so-temp::before { display: none; }
+.globo-grade { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.globo-grade-rotulo { position: absolute; left: 0; top: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: rgba(225,232,242,.78); text-shadow: 0 0 3px #000, 0 0 2px #000; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.globo-grade-rotulo[data-tipo='lat'] { margin: -7px 0 0 2px; }
+.globo-grade-rotulo[data-tipo='lon'] { margin: 0 0 0 0; transform-origin: 0 0; translate: -50% 2px; }
+.globo-leitura { position: absolute; right: 12px; bottom: 12px; z-index: 3; max-width: min(460px, 46%); padding: 8px 11px; border-radius: 10px; background: rgba(8,11,18,.78); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px); color: #e8edf3; font-size: 12px; line-height: 1.5; white-space: pre-line; font-variant-numeric: tabular-nums; pointer-events: none; }
+@media (pointer: coarse) { .globo-leitura { display: none; } }
 .globo-sistema-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; pointer-events: none; }
 .globo-sistema-controles > * { pointer-events: auto; }
 .globo-recolhivel { transition: opacity .45s ease; }
