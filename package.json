@@ -5,7 +5,7 @@
   "description": "Painel meteorológico pessoal: frontend estático (Cloudflare Pages) e Cloudflare Worker.",
   "type": "module",
   "scripts": {
-    "test": "node --test test/analise.test.mjs test/ceu.test.mjs test/corpos.test.mjs test/calibracao.test.mjs worker/test/worker.test.mjs",
+    "test": "node --test test/analise.test.mjs test/ceu.test.mjs test/corpos.test.mjs test/calibracao.test.mjs test/cidades.test.mjs worker/test/worker.test.mjs",
     "worker:deploy": "cd worker && wrangler deploy",
     "worker:dev": "cd worker && wrangler dev",
     "configurar": "node scripts/configurar.mjs"
