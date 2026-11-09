@@ -11,7 +11,7 @@
 // 3. Mostra esses textos. O widget não calcula nada: os números são sempre os mesmos do app.
 // 4. Guarda o último resumo válido. Sem conexão, mostra esse resumo com o aviso de que pode estar desatualizado.
 //
-// Contrato do resumo: docs/TECNICO.md, seção 11. Instalação: docs/WIDGET.md.
+// Contrato do resumo: docs/TECNICO.md, seção 13. Instalação: docs/WIDGET.md.
 
 /** Configuração. appUrl é o único item a trocar quando o painel mudar de endereço. */
 const CONFIG = {

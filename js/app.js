@@ -43,7 +43,7 @@ const VERIFICACAO = [
  * app Scriptable). Roda a mesma busca e a mesma análise do app e entrega o resumo de Hoje em
  * window.painelResumo (Promise). Nesse modo não há GPS, telas, gravação de preferências nem service worker.
  * O local vem dos parâmetros lat e lon (o widget já os arredonda); sem eles, o centro de Campo Bom.
- * Contrato do resumo: docs/TECNICO.md, seção 11.
+ * Contrato do resumo: docs/TECNICO.md, seção 13.
  */
 const MODO_WIDGET = lerModoWidget(location.search);
 const FORMATO_RESUMO = 1;        // muda só quando o contrato do resumo mudar de forma incompatível
@@ -774,7 +774,7 @@ function situacaoChuva(a) {
  * Resumo de Hoje para o widget do iPhone, montado com as mesmas funções e os mesmos formatos da primeira tela
  * (temperaturaAgora, temperaturaPrevistaAgora, sensacaoAgora, analisarDia, situacaoChuva, avaliarRisco, avisosOrdenados, fmt). O widget só exibe os
  * textos prontos de "textos"; os valores numéricos vão junto apenas para cor e ícone.
- * Contrato (FORMATO_RESUMO): docs/TECNICO.md, seção 11.
+ * Contrato (FORMATO_RESUMO): docs/TECNICO.md, seção 13.
  * @returns {object} objeto simples, serializável em JSON
  */
 function resumoWidget() {
