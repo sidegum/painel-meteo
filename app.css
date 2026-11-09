@@ -604,6 +604,21 @@ button.globo-rotulo { cursor: pointer; }
 .globo-rotulo-planeta.sonda { color: #cfe3ff; border-style: dashed; font-weight: 600; }
 .globo-rotulo-planeta.faixa { background: none; border: 0; color: #9fb0c4; font-weight: 560; font-size: 11px; }
 .globo-rotulo-planeta.anao { color: #c8b8a6; }
+.globo-rotulo-planeta.escala { background: none; border: 0; color: rgba(170,190,212,.75); font-weight: 520; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.globo-tabela-planetas { position: absolute; top: 62px; right: 64px; z-index: 2; max-height: calc(100% - 150px); overflow: auto; padding: 8px 10px; border-radius: 12px; background: rgba(8,11,18,.8); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px); color: #e8edf3; }
+.tabela-planetas table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabela-planetas th, .tabela-planetas td { padding: 3px 8px; text-align: right; border-bottom: 1px solid rgba(128,140,155,.18); }
+.tabela-planetas thead th { color: #8796a8; font-weight: 600; font-size: 11px; }
+.tabela-planetas tbody th { text-align: left; font-weight: 680; }
+.globo-tabela-planetas .tabela-planetas tbody th { color: #f3f5f8; }
+.tabela-planetas td:last-child { text-align: left; }
+.globo-tabela-planetas .tabela-planetas td:last-child { color: #c9d3de; }
+.tabela-planetas tr.tocavel { cursor: pointer; }
+.tabela-planetas tr.tocavel:hover { background: rgba(255,255,255,.06); }
+.tabela-planetas .nota { max-width: 560px; margin: 6px 2px 0; white-space: normal; font-size: 11px; color: #8796a8; }
+#dlg-info .tabela-planetas { overflow-x: auto; }
+.globo.com-galaxia .globo-tabela-planetas { display: none !important; }
+.globo.com-espaco .globo-aviso { top: 104px; }
 .globo-rotulo-planeta.lua { color: #dfe4ec; font-size: 11px; padding: 1px 6px; }
 .globo-rotulo-planeta.cometa { color: #a8e6ff; }
 .globo-rotulo-planeta.sol { color: #ffe1a0; border-color: rgba(255,209,102,.4); }
@@ -754,7 +769,8 @@ button.globo-rotulo { cursor: pointer; }
 .globo-galaxia-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none; }
 .globo-galaxia-controles[hidden] { display: none; }
 .globo-galaxia-controles > * { pointer-events: auto; }
-.globo-galaxia-voltar, .globo-ir-galaxia, .globo-salvar { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
+.globo-galaxia-voltar, .globo-ir-galaxia, .globo-btn-tabela, .globo-salvar { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
+.globo-btn-tabela[aria-pressed="true"] { border-color: #ffd166; color: #ffe1a0; }
 .globo-salvar { margin-left: auto; }
 .globo-salvar:disabled { opacity: .6; }
 .globo-escala { display: flex; flex-direction: column-reverse; gap: 4px; pointer-events: none; }
