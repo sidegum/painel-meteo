@@ -102,23 +102,23 @@ test('tamanho médio mostra os textos prontos do painel, sem recalcular', async 
     'Risco alto de temporal · INMET', 'Rajada 19 km/h de NE às 15h', 'INMET Campo Bom · 15:00', 'Open-Meteo · 15:43', 'Confiança alta']) {
     assert.ok(t.includes(esperado), `faltou "${esperado}" em ${JSON.stringify(t)}`);
   }
-  assert.equal(widget.url, 'https://sidegum.github.io/painel-meteo/');
+  assert.equal(widget.url, 'https://tempo-rs.pages.dev/');
   assert.ok(widget.refreshAfterDate instanceof Date);
 });
 
 test('local do GPS vai arredondado para 2 casas, com o nome da cidade', async () => {
   const { urls } = await rodar();
-  assert.equal(urls[0], 'https://sidegum.github.io/painel-meteo/?widget=1&lat=-29.68&lon=-51.05&nome=Campo%20Bom');
+  assert.equal(urls[0], 'https://tempo-rs.pages.dev/?widget=1&lat=-29.68&lon=-51.05&nome=Campo%20Bom');
 });
 
 test('parâmetro "lat,lon" do widget substitui o GPS', async () => {
   const { urls } = await rodar({ parametro: '-30,03; -51,23', gps: null });
-  assert.equal(urls[0], 'https://sidegum.github.io/painel-meteo/?widget=1&lat=-30.03&lon=-51.23');
+  assert.equal(urls[0], 'https://tempo-rs.pages.dev/?widget=1&lat=-30.03&lon=-51.23');
 });
 
 test('sem GPS e sem local anterior, o painel usa o padrão (Campo Bom)', async () => {
   const { urls } = await rodar({ gps: null });
-  assert.equal(urls[0], 'https://sidegum.github.io/painel-meteo/?widget=1');
+  assert.equal(urls[0], 'https://tempo-rs.pages.dev/?widget=1');
 });
 
 test('sem conexão: mostra o último resumo guardado e avisa que pode estar desatualizado', async () => {

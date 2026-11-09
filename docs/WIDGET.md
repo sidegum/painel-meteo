@@ -41,4 +41,4 @@ Tocar no widget abre o painel.
 
 ## Quando o endereço do painel mudar
 
-Na mudança para a Cloudflare, troque só a linha `appUrl` no começo do script, dentro do Scriptable. Nada mais precisa mudar.
+O script aponta para `https://tempo-rs.pages.dev/`. Se o endereço mudar, troque só a linha `appUrl` no começo do script, dentro do Scriptable. Nada mais precisa mudar.

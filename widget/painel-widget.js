@@ -15,7 +15,7 @@
 
 /** Configuração. appUrl é o único item a trocar quando o painel mudar de endereço. */
 const CONFIG = {
-  appUrl: 'https://sidegum.github.io/painel-meteo/',
+  appUrl: 'https://tempo-rs.pages.dev/',
   formatoResumo: 1,          // igual a FORMATO_RESUMO em js/app.js
   atualizarMin: 15,          // pedido ao iOS; ele decide o momento exato da atualização
   esperaGpsMs: 8000,
