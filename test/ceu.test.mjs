@@ -64,3 +64,17 @@ test('referências: Sirius e Ácrux nas posições do catálogo (Sirius cruza o 
   perto(C.infoEstrela(s[1], s[2], CAMPO_BOM, Date.parse('2026-01-01T00:00:00Z')).culmina.altura, 77.06, 0.1, 'altura de Sirius no meridiano');
   assert.ok(C.REFERENCIAS.some((r) => r[0] === 'Cruzeiro do Sul'));
 });
+
+test('efemérides: distâncias e velocidades dos planetas dentro das faixas físicas', () => {
+  const lista = C.efemeridesPlanetas(Date.parse('2026-01-10T00:00:00Z')); // oposição de Júpiter (10/01/2026)
+  assert.equal(lista.length, 8);
+  const jup = lista.find((p) => p.corpo === 'Jupiter');
+  perto(jup.distTerraUa, 4.23, 0.05, 'Júpiter na oposição, distância à Terra');
+  perto(jup.elongacao, 180, 3, 'elongação de Júpiter na oposição');
+  assert.ok(jup.mag < -2.5, `magnitude de Júpiter na oposição: ${jup.mag}`);
+  perto(jup.constelacao === 'Gêmeos' ? 1 : 0, 1, 0, 'Júpiter em Gêmeos em jan/2026');
+  const merc = lista.find((p) => p.corpo === 'Mercury');
+  assert.ok(merc.distSolUa > 0.30 && merc.distSolUa < 0.47 && merc.velKmS > 38 && merc.velKmS < 59, 'Mercúrio entre periélio e afélio');
+  const net = lista.find((p) => p.corpo === 'Neptune');
+  perto(net.luzMin, 4.1 * 60, 15, 'luz de Netuno até a Terra (~4 h)');
+});

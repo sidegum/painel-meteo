@@ -108,6 +108,8 @@ export function posicaoNoCeu(corpo, obs, t) {
 
 /** Posição heliocêntrica de um corpo em coordenadas eclípticas J2000 (UA), a mesma referência das sondas do Horizons. */
 const ROT_ECL = A.Rotation_EQJ_ECL();
+/** Posição (UA) e velocidade (UA/dia) heliocêntricas J2000 equatoriais. */
+export function estadoHelio(corpo, t) { const h = A.HelioState(corpo, data(t)); return { x: h.x, y: h.y, z: h.z, vx: h.vx, vy: h.vy, vz: h.vz }; }
 export function helioEcliptica(corpo, t) { const v = A.RotateVector(ROT_ECL, A.HelioVector(corpo, data(t))); return { x: v.x, y: v.y, z: v.z }; }
 export const UA = UA_KM;
 
@@ -232,6 +234,34 @@ export function infoAstro(corpo, obs, t) {
   if (corpo === 'Moon') info.fase = faseLua(t);
   if (corpo !== 'Sun' && corpo !== 'Moon') info.periodo = A.Elongation(corpo, d).visibility === 'morning' ? 'madrugada' : 'noite';
   return info;
+}
+
+/**
+ * Efemérides dos planetas e de Plutão no instante t, vistas do centro da Terra (para a tabela do sistema solar):
+ * distâncias ao Sol e à Terra, tempo da luz, velocidade orbital, magnitude, fração iluminada, afastamento do Sol no
+ * céu (elongação, com madrugada ou noite), constelação e diâmetro aparente. Tudo pelo Astronomy Engine.
+ * @returns {{corpo:string, nome:string, distSolUa:number, distTerraUa:number, luzMin:number, velKmS:number, mag:number,
+ *   fracao:number, elongacao:number, periodo:string, constelacao:string, diametroSeg:number}[]}
+ */
+export function efemeridesPlanetas(t) {
+  const d = data(t);
+  return ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'].map((corpo) => {
+    const h = A.HelioState(corpo, d);
+    const geo = A.GeoVector(corpo, d, true); // com aberração: direção em que se vê
+    const distTerraUa = Math.hypot(geo.x, geo.y, geo.z);
+    const eq = A.EquatorFromVector(geo);
+    const constel = A.Constellation(eq.ra, eq.dec);
+    const il = A.Illumination(corpo, d);
+    const el = A.Elongation(corpo, d);
+    return {
+      corpo, nome: CORPOS[corpo].nome,
+      distSolUa: Math.hypot(h.x, h.y, h.z), distTerraUa, luzMin: distTerraUa * UA_KM / 299792.458 / 60,
+      velKmS: Math.hypot(h.vx, h.vy, h.vz) * UA_KM / 86400,
+      mag: il.mag, fracao: il.phase_fraction, elongacao: el.elongation, periodo: el.visibility === 'morning' ? 'madrugada' : 'noite',
+      constelacao: CONSTELACOES[constel.symbol] || constel.name,
+      diametroSeg: 2 * Math.atan(CORPOS[corpo].diametroKm / 2 / (distTerraUa * UA_KM)) / RAD * 3600,
+    };
+  });
 }
 
 /**
