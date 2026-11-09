@@ -18,7 +18,7 @@ mkdir -p "$saida/dados"
 [ -z "$globo" ] || globo=$(cd "$globo" && pwd)
 cd "$raiz"
 cp index.html privacidade.html manifest.json sw.js app.css "$saida/"
-cp -R js vendor icones "$saida/"
+cp -R js vendor icones widget "$saida/"
 cp dados/*.json "$saida/dados/"
 cp cloudflare/_headers cloudflare/404.html "$saida/"
 

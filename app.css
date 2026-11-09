@@ -848,3 +848,7 @@ button.globo-rotulo { cursor: pointer; }
 @media (min-width: 1100px) {
   .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { column-gap: 16px; }
 }
+
+/* Páginas avulsas (privacidade, widget do iPhone): coluna central. Sem estilo inline, por causa da CSP. */
+.pagina-simples { max-width: 680px; margin: 0 auto; padding-bottom: 40px; }
+.pagina-simples .titulo-aba { margin-left: 0; }

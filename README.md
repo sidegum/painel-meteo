@@ -10,6 +10,7 @@ Painel de chuva e vento para celular, com Campo Bom (RS) como local padrão. Com
 | Regras de confiança | `js/analise.js` (objeto `REGRAS`) | Todos os limites ajustáveis num lugar só |
 | Worker | `worker/` | Cloudflare Worker gratuito: METAR, INMET, El Niño, acerto dos modelos, tarefas agendadas |
 | Instalação | `manifest.json`, `sw.js`, `icones/` | Instalar na tela inicial e abrir sem internet |
+| Widget do iPhone | `widget/` | Script do app Scriptable que mostra o resumo de Hoje na tela de início (ver `docs/WIDGET.md`) |
 | Bibliotecas | `vendor/` | uPlot, Leaflet e fonte Archivo, versões fixas (ver `docs/VENDOR.md`) |
 | Documentos | `docs/` | Plano visual, segurança, relatório de entrega |
 
@@ -58,6 +59,7 @@ Sem token, o Worker usa a última leitura de cada estação e grava, a cada hora
 - Android (Chrome): abra o endereço do Pages, menu de três pontos, "Instalar app" ou "Adicionar à tela inicial".
 - iPhone (Safari): abra o endereço, botão Compartilhar, "Adicionar à Tela de Início".
 - Na primeira abertura, permita a localização. Se negar, o app usa o centro de Campo Bom.
+- Widget do iPhone (app Scriptable): veja `docs/WIDGET.md` ou o link "Widget do iPhone" no rodapé do painel.
 
 ## Testes
 

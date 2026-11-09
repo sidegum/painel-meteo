@@ -9,8 +9,8 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<main class="detalhes" style="max-width:680px;margin:0 auto;padding-bottom:40px">
-  <h1 class="titulo-aba" style="margin-left:0">Quais dados saem do aparelho</h1>
+<main class="detalhes pagina-simples">
+  <h1 class="titulo-aba">Quais dados saem do aparelho</h1>
   <p>Não há login, perfil, banco de dados pessoal, anúncios, cookies, pixels nem ferramentas de estatística.</p>
   <h2>Localização</h2>
   <p>A posição exata do GPS fica só neste aparelho e só na memória enquanto o app está aberto. Ela é usada para escolher a estação mais próxima e para saber se você está dentro da área de um aviso.</p>
@@ -23,6 +23,7 @@
       <tr><td>Worker do painel (Cloudflare)</td><td>Coordenada arredondada. Não grava localização nem IP; o limite de uso usa um código embaralhado que muda todo dia e fica só na memória</td></tr>
       <tr><td>INMET, AviationWeather (via Worker), NOAA e IRI (via Worker)</td><td>Nada sobre você; o Worker pede dados de uma região ou de estações públicas</td></tr>
       <tr><td>INMET direto (sem Worker)</td><td>Só o código público do município de Campo Bom</td></tr>
+      <tr><td>Hospedagem do painel (só o widget do iPhone)</td><td>Coordenada arredondada e nome da cidade, no endereço que o widget abre</td></tr>
       <tr><td>OpenStreetMap e RainViewer (mapa)</td><td>Os quadrados de mapa da região exibida, como em qualquer mapa na web</td></tr>
     </tbody>
   </table>
