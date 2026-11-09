@@ -2,6 +2,7 @@
 // só números e textos esperados são copiados, nada vai para innerHTML.
 import { CONFIG } from './config.js';
 import { arredondaCoord, isoLocalParaMs, valido, MODELOS, REGRAS, deslocamentoRadar, chegadaChuva, secoPeloRadar, direcaoTexto } from './analise.js';
+import { normalizarResultados, LIMITES } from './cidades.js';
 
 const CACHE = 'painel-dados-v1';
 
@@ -37,20 +38,27 @@ export async function buscarJson(fonte, url, opcoes = {}) {
 /**
  * Uma requisição JSON com tempo limite (AbortController), sem credenciais e sem referrer, com limite de tamanho.
  * Em 429 ou 5xx aplica espera exponencial por fonte (2, 4, 8 ... 60 min), persistida em localStorage.
- * @throws {ErroFonte} com tipo rede | tempo | limite | servidor | http | tamanho | formato | api | offline
+ * O signal opcional cancela a requisição por fora (ex.: a busca de cidades quando a pessoa continua digitando).
+ * @throws {ErroFonte} com tipo rede | tempo | limite | servidor | http | tamanho | formato | api | offline | cancelada
  */
-async function buscarJsonUmaVez(fonte, url, { timeout = 15000, maxBytes = 6e6 } = {}) {
+async function buscarJsonUmaVez(fonte, url, { timeout = 15000, maxBytes = 6e6, signal } = {}) {
+  if (signal?.aborted) throw new ErroFonte(fonte, 'cancelada', 'busca cancelada');
   const ate = emEspera(fonte);
   if (ate) throw new ErroFonte(fonte, 'limite', `aguardando até ${new Date(ate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} após limite ou falha`);
   if (!navigator.onLine) throw new ErroFonte(fonte, 'offline', 'sem conexão');
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), timeout);
+  const cancelar = () => ctl.abort();
+  signal?.addEventListener('abort', cancelar, { once: true });
   let r;
   try {
     r = await fetch(url, { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
   } catch (e) {
     clearTimeout(t);
+    if (signal?.aborted) throw new ErroFonte(fonte, 'cancelada', 'busca cancelada');
     throw new ErroFonte(fonte, e.name === 'AbortError' ? 'tempo' : 'rede', e.name === 'AbortError' ? 'tempo esgotado' : 'falha de conexão');
+  } finally {
+    signal?.removeEventListener('abort', cancelar);
   }
   clearTimeout(t);
   if (r.status === 429 || r.status >= 500) {
@@ -83,6 +91,9 @@ export async function lerCache(chave) {
     const r = await c.match(new Request('/__dados/' + chave));
     return r ? await r.json() : null;
   } catch { return null; }
+}
+export async function apagarCache(chave) {
+  try { await (await caches.open(CACHE)).delete(new Request('/__dados/' + chave)); } catch {}
 }
 
 // ---------- Open-Meteo: previsão determinística ----------
@@ -211,16 +222,20 @@ export async function buscarEnsemble(lat, lon) {
 
 // ---------- Open-Meteo: busca de cidades ----------
 
-export async function buscarCidades(nome) {
-  const q = String(nome).trim().slice(0, 60);
+/**
+ * Busca cidades pelo nome (GET /v1/search: name, count, language, format). A API não pede chave; com 2 letras
+ * só casa nomes exatos e a partir de 3 faz busca aproximada, por isso serve para o autocompletar.
+ * Pede 20 resultados para sobrarem cidades depois do filtro de normalizarResultados (só lugares habitados,
+ * Brasil primeiro, sem repetidos).
+ * @param {string} nome texto digitado (até LIMITES.consulta caracteres)
+ * @param {{signal?:AbortSignal}} [op] cancela a busca quando a pessoa continua digitando
+ */
+export async function buscarCidades(nome, { signal } = {}) {
+  const q = String(nome).trim().slice(0, LIMITES.consulta);
   if (q.length < 2) return [];
-  const p = new URLSearchParams({ name: q, count: '8', language: 'pt', format: 'json' });
-  const j = await buscarJson('geocoding', 'https://geocoding-api.open-meteo.com/v1/search?' + p, { timeout: 10000 });
-  return (Array.isArray(j.results) ? j.results : []).filter((r) => valido(r.latitude) && valido(r.longitude)).map((r) => ({
-    nome: String(r.name || '').slice(0, 80),
-    regiao: [r.admin1, r.country_code].filter(Boolean).map((x) => String(x).slice(0, 60)).join(', '),
-    lat: r.latitude, lon: r.longitude,
-  }));
+  const p = new URLSearchParams({ name: q, count: '20', language: 'pt', format: 'json' });
+  const j = await buscarJson('geocoding', 'https://geocoding-api.open-meteo.com/v1/search?' + p, { timeout: 10000, signal });
+  return normalizarResultados(j.results);
 }
 
 // ---------- Worker (INMET, METAR, alertas, El Niño, acerto) ----------

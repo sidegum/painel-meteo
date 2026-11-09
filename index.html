@@ -30,6 +30,7 @@
   <div class="agora" id="agora" aria-live="polite"></div>
   <button class="atualizar" id="btn-atualizar" type="button" aria-label="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg></button>
 </header>
+<nav class="cidades" id="cidades" aria-label="Cidades" hidden></nav>
 <nav class="nav" aria-label="Seções">
   <button type="button" data-ir="hoje" aria-current="page">Hoje</button>
   <button type="button" data-ir="amanha">Amanhã</button>
@@ -96,16 +97,20 @@
 </main>
 
 
-<dialog id="dlg-local" aria-labelledby="dlg-local-t">
+<dialog id="dlg-local" class="dlg-local" aria-labelledby="dlg-local-t">
   <form method="dialog" class="dlg">
-    <h2 id="dlg-local-t">Local</h2>
-    <button type="button" id="btn-gps" class="largo">Usar minha localização atual</button>
-    <button type="button" id="btn-padrao" class="largo">Centro de Campo Bom (padrão)</button>
-    <label for="busca">Buscar cidade</label>
-    <input id="busca" type="search" autocomplete="off" inputmode="search" maxlength="60" placeholder="Ex.: Novo Hamburgo">
-    <ul id="resultados" class="resultados" aria-live="polite"></ul>
-    <p class="nota">A localização exata fica só neste aparelho. Às APIs vão coordenadas arredondadas para 2 casas (cerca de 1 km).</p>
-    <button value="fechar" class="largo secundario">Fechar</button>
+    <div class="dlg-topo">
+      <h2 id="dlg-local-t">Escolher local</h2>
+      <button value="fechar" class="fechar" aria-label="Fechar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="campo-busca">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.4 15.4 20 20"/></svg>
+      <input id="busca" type="search" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="search" inputmode="search" maxlength="60" placeholder="Buscar cidade" aria-label="Buscar cidade" aria-controls="lista-locais" aria-describedby="busca-estado">
+      <button type="button" id="busca-limpar" class="limpar" aria-label="Limpar busca" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <p id="busca-estado" class="busca-estado" role="status" aria-live="polite" hidden></p>
+    <div id="lista-locais" class="lista-locais"></div>
+    <p class="nota">A localização exata fica só neste aparelho. Às APIs vão coordenadas arredondadas para 2 casas (cerca de 1 km). Busca de cidades: Open-Meteo, com dados do GeoNames.</p>
   </form>
 </dialog>
 

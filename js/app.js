@@ -8,15 +8,17 @@ import {
   calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
 } from './analise.js';
 import {
-  buscarPrevisao, buscarEnsemble, buscarCidades, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
-  salvarCache, lerCache, workerConfigurado, MODELOS_ENSEMBLE, buscarAlertasDireto, buscarObservacoesDireto, buscarChuvaRadar, buscarChegadaChuva,
+  buscarPrevisao, buscarEnsemble, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
+  salvarCache, lerCache, apagarCache, workerConfigurado, MODELOS_ENSEMBLE, buscarAlertasDireto, buscarObservacoesDireto, buscarChuvaRadar, buscarChegadaChuva,
 } from './dados.js';
+import { chaveLocal } from './cidades.js';
+import { criarLocais } from './locais.js';
 import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor } from './ui.js';
 import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.8';
+const VERSAO = '1.10.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -77,6 +79,7 @@ async function iniciar() {
     if (!antes || antes.lat !== agora.lat || antes.lon !== agora.lon) await atualizar({ forcar: true, local: !!antes });
   }
   agendar();
+  setTimeout(() => ocioso(preCarregarLocais), 4000); // abas de cidade prontas depois da primeira tela
   if ('serviceWorker' in navigator) {
     // versão nova publicada: recarrega uma vez quando o novo service worker assume
     const tinha = !!navigator.serviceWorker.controller;
@@ -131,13 +134,23 @@ function localizarGps(silencioso, recente = false) {
 }
 
 function definirLocal(l) {
-  const mudou = !estado.local || Math.abs(arredondaCoord(estado.local.lat) - arredondaCoord(l.lat)) > 0.001 || Math.abs(arredondaCoord(estado.local.lon) - arredondaCoord(l.lon)) > 0.001;
+  const mudou = !estado.local || chaveLocal(estado.local) !== chaveLocal(l);
   // salva só no aparelho e já arredondado: a posição exata não é persistida
   estado.local = { ...l, lat: l.lat, lon: l.lon };
-  prefs.gravar('local', { nome: l.nome, regiao: l.regiao, origem: l.origem, lat: arredondaCoord(l.lat), lon: arredondaCoord(l.lon) });
-  if (l.origem !== 'gps') estado.localExato = null;
+  prefs.gravar('local', { id: l.id ?? null, nome: l.nome, regiao: l.regiao, origem: l.origem, lat: arredondaCoord(l.lat), lon: arredondaCoord(l.lon) });
+  if (l.origem === 'gps') lembrarGps(l);
+  else estado.localExato = null;
   atualizarCabecalho();
   return mudou;
+}
+
+// Último ponto do GPS (arredondado): a aba "Aqui" volta a ele na hora, com os dados salvos, enquanto o GPS responde.
+// O dado salvo do ponto anterior é apagado quando o ponto muda (salvo se for de uma favorita).
+function lembrarGps(l) {
+  const novo = { lat: arredondaCoord(l.lat), lon: arredondaCoord(l.lon) };
+  const antigo = prefs.ler('ultimoGps', null);
+  if (antigo && chaveLocal(antigo) !== chaveLocal(novo) && !locais?.ehFavorita(antigo)) apagarInstantaneo(antigo);
+  prefs.gravar('ultimoGps', novo);
 }
 
 const pontoExato = () => estado.localExato || estado.local;
@@ -145,26 +158,115 @@ const pontoExato = () => estado.localExato || estado.local;
 // Cidade escolhida à mão vale só nesta sessão; ao abrir o app de novo, volta para a posição atual.
 function marcarEscolha(sim) { try { if (sim) sessionStorage.setItem('localEscolhido', '1'); else sessionStorage.removeItem('localEscolhido'); } catch {} }
 
+let locais = null;
+
 function configurarLocal() {
-  const dlg = $('#dlg-local');
-  $('#btn-local').addEventListener('click', () => { dlg.showModal(); $('#busca').focus(); });
-  $('#btn-gps').addEventListener('click', async () => { dlg.close(); marcarEscolha(false); await localizarGps(false); atualizar({ forcar: true, local: true }); });
-  $('#btn-padrao').addEventListener('click', () => { dlg.close(); marcarEscolha(true); definirLocal({ ...CONFIG.padrao, origem: 'cidade' }); atualizar({ forcar: true, local: true }); });
-  let t = null;
-  $('#busca').addEventListener('input', (e) => {
-    clearTimeout(t);
-    const q = e.target.value;
-    t = setTimeout(async () => {
-      const lista = $('#resultados');
-      if (q.trim().length < 2) { lista.replaceChildren(); return; }
-      try {
-        const r = await buscarCidades(q);
-        lista.replaceChildren(...(r.length ? r.map((c) => el('li', {}, el('button', { type: 'button', onclick: () => {
-          dlg.close(); marcarEscolha(true); definirLocal({ nome: c.nome, regiao: c.regiao, lat: c.lat, lon: c.lon, origem: 'cidade' }); atualizar({ forcar: true, local: true });
-        } }, c.nome, el('small', { text: c.regiao })))) : [el('li', { class: 'nota', text: 'Nenhuma cidade encontrada.' })]));
-      } catch (err) { lista.replaceChildren(el('li', { class: 'nota', text: 'Busca indisponível: ' + err.message })); }
-    }, 450); // espera a pessoa parar de digitar: uma chamada por busca, não por tecla
+  locais = criarLocais({
+    atual: () => estado.local,
+    escolherCidade: (c) => { marcarEscolha(true); trocarLocal({ id: c.id ?? null, nome: c.nome, regiao: c.regiao, lat: c.lat, lon: c.lon, origem: 'cidade' }); },
+    usarGps: usarLocalizacaoAtual,
+    aoMudarFavoritas: (favoritas, removida) => {
+      if (!removida) { guardarInstantaneoAtual(); ocioso(preCarregarLocais); return; }
+      // a cidade tirada perde os dados salvos, salvo se for também o último ponto do GPS
+      const gps = prefs.ler('ultimoGps', null);
+      if (!gps || chaveLocal(gps) !== chaveLocal(removida)) apagarInstantaneo(removida);
+    },
   });
+  $('#btn-local').addEventListener('click', () => locais.abrir());
+}
+
+/**
+ * Troca o local da tela (aba de cidade, favorita, recente ou resultado da busca). Os dados do local anterior saem
+ * na hora: entram os dados salvos do novo local (instantâneo) ou, sem eles, a tela fica esmaecida até a previsão chegar.
+ * @param {object} l local com nome, regiao, lat, lon, origem e id opcional (GeoNames)
+ */
+async function trocarLocal(l) {
+  definirLocal(l);
+  await carregarInstantaneo();
+  atualizar({ forcar: true });
+}
+
+/** Aba "Aqui": mostra na hora o último ponto do GPS e confirma a posição; se ela mudou, troca os dados de novo. */
+async function usarLocalizacaoAtual() {
+  marcarEscolha(false);
+  const ultimo = prefs.ler('ultimoGps', null);
+  if (ultimo && Number.isFinite(ultimo.lat) && Number.isFinite(ultimo.lon)) {
+    definirLocal({ nome: 'Sua localização', regiao: 'GPS', lat: ultimo.lat, lon: ultimo.lon, origem: 'gps' });
+    await carregarInstantaneo();
+  }
+  const antes = estado.local ? chaveLocal(estado.local) : null;
+  const pedido = ultimo ? atualizar({ forcar: true }) : Promise.resolve();
+  await localizarGps(false);
+  await pedido;
+  if (chaveLocal(estado.local) !== antes || !ultimo) { await carregarInstantaneo(); await atualizar({ forcar: true }); }
+}
+
+// ------------------------------------------------------------------ dados salvos por local (instantâneos)
+// Previsão e cenários das favoritas e do último ponto do GPS ficam no Cache Storage com a chave do local
+// (coordenada arredondada, chaveLocal). Trocar de aba mostra esses dados na hora, com o aviso de dados salvos,
+// enquanto a busca nova sai. preCarregarLocais os renova em segundo plano.
+
+const chaveInstantaneo = (tipo, l) => `${tipo}@${chaveLocal(l)}`;
+const guardaInstantaneo = (l) => !!l && (l.origem === 'gps' || !!locais?.ehFavorita(l));
+
+function apagarInstantaneo(l) { apagarCache(chaveInstantaneo('previsao', l)); apagarCache(chaveInstantaneo('ensemble', l)); }
+
+function guardarInstantaneoAtual() {
+  if (!guardaInstantaneo(estado.local)) return;
+  if (estado.prevBruta && !estado.cacheAntigo) salvarCache(chaveInstantaneo('previsao', estado.local), estado.prevBruta);
+  if (estado.ensBruto) salvarCache(chaveInstantaneo('ensemble', estado.local), estado.ensBruto);
+}
+
+/**
+ * Põe na tela os dados salvos do local atual, sem misturar com os do local anterior: medições, radar e cenários
+ * do outro local são descartados; a previsão vem do instantâneo (até CONFIG.locais.idadeMaxSalvoH) ou fica vazia,
+ * com a tela esmaecida (main[aria-busy]) até renderTudo receber a previsão nova.
+ */
+async function carregarInstantaneo() {
+  const chave = chaveLocal(estado.local);
+  delete estado.erros.previsao;
+  Object.assign(estado, { obs: null, obsEm: null, radarAgora: null, radarAgoraEm: null, chegada: null, chegadaEm: null, ens: null, ensBruto: null, ensEm: null, ancoragem: null });
+  const [p, e] = await Promise.all([lerCache(`previsao@${chave}`), lerCache(`ensemble@${chave}`)]);
+  if (chaveLocal(estado.local) !== chave) return; // outra troca começou enquanto lia
+  const recente = (c) => c?.dados && Date.now() - c.salvoEm < CONFIG.locais.idadeMaxSalvoH * 3600000;
+  if (recente(p)) {
+    Object.assign(estado, { prevBruta: p.dados, prevEm: p.salvoEm, cacheAntigo: true });
+    if (recente(e)) Object.assign(estado, { ensBruto: e.dados, ensEm: e.salvoEm });
+    recalibrar();
+    renderTudo();
+  } else {
+    Object.assign(estado, { prevBruta: null, prev: null, prevEm: null, trocando: true });
+    $('#conteudo').setAttribute('aria-busy', 'true');
+    $('#agora').replaceChildren(); // a temperatura do topo era do local anterior
+    atualizarCabecalho();
+  }
+}
+
+/**
+ * Renova em segundo plano a previsão e os cenários de cada favorita fora de uso cujo dado salvo passou de
+ * CONFIG.locais.preCarregar*Min. Uma favorita por vez, só com a tela visível e com internet; falhas são ignoradas
+ * (a troca de aba ainda funciona, só sem a resposta instantânea).
+ */
+let preCarregando = false;
+async function preCarregarLocais() {
+  if (preCarregando || !locais || estado.apagado || document.hidden || navigator.onLine === false) return;
+  preCarregando = true;
+  const venceu = (c, min) => !c?.dados || Date.now() - c.salvoEm > min * 60000;
+  try {
+    for (const f of locais.favoritas()) {
+      if (estado.apagado || document.hidden) break;
+      if (estado.local && chaveLocal(f) === chaveLocal(estado.local)) continue;
+      const [p, e] = await Promise.all([lerCache(chaveInstantaneo('previsao', f)), lerCache(chaveInstantaneo('ensemble', f))]);
+      if (venceu(p, CONFIG.locais.preCarregarPrevisaoMin)) {
+        const pv = await buscarPrevisao(f.lat, f.lon).catch(() => null);
+        if (pv && locais.ehFavorita(f)) await salvarCache(chaveInstantaneo('previsao', f), pv);
+      }
+      if (venceu(e, CONFIG.locais.preCarregarCenariosMin)) {
+        const r = await buscarEnsemble(f.lat, f.lon).catch(() => null);
+        if (r?.ens && locais.ehFavorita(f)) await salvarCache(chaveInstantaneo('ensemble', f), r.ens);
+      }
+    }
+  } finally { preCarregando = false; }
 }
 
 // ------------------------------------------------------------------ atualização
@@ -187,37 +289,51 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
   const venceu = (em, min) => forcar || local || !em || Date.now() - em > min * 60000;
   const I = CONFIG.intervalos;
   const { lat, lon } = estado.local;
+  // Respostas que chegam depois de uma troca de local são descartadas: nunca misturam dois locais na tela.
+  const chave = chaveLocal(estado.local);
+  const aqui = () => !!estado.local && chaveLocal(estado.local) === chave;
   try {
     // Todas as fontes saem ao mesmo tempo; a primeira tela é desenhada assim que a previsão chega.
     if (local) { estado.ens = null; estado.ensBruto = null; estado.obs = null; estado.alertas = null; }
     const tarefas = [];
     let principal = Promise.resolve();
     if (venceu(estado.prevEm, I.previsao)) tarefas.push(principal = buscarPrevisao(lat, lon)
-      .then((pv) => { estado.prevBruta = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao; salvarCache('previsao', pv); recalibrar(); })
-      .catch((e) => { estado.erros.previsao = e.message; })
-      .then(() => renderTudo()));
+      .then((pv) => {
+        if (!aqui()) return;
+        estado.prevBruta = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao;
+        salvarCache('previsao', pv);
+        if (guardaInstantaneo(estado.local)) salvarCache(chaveInstantaneo('previsao', estado.local), pv);
+        recalibrar();
+      })
+      .catch((e) => { if (aqui()) estado.erros.previsao = e.message; })
+      .then(() => { if (aqui()) renderTudo(); }));
     if (venceu(estado.ensEm, I.cenarios)) tarefas.push(buscarEnsemble(lat, lon).then(({ ens, erros }) => {
+      if (!aqui()) return;
       estado.ensErros = erros;
-      if (ens) { estado.ensBruto = ens; estado.ensEm = Date.now(); salvarCache('ensemble', ens); delete estado.erros.ensemble; recalibrar(); }
+      if (ens) {
+        estado.ensBruto = ens; estado.ensEm = Date.now(); salvarCache('ensemble', ens); delete estado.erros.ensemble;
+        if (guardaInstantaneo(estado.local)) salvarCache(chaveInstantaneo('ensemble', estado.local), ens);
+        recalibrar();
+      }
       else estado.erros.ensemble = erros.join('; ') || 'sem dados';
     }));
     const w = workerConfigurado();
     // Medições: Worker (INMET + METAR); sem ele, só a última leitura do INMET de Campo Bom direto.
     if (agora || venceu(estado.obsEm, I.medicoes)) tarefas.push((w ? buscarObservacoes(lat, lon).catch(() => buscarObservacoesDireto()) : buscarObservacoesDireto())
-      .then((o) => { estado.obs = o; estado.obsEm = Date.now(); salvarCache('observacoes', o); delete estado.erros.medicoes; recalibrar(); })
-      .catch((e) => { estado.erros.medicoes = e.message; }));
+      .then((o) => { if (!aqui()) return; estado.obs = o; estado.obsEm = Date.now(); salvarCache('observacoes', o); delete estado.erros.medicoes; recalibrar(); })
+      .catch((e) => { if (aqui()) estado.erros.medicoes = e.message; }));
     // Alertas: Worker (resposta enxuta) ou INMET direto. Falha vira "Alertas indisponíveis".
     if (venceu(estado.alertasEm, I.alertas)) tarefas.push((w ? buscarAlertas().catch(() => buscarAlertasDireto()) : buscarAlertasDireto())
       .then((a) => { estado.alertas = a; estado.alertasEm = Date.now(); delete estado.erros.alertas; })
       .catch((e) => { estado.alertas = null; estado.erros.alertas = e.message; }));
     // Radar sobre o ponto: diz se está chovendo agora, mesmo entre as leituras horárias da estação.
     if (agora || venceu(estado.radarAgoraEm, 5)) tarefas.push(buscarChuvaRadar(lat, lon)
-      .then((r) => { estado.radarAgora = r; estado.radarAgoraEm = Date.now(); })
-      .catch(() => { estado.radarAgora = null; }));
+      .then((r) => { if (aqui()) { estado.radarAgora = r; estado.radarAgoraEm = Date.now(); } })
+      .catch(() => { if (aqui()) estado.radarAgora = null; }));
     // Chuva chegando: movimento dos ecos do radar extrapolado até o local (mesma cadência do radar).
     if (agora || venceu(estado.chegadaEm, 5)) tarefas.push(buscarChegadaChuva(lat, lon)
-      .then((c) => { estado.chegada = c; estado.chegadaEm = Date.now(); })
-      .catch(() => { estado.chegada = null; }));
+      .then((c) => { if (aqui()) { estado.chegada = c; estado.chegadaEm = Date.now(); } })
+      .catch(() => { if (aqui()) estado.chegada = null; }));
     // El Niño: arquivo do robô do GitHub ou Worker; no botão atualizar, busca de novo também
     if (venceu(estado.ensoEm, I.enso)) tarefas.push(buscarEnso()
       .then((e) => { estado.enso = e; estado.ensoEm = Date.now(); salvarCache('enso', e); delete estado.erros.enso; })
@@ -286,6 +402,7 @@ async function atualizarTudo() {
   } finally {
     clearTimeout(vigia);
     if (rodada === minha) pararGiro();
+    ocioso(preCarregarLocais);
     navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {});
   }
 }
@@ -303,7 +420,8 @@ function atualizarCabecalho() {
     $('#btn-local').setAttribute('aria-label', `Local: ${estado.local.nome}. Toque para trocar.`);
   }
   const h = $('#local-hora');
-  if (!estado.prevEm) { h.textContent = 'sem dados ainda'; return; }
+  locais?.renderAbas();
+  if (!estado.prevEm) { h.textContent = estado.trocando ? 'buscando a previsão…' : 'sem dados ainda'; return; }
   const atraso = Date.now() - estado.prevEm > 45 * 60000;
   h.textContent = `Atualizado às ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)}${atraso ? ', desatualizado' : ''}`;
   h.classList.toggle('atrasado', atraso);
@@ -680,6 +798,13 @@ function chegandoAgora() {
 // ------------------------------------------------------------------ render geral
 
 function renderTudo() {
+  if (estado.trocando) {
+    if (!estado.prev && !estado.erros.previsao) return; // troca de local: a previsão nova ainda não chegou
+    estado.trocando = false;
+    $('#conteudo').removeAttribute('aria-busy');
+    // sem previsão do local novo, nada do local anterior pode ficar nas outras abas
+    if (!estado.prev) for (const id of ['#hoje-detalhes', '#amanha-primeira', '#amanha-detalhes', '#semana-conteudo', '#dia-primeira', '#dia-detalhes', '#modelos-conteudo']) $(id).replaceChildren();
+  }
   renderAvisos({ semAlertaEnso: true }); // rápido, antes da primeira tela; o aviso do El Niño entra quando a aba El Niño é montada na fila
   if (!estado.prev) { renderSemPrevisao(); return; }
   for (const f of estado.faixas) f.destruir();

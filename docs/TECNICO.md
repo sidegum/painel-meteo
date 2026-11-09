@@ -124,7 +124,8 @@ O `setInterval` de 60 s reescreve o cabeçalho ("Atualizado às HH:MM", com ", d
 
 | Campo | Conteúdo |
 |---|---|
-| `local` | `{ nome, regiao, lat, lon, origem: 'gps' \| 'cidade' \| 'padrao' }`. Em `localStorage` fica a versão arredondada. |
+| `local` | `{ id?, nome, regiao, lat, lon, origem: 'gps' \| 'cidade' \| 'padrao' }`. Em `localStorage` fica a versão arredondada. `id` é o do GeoNames, quando a cidade veio da busca. |
+| `trocando` | `true` entre a troca para um local sem dados salvos e a chegada da previsão dele (seção 5.1). |
 | `localExato` | Coordenada exata do GPS, só em memória. É usada para distâncias calculadas no aparelho. |
 | `prevBruta` | Saída de `normalizarPrevisao` (seção 4.2), como veio da Open-Meteo. É o que vai para o cache local. |
 | `prev` | `prevBruta` calibrada por `recalibrar` (seção 3.7). Todas as telas leem daqui. |
@@ -358,7 +359,8 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
 
 ### 4.4 Outras fontes
 
-- `buscarCidades(nome)`: geocodificação da Open-Meteo, com a consulta limitada a 60 caracteres.
+- `buscarCidades(nome, { signal })`: geocodificação da Open-Meteo (`/v1/search` com `name`, `count=20`, `language=pt`, `format=json`), com a consulta limitada a 60 caracteres. Com 2 letras a API só casa nomes exatos; a partir de 3 faz busca aproximada. A resposta passa por `normalizarResultados` (seção 5.9). O `signal` cancela a chamada quando a pessoa continua digitando: `buscarJsonUmaVez` aceita um `AbortSignal` externo e lança `ErroFonte` do tipo `cancelada`, que não é repetida.
+- `apagarCache(chave)`: remove uma entrada do cache de dados (usada pelos instantâneos por local).
 - `worker(rota, params)`: chamada às rotas fixas do Worker. `workerConfigurado()` valida a URL do Worker em `config.js`.
 - `buscarAlertasDireto` e `buscarObservacoesDireto`: alternativas sem Worker (INMET direto, quando o CORS permite).
 - `buscarEnso`: tenta o Worker. Se falhar, lê `dados/enso.json`, publicado no próprio Pages.
@@ -390,8 +392,19 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
   - Chama `getCurrentPosition` com `timeout` de 9 s.
   - Uma **trava de 12 s** encerra a espera mesmo se o navegador não chamar nenhum retorno (caso observado no iOS com o app na tela inicial). A flag `feito` garante uma única resolução.
   - Sem GPS, usa o último local salvo. Se não houver nenhum, usa o centro de Campo Bom.
-- `definirLocal(l)` grava em `localStorage` só a coordenada arredondada e devolve se o local mudou.
-- `configurarLocal()` cuida do diálogo de busca de cidades, com debounce de 450 ms (uma chamada por busca, não por tecla).
+- `definirLocal(l)` grava em `localStorage` só a coordenada arredondada (e o `id` do GeoNames, quando houver) e devolve se o local mudou. Com origem `gps`, `lembrarGps` guarda o último ponto em `pref:ultimoGps` e apaga os dados salvos do ponto anterior.
+- `configurarLocal()` cria as abas de cidade e a janela "Escolher local" (`criarLocais`, seção 5.9) e liga os retornos:
+  - `escolherCidade(c)` marca a escolha da sessão e chama `trocarLocal`.
+  - `usarLocalizacaoAtual()` (aba "Aqui"): mostra na hora o último ponto do GPS com os dados salvos dele, confirma a posição com `localizarGps` e, se a coordenada arredondada mudou, troca os dados de novo.
+- `trocarLocal(l)`: `definirLocal`, `carregarInstantaneo` e `atualizar({ forcar: true })`.
+
+#### Dados salvos por local (instantâneos)
+
+- Chave: `previsao@<lat>,<lon>` e `ensemble@<lat>,<lon>` no Cache Storage, com a coordenada arredondada (`chaveLocal`).
+- Só a posição do GPS e as favoritas guardam instantâneo (`guardaInstantaneo`). Tirar uma favorita apaga o dela.
+- `carregarInstantaneo()` descarta medições, radar, cenários e ancoragem do local anterior. Se houver instantâneo com menos de `CONFIG.locais.idadeMaxSalvoH` (12 h), ele vai para a tela com o aviso "Mostrando dados salvos enquanto atualiza". Sem ele, `estado.trocando = true`: a tela fica esmaecida (`main[aria-busy]`), a temperatura do topo é apagada e `renderTudo` só desenha quando a previsão nova chega. Se ela falhar, as outras abas são esvaziadas, para nada do local anterior ficar na tela.
+- `atualizar` guarda a chave do local no início e descarta as respostas (previsão, cenários, medições, radar) que chegam depois de uma troca (`aqui()`). Assim, duas trocas rápidas nunca misturam locais.
+- `preCarregarLocais()`: depois da primeira tela e de cada `atualizarTudo`, em tempo ocioso, renova uma favorita por vez quando a previsão salva passa de `CONFIG.locais.preCarregarPrevisaoMin` (30 min) ou os cenários de `preCarregarCenariosMin` (120 min). Só com a página visível e com internet. Com isso, trocar de aba de cidade é instantâneo (medido: 35 a 75 ms no teste com Playwright, sem esmaecer).
 
 ### 5.2 Análise por dia
 
@@ -537,6 +550,30 @@ A ordem é:
 - `aplicarTema()` alterna entre automático, claro e escuro (`data-tema` em `<html>`) e atualiza `theme-color`.
 - `configurarRodape()`: o botão "Apagar dados" remove os service workers, o Cache Storage, o `localStorage` e o `sessionStorage`.
 
+### 5.9 Busca de cidades, favoritas e abas (`js/cidades.js` e `js/locais.js`)
+
+**`js/cidades.js`** (funções puras, testadas em `test/cidades.test.mjs`):
+
+- `LIMITES`: 8 favoritas, 5 recentes, 10 resultados, 60 caracteres por consulta.
+- `normalizarResultados(results)`: mantém só lugares habitados (`feature_code` PPL\*, do GeoNames; aeroportos e bairros saem, a não ser que não haja outro resultado), remove repetidos por `id`, põe o Brasil primeiro mantendo a ordem de relevância da API em cada grupo e monta `regiao` com `regiaoDe`.
+- `regiaoDe(c, repetida)`: "Estado, País". Quando duas cidades com o mesmo nome caem no mesmo estado (comparação sem acento), entra "município de X" (`admin2`).
+- `trechosDestaque(nome, consulta)`: trechos para destacar o que foi digitado, no início do nome ou de uma palavra, sem diferenciar acento nem maiúscula. Um mapa de índices liga o texto dobrado ao original.
+- `mesmoLocal(a, b)`: mesmo `id` do GeoNames quando os dois têm; senão, mesma `chaveLocal` (coordenada com 2 casas). O padrão do app (Campo Bom, sem `id`) casa com o Campo Bom da busca.
+- `alternarFavorita`, `moverFavorita`, `adicionarRecente`, `listaValida` e `paraGuardar`: listas imutáveis. O que vai para o aparelho é `{ id, nome, regiao, lat, lon }` com a coordenada arredondada.
+
+**`js/locais.js`** (`criarLocais({ atual, escolherCidade, usarGps, aoMudarFavoritas })`):
+
+- Favoritas e recentes ficam em `pref:favoritas` e `pref:recentes` (`localStorage`).
+- **Abas de cidade** (`#cidades`, abaixo do nome do local): "Aqui" (GPS), as favoritas na ordem escolhida e, se a cidade em uso não for favorita, uma aba para ela com a estrela de favoritar. Por último, a lupa abre a busca. Sem favoritas e no GPS, a faixa some. A faixa rola na horizontal e mantém a aba em uso visível. `renderAbas` só redesenha quando o local ou as favoritas mudam (é chamada por `atualizarCabecalho`).
+- **Janela "Escolher local"** (`#dlg-local`): folha de baixo no celular, cartão centralizado a partir de 760 px.
+  - Sem texto: "Sua localização atual", Campo Bom (padrão, se não estiver salvo), Favoritas (com "Ordenar": setas sobem e descem) e Recentes (com "Limpar").
+  - Com texto: as salvas que casam aparecem na hora (`casaConsulta`) e os resultados da API entram abaixo, sem repetir. A busca sai 220 ms depois da última tecla; a anterior é cancelada; as respostas ficam em memória (40 consultas). Os resultados anteriores ficam na tela até os novos chegarem, com "Buscando…".
+  - Estados: menos de 2 letras, nenhum resultado, sem internet (as salvas continuam), limite de uso e falha com "Tentar de novo".
+  - Teclado: setas percorrem as cidades, Enter na busca escolhe a primeira, Esc com texto limpa a busca antes de fechar. Tocar fora da janela fecha.
+  - No celular, o teclado só abre sozinho se não houver cidade salva; no computador, o cursor já fica na busca.
+- A cidade escolhida continua valendo só até fechar o app (`sessionStorage.localEscolhido`); ao abrir de novo, volta para a posição atual. As favoritas ficam.
+
+
 ---
 
 ## 6. `js/mapa.js`
@@ -664,7 +701,8 @@ Nenhuma chave contém a localização ou o IP do usuário.
 - `test/ceu.test.mjs`: cálculos do céu conferidos com fatos publicados (equinócio, solstício, Gemínidas, eclipses de 2026, estrelas circumpolares).
 - `worker/test/worker.test.mjs`: 24 testes dos parsers e das regras do Worker, com fixtures reais.
 - `test/calibracao.test.mjs`: leitor de ZIP e CSV do INMET, agregação diária, viés, fator, validação fora da amostra e aplicação no app (séries, cenários, pesos).
-- O comando `npm test` roda os quatro.
+- `test/cidades.test.mjs`: normalização da busca de cidades (com respostas reais da geocodificação), desambiguação, destaque, favoritas e recentes.
+- O comando `npm test` roda todos.
 
 ---
 
