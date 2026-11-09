@@ -726,6 +726,15 @@ de kpc), toques e o render do laço vão para o módulo enquanto `G.galaxia` exi
 - `salvarImagem`: renderiza a vista com o lado maior em até 4.096 px (ou o limite da GPU), desenha nomes, escala e
   créditos num canvas 2D e entrega PNG (folha de compartilhar no celular, download no computador).
 
+Sistema solar com mais dados (1.9.8):
+- Tabela "Dados" (`montarTabela` em `globo-espaco.js`, cálculo em `efemeridesPlanetas` de `ceu.js`, testado): para
+  cada planeta e Plutão, distância ao Sol e à Terra, tempo da luz até a Terra, velocidade orbital, magnitude, constelação
+  e elongação, na data mostrada (acompanha o tempo acelerado). Painel lateral a partir de 900 px; no celular abre numa
+  janela. Tocar numa linha leva até o planeta. Os nomes da cena não ficam por baixo dela.
+- Escala na cena (filtro "Escala de distâncias"): anéis de 1 a 1.000 UA no plano da eclíptica com a distância e o
+  tempo da luz, choque de terminação (~90 UA; Voyager 1 a 94 UA, Voyager 2 a 84 UA) e início estimado da Nuvem de Oort
+  (~2.000 UA), todos tocáveis.
+
 Detalhes da Terra (1.9.7):
 - Contornos (`globo-contornos.js`, `vendor/terra/contornos.bin`): Int16 lon·32767/180, lat·32767/90 (passo de ~600 m),
   fim de linha (−32768, −32768); 370 mil pontos em `LineSegments` de 1 pixel, a 130 m de altura, com a profundidade

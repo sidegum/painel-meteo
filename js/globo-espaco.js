@@ -43,7 +43,7 @@ const E = {
 
 const MAGS = [[21, 'Todas (800 mil, inclusive as de telescópio)'], [6.5, 'As visíveis a olho nu'], [4.5, 'As de céu de cidade'], [2.5, 'Só as mais brilhantes'], [0, 'Nenhuma']];
 const FILTROS_PADRAO = { magEstrelas: 21, viaLactea: true, objetos: true, nomesEstrelas: true, linhas: true, nomesConst: false, planetas: true, trilhas: true,
-  orbitas: true, luas: true, pequenos: true, cinturoes: true, sondas: true, rotasSondas: true, rotulos: true };
+  orbitas: true, luas: true, pequenos: true, cinturoes: true, sondas: true, rotasSondas: true, rotulos: true, escala: true, tabela: true };
 const F = { ...FILTROS_PADRAO, ...prefs.ler('globo:filtrosEspaco', {}) };
 const MAG_ROTULO_ESTRELA = 1.6; // estrelas com nome que ganham rótulo (as ~25 mais brilhantes)
 
@@ -87,7 +87,7 @@ function abrirFiltros() {
       sistema ? null : caixa('nomesConst', 'Nomes das constelações'),
       el('h4', { text: sistema ? 'Sistema solar' : 'Em volta da Terra' }),
       ...(sistema
-        ? [caixa('orbitas', 'Órbitas'), caixa('luas', 'Luas'), caixa('pequenos', 'Planetas anões, asteroides e cometas'), caixa('cinturoes', 'Cinturões de asteroides e de Kuiper'), caixa('sondas', 'Sondas e telescópios'), caixa('rotasSondas', 'Rotas das sondas'), caixa('rotulos', 'Nomes')]
+        ? [caixa('orbitas', 'Órbitas'), caixa('escala', 'Escala de distâncias (UA e tempo da luz)'), caixa('luas', 'Luas'), caixa('pequenos', 'Planetas anões, asteroides e cometas'), caixa('cinturoes', 'Cinturões de asteroides e de Kuiper'), caixa('sondas', 'Sondas e telescópios'), caixa('rotasSondas', 'Rotas das sondas'), caixa('rotulos', 'Nomes')]
         : [caixa('planetas', 'Planetas no céu'), caixa('trilhas', 'Órbita da ISS e da Tiangong')])));
 }
 
@@ -625,6 +625,7 @@ function alternarSistema(ligar) {
   for (const r of SIS.rotulos) r.el.hidden = true;
   for (const r of [...E.estrelas, ...E.objetos, ...E.constelacoes]) r.rotulo.hidden = true;
   SIS.dom.raiz.hidden = !ligar;
+  mostrarTabela();
   if (!ligar) { SIS.desloc = 0; definirVelocidade(0); }
   SIS.focado = null; if (SIS.dom) { SIS.dom.geral.hidden = true; SIS.dom.livre.setAttribute('aria-pressed', 'false'); SIS.dom.dica.hidden = true; }
   G.modoSistema(ligar);
@@ -846,6 +847,7 @@ async function montarSistema() {
   const marcaHp = new THREE.Object3D(); paraCena(0, -120, 0, marcaHp.position); grupo.add(marcaHp);
   rotulo(marcaHp, 'Heliopausa', 10, 'faixa', 0);
   tocaveis.push({ objeto: marcaHp, acao: () => G.mostrarPainel('Heliopausa', 'Onde o vento do Sol perde força e começa o espaço interestelar.', 'Cerca de 120 UA do Sol (18 bilhões de km)', 'Voyager 1 (2012) e Voyager 2 (2018), NASA', acoesSistema()) });
+  montarEscala(grupo, rotulo, tocaveis);
   const fonteCorpos = corpos ? `JPL Small-Body Database · ${fmt.dataCurta(Date.parse(corpos.gerado) || agora, fusoS(G.estadoApp))}` : '';
   const regioes = [
     ['principal', 2.7, 135, 'Milhões de rochas entre Marte e Júpiter. Ceres, o maior, é um planeta anão.', 'De 2,1 a 3,3 UA do Sol'],
@@ -920,9 +922,101 @@ function aplicarFiltrosSistema() {
       case 'orbitaAnao': o.visible = F.pequenos && (F.orbitas || !!o.userData.destaque); break;
       case 'orbitaPequeno': o.visible = F.pequenos && !!o.userData.destaque; break;
       case 'populacao': o.visible = F.cinturoes; break;
+      case 'escala': o.visible = F.escala; break;
       default:
     }
   });
+}
+
+// ---------- escala de distâncias, choque de terminação e Nuvem de Oort ----------
+
+const ANEIS_ESCALA_UA = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+const SEGUNDOS_LUZ_POR_UA = C.UA / 299792.458; // 499,0 s
+
+/** Tempo que a luz leva para percorrer 'ua' unidades astronômicas, em texto curto. */
+function textoLuz(ua) {
+  const s = ua * SEGUNDOS_LUZ_POR_UA;
+  if (s < 3600) return `${num(s / 60, 0)} min-luz`;
+  if (s < 86400 * 2) return `${num(s / 3600, s < 36000 ? 1 : 0)} h-luz`;
+  return `${num(s / 86400, 1)} dias-luz`;
+}
+
+/**
+ * Anéis de distância no plano da eclíptica (a escala da cena é comprimida, então a régua fica desenhada nela), o choque
+ * de terminação (Voyager 1 a 94 UA em 2004, Voyager 2 a 84 UA em 2007) e o começo estimado da Nuvem de Oort.
+ */
+function montarEscala(grupo, rotulo, tocaveis) {
+  const { THREE, G } = E;
+  const circulo = (ua, cor, opac, tracejado) => {
+    const pts = [], v = new THREE.Vector3();
+    for (let k = 0; k <= 240; k++) { const a = k / 240 * Math.PI * 2; pts.push(paraCena(Math.cos(a) * ua, Math.sin(a) * ua, 0, v).clone()); }
+    const mat = tracejado ? new THREE.LineDashedMaterial({ color: cor, dashSize: 0.04 * distanciaTela(ua), gapSize: 0.05 * distanciaTela(ua), transparent: true, opacity: opac, depthWrite: false })
+      : new THREE.LineBasicMaterial({ color: cor, transparent: true, opacity: opac, depthWrite: false });
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat);
+    if (tracejado) l.computeLineDistances();
+    return l;
+  };
+  const marca = (ua, angulo, tipo) => { const o = new THREE.Object3D(); paraCena(ua * Math.cos(angulo * RAD), ua * Math.sin(angulo * RAD), 0, o.position); o.userData.tipo = tipo; grupo.add(o); return o; };
+  for (const ua of ANEIS_ESCALA_UA) {
+    const l = circulo(ua, 0x9fb4cc, 0.09, true); l.userData.tipo = 'escala'; grupo.add(l);
+    const o = marca(ua, -62, 'escala');
+    rotulo(o, `${num(ua, 0)} UA · ${textoLuz(ua)}`, 6, 'escala', 0);
+    tocaveis.push({ objeto: o, acao: () => G.mostrarPainel(`${num(ua, 0)} UA do Sol`, 'Anel de distância: cada ponto dele está a esta distância do Sol. No mapa as distâncias são comprimidas para tudo caber na tela; a direção de cada corpo é a real.',
+      `${num(ua * C.UA / 1e6, 0)} milhões de km · a luz do Sol leva ${textoLuz(ua).replace('-luz', '')} para chegar`, 'UA = 149.597.870,7 km (IAU 2012)', acoesSistema()), prioridade: 0 });
+  }
+  const choque = circulo(90, 0x8fb0d8, 0.28, true); choque.userData.tipo = 'escala'; grupo.add(choque);
+  const oChoque = marca(90, 160, 'escala');
+  rotulo(oChoque, 'Choque de terminação', 9, 'faixa', 0);
+  tocaveis.push({ objeto: oChoque, acao: () => G.mostrarPainel('Choque de terminação', 'Onde o vento solar, que sai do Sol a 400 km/s, freia de repente abaixo da velocidade do som ao encontrar o gás entre as estrelas.',
+    'Voyager 1 cruzou a 94 UA (dez/2004) e Voyager 2 a 84 UA (ago/2007): a bolha não é redonda nem fixa', 'Stone et al. 2005 e 2008, Science e Nature', acoesSistema()), prioridade: 0 });
+  const oort = circulo(2000, 0xb9a6d8, 0.22, true); oort.userData.tipo = 'escala'; grupo.add(oort);
+  const oOort = marca(2000, 120, 'escala');
+  rotulo(oOort, 'Nuvem de Oort (início estimado)', 7, 'faixa', 0);
+  tocaveis.push({ objeto: oOort, acao: () => G.mostrarPainel('Nuvem de Oort', 'Reservatório de bilhões de núcleos de cometas em volta do Sol, de onde vêm os cometas de período longo. Nunca foi vista diretamente: sua existência é deduzida das órbitas desses cometas.',
+    'Começa a cerca de 2.000 UA e pode ir além de 100.000 UA (1,6 ano-luz), um terço do caminho até Alfa Centauri', 'Oort 1950; estimativas atuais variam bastante', acoesSistema()), prioridade: 0 });
+}
+
+// ---------- tabela dos planetas agora ----------
+
+const largo = () => matchMedia('(min-width: 900px)').matches;
+
+/** Painel lateral no computador; no celular, "Dados" abre a mesma tabela numa janela (a cena fica limpa). */
+function mostrarTabela() {
+  if (!SIS.dom) return;
+  const ligado = E.modo === 'sistema' && !E.G.galaxia;
+  SIS.dom.dados.setAttribute('aria-pressed', String(F.tabela && largo()));
+  SIS.dom.tabela.hidden = !(ligado && F.tabela && largo());
+  if (ligado && !largo() && SIS.pediuTabela) mostrarInfo('Planetas agora', montarTabela(instanteSistema()));
+  SIS.pediuTabela = false;
+  if (!SIS.dom.tabela.hidden) atualizarTabela(instanteSistema(), true);
+}
+
+function atualizarTabela(ms, forcar = false) {
+  if (!forcar && SIS.dom.tabela.hidden) return;
+  SIS.dom.tabela.replaceChildren(montarTabela(ms));
+}
+
+const textoMin = (min) => (min < 60 ? `${num(min, min < 10 ? 1 : 0)} min` : `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, '0')}`);
+
+function montarTabela(ms) {
+  const lista = C.efemeridesPlanetas(ms);
+  const te = C.helioEcliptica('Earth', ms), terraSol = Math.hypot(te.x, te.y, te.z), ve = C.estadoHelio('Earth', ms);
+  const cab = el('tr', {}, ...['', 'do Sol', 'da Terra', 'luz', 'km/s', 'brilho', 'no céu'].map((t) => el('th', { text: t })));
+  const linhaDe = (nome, sol, terra, luz, vel, mag, ceu, corpo) => {
+    const tr = el('tr', {}, el('th', { text: nome }), el('td', { text: sol }), el('td', { text: terra }), el('td', { text: luz }), el('td', { text: vel }), el('td', { text: mag }), el('td', { text: ceu }));
+    if (corpo) {
+      tr.tabIndex = 0; tr.classList.add('tocavel');
+      tr.addEventListener('click', () => { const P = SIS.planetas.find((x) => x.p.corpo === corpo); if (P) { SIS.tocado = P.malha; focarObjeto(P.malha); } mostrarAstro(corpo, instanteSistema()); document.getElementById('dlg-info')?.close?.(); });
+    }
+    return tr;
+  };
+  const linhas = lista.map((p) => linhaDe(p.nome, `${num(p.distSolUa, p.distSolUa < 10 ? 3 : 2)} UA`, `${num(p.distTerraUa * C.UA / 1e6, 0)} mi km`, textoMin(p.luzMin),
+    num(p.velKmS, 1), num(p.mag, 1), `${p.constelacao} · ${num(p.elongacao, 0)}° do Sol`, p.corpo));
+  linhas.splice(2, 0, linhaDe('Terra', `${num(terraSol, 4)} UA`, '–', textoMin(terraSol * SEGUNDOS_LUZ_POR_UA / 60), num(Math.hypot(ve.vx, ve.vy, ve.vz) * C.UA / 86400, 1), '–', 'luz do Sol até aqui', null));
+  const d = new Date(ms);
+  return el('div', { class: 'tabela-planetas' },
+    el('table', {}, el('thead', {}, cab), el('tbody', {}, ...linhas)),
+    el('p', { class: 'nota', text: `Astronomy Engine (VSOP87) · ${d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}. Brilho em magnitude (menor = mais brilhante); "luz" é o tempo que a luz do planeta leva até a Terra. Toque numa linha para ir até o planeta.` }));
 }
 
 function mostrarTerra() {
@@ -957,14 +1051,16 @@ function montarControlesSistema() {
   const hoje = el('button', { type: 'button', class: 'globo-hoje', text: 'Hoje', hidden: true, 'aria-label': 'Voltar para hoje', onclick: () => { SIS.desloc = 0; definirVelocidade(0); } });
   const geral = el('button', { type: 'button', class: 'globo-visao-geral', text: 'Visão geral', hidden: true, onclick: visaoGeral });
   const livre = el('button', { type: 'button', class: 'globo-livre', text: 'Navegação livre', 'aria-pressed': 'false', onclick: () => alternarLivre(!E.G.livre) });
+  const dados = el('button', { type: 'button', class: 'globo-btn-tabela', text: 'Dados', 'aria-pressed': String(F.tabela), title: 'Tabela dos planetas agora', onclick: () => { if (largo()) { F.tabela = !F.tabela; gravarFiltros(); } else SIS.pediuTabela = true; mostrarTabela(); } });
+  const tabela = el('div', { class: 'globo-tabela-planetas', hidden: true });
   const galaxia = el('button', { type: 'button', class: 'globo-ir-galaxia', text: 'Via Láctea', title: 'Sair do sistema solar e ver a Via Láctea de fora', onclick: () => E.G.abrirGalaxia() });
   const dica = el('p', { class: 'globo-dica', hidden: true, text: 'Arraste para olhar em volta · afaste os dedos para avançar · dois toques para ir até algo' });
   const data = el('p', { class: 'globo-data-sistema' });
-  const topo = el('div', { class: 'globo-sistema-topo' }, tempo, hoje, geral, galaxia, livre);
+  const topo = el('div', { class: 'globo-sistema-topo' }, tempo, hoje, geral, galaxia, dados, livre);
   // fontes e data dos dados ficam no "?" (ajuda), fora da cena
   const raiz = el('div', { class: 'globo-sistema-controles globo-recolhivel', hidden: true }, dica, data, topo);
-  E.G.dom.raiz.append(raiz);
-  SIS.dom = { raiz, tempo, hoje, data, geral, livre, dica };
+  E.G.dom.raiz.append(raiz, tabela);
+  SIS.dom = { raiz, tempo, hoje, data, geral, livre, dica, dados, tabela };
 }
 
 const _m4 = { m: null, x: null, y: null, z: null, p: null };
@@ -1022,6 +1118,7 @@ function atualizarSistema(agora) {
     SIS.dom.data.textContent = agoraMesmo ? `Hoje, ${d.toLocaleDateString('pt-BR')}` : d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
     SIS.dom.hoje.hidden = agoraMesmo;
   }
+  if (SIS.dom && G.quadro % 30 === 5) atualizarTabela(ms);
 }
 
 /** Objeto e todos os grupos acima dele visíveis (dentro do sistema solar). */
@@ -1033,8 +1130,10 @@ function visivelNoSistema(o) {
 /** Rótulos do sistema solar sem sobreposição: os de maior prioridade ficam, os que colidem somem. */
 /** Retângulos (em coordenadas do canvas) dos controles visíveis por cima da cena, com uma folga. */
 function zonasDosControles(G, rect) {
-  if (G.dom.raiz.classList.contains('imersivo')) return [];
   const out = [];
+  const tab = SIS.dom?.tabela; // a tabela dos planetas fica à vista mesmo com os controles recolhidos
+  if (tab && !tab.hidden) { const r = tab.getBoundingClientRect(); out.push({ x0: r.left - rect.left - 4, y0: r.top - rect.top - 4, x1: r.right - rect.left + 4, y1: r.bottom - rect.top + 4 }); }
+  if (G.dom.raiz.classList.contains('imersivo')) return out;
   for (const b of G.dom.raiz.querySelectorAll('.globo-recolhivel button, .globo-recolhivel .globo-data-sistema, .globo-recolhivel .globo-legenda, .globo-recolhivel .globo-linha')) {
     const r = b.getBoundingClientRect();
     if (!r.width || !r.height) continue;
