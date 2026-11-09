@@ -4,7 +4,7 @@ import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, periodoDoDia, classeRajada,
-  condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
+  condicaoCeu, mesclarObservacoes, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
   calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
 } from './analise.js';
 import {
@@ -16,7 +16,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.7';
+const VERSAO = '1.9.8';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -189,7 +189,9 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
   const { lat, lon } = estado.local;
   try {
     // Todas as fontes saem ao mesmo tempo; a primeira tela é desenhada assim que a previsão chega.
-    if (local) { estado.ens = null; estado.ensBruto = null; estado.obs = null; estado.alertas = null; }
+    // Mudou o local: cenários e alertas são refeitos. As medições ficam se o lugar for o mesmo (o GPS oscila
+    // algumas centenas de metros entre leituras): sem isso, o céu e a temperatura medidos sumiam até a nova resposta.
+    if (local) { estado.ens = null; estado.ensBruto = null; estado.obs = medicoesDoLugar(lat, lon); estado.alertas = null; }
     const tarefas = [];
     let principal = Promise.resolve();
     if (venceu(estado.prevEm, I.previsao)) tarefas.push(principal = buscarPrevisao(lat, lon)
@@ -204,7 +206,12 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     const w = workerConfigurado();
     // Medições: Worker (INMET + METAR); sem ele, só a última leitura do INMET de Campo Bom direto.
     if (agora || venceu(estado.obsEm, I.medicoes)) tarefas.push((w ? buscarObservacoes(lat, lon).catch(() => buscarObservacoesDireto()) : buscarObservacoesDireto())
-      .then((o) => { estado.obs = o; estado.obsEm = Date.now(); salvarCache('observacoes', o); delete estado.erros.medicoes; recalibrar(); })
+      .then((o) => {
+        // Uma resposta sem alguma estação (METAR fora do ar, limite de requisições, Worker indisponível) não apaga
+        // a última leitura dela: cada leitura continua valendo pelo tempo da regra da variável (REGRAS.medicoes).
+        estado.obs = { ...mesclarObservacoes(medicoesDoLugar(lat, lon), o), ponto: { lat, lon } };
+        estado.obsEm = Date.now(); salvarCache('observacoes', estado.obs); delete estado.erros.medicoes; recalibrar();
+      })
       .catch((e) => { estado.erros.medicoes = e.message; }));
     // Alertas: Worker (resposta enxuta) ou INMET direto. Falha vira "Alertas indisponíveis".
     if (venceu(estado.alertasEm, I.alertas)) tarefas.push((w ? buscarAlertas().catch(() => buscarAlertasDireto()) : buscarAlertasDireto())
@@ -239,6 +246,15 @@ async function atualizar({ forcar = false, local = false, agora = false } = {}) 
     if (!tudoRodando) { $('#btn-atualizar').removeAttribute('aria-busy'); $('#btn-atualizar').setAttribute('aria-label', 'Atualizar'); }
     atualizarCabecalho();
   }
+}
+
+/**
+ * Medições já carregadas, se forem deste lugar (até REGRAS.medicoes.mesmoLugarKm de onde foram buscadas).
+ * @returns {object|null}
+ */
+function medicoesDoLugar(lat, lon) {
+  const p = estado.obs?.ponto;
+  return p && distanciaKm(lat, lon, p.lat, p.lon) <= REGRAS.medicoes.mesmoLugarKm ? estado.obs : null;
 }
 
 function agendar() {
@@ -601,8 +617,15 @@ function ceuAgora() {
   // médias e altas vêm dos modelos, e vale a maior cobertura: sem isso, um céu de nuvens altas virava "Ensolarado".
   const acima = medido ? maximo([modelo('cloud_cover_mid'), modelo('cloud_cover_high')].filter(valido)) : null;
   const cobertura = medido ? Math.max(medido.valor, valido(acima) ? acima : 0) : modelo('cloud_cover');
-  const ceu = condicaoCeu([cobertura], [valido(dia) ? Math.round(dia) : null], null);
+  // Sem medição, a previsão da hora decide com histerese sobre a última condição mostrada aqui (REGRAS.ceu):
+  // uma cobertura prevista oscilando perto de um limite (ex.: 19% e 22%) não troca "Ensolarado" por
+  // "Sol entre nuvens" a cada busca. Medição nova não passa pela histerese: o dado medido sempre manda.
+  const memoria = prefs.ler('ceuAgora', null);
+  const vale = memoria && agora - memoria.ms <= REGRAS.ceu.memoriaHoras * 3600000
+    && distanciaKm(pt.lat, pt.lon, memoria.lat, memoria.lon) <= REGRAS.medicoes.mesmoLugarKm;
+  const ceu = condicaoCeu([cobertura], [valido(dia) ? Math.round(dia) : null], null, !medido && vale ? memoria.nivel : null);
   if (!ceu) return null;
+  prefs.gravar('ceuAgora', { nivel: ceu.nivel, ms: agora, lat: pt.lat, lon: pt.lon });
   const origem = !medido ? 'nuvens pela previsão para esta hora'
     : valido(acima) && acima > medido.valor ? `nuvens baixas medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}; médias e altas pela previsão`
       : `nuvens medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}`;

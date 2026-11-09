@@ -54,10 +54,18 @@ export const REGRAS = {
   limitesSemana: { chuva: [1, 10, 30], rajada: [40, 60, 80] },
   ceu: {                       // cobertura média de nuvens (%) -> condição do céu
     limpo: 20, poucasNuvens: 45, parcial: 75,
+    // Histerese do céu de agora pela previsão: para trocar de condição, a cobertura precisa passar o limite
+    // em 5 pontos (ex.: de "Ensolarado" para "Sol entre nuvens" só acima de 25%, e de volta só abaixo de 15%).
+    histerese: 5,
+    memoriaHoras: 3,           // a última condição mostrada vale como referência por 3 h, no mesmo lugar
   },
   ceuMedido: {                 // céu de agora pelo METAR: aeroporto até 50 km, boletim de até 90 min
     distanciaKm: 50, idadeMin: 90,
   },
+  // Medições guardadas entre buscas: uma resposta que chega sem uma estação (fonte fora do ar, limite de
+  // requisições, resposta antiga de cache) não apaga a última leitura dela. A idade de cada leitura continua
+  // valendo (ex.: METAR só até 90 min). Mudou mais que isso de lugar, as medições anteriores são descartadas.
+  medicoes: { mesmoLugarKm: 25 },
   // Temperatura das próximas horas ancorada na medição: a diferença entre o medido e o previsto para a hora
   // da leitura vai sendo somada à previsão e some aos poucos em `horas` (persistência do erro, padrão de nowcasting).
   ancoragem: {
@@ -1134,7 +1142,7 @@ function calcularConsenso(prev, variavel, modelos) {
  * Condição do céu pela cobertura média (horas de dia, se houver) e pela probabilidade de chuva.
  * @returns {{nivel:string, texto:string, noite:boolean, chuva:string|null, cobertura:number}|null}
  */
-export function condicaoCeu(cobertura, dia, probChuva) {
+export function condicaoCeu(cobertura, dia, probChuva, nivelAnterior = null) {
   const C = REGRAS.ceu;
   const pares = (cobertura || []).map((c, i) => [c, dia?.[i]]).filter(([c]) => valido(c));
   if (!pares.length) return null;
@@ -1142,11 +1150,11 @@ export function condicaoCeu(cobertura, dia, probChuva) {
   const usar = deDia.length ? deDia : pares;
   const noite = !deDia.length && pares.some(([, d]) => d === 0 || d === false);
   const media = usar.reduce((s, [c]) => s + c, 0) / usar.length;
-  let nivel, texto;
-  if (media <= C.limpo) { nivel = 'limpo'; texto = noite ? 'Céu limpo' : 'Ensolarado'; }
-  else if (media <= C.poucasNuvens) { nivel = 'poucas'; texto = noite ? 'Poucas nuvens' : 'Sol entre nuvens'; }
-  else if (media <= C.parcial) { nivel = 'parcial'; texto = 'Parcialmente nublado'; }
-  else { nivel = 'nublado'; texto = 'Nublado'; }
+  const nivel = nivelCeu(media, nivelAnterior);
+  let texto = {
+    limpo: noite ? 'Céu limpo' : 'Ensolarado', poucas: noite ? 'Poucas nuvens' : 'Sol entre nuvens',
+    parcial: 'Parcialmente nublado', nublado: 'Nublado',
+  }[nivel];
   const o = REGRAS.ocorrencia;
   let chuva = null;
   if (valido(probChuva) && probChuva >= o.provavel) chuva = 'provavel';
@@ -1154,6 +1162,42 @@ export function condicaoCeu(cobertura, dia, probChuva) {
   if (chuva === 'provavel') texto = nivel === 'nublado' || nivel === 'parcial' ? 'Nublado com chuva' : (noite ? 'Pancadas de chuva' : 'Sol e pancadas de chuva');
   else if (chuva === 'possivel') texto = `${texto}, pode chover`;
   return { nivel, texto, noite, chuva, cobertura: media };
+}
+
+const NIVEIS_CEU = ['limpo', 'poucas', 'parcial', 'nublado'];
+/**
+ * Nível do céu pela cobertura (REGRAS.ceu). Com nivelAnterior, cada limite se afasta REGRAS.ceu.histerese
+ * pontos do nível anterior: a condição só troca quando a cobertura passa o limite com folga.
+ * @param {number} cobertura %
+ * @param {string|null} [nivelAnterior]
+ * @returns {'limpo'|'poucas'|'parcial'|'nublado'}
+ */
+export function nivelCeu(cobertura, nivelAnterior = null) {
+  const C = REGRAS.ceu, ant = NIVEIS_CEU.indexOf(nivelAnterior);
+  const limites = [C.limpo, C.poucasNuvens, C.parcial];
+  const folga = (k) => (ant < 0 ? 0 : ant <= k ? C.histerese : -C.histerese);
+  return NIVEIS_CEU[limites.filter((lim, k) => cobertura > lim + folga(k)).length];
+}
+
+/**
+ * Junta a resposta nova de medições com a anterior, estação por estação, no mesmo lugar: fica o registro
+ * com a leitura mais recente; estação ausente na resposta nova continua com a última leitura que tinha.
+ * Em empate de horário, fica o registro com mais leituras (a série completa do Worker vence a leitura avulsa).
+ * @param {{fontes:object[]}|null} anterior
+ * @param {{fontes:object[]}} nova
+ * @returns {{fontes:object[]}}
+ */
+export function mesclarObservacoes(anterior, nova) {
+  if (!anterior?.fontes?.length || !nova) return nova;
+  const ultima = (f) => (f?.serie?.length ? f.serie[f.serie.length - 1].ms : -Infinity);
+  const chave = (f) => `${f.tipo}:${f.id}`;
+  const porId = new Map((nova.fontes || []).map((f) => [chave(f), f]));
+  for (const f of anterior.fontes) {
+    const atual = porId.get(chave(f));
+    const melhor = !atual || ultima(f) > ultima(atual) || (ultima(f) === ultima(atual) && f.serie.length > atual.serie.length);
+    if (melhor) porId.set(chave(f), f);
+  }
+  return { ...nova, fontes: [...porId.values()] };
 }
 
 // Resposta curta para "vai chover?".

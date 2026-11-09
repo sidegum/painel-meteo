@@ -1,7 +1,7 @@
 // Testes das regras de análise. Rodar: node --test test/analise.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { avaliarDia, correcaoTemperatura, calibrarProb, mediana, escolherFonte, leituraValida, fraseDoDia, pesosModelos, probLimites, isoLocalParaMs, partesLocais, direcaoTexto, arredondaCoord, condicaoCeu, respostaChuva } from '../js/analise.js';
+import { avaliarDia, correcaoTemperatura, calibrarProb, mediana, escolherFonte, leituraValida, fraseDoDia, pesosModelos, probLimites, isoLocalParaMs, partesLocais, direcaoTexto, arredondaCoord, condicaoCeu, nivelCeu, mesclarObservacoes, respostaChuva } from '../js/analise.js';
 
 const r = (modelo, chuva, rajada) => ({ modelo, chuva, probMax: null, rajada: rajada === null ? null : { valor: rajada }, tmin: 15, tmax: 25 });
 
@@ -126,6 +126,38 @@ test('condição do céu a partir da cobertura de nuvens', () => {
   // sem dado não vira zero
   assert.equal(condicaoCeu([null, null], [1, 1], 0.2), null);
   assert.equal(condicaoCeu([], [], 0.2), null);
+});
+
+test('céu com histerese: só troca de condição quando a cobertura passa o limite com folga', () => {
+  // sem referência anterior, os limites normais (20, 45, 75)
+  assert.equal(nivelCeu(19), 'limpo');
+  assert.equal(nivelCeu(22), 'poucas');
+  // vindo de "Ensolarado", 22% ainda é ensolarado; acima de 25% troca
+  assert.equal(nivelCeu(22, 'limpo'), 'limpo');
+  assert.equal(nivelCeu(26, 'limpo'), 'poucas');
+  // vindo de "Sol entre nuvens", 18% ainda é sol entre nuvens; abaixo de 15% troca
+  assert.equal(nivelCeu(18, 'poucas'), 'poucas');
+  assert.equal(nivelCeu(14, 'poucas'), 'limpo');
+  // mudança grande não fica presa: de "Ensolarado" para 80% é nublado
+  assert.equal(nivelCeu(85, 'limpo'), 'nublado');
+  assert.equal(condicaoCeu([22], [1], null, 'limpo').texto, 'Ensolarado');
+});
+
+test('medições: resposta sem uma estação não apaga a última leitura dela', () => {
+  const metar = (id, ms, nuvens) => ({ id, tipo: 'metar', lat: -29.9, lon: -51.1, serie: [{ ms, nuvens }] });
+  const anterior = { fontes: [metar('SBCO', 1000, 50), metar('SBPA', 1000, 50), { id: 'A884', tipo: 'inmet', serie: [{ ms: 900 }, { ms: 1000 }] }] };
+  // resposta nova sem METAR (só a leitura avulsa do INMET, mesmo horário)
+  const nova = { fontes: [{ id: 'A884', tipo: 'inmet', serie: [{ ms: 1000 }] }] };
+  const m = mesclarObservacoes(anterior, nova);
+  assert.deepEqual(m.fontes.map((f) => f.id).sort(), ['A884', 'SBCO', 'SBPA']);
+  assert.equal(m.fontes.find((f) => f.id === 'A884').serie.length, 2); // a série completa vence a avulsa
+  // leitura mais nova substitui a antiga
+  const m2 = mesclarObservacoes(anterior, { fontes: [metar('SBCO', 2000, 25)] });
+  assert.equal(m2.fontes.find((f) => f.id === 'SBCO').serie[0].nuvens, 25);
+  // resposta de cache mais antiga não volta o relógio
+  const m3 = mesclarObservacoes(anterior, { fontes: [metar('SBPA', 500, 0)] });
+  assert.equal(m3.fontes.find((f) => f.id === 'SBPA').serie[0].nuvens, 50);
+  assert.equal(mesclarObservacoes(null, nova), nova);
 });
 
 test('resposta curta de chuva', () => {
