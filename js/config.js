@@ -9,5 +9,8 @@ export const CONFIG = {
   },
   atualizarTelaAbertaMin: 10, // com a tela aberta e sem toque em atualizar, atualiza tudo a cada 10 min
   idadeMaxMedicaoMin: 180, // leituras mais antigas são descartadas
+  // Campos globais da aba Globo, gerados pelo GitHub Actions (.github/workflows/globo.yml) e publicados na pasta
+  // globo-dados/ do próprio site a cada publicação no Cloudflare Pages (scripts/publicar-pages.sh).
+  globoDados: 'globo-dados/',
   radarOficial: 'https://defesacivil.rs.gov.br/monitoramento-radar-meteorologico',
 };

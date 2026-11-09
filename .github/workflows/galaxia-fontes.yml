@@ -1,0 +1,26 @@
+name: Fontes da escala de galáxias
+
+# Baixa os catálogos brutos da escala de galáxias (scripts/globo/baixar-fontes-galaxia.sh) e grava em
+# scripts/globo/fontes/ no branch em que rodou. Só sob demanda (Actions > Run workflow): sem gatilho de push, para
+# não gravar em branches de outras mudanças; os catálogos são fixos.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  baixar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar os catálogos
+        run: scripts/globo/baixar-fontes-galaxia.sh scripts/globo/fontes
+      - name: Gravar no branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/globo/fontes
+          git commit -m "Catálogos brutos da escala de galáxias" || exit 0
+          for espera in 0 10 30; do sleep $espera; git push && break; done

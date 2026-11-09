@@ -103,6 +103,17 @@ export const REGRAS = {
     aviso: { 'perigo potencial': 'moderado', perigo: 'alto', 'grande perigo': 'alto' },
     niveis: { moderado: 2, alto: 4 },
   },
+  // Granizo (sinaisGranizo). Fontes, da mais forte para a mais fraca:
+  // 1) aviso do INMET para o dia cujo texto cita granizo (os de Tempestade citam "queda de granizo");
+  // 2) código de tempo 96 ou 99 ("trovoada com granizo") do UKMO, que, segundo a documentação da Open-Meteo,
+  //    é um dos modelos com previsão explícita de granizo (os ECMWF só informam 95 e 97);
+  // 3) ambiente favorável, só com risco de temporal moderado ou alto: energia (CAPE) alta e nível de
+  //    congelamento baixo, que deixa o granizo chegar ao chão sem derreter.
+  granizo: {
+    codigos: [96, 99],
+    cape: 2000,                // J/kg
+    congelamentoMaxM: 4200,    // m acima do nível do mar
+  },
 };
 
 export const MODELOS = {
@@ -257,10 +268,13 @@ export function escolherFonte(fontes, variavel, lat, lon, agoraMs, idadeMaxMin) 
  * @returns {number[]}
  */
 export function indicesDoDia(horas, data, offsetSeg, aPartirMs = -Infinity) {
+  // número do dia local por aritmética (sem criar Date por hora): mesmo resultado de partesLocais(...).data
+  const [a, m, d] = String(data).split('-').map(Number);
+  const alvo = Date.UTC(a, m - 1, d) / 86400000;
   const idx = [];
   horas.forEach((ms, i) => {
     if (ms + 3600000 <= aPartirMs) return;
-    if (partesLocais(ms, offsetSeg).data === data) idx.push(i);
+    if (Math.floor((ms + offsetSeg * 1000) / 86400000) === alvo) idx.push(i);
   });
   return idx;
 }
@@ -1094,7 +1108,17 @@ export function calibrarProb(p, calib) {
  * Séries horárias de mediana, mínimo e máximo de uma variável entre os modelos.
  * @returns {{med:Array<number|null>, lo:Array<number|null>, hi:Array<number|null>}}
  */
+// Memória por objeto de previsão: as telas pedem o mesmo consenso dezenas de vezes por renderização
+// (antes, até uma vez por hora do dia). Cada calibração ou ancoragem cria um objeto novo, então nada fica velho.
+const memoriaConsenso = new WeakMap();
 export function consensoHorario(prev, variavel, modelos) {
+  let porPrev = memoriaConsenso.get(prev);
+  if (!porPrev) { porPrev = new Map(); memoriaConsenso.set(prev, porPrev); }
+  const chave = `${variavel}|${modelos.join(',')}`;
+  if (!porPrev.has(chave)) porPrev.set(chave, calcularConsenso(prev, variavel, modelos));
+  return porPrev.get(chave);
+}
+function calcularConsenso(prev, variavel, modelos) {
   const med = [], lo = [], hi = [];
   for (let i = 0; i < prev.horas.length; i++) {
     const vs = modelos.map((m) => prev.modelos[m]?.vars[variavel]?.[i]);
@@ -1224,17 +1248,18 @@ export function leituraPressao(av, probChuva) {
   if (!valido(probChuva)) {
     return piora
       ? { titulo: 'Pressão caindo', texto: 'Costuma anteceder mudança no tempo.', classe: 'mudanca' }
-      : { titulo: av.sinal === 'firme' ? 'Pressão subindo' : 'Pressão estável', texto: 'Sem sinal de piora.', classe: av.sinal === 'firme' ? 'firme' : 'neutra' };
+      : { titulo: av.sinal === 'firme' ? 'Pressão subindo' : 'Pressão sem sinal de mudança', texto: 'Sem sinal de piora.', classe: av.sinal === 'firme' ? 'firme' : 'neutra' };
   }
   if (piora && chuvaPrevista) {
     return { titulo: 'Confirma a chuva prevista', classe: av.sinal === 'forte' ? 'forte' : 'confirma',
       texto: av.sinal === 'fraco' ? 'A pressão começa a cair.' : 'A pressão está caindo, como antes de uma frente.' };
   }
   if (piora) return { titulo: 'Mudança no tempo', classe: 'mudanca', texto: 'A pressão cai, mas sem chuva prevista hoje: por ora, mais nuvens ou vento.' };
-  if (chuvaPrevista) return { titulo: 'Pressão estável', classe: 'neutra', texto: 'Isso não muda a chuva prevista.' };
+  // "sem sinal de mudança", e não "estável": a tendência de 3 h logo acima pode dizer "subindo devagar" (até 1,5 hPa)
+  if (chuvaPrevista) return { titulo: 'Pressão sem sinal de mudança', classe: 'neutra', texto: 'Isso não muda a chuva prevista.' };
   return av.sinal === 'firme'
     ? { titulo: 'Tempo firme', classe: 'firme', texto: 'Pressão subindo ou alta.' }
-    : { titulo: 'Pressão estável', classe: 'neutra', texto: 'Sem variação importante.' };
+    : { titulo: 'Pressão sem sinal de mudança', classe: 'neutra', texto: 'Variação pequena nas últimas horas.' };
 }
 
 // ---------- chuva chegando (radar) ----------
@@ -1370,4 +1395,24 @@ export function riscoTemporal({ prob = null, chovendo = false, chegando = false,
   let nivel = pontos >= T.niveis.alto ? 'alto' : pontos >= T.niveis.moderado ? 'moderado' : 'baixo';
   if (nivelAviso) { nivel = nivelAviso; motivos.unshift(`aviso de tempestade do INMET em vigor (${String(aviso).toLowerCase()})`); }
   return { nivel, pontos, motivos };
+}
+
+/**
+ * Sinais de granizo no dia (regras e fontes em REGRAS.granizo). Não é previsão própria de granizo: junta só
+ * o que as fontes dizem. Sem sinal, null.
+ * @param {{avisos?:object[], codigosUkmo?:number[], cape?:number|null, congelamento?:number|null, nivelTemporal?:string|null}} d
+ *   avisos: avisos do INMET do local válidos no dia; codigosUkmo: códigos de tempo horários do UKMO no dia;
+ *   cape: máximo do dia; congelamento: menor nível de congelamento (m) nas horas de CAPE alto; nivelTemporal: riscoTemporal().nivel
+ * @returns {{fonte:'inmet'|'modelo'|'ambiente', texto:string}|null}
+ */
+export function sinaisGranizo({ avisos = [], codigosUkmo = [], cape = null, congelamento = null, nivelTemporal = null } = {}) {
+  const G = REGRAS.granizo;
+  const cita = (a) => /granizo/i.test([a.titulo, a.descricao, ...(a.riscos || [])].join(' '));
+  const aviso = avisos.find(cita);
+  if (aviso) return { fonte: 'inmet', texto: `O aviso de ${String(aviso.titulo || 'tempestade').toLowerCase()} do INMET cita queda de granizo.` };
+  if (codigosUkmo.some((c) => G.codigos.includes(c))) return { fonte: 'modelo', texto: 'O modelo do Met Office (UKMO), que prevê granizo diretamente, indica trovoada com granizo.' };
+  if ((nivelTemporal === 'moderado' || nivelTemporal === 'alto') && valido(cape) && cape >= G.cape && valido(congelamento) && congelamento <= G.congelamentoMaxM) {
+    return { fonte: 'ambiente', texto: `Energia para tempestades alta (${Math.round(cape)} J/kg) e nível de congelamento baixo (${(congelamento / 1000).toFixed(1).replace('.', ',')} km).` };
+  }
+  return null;
 }

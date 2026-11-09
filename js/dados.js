@@ -25,7 +25,7 @@ export class ErroFonte extends Error {
 
 // Uma nova tentativa em falha de rede ou tempo esgotado (comum no celular trocando de rede).
 // Limite de uso (429) e erro do servidor não são repetidos: respeitam a espera.
-async function buscarJson(fonte, url, opcoes = {}) {
+export async function buscarJson(fonte, url, opcoes = {}) {
   try { return await buscarJsonUmaVez(fonte, url, opcoes); }
   catch (e) {
     if (!(e instanceof ErroFonte) || !['rede', 'tempo'].includes(e.tipo)) throw e;
@@ -91,6 +91,7 @@ export const VARS_HORA = [
   'precipitation', 'precipitation_probability', 'wind_speed_10m', 'wind_gusts_10m', 'wind_direction_10m',
   'temperature_2m', 'apparent_temperature', 'relative_humidity_2m', 'dew_point_2m', 'pressure_msl',
   'cloud_cover', 'cloud_cover_low', 'cloud_cover_mid', 'cloud_cover_high', 'visibility', 'cape', 'uv_index', 'is_day',
+  'weather_code', 'freezing_level_height', // granizo (sinaisGranizo): código 96/99 do UKMO e nível de congelamento
 ];
 const VARS_DIA = ['sunrise', 'sunset', 'uv_index_max'];
 
@@ -242,7 +243,10 @@ export const buscarAlertas = () => worker('alertas');
 // de Campo Bom, que é público.
 export const GEOCODE_PADRAO = '4303905';
 
+// Listas do INMET: hoje chegam como array JSON; versões antigas mandavam texto no formato "['a', 'b']".
+// Mesma regra do Worker (listaPython em worker/src/index.js).
 function listaPython(v) {
+  if (Array.isArray(v)) return v.map((x) => String(x ?? '').trim().slice(0, 400)).filter(Boolean).slice(0, 8);
   const s = String(v ?? '').slice(0, 4000);
   if (!s.trim()) return [];
   return s.replace(/^\s*\[\s*/, '').replace(/\s*\]\s*$/, '').split(/['"]\s*,\s*['"]/)
@@ -297,7 +301,7 @@ export async function buscarEnso() {
 }
 /**
  * Calibração com o histórico (viés de temperatura, fatores de rajada e vento, pesos), gerada todo mês pelo
- * GitHub Actions (scripts/calibrar.mjs) e publicada pelo GitHub Pages junto com o app: mesma origem, sem
+ * GitHub Actions (scripts/calibrar.mjs) e publicada no Cloudflare Pages junto com o app: mesma origem, sem
  * Worker e sem CORS. Método em docs/CALIBRACAO.md.
  * @returns {Promise<object>} conteúdo de dados/calibracao.json
  */
@@ -310,8 +314,17 @@ export async function buscarCalibracao() {
 export const buscarAcerto = (estacao) => worker('acerto', { estacao: String(estacao).replace(/[^A-Za-z0-9]/g, '').slice(0, 8) });
 
 // ---------- RainViewer ----------
-// Lê sempre weather-maps.json para descobrir host e caminhos dos quadros.
-export async function buscarRadar() {
+// Lê weather-maps.json para descobrir host e caminhos dos quadros. A mesma resposta serve por 60 s:
+// chuva sobre o ponto, chegada da chuva e mapa pedem a lista na mesma rodada e dividem uma só requisição.
+let radarRecente = null; // { em: ms, promessa }
+export function buscarRadar() {
+  if (radarRecente && Date.now() - radarRecente.em < 60000) return radarRecente.promessa;
+  const promessa = lerListaRadar();
+  radarRecente = { em: Date.now(), promessa };
+  promessa.catch(() => { if (radarRecente?.promessa === promessa) radarRecente = null; });
+  return promessa;
+}
+async function lerListaRadar() {
   const j = await buscarJson('rainviewer', 'https://api.rainviewer.com/public/weather-maps.json', { timeout: 10000, maxBytes: 2e5 });
   const host = String(j.host || '');
   if (!/^https:\/\/[a-z0-9.-]+\.rainviewer\.com$/i.test(host)) throw new ErroFonte('rainviewer', 'formato', 'host de radar inesperado');
@@ -355,15 +368,7 @@ export async function buscarChuvaRadar(lat, lon) {
   const q = r.quadros[r.quadros.length - 1];
   const t = pixelDoPonto(arredondaCoord(lat), arredondaCoord(lon));
   const url = `${r.host}${q.path}/256/${t.z}/${t.x}/${t.y}/2/0_0.png`;
-  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 10000);
-  let blob;
-  try {
-    const resp = await fetch(url, { signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
-    if (!resp.ok) throw new ErroFonte('rainviewer', 'http', `erro ${resp.status}`);
-    blob = await resp.blob();
-  } catch (e) { throw e instanceof ErroFonte ? e : new ErroFonte('rainviewer', 'rede', 'falha ao ler o radar'); }
-  finally { clearTimeout(to); }
-  const img = await createImageBitmap(blob);
+  const img = await tileRadar(url);
   const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(256, 256) : Object.assign(document.createElement('canvas'), { width: 256, height: 256 });
   const c = cv.getContext('2d'); c.drawImage(img, 0, 0);
   const x0 = Math.max(0, t.px - 2), y0 = Math.max(0, t.py - 2);

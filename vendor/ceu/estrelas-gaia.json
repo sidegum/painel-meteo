@@ -1,0 +1,9 @@
+{
+ "fonte": "ESA Gaia DR3 (Gaia Collaboration 2023) e distâncias de Bailer-Jones et al. 2021 (r_med_geo), via Gaia Archive",
+ "licenca": "dados do Gaia: CC BY-SA 3.0 IGO (ESA/Gaia/DPAC)",
+ "consulta": "SELECT g.ra, g.dec, g.phot_g_mean_mag AS g, g.bp_rp, d.r_med_geo\nFROM gaiadr3.gaia_source AS g\nLEFT OUTER JOIN external.gaiaedr3_distance AS d ON d.source_id = g.source_id\nLEFT OUTER JOIN gaiadr3.hipparcos2_best_neighbour AS h ON h.source_id = g.source_id\nWHERE g.phot_g_mean_mag < 10.5 AND h.source_id IS NULL",
+ "gMax": 10.5,
+ "n": 682849,
+ "comDistancia": 677095,
+ "gerado": "2026-11-05T21:32:14Z"
+}

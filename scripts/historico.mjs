@@ -126,17 +126,31 @@ async function medicoesMetar(est, ini, fim) {
 
 // ------------------------------------------------------------------ Open-Meteo Previous Runs
 
-async function previsoesPassadas(est, datas) {
+/**
+ * Blocos de até `tamanho` dias que cobrem só as datas pedidas: cada bloco começa numa data que falta e os trechos sem
+ * nenhuma data são pulados (antes, um dia antigo sem dado fazia a coleta varrer o arquivo inteiro todo dia).
+ * @param {string[]} datas datas AAAA-MM-DD em ordem
+ * @returns {[string, string][]}
+ */
+function blocos(datas, tamanho) {
+  const out = [];
+  for (let i = 0; i < datas.length;) {
+    const a = datas[i], b = [somaDias(a, tamanho - 1), datas.at(-1)].sort()[0];
+    out.push([a, b]);
+    while (i < datas.length && datas[i] <= b) i++;
+  }
+  return out;
+}
+
+/** @param {Record<string, string[]>} datasPorModelo datas que faltam, por modelo */
+async function previsoesPassadas(est, datasPorModelo) {
   const porModelo = {};
   const custo = { chamadas: 0 };
-  if (!datas.length) return { porModelo, custo };
-  const ini = datas[0], fim = datas[datas.length - 1];
   const hourly = VARS_PREVISAO.flatMap((v) => LEADS.map((d) => `${v}_previous_day${d}`)).join(',');
   for (const modelo of est.modelos) {
     porModelo[modelo] = {};
     // blocos de 60 dias: respostas de ~1 MB e custo previsível
-    for (let a = ini; a <= fim; a = somaDias(a, 60)) {
-      const b = [somaDias(a, 59), fim].sort()[0];
+    for (const [a, b] of blocos(datasPorModelo[modelo] || [], 60)) {
       const p = new URLSearchParams({
         latitude: String(est.lat), longitude: String(est.lon), hourly, models: modelo,
         start_date: a, end_date: b, timezone: 'America/Sao_Paulo', wind_speed_unit: 'kmh',
@@ -227,9 +241,7 @@ const INICIO_PR_HORARIO = { ecmwf_ifs: '2025-09-01', ecmwf_aifs025_single: '2024
 async function horarioOpenMeteo(base, est, modelo, datas, mapa, blocoDias) {
   const out = {};
   if (!datas.length) return out;
-  const ini = datas[0], fim = datas.at(-1);
-  for (let a = ini; a <= fim; a = somaDias(a, blocoDias)) {
-    const b = [somaDias(a, blocoDias - 1), fim].sort()[0];
+  for (const [a, b] of blocos(datas, blocoDias)) {
     const p = new URLSearchParams({
       latitude: String(est.lat), longitude: String(est.lon), hourly: [...new Set(Object.values(mapa))].join(','),
       models: modelo, start_date: a, end_date: b, timezone: 'America/Sao_Paulo', wind_speed_unit: 'kmh',
@@ -264,9 +276,12 @@ async function coletarHorario(est, horasObs) {
     for (const [d, x] of Object.entries(obsPorHora(horasObs, campo))) linha(d)[chave] = x;
   }
 
+  // dias a buscar: os mais recentes e os que faltam a partir do primeiro dia já com dado (antes dele o arquivo da API
+  // não tem nada; sem dado nenhum, desde `de`)
   const dias = (de, falta, recentes) => {
+    const ids = Object.keys(tab.dias).filter((d) => d >= de && !falta(tab.dias[d])).sort();
     const xs = [];
-    for (let d = de; d <= ontem; d = somaDias(d, 1)) if (falta(tab.dias[d]) || d >= somaDias(ontem, -recentes)) xs.push(d);
+    for (let d = ids[0] ?? de; d <= ontem; d = somaDias(d, 1)) if (falta(tab.dias[d]) || d >= somaDias(ontem, -recentes)) xs.push(d);
     return xs;
   };
   // temperatura de 1 a 5 dias antes (p1…p5) e, na véspera, ponto de orvalho (d1) e vento (w1), para a sensação
@@ -339,13 +354,19 @@ async function coletarEstacao(est) {
   console.log(`  ${obsDias.size} dias com medição; descartes do controle de qualidade: ${JSON.stringify(qc.descartes)}`);
   if (!obsDias.size) console.log('  AVISO: nenhuma medição nova nesta execução; as já guardadas continuam valendo.');
 
-  // previsões: datas que faltam na tabela e os 10 dias mais recentes
+  // previsões, por modelo: os 10 dias mais recentes e os que faltam a partir do primeiro dia com dado do modelo (antes
+  // dele o arquivo da Previous Runs não tem nada; um modelo ainda sem dado nenhum busca o período todo)
   const limiteRecente = somaDias(ontem, -10);
   const todas = [];
   for (let d = INICIO; d <= ontem; d = somaDias(d, 1)) todas.push(d);
-  const faltam = todas.filter((d) => !tabela.dias[d]?.prev || d >= limiteRecente);
-  console.log(`  Previous Runs: ${faltam.length} dias a buscar (${faltam[0] ?? '-'} a ${faltam.at(-1) ?? '-'})`);
-  const prev = await previsoesPassadas(est, faltam);
+  const temPrevisao = (d, m) => Object.keys(tabela.dias[d]?.prev?.[m] || {}).some((L) => L !== '0'); // 0 é a rajada da Historical Forecast
+  const faltamPorModelo = {};
+  for (const m of est.modelos) {
+    const primeiro = todas.find((d) => temPrevisao(d, m)) ?? INICIO;
+    faltamPorModelo[m] = todas.filter((d) => d >= limiteRecente || (d >= primeiro && !temPrevisao(d, m)));
+    console.log(`  Previous Runs ${m}: ${faltamPorModelo[m].length} dias a buscar (${faltamPorModelo[m][0] ?? '-'} a ${faltamPorModelo[m].at(-1) ?? '-'})`);
+  }
+  const prev = await previsoesPassadas(est, faltamPorModelo);
   console.log(`  ${prev.custo.chamadas} requisições`);
 
   for (const d of todas) {

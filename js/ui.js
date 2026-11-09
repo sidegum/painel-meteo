@@ -1,6 +1,43 @@
 // Utilidades de interface. Todo texto entra por textContent; nada de innerHTML com dados externos.
 import { partesLocais, valido, direcaoTexto } from './analise.js';
 
+// ------------------------------------------------------------------ guarda de valores ausentes
+// Nenhum valor ausente pode aparecer na tela como "null", "undefined" ou "NaN".
+// 1) append, prepend, replaceChildren, before, after e replaceWith ignoram null, undefined e false
+//    (o DOM os converteria no texto "null"/"undefined").
+// 2) Todo texto (textContent, nós de texto criados por el() e strings passadas aos métodos acima) troca as
+//    palavras soltas null, undefined e NaN por "–" e avisa no console, para o defeito ser achado e corrigido.
+const AUSENTE_RE = /(^|[^\p{L}\p{N}_])(null|undefined|NaN)(?![\p{L}\p{N}_])/gu;
+export function textoSeguro(v) {
+  const s = String(v);
+  if (!AUSENTE_RE.test(s)) return s;
+  AUSENTE_RE.lastIndex = 0;
+  console.warn('Valor ausente no texto da tela:', s);
+  return s.replace(AUSENTE_RE, '$1–');
+}
+const vazio = (x) => x === null || x === undefined || x === false;
+const limpar = (args) => args.filter((x) => !vazio(x)).map((x) => (typeof x === 'string' ? textoSeguro(x) : x));
+function protegerMetodos(proto, nomes) {
+  for (const nome of nomes) {
+    const orig = proto?.[nome];
+    if (typeof orig !== 'function' || orig.__seguro) continue;
+    const novo = function (...args) { return orig.apply(this, limpar(args)); };
+    novo.__seguro = true;
+    proto[nome] = novo;
+  }
+}
+if (typeof Element !== 'undefined') {
+  protegerMetodos(Element.prototype, ['append', 'prepend', 'replaceChildren', 'before', 'after', 'replaceWith']);
+  protegerMetodos(DocumentFragment.prototype, ['append', 'prepend', 'replaceChildren']);
+  protegerMetodos(CharacterData.prototype, ['before', 'after', 'replaceWith']);
+  const desc = Object.getOwnPropertyDescriptor(Node.prototype, 'textContent');
+  if (desc?.set && !desc.set.__seguro) {
+    const set = function (v) { desc.set.call(this, vazio(v) ? '' : textoSeguro(v)); };
+    set.__seguro = true;
+    Object.defineProperty(Node.prototype, 'textContent', { ...desc, set });
+  }
+}
+
 export function el(tag, attrs = {}, ...filhos) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -9,11 +46,11 @@ export function el(tag, attrs = {}, ...filhos) {
     else if (k === 'text') e.textContent = v;
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else if (k === 'style') for (const [p, val] of Object.entries(v)) e.style.setProperty(p, val);
-    else e.setAttribute(k, v === true ? '' : String(v));
+    else e.setAttribute(k, v === true ? '' : k === 'title' || k.startsWith('aria-') ? textoSeguro(v) : String(v));
   }
   for (const f of filhos.flat()) {
     if (f === null || f === undefined || f === false) continue;
-    e.append(f instanceof Node ? f : document.createTextNode(String(f)));
+    e.append(f instanceof Node ? f : document.createTextNode(textoSeguro(f)));
   }
   return e;
 }
@@ -93,3 +130,17 @@ export const prefs = {
 };
 
 export const cor = (nome) => getComputedStyle(document.documentElement).getPropertyValue(nome).trim() || '#888';
+
+/**
+ * Seletor compacto: um único botão com a opção atual que abre a lista nativa do sistema
+ * (no iPhone, a roleta). Substitui fileiras de botões de filtro que poluem a tela.
+ * @param {string} rotulo nome acessível
+ * @param {Array<[string,string]>} opcoes pares [valor, nome]
+ * @param {string} atual valor escolhido
+ * @param {(valor:string)=>void} aoMudar
+ */
+export function seletor(rotulo, opcoes, atual, aoMudar) {
+  const s = el('select', { 'aria-label': rotulo, onchange: () => aoMudar(s.value) },
+    ...opcoes.map(([v, nome]) => el('option', { value: v, selected: v === atual }, nome)));
+  return el('label', { class: 'seletor' }, s);
+}

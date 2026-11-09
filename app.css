@@ -51,7 +51,7 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: var(--cab-vis, 110px); }
 body {
   margin: 0; background: var(--fundo); color: var(--texto);
   font-family: 'Archivo', system-ui, sans-serif; font-size: 16px; line-height: 1.4;
@@ -93,7 +93,22 @@ button { cursor: pointer; }
 .agora .rot-agora { font-size: 11px; font-weight: 600; color: var(--fraco); margin-bottom: 2px; }
 .agora b { font-size: 26px; font-weight: 650; letter-spacing: -.02em; }
 .agora small { font-size: 12px; color: var(--fraco); margin-top: 3px; white-space: nowrap; }
-.cabeca { position: sticky; top: 0; z-index: 20; background: var(--fundo); }
+/* Barra de cima fixa e recolhível: o corpo reserva a altura dela (--alt-cab), então recolher não move o conteúdo.
+   No Globo, recolhida, a reserva some e o globo ganha a tela toda. */
+.cabeca { position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: var(--fundo); transition: transform .22s ease; will-change: transform; }
+body { padding-top: var(--alt-cab, 110px); }
+.cabeca[data-oculta] { transform: translateY(calc(-100% + var(--safe-t))); }
+.cabeca[data-recolhida] { height: var(--safe-t); overflow: hidden; }
+body[data-aba="globo"][data-cab="oculta"] { padding-top: var(--safe-t); }
+/* Globo: tela fixa do tamanho da janela, sem rolagem da página (o arrastar é só do globo).
+   O rodapé e a faixa de estado saem dessa tela; a barra de cima só muda pela alça ou pelo tempo sem uso. */
+html:has(body[data-aba="globo"]) { overflow: hidden; overscroll-behavior: none; }
+body[data-aba="globo"] { position: fixed; inset: 0; width: 100%; overflow: hidden; overscroll-behavior: none; }
+body[data-aba="globo"] .rodape, body[data-aba="globo"] #estado { display: none; }
+.alca { position: fixed; z-index: 21; left: 50%; top: calc(var(--cab-vis, 110px) - 11px); transform: translateX(-50%); width: 64px; height: 22px; padding: 0; border: 0; background: none; display: flex; align-items: center; justify-content: center; transition: top .22s ease; }
+.alca i { width: 36px; height: 5px; border-radius: 3px; background: var(--fraco); opacity: .55; }
+.alca[aria-expanded="false"] { top: var(--safe-t); }
+.alca[aria-expanded="false"] i { opacity: .9; }
 
 .puxar { position: fixed; left: 50%; top: 64px; z-index: 30; transform: translate(-50%, 0); opacity: 0; pointer-events: none;
   padding: 8px 14px; border-radius: 18px; background: var(--sup2, var(--sup)); color: var(--texto); font-size: 14px; transition: opacity .12s; will-change: transform; }
@@ -208,6 +223,11 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 /* ---------- seções de detalhe ---------- */
 .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { padding: 0 16px; }
 .titulo-aba { font-size: 24px; font-stretch: 112%; font-weight: 720; margin: 8px 16px 8px; }
+.voltar-mais { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin: 4px 0 -8px; padding: 0 16px 0 10px; background: none; border: 0; color: var(--fraco); font: inherit; font-size: 15px; font-weight: 600; }
+.voltar-mais::before { content: ''; width: 8px; height: 8px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); margin-right: 2px; }
+.legenda-horas { margin: -2px 0 6px; font-size: 14px; color: var(--fraco); }
+.legenda-horas .p, .legenda-horas .mm { color: var(--chuva-txt); font-weight: 600; }
+.legenda-horas .g { color: var(--rajada-txt); font-weight: 600; }
 .secao { padding: 18px 0 8px; border-top: 6px solid var(--sup); margin-top: 14px; }
 .secao h2 { font-size: 19px; font-stretch: 105%; font-weight: 700; margin: 0 0 4px; }
 .secao .fonte { font-size: 13px; color: var(--fraco); margin: 2px 0 8px; }
@@ -215,7 +235,7 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 .nota { font-size: 14px; color: var(--fraco); }
 
 /* lista por hora: rolagem horizontal só aqui */
-.horas { display: flex; overflow-x: auto; gap: 0; margin: 0 -16px; padding: 0 16px 6px; scroll-snap-type: x proximity; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
+.horas { display: flex; overflow-x: auto; gap: 0; margin: 0 -16px; padding: 0 16px 6px; scroll-snap-type: x proximity; scroll-padding-left: 16px; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
 .hora { flex: 0 0 64px; scroll-snap-align: start; padding: 6px 4px; border-right: 1px solid var(--linha); text-align: center; font-size: 15px; }
 .hora .h { font-weight: 650; }
 .hora .p { color: var(--chuva-txt); font-weight: 600; }
@@ -280,7 +300,7 @@ td.n, th.n { text-align: right; }
 /* semana */
 .dias { list-style: none; margin: 0 -16px; padding: 0; }
 .dia { border-bottom: 1px solid var(--linha); }
-.dia > button {
+.dia > .cab {
   width: 100%; min-height: 76px; text-align: left; background: none; border: 0; padding: 10px 16px;
   display: grid; grid-template-columns: 50px 1fr; gap: 2px 10px; align-items: center;
 }
@@ -292,13 +312,12 @@ td.n, th.n { text-align: right; }
 .dia .nums .g { color: var(--rajada-txt); font-weight: 600; }
 .dia .nums .t { white-space: nowrap; }
 .dia .cf { grid-column: 2; font-size: 14px; color: var(--fraco); }
-.dia .exp { padding: 0 16px 12px; }
 .dia.longe .resumo::after { content: ' (confiança menor)'; font-weight: 500; color: var(--fraco); font-size: 14px; }
 .tmin { color: var(--fria); }
 .tmax { color: var(--quente); }
 
 /* barras de probabilidade (El Niño e semana) */
-.pbar { display: grid; grid-template-columns: 46px 1fr; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.pbar { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
 .pbar .trilho { display: flex; height: 26px; background: var(--sup); }
 .pbar .trilho i { display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 13px; font-weight: 650; overflow: hidden; color: #fff; }
 .pbar .ln { background: #2457A6; }
@@ -314,10 +333,6 @@ td.n, th.n { text-align: right; }
 .mapa-dica { position: absolute; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px;
   background: rgba(0,0,0,.45); color: #fff; font-weight: 600; font-size: 15px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .mapa-dica.ver { opacity: 1; }
-.camadas { display: flex; gap: 6px; overflow-x: auto; margin: 4px -16px 8px; padding: 0 16px 4px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; scrollbar-width: none; }
-.camadas::-webkit-scrollbar { display: none; }
-.camadas button { flex: none; min-height: 38px; padding: 0 13px; border-radius: 19px; border: 1.5px solid var(--linha); background: none; font-size: 14px; color: var(--fraco); }
-.camadas button[aria-checked="true"] { background: var(--texto); color: var(--fundo); border-color: var(--texto); font-weight: 600; }
 .mapa-titulo { margin: 4px 0 6px; font-weight: 600; font-size: 15px; }
 .mapa-barra { height: 8px; border-radius: 4px; max-width: 360px; }
 .mapa-rotulos { display: flex; justify-content: space-between; max-width: 360px; font-size: 12px; color: var(--fraco); margin: 2px 0 4px; }
@@ -338,7 +353,7 @@ td.n, th.n { text-align: right; }
 
 /* navegação entre os dias: logo abaixo do topo, fixa junto com ele */
 .nav {
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   background: var(--fundo); border-bottom: 1px solid var(--linha); height: 44px;
 }
 .nav button {
@@ -514,6 +529,309 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
   background: var(--sup2); color: var(--texto); font: inherit; font-weight: 560; font-size: 13px; line-height: 1.3; text-align: left; border-left: 3px solid var(--linha); }
 .linha-placar .lt-txt { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
 .linha-placar .lt-txt small { font-size: 12px; font-weight: 500; color: var(--fraco); }
+
+/* ---------- aba Globo: cena 3D ocupa a tela abaixo do topo; a interface flutua sobre ela ---------- */
+.aba-globo { padding: 0; }
+.globo { position: relative; width: 100%; height: 70vh; background: #04060b; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; color: #eceef0; }
+.globo-canvas { display: block; width: 100%; height: 100%; outline: none; cursor: grab; }
+.globo-canvas:active { cursor: grabbing; }
+.globo-topo { position: absolute; left: 0; right: 0; top: 0; padding: 10px 12px 0; pointer-events: none; }
+.globo-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; pointer-events: auto; padding-bottom: 6px; }
+.globo-chips::-webkit-scrollbar { display: none; }
+.globo-chips button { flex: none; min-height: 36px; padding: 0 11px; border-radius: 18px; border: 1px solid rgba(255,255,255,.22); background: rgba(10,14,22,.62); color: #dfe4ea; font-size: 13px; font-weight: 560; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-chips button[aria-checked="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
+.globo-botoes { position: absolute; right: 10px; top: 56px; display: flex; flex-direction: column; gap: 8px; z-index: 2; }
+.globo-botoes button { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(10,14,22,.5); color: #dfe4ea; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-botoes svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.globo-botoes svg .cheio { fill: currentColor; stroke: none; }
+.globo-botoes button::before { content: ''; position: absolute; inset: -4px; } /* área de toque de 44 px */
+.globo-botoes button { position: relative; }
+.globo-aviso { position: absolute; left: 12px; right: 12px; top: 58px; margin: 0; padding: 10px 14px; border-radius: 10px; background: rgba(10,14,22,.78); color: #eceef0; font-size: 14px; max-width: 420px; }
+.globo-aviso.grave { border-left: 3px solid #ee8a6a; }
+.globo-rodape { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px calc(8px + var(--safe-b)); background: linear-gradient(to top, rgba(4,6,11,.92), rgba(4,6,11,.55) 70%, rgba(4,6,11,0)); pointer-events: none; }
+.globo-rodape > * { pointer-events: auto; }
+.globo-legenda-texto { margin: 0 0 4px; font-size: 13px; color: #dfe4ea; }
+.globo-barra { height: 8px; border-radius: 4px; background: #333; max-width: 420px; }
+.globo-rotulos { display: flex; justify-content: space-between; max-width: 420px; font-size: 11px; color: #b7c0c9; margin-top: 2px; }
+.globo-unidade { font-size: 11px; color: #b7c0c9; }
+.globo-rotulos .globo-unidade { margin-left: 4px; }
+/* tempo na Terra: o instante mostrado num botão; ao tocar, a linha do tempo da previsão (arrastar e animar) */
+.globo-linha { display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; }
+.globo-linha[hidden] { display: none; }
+.globo-faixa-caixa { position: relative; flex: 1; min-width: 0; padding-bottom: 14px; }
+.globo-faixa { width: 100%; accent-color: #eceef0; height: 28px; margin: 0; display: block; }
+.globo-dias { position: absolute; left: 8px; right: 8px; bottom: 0; height: 13px; }
+.globo-dias span { position: absolute; transform: translateX(-2px); font-size: 10.5px; color: #aab3bd; white-space: nowrap; }
+.globo-dias span:last-child:not(:first-child) { transform: translateX(-100%); }
+.globo-tocar { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.6); color: #eceef0; display: grid; place-items: center; }
+.globo-tocar svg { width: 16px; height: 16px; fill: currentColor; }
+.globo-tocar[aria-pressed="true"] { background: #eceef0; color: #0b0f16; }
+.globo-tempo-terra { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; }
+.globo-instante { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.28); background: rgba(10,14,22,.62); color: #eceef0; font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; }
+.globo-instante[hidden], .globo-agora[hidden] { display: none; }
+.globo-instante[aria-expanded="true"] { border-color: rgba(255,255,255,.6); }
+.globo-instante.previsao { border-color: #ffd166; color: #ffe1a0; }
+.globo-agora { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.3); background: rgba(236,238,240,.92); color: #0b0f16; font-size: 13px; font-weight: 680; }
+.globo-notas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
+.globo-notas p { margin: 0; font-size: 11.5px; color: #aab3bd; }
+.globo-notas .com-erro { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.globo-ciclones { color: #ff9a8a !important; font-weight: 600; }
+.globo-painel { z-index: 6; position: absolute; left: 12px; right: 12px; bottom: 150px; max-width: 420px; margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(10,14,22,.86); color: #eceef0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12); }
+.globo-painel-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: #b7c0c9; }
+.globo-painel-topo b { color: #eceef0; font-weight: 640; }
+.globo-fechar { min-width: 36px; min-height: 36px; border: 0; background: none; color: #dfe4ea; font-size: 22px; line-height: 1; }
+.globo-frase { margin: 4px 0 2px; font-size: 19px; font-weight: 700; font-stretch: 108%; line-height: 1.2; }
+.globo-numeros { margin: 0; font-size: 15px; font-weight: 560; }
+.globo-quando { margin: 4px 0 6px; font-size: 12.5px; color: #b7c0c9; }
+.globo-detalhe { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: none; color: #eceef0; font-size: 13px; font-weight: 600; }
+.tabela-detalhe { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabela-detalhe th { text-align: left; font-weight: 560; color: var(--fraco); padding: 5px 8px 5px 0; vertical-align: top; width: 46%; }
+.tabela-detalhe td { padding: 5px 0; border-bottom: 1px solid var(--linha); }
+@media (min-width: 760px) { .globo { border-radius: 0 0 10px 10px; } }
+/* Monitor grande (o app tira o limite de largura com o Globo aberto): a linha do tempo e as notas não se esticam. */
+@media (min-width: 1100px) { .globo-rodape > * { max-width: 960px; } }
+/* Filtros do espaço no computador: janela no centro da tela, inteira, rolando por dentro se faltar altura */
+@media (min-width: 760px) { #dlg-info:has(.filtros) { margin: auto; border-radius: 14px; max-height: min(88vh, 900px); overflow: auto; } }
+#dlg-info:has(.filtros)::backdrop { background: rgba(4, 6, 11, .2); } /* o efeito de cada filtro aparece por trás */
+.globo-btn-espaco[aria-pressed="true"] { background: #eceef0 !important; color: #0b0f16 !important; }
+.globo-espaco { position: absolute; left: 0; right: 0; top: 52px; padding: 0 12px; pointer-events: none; }
+.globo-espaco > * { pointer-events: auto; }
+.globo-espaco .globo-chips button[aria-pressed="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
+.globo-espaco-nota { margin: 2px 0 0; font-size: 11.5px; color: #aab3bd; max-width: 300px; }
+.globo-rotulo { position: absolute; left: 0; top: 0; padding: 2px 8px; border-radius: 10px; background: rgba(10,14,22,.75); color: #ffd166; font-size: 12px; font-weight: 650; border: 1px solid rgba(255,209,102,.5); margin: -28px 0 0 -16px; white-space: nowrap; pointer-events: auto; }
+button.globo-rotulo { cursor: pointer; }
+.globo-rotulo-planeta { color: #dfe4ea; border-color: rgba(255,255,255,.2); margin: 0; pointer-events: none; }
+.globo-rotulo-planeta.sonda { color: #cfe3ff; border-style: dashed; font-weight: 600; }
+.globo-rotulo-planeta.faixa { background: none; border: 0; color: #9fb0c4; font-weight: 560; font-size: 11px; }
+.globo-rotulo-planeta.anao { color: #c8b8a6; }
+.globo-rotulo-planeta.lua { color: #dfe4ec; font-size: 11px; padding: 1px 6px; }
+.globo-rotulo-planeta.cometa { color: #a8e6ff; }
+.globo-rotulo-planeta.sol { color: #ffe1a0; border-color: rgba(255,209,102,.4); }
+.globo-rotulo-ceu { margin: 10px 0 0 8px; padding: 0 6px; background: rgba(10,14,22,.45); font-size: 11px; font-weight: 600; border: 0; color: #e8e2cf; }
+.globo-rotulo-estrela { margin: 6px 0 0 6px; padding: 0 4px; background: none; border: 0; font-size: 10.5px; font-weight: 500; color: rgba(205,216,235,.72); letter-spacing: .01em; }
+.globo-rotulo-objeto { margin: 6px 0 0 6px; padding: 0 4px; background: none; border: 0; font-size: 10.5px; font-weight: 500; font-style: italic; color: rgba(255,196,214,.7); }
+.globo-rotulo-constelacao { margin: 0; padding: 0; background: none; border: 0; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgba(150,175,215,.55); transform-origin: center; }
+.filtros h4 { margin: 14px 0 6px; font-size: 13px; color: var(--fraco); font-weight: 600; }
+.filtros h4:first-child { margin-top: 0; }
+.filtro { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 15px; cursor: pointer; }
+.filtro input { width: 20px; height: 20px; accent-color: var(--foco); flex: none; }
+.filtro-opcoes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+.filtro-opcoes button { min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--linha); background: none; color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.filtro-opcoes button[aria-checked=true] { border-color: var(--foco); background: color-mix(in srgb, var(--foco) 14%, transparent); font-weight: 600; }
+.globo-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.globo-detalhe[aria-pressed="true"] { background: #eceef0; color: #0b0f16; }
+.globo-frase-media { font-size: 16px; font-weight: 650; line-height: 1.3; }
+/* Céu de hoje: uma linha acima do globo com o que dá para ver a olho nu, cada item tocável */
+.ceu-hoje { background: #04060b; color: #eceef0; padding: 8px 12px 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.ceu-hoje-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ceu-hoje-titulo { font-size: 13px; font-weight: 650; color: #dfe4ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ceu-hoje-tudo { flex: none; min-height: 32px; padding: 0 10px; border: 0; background: none; color: #9cc3ff; font-size: 13px; font-weight: 600; }
+.ceu-hoje-lista { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 2px -12px 0; padding: 0 12px; scroll-padding: 0 12px; scroll-snap-type: x proximity; touch-action: pan-x; }
+.ceu-hoje-lista::-webkit-scrollbar { display: none; }
+.ceu-item { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; margin: 0; padding: 0 12px; border-radius: 18px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.04); color: #eceef0; font: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; scroll-snap-align: start; }
+.ceu-item b { font-variant-numeric: tabular-nums; font-weight: 600; color: #ffe1a0; }
+.ceu-item.destaque { border-color: rgba(255,209,102,.6); }
+.ceu-item.nuvem-nublado { opacity: .55; }
+.ceu-item.nuvem-nublado::after { content: '☁'; font-size: 12px; }
+.ceu-hoje-vazio { margin: 4px 0; font-size: 13px; color: #aab3bd; }
+.ceu-frase { font-size: 16px; line-height: 1.4; }
+.ceu-lista { padding-left: 18px; margin: 6px 0 10px; }
+.ceu-lista li { margin: 0 0 8px; }
+.ceu-lista li p { margin: 2px 0 0; color: var(--fraco); font-size: 14px; }
+.ceu-lista li.fraco { opacity: .65; }
+.ceu-sub { font-size: 15px; margin: 14px 0 4px; }
+.ceu-desenho { display: block; width: 100%; height: auto; border-radius: 10px; margin: 6px 0 8px; }
+.ceu-desenho-grau { font-size: 9px; fill: rgba(255,255,255,.45); }
+.ceu-desenho-rumo { font-size: 10px; fill: rgba(255,255,255,.55); }
+.ceu-desenho-rumo.cardeal { font-size: 12px; font-weight: 700; fill: #fff; }
+.ceu-desenho-ref { font-size: 10px; fill: #cfe0ff; }
+.ceu-desenho-alvo { font-size: 12px; font-weight: 700; fill: #ffe1a0; }
+.ceu-aviso { font-size: 14px; font-weight: 600; color: var(--quente); }
+.globo-cidades { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.globo-cidade { position: absolute; left: 0; top: 0; margin: -8px 0 0 -2.5px; padding-left: 9px; font-size: 12px; line-height: 16px; font-weight: 600; color: #f3f5f8; text-shadow: 0 0 3px #000, 0 1px 2px #000; white-space: nowrap; }
+.globo-cidade::before { content: ''; position: absolute; left: 0; top: 5.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
+.globo-cidade.capital { font-size: 13px; font-weight: 720; }
+.globo-cidade.capital::before { left: -1px; top: 4.5px; width: 5px; height: 5px; border-radius: 1px; background: #0b0f16; border: 1.5px solid #fff; }
+.globo-cidade.capital-estado::before { background: #0b0f16; border: 1.5px solid #fff; width: 4px; height: 4px; }
+.globo-cidade.pequena { font-size: 11px; font-weight: 520; color: #e2e7ee; }
+.globo-cidade.pequena::before { width: 4px; height: 4px; top: 6px; left: .5px; }
+.globo-cidade.so-temp { margin: -9px 0 0 6px; padding: 0 5px; border-radius: 9px; background: rgba(11,15,22,.82); font-size: 11.5px; line-height: 18px; text-shadow: none; }
+.globo-cidade.so-temp::before { display: none; }
+.globo-grade { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.globo-grade-rotulo { position: absolute; left: 0; top: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: rgba(225,232,242,.78); text-shadow: 0 0 3px #000, 0 0 2px #000; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.globo-grade-rotulo[data-tipo='lat'] { margin: -7px 0 0 2px; }
+.globo-grade-rotulo[data-tipo='lon'] { margin: 0 0 0 0; transform-origin: 0 0; translate: -50% 2px; }
+.globo-leitura { position: absolute; right: 12px; bottom: 12px; z-index: 3; max-width: min(460px, 46%); padding: 8px 11px; border-radius: 10px; background: rgba(8,11,18,.78); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px); color: #e8edf3; font-size: 12px; line-height: 1.5; white-space: pre-line; font-variant-numeric: tabular-nums; pointer-events: none; }
+@media (pointer: coarse) { .globo-leitura { display: none; } }
+.globo-sistema-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; pointer-events: none; }
+.globo-sistema-controles > * { pointer-events: auto; }
+.globo-recolhivel { transition: opacity .45s ease; }
+.globo.imersivo .globo-recolhivel { opacity: 0; }
+.globo.imersivo .globo-recolhivel, .globo.imersivo .globo-recolhivel * { pointer-events: none !important; }
+.globo-tempo, .globo-hoje { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; }
+.globo-tempo[aria-pressed="true"] { border-color: #ffd166; color: #ffe1a0; }
+.globo-hoje[hidden] { display: none; }
+.globo-visao-geral { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(236,238,240,.92); color: #0b0f16; font-size: 13px; font-weight: 680; }
+.globo-visao-geral[hidden] { display: none; }
+.globo-sistema-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; align-self: stretch; pointer-events: none; }
+.globo-sistema-topo > * { pointer-events: auto; }
+.globo-livre { margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
+.globo-livre[aria-pressed="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
+.globo-dica { margin: 0; padding: 6px 10px; border-radius: 10px; background: rgba(10,14,22,.8); color: #dfe4ec; font-size: 12px; }
+.globo-dica[hidden] { display: none; }
+.globo-data-sistema { margin: 0; font-size: 13px; color: #dfe4ea; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
+.globo.com-espaco .globo-botoes { top: 108px; }
+
+/* menu "Ver mais": seções fora da barra principal (Avisos, Globo, El Niño, Modelos) */
+.nav #btn-mais[data-avisos]::after { content: ''; position: absolute; top: 11px; right: calc(50% - 38px); width: 7px; height: 7px; border-radius: 50%; background: var(--quente); }
+.mais-lista { display: flex; flex-direction: column; gap: 8px; }
+.mais-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 56px; padding: 10px 14px; border: 1.5px solid var(--linha); border-radius: 10px; background: var(--sup); color: var(--texto); text-align: left; }
+.mais-item b { font-size: 16px; font-weight: 680; }
+.mais-item span { font-size: 13px; color: var(--fraco); }
+.mais-item[aria-current="page"] { border-color: var(--texto); }
+.mais-item.com-aviso span { color: var(--quente); font-weight: 600; }
+
+/* aba Avisos */
+#avisos-conteudo { padding: 0 16px 8px; }
+.aviso-card { border-left: 3px solid var(--quente); background: var(--sup); border-radius: 0 8px 8px 0; padding: 12px 14px; margin: 10px 0; }
+.aviso-card.grave { background: var(--alerta-fundo); }
+.aviso-card h2 { font-size: 17px; margin: 0 0 4px; font-weight: 700; }
+.aviso-card .quando { margin: 0; color: var(--fraco); font-size: 14px; }
+.aviso-card details { margin-top: 8px; }
+.aviso-card summary { color: var(--fraco); font-size: 14px; min-height: 32px; display: flex; align-items: center; cursor: pointer; }
+.aviso-card details p { margin: 6px 0; }
+.avisos-vazio { font-size: 17px; font-weight: 600; margin: 12px 0 4px; }
+.avisos-outros { margin-top: 14px; }
+.avisos-outros summary { color: var(--fraco); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.avisos-outros li { margin: 6px 0; }
+
+/* seletor compacto (uma opção visível; a lista abre no seletor nativo do sistema) */
+.seletor { position: relative; display: inline-flex; align-items: center; margin: 4px 0 8px; }
+.seletor select {
+  appearance: none; -webkit-appearance: none; min-height: 40px; padding: 0 36px 0 14px; border-radius: 20px;
+  border: 1.5px solid var(--linha); background: var(--sup); color: var(--texto); font: inherit; font-size: 15px; font-weight: 600;
+}
+.seletor::after {
+  content: ''; position: absolute; right: 15px; top: 50%; width: 7px; height: 7px; pointer-events: none;
+  border-right: 2px solid var(--fraco); border-bottom: 2px solid var(--fraco); transform: translateY(-70%) rotate(45deg);
+}
+.seletor select:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
+
+/* dia da Semana: tocável, abre o painel do dia */
+.dia > .cab { position: relative; padding-right: 36px; color: inherit; font: inherit; }
+.dia > .cab::after { content: ''; position: absolute; right: 18px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--fraco); border-top: 2px solid var(--fraco); transform: translateY(-50%) rotate(45deg); }
+.dia > .cab:active { background: var(--sup); }
+
+/* El Niño no RS */
+.destaque-rs { background: var(--sup); border-radius: 10px; padding: 10px 12px; }
+.episodios { list-style: none; margin: 0; padding: 0; }
+.episodios li { border-bottom: 1px solid var(--linha); padding: 10px 0; }
+.episodios li p { margin: 4px 0 0; }
+.episodios .ep-cab { display: flex; justify-content: space-between; gap: 8px; }
+.episodios .ep-pico { color: var(--quente); font-weight: 600; white-space: nowrap; }
+.episodios li.em-curso .ep-cab b { color: var(--quente); }
+.noticias { list-style: none; margin: 0; padding: 0; }
+.noticias li { padding: 10px 0; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; gap: 2px; }
+.noticias a { font-weight: 600; text-decoration: none; }
+.enso-tecnico { margin-top: 16px; border-top: 6px solid var(--sup); padding-top: 6px; }
+.enso-tecnico > summary { min-height: 44px; display: flex; align-items: center; font-weight: 650; cursor: pointer; }
+
+/* Aviso antecipado do El Niño (resumo do El Niño e aba Avisos) */
+.alerta-local { margin: 14px 0 4px; padding: 12px 14px; background: var(--sup); border-radius: 8px; }
+.alerta-local h3 { margin: 0 0 6px; font-size: 17px; }
+.alerta-titulo { margin: 10px 0 4px; font-weight: 650; }
+.alerta-dias, .alerta-epocas { list-style: none; margin: 0; padding: 0; }
+.alerta-dias button { all: unset; box-sizing: border-box; width: 100%; min-height: 44px; display: grid; grid-template-columns: 5.5em 1fr; column-gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--linha); cursor: pointer; }
+.alerta-dias button:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
+.alerta-dias .cf { grid-column: 2; font-size: 14px; color: var(--fraco); }
+.alerta-epocas li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid var(--linha); }
+.alerta-epocas span { color: var(--fraco); font-size: 15px; }
+.link-aviso { all: unset; cursor: pointer; color: var(--quente); font-weight: 650; min-height: 44px; display: inline-flex; align-items: center; }
+.aviso-card.painel-aviso { border-left-color: var(--chuva); }
+
+/* Escala de galáxias (Via Láctea vista de fora): esconde o sistema solar e mostra só os controles dela */
+.globo.com-galaxia .globo-sistema-controles, .globo.com-galaxia .globo-espaco, .globo.com-galaxia .globo-rotulo:not(.galaxia-rotulo) { display: none !important; }
+.globo-galaxia-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none; }
+.globo-galaxia-controles[hidden] { display: none; }
+.globo-galaxia-controles > * { pointer-events: auto; }
+.globo-galaxia-voltar, .globo-ir-galaxia, .globo-salvar { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
+.globo-salvar { margin-left: auto; }
+.globo-salvar:disabled { opacity: .6; }
+.globo-escala { display: flex; flex-direction: column-reverse; gap: 4px; pointer-events: none; }
+.globo-escala-barra { display: block; height: 2px; min-width: 20px; background: rgba(230,236,244,.9); box-shadow: 0 1px 2px #000; }
+.globo-escala-texto { font-size: 12px; font-weight: 600; color: #e6ecf4; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
+.galaxia-rotulo.faixa { color: #b9c8dc; font-style: italic; }
+.galaxia-rotulo.galaxia-sol { color: #ffe9a8; border-color: rgba(255,209,102,.5); }
+
+/* Computador e monitor grande: mesmo visual e mesma ordem do celular, aproveitando a largura.
+   Até 1099 px nada muda (coluna de 720 px). A partir de 1100 px a coluna cresce até 1240 px e os blocos de
+   detalhe ficam em duas colunas; mapa, gráficos largos e tabelas (.largura-total) ocupam a linha inteira.
+   No Globo, o conteúdo ocupa a janela toda (a tela do Globo é da thread do Globo; aqui só a moldura). */
+@media (min-width: 1100px) {
+  .cabeca > .topo, .nav, main, .faixa-aviso { max-width: 1240px; }
+  .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; align-items: start;
+  }
+  .detalhes > .largura-total, #semana-conteudo > .largura-total, #modelos-conteudo > .largura-total, #elnino-conteudo > .largura-total,
+  .detalhes > :not(.secao), #semana-conteudo > :not(.secao), #modelos-conteudo > :not(.secao), #elnino-conteudo > :not(.secao) { grid-column: 1 / -1; }
+  .nav { max-width: 720px; }
+  /* resumo do El Niño: o aviso para o local fica ao lado do estado e da tabela */
+  .enso-painel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; align-items: start; }
+  .enso-painel > * { grid-column: 1; }
+  .enso-painel > .alerta-local { grid-column: 2; grid-row: 1 / span 6; margin-top: 0; }
+  .mapa { height: 520px; }
+  body[data-aba="globo"] main { max-width: none; }
+}
+@media (min-width: 1600px) {
+  .cabeca > .topo, main, .faixa-aviso { max-width: 1440px; }
+  .mapa { height: 620px; }
+}
+
+/* Bloco principal com o céu desenhado atrás (js/fundo-ceu.js, condição em fundoDoResumo e faseDoCeu).
+   O céu é o mesmo nos temas claro e escuro, então o texto do bloco é sempre claro: as cores do tema são
+   redefinidas só dentro dele. Temperatura grande e fina; o resto como antes. */
+.resumo[data-fundo] {
+  --texto: #FFFFFF; --fraco: rgba(255, 255, 255, .8); --linha: rgba(255, 255, 255, .28);
+  --fria: #D3E6FF; --quente: #FFD9C7; --chuva-txt: #DDF0FF; --chuva: #CFE8FF; --fundo: rgba(255, 255, 255, .0);
+  position: relative; isolation: isolate; overflow: hidden; margin: 6px 0 4px; padding: 14px 16px 14px; border-radius: 18px;
+  background: #4F7DB3; color: var(--texto); text-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+}
+.resumo[data-fundo] > .ceu-fundo { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+.resumo[data-fundo] .resumo-agora b { font-size: 64px; font-weight: 300; letter-spacing: -.04em; }
+.resumo[data-fundo] .resumo-agora .sens-agora b { font-size: 22px; font-weight: 500; }
+.resumo[data-fundo] .resumo-ceu .cond { font-weight: 600; }
+.resumo[data-fundo] .confianca { border: 0; background: rgba(255, 255, 255, .18); color: var(--texto); text-shadow: none; }
+:root[data-visual="a"] .resumo[data-fundo] .resumo-temp { border-color: var(--linha); }
+.resumo[data-fundo] .icone-ceu .tr { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .18)); }
+
+/* Estilo nativo (1.9.5): menos "cara de painel gerado". Seções viram cartões agrupados com título pequeno e
+   discreto; seletores viram controles segmentados; avisos e faixas sem barra colorida lateral; botões sem contorno.
+   Regras finais do arquivo: valem para o app todo (o Globo tem estilo próprio e não usa estas classes). */
+.secao { margin: 12px 0; padding: 14px 16px 12px; border: 0; border-radius: 16px; background: var(--sup); overflow: clip; }
+.secao h2 { font-size: 13px; font-weight: 620; font-stretch: 100%; letter-spacing: .03em; text-transform: uppercase; color: var(--fraco); margin: 0 0 10px; }
+.secao h3 { font-size: 15px; }
+.secao .secao { padding: 0; margin: 14px 0 0; background: none; border-radius: 0; }
+.secao .mapa { margin-left: -16px; margin-right: -16px; border-radius: 0; }
+.faixa-aviso { border-left: 0; border-radius: 12px; }
+.linha-temporal, .linha-temporal.alto { border-left: 0; border-radius: 12px; padding: 10px 12px; margin: 8px 0 4px; font-size: 14px; background: var(--sup); }
+.linha-temporal.alto { background: var(--alerta-fundo); }
+.chip, .mais-item { border: 0; background: var(--sup2); border-radius: 12px; }
+.chip[aria-pressed="true"] { background: var(--texto); color: var(--fundo); }
+.mais-item[aria-current="page"] { box-shadow: inset 0 0 0 1.5px var(--texto); }
+/* controle segmentado: grupo com fundo, opção escolhida destacada; sem contornos */
+.troca { gap: 8px; align-items: center; justify-content: space-between; }
+.troca-modo, .troca-horas { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--sup); flex: none; }
+.troca button { border: 0; border-radius: 8px; min-height: 32px; padding: 0 10px; color: var(--fraco); background: none; font-weight: 560; }
+.troca button[aria-pressed="true"] { color: var(--texto); background: var(--sup2); font-weight: 650; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.troca-horas { border: 0; margin-left: 0; }
+.troca-horas button[aria-pressed="true"] { background: var(--sup2); }
+/* lista de dias da Semana como um cartão, linhas com divisória recuada */
+.dias { margin: 0; border-radius: 16px; background: var(--sup); overflow: hidden; }
+.dia { border-bottom: 0; }
+.dia + .dia { box-shadow: inset 0 1px 0 var(--linha); }
+@media (min-width: 1100px) {
+  .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { column-gap: 16px; }
+}
 
 /* Páginas avulsas (privacidade, widget do iPhone): coluna central. Sem estilo inline, por causa da CSP. */
 .pagina-simples { max-width: 680px; margin: 0 auto; padding-bottom: 40px; }

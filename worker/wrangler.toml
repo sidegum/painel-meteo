@@ -5,7 +5,9 @@ workers_dev = true
 
 # Só leitura de dados públicos. Nenhuma outra permissão (sem D1, R2, filas, etc.).
 [vars]
-ALLOWED_ORIGIN = "https://sidegum.github.io"
+# Origens aceitas no CORS, separadas por vírgula. O workflow de publicação acrescenta o endereço real do projeto no
+# Cloudflare Pages e o domínio próprio (variáveis PAINEL_DOMINIO e PAGES_PROJETO do repositório).
+ALLOWED_ORIGIN = "https://tempo-rs.pages.dev"
 LIMITE_POR_MINUTO = "30"
 
 
@@ -15,8 +17,8 @@ binding = "KV"
 id = "COLE_AQUI_O_ID_DO_KV"
 
 [triggers]
-# Séries horárias das estações de verificação, El Niño a cada 6 h e acerto diário às 06:15 de Brasília.
-crons = ["5 * * * *", "0 */6 * * *", "15 9 * * *"]
+# Séries horárias das estações (três buscas por hora, ver registrarSeries) de verificação, El Niño a cada 6 h e acerto diário às 06:15 de Brasília.
+crons = ["5,25,45 * * * *", "0 */6 * * *", "15 9 * * *"]
 
 [observability]
 enabled = false   # sem logs persistentes: evita guardar IPs e parâmetros

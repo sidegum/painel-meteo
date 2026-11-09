@@ -13,6 +13,6 @@ writeFileSync(cfg, readFileSync(cfg, 'utf8').replace(/workerUrl: '[^']*'/, `work
 const idx = 'index.html';
 let html = readFileSync(idx, 'utf8');
 html = html.replace(/ https:\/\/[a-z0-9.-]+\.workers\.dev/gi, '');
-html = html.replace('https://apiprevmet3.inmet.gov.br;', `https://apiprevmet3.inmet.gov.br ${url};`);
+html = html.replace(/connect-src[^;]*/, (lista) => `${lista} ${url}`); // sempre no fim da lista, seja qual for o último host
 writeFileSync(idx, html);
 console.log('Worker configurado em', url);

@@ -1,0 +1,32 @@
+{
+ "fonte": "Natural Earth 10m (domínio público), simplificado por Douglas-Peucker",
+ "formato": "Int16 little-endian, lon*32767/180, lat*32767/90, fim de linha = -32768 -32768",
+ "tolerancia": {
+  "litoral": 0.008,
+  "lagos": 0.008,
+  "paises": 0.008,
+  "estados": 0.012
+ },
+ "camadas": [
+  {
+   "nome": "litoral",
+   "valores": 348474,
+   "pontos": 170104
+  },
+  {
+   "nome": "lagos",
+   "valores": 53176,
+   "pontos": 26056
+  },
+  {
+   "nome": "paises",
+   "valores": 84016,
+   "pontos": 34028
+  },
+  {
+   "nome": "estados",
+   "valores": 373396,
+   "pontos": 141600
+  }
+ ]
+}

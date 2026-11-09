@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import w, {
   parseOni, parseSemanal, parseMensal, parseDiscussao, parseProbabilidades, parseIri, normalizarMetar, coberturaMetar,
-  normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia, calibracao, probDiariaCenarios,
+  normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, parseNoticias, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia, calibracao, probDiariaCenarios,
 } from '../src/index.js';
 
 const fx = (n) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
@@ -34,9 +34,9 @@ globalThis.fetch = async (url) => {
   return new Response('não esperado', { status: 599 });
 };
 
-const env = { ALLOWED_ORIGIN: 'https://sidegum.github.io', LIMITE_POR_MINUTO: '30' };
+const env = { ALLOWED_ORIGIN: 'https://tempo-rs.pages.dev', LIMITE_POR_MINUTO: '30' };
 let ipSeq = 0;
-const req = (path, { method = 'GET', origin = 'https://sidegum.github.io', ip } = {}) =>
+const req = (path, { method = 'GET', origin = 'https://tempo-rs.pages.dev', ip } = {}) =>
   new Request('https://painel.exemplo.workers.dev' + path, { method, headers: { origin, 'cf-connecting-ip': ip || `10.0.0.${++ipSeq % 250}` } });
 
 // ---------------- parsers com dados reais
@@ -118,6 +118,13 @@ test('leituras inválidas e 9999 são descartadas', () => {
   assert.equal(s.temperatura, null); assert.equal(s.umidade, null); assert.equal(s.chuva, null); assert.equal(s.vento, null);
 });
 
+test('sem altitude da estação a pressão ao nível do mar fica nula (nunca a pressão da estação)', () => {
+  const j = JSON.parse(fx('inmet-proxima-4303905.json'));
+  const s = normalizarInmet({ id: 'A884', nome: 'CAMPO BOM', lat: -29.674, lon: -51.064, alt: null }, [j.dados]).serie[0];
+  assert.ok(s.pressaoEstacao > 900);
+  assert.equal(s.pressao, null);
+});
+
 test('acumulados exigem horas completas', () => {
   const agora = Date.UTC(2026, 10, 3, 12);
   const serie = Array.from({ length: 24 }, (_, k) => ({ ms: agora - k * 3600000, chuva: k === 5 ? null : 1 }));
@@ -125,6 +132,7 @@ test('acumulados exigem horas completas', () => {
   assert.equal(a.h1.valor, 1);
   assert.equal(a.h24.valor, 23);
   assert.equal(a.h72.valor, null); // faltam horas: não vira zero
+  assert.deepEqual([a.h72.soma, a.h72.horas, a.h72.esperado], [23, 23, 72]); // mínimo garantido com as horas que existem
 });
 
 test('avisos do INMET: polígono, município padrão, listas', () => {
@@ -178,7 +186,7 @@ test('parâmetros inválidos', async () => {
 
 test('CORS restrito à origem do app', async () => {
   const ok = await w.fetch(req('/v1/saude'), env);
-  assert.equal(ok.headers.get('access-control-allow-origin'), 'https://sidegum.github.io');
+  assert.equal(ok.headers.get('access-control-allow-origin'), 'https://tempo-rs.pages.dev');
   const ruim = await w.fetch(req('/v1/saude', { origin: 'https://evil.example' }), env);
   assert.equal(ruim.headers.get('access-control-allow-origin'), null);
 });
@@ -268,4 +276,19 @@ test('força do El Niño por trimestre (tabela real do CPC)', async () => {
   assert.equal(f[3].tri, 'DJF');
   assert.deepEqual(f[3].elNino, { fraco: 0, moderado: 3, forte: 16, muitoForte: 81 });
   assert.equal(f[8].neutro, 70);
+});
+
+test('parseNoticias: título sem veículo, só links do Google Notícias, recentes e sem repetidas', () => {
+  const agora = Date.parse('2026-11-05T12:00:00Z');
+  const item = (t, l, d, f) => `<item><title>${t}</title><link>${l}</link><pubDate>${d}</pubDate>${f ? `<source url="https://x.com">${f}</source>` : ''}</item>`;
+  const xml = `<rss><channel>${[
+    item('Tornado no RS e El Niño - GZH', 'https://news.google.com/rss/articles/a?oc=5', 'Wed, 04 Nov 2026 10:00:00 GMT', 'GZH'),
+    item('Tornado no RS e El Niño - g1', 'https://news.google.com/rss/articles/b', 'Wed, 04 Nov 2026 09:00:00 GMT', 'g1'),
+    item('Chuva &amp; cheia no Guaíba - MetSul', 'https://news.google.com/rss/articles/c', 'Thu, 05 Nov 2026 08:00:00 GMT', 'MetSul'),
+    item('Antiga', 'https://news.google.com/rss/articles/d', 'Mon, 01 Jan 2024 00:00:00 GMT', 'X'),
+    item('Link ruim', 'javascript:alert(1)', 'Thu, 05 Nov 2026 08:00:00 GMT', 'Y'),
+  ].join('')}</channel></rss>`;
+  const r = parseNoticias(xml, agora);
+  assert.deepEqual(r.map((n) => [n.titulo, n.veiculo]), [['Chuva & cheia no Guaíba', 'MetSul'], ['Tornado no RS e El Niño', 'GZH']]);
+  assert.throws(() => parseNoticias('<!DOCTYPE x><rss></rss>'));
 });

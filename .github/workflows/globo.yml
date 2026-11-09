@@ -1,0 +1,81 @@
+name: Dados do globo
+
+# Gera os campos globais da aba Globo (GFS 0,5°, mosaico infravermelho do GIBS, ciclones e elementos orbitais) e
+# publica tudo no branch "globo-dados", sempre com um único commit (sem histórico), para o repositório não crescer.
+# O app lê os arquivos na pasta globo-dados/ do próprio site no Cloudflare Pages, publicada ao fim deste job.
+on:
+  schedule:
+    - cron: '25 */3 * * *'   # a cada 3 h (o GFS novo entra a cada 6 h; repositório privado: limite de 2.000 min/mês do Actions)
+  workflow_dispatch:
+    inputs:
+      so:
+        description: 'Só algumas partes (gfs,satelite,ciclones,satelites,sondas,corpos); vazio = todas'
+        required: false
+        default: ''
+  push:
+    paths:
+      - 'scripts/globo/atualizar.py'
+      - '.github/workflows/globo.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: globo-dados
+  cancel-in-progress: false
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar ecCodes, NumPy e Pillow
+        run: pip install --quiet "eccodes==2.50.0" "numpy>=2" "pillow>=11"
+      - name: Buscar a publicação anterior (para reaproveitar a rodada do GFS se não mudou)
+        run: |
+          git clone --quiet --depth 1 --branch globo-dados "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" saida/globo \
+            || mkdir -p saida/globo
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Gerar os dados
+        run: python3 scripts/globo/atualizar.py saida/globo
+        env:
+          GLOBO_SO: ${{ github.event.inputs.so }}
+      - name: Publicar no branch globo-dados (um commit só)
+        run: |
+          cd saida/globo
+          rm -rf .git
+          git init --quiet
+          git checkout --quiet -b globo-dados
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "Dados do globo gerados em $(date -u +%Y-%m-%dT%H:%MZ)"
+          # o GitHub às vezes recusa o push com erro interno passageiro ("fatal error in commit_refs"): até 4 tentativas
+          for espera in 0 10 30 60; do
+            sleep $espera
+            git push --force --quiet "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" globo-dados && break
+            [ $espera = 60 ] && exit 1
+          done
+          du -sh .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Os campos novos também vão para o Cloudflare Pages (pasta globo-dados/ do site), no mesmo job, para gastar
+      # menos minutos do Actions. Só a partir da main: o app publicado é sempre o da main.
+      - uses: actions/setup-node@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          node-version: '22'
+      - name: Publicar no Cloudflare Pages
+        if: github.ref == 'refs/heads/main'
+        run: scripts/publicar-pages.sh saida/globo
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJETO: ${{ vars.PAGES_PROJETO }}
+          PAGES_MENSAGEM: Campos do Globo atualizados

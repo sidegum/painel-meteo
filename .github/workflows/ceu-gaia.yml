@@ -1,0 +1,34 @@
+name: Céu do Gaia
+
+# Gera vendor/ceu/estrelas-gaia.bin (estrelas do Gaia DR3 fora do Hipparcos, com distâncias de Bailer-Jones) pelo
+# serviço TAP do Gaia Archive e grava no próprio branch em que rodou. Só sob demanda (sem gatilho de push, para não
+# gravar em branches de outras mudanças): o catálogo é fixo.
+on:
+  workflow_dispatch:
+    inputs:
+      gmax:
+        description: 'Magnitude G máxima'
+        required: false
+        default: '10.5'
+
+permissions:
+  contents: write
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Consultar o Gaia Archive e montar o catálogo
+        run: python3 scripts/globo/montar-ceu-gaia.py vendor/ceu "${{ inputs.gmax || '10.5' }}"
+      - name: Gravar no branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vendor/ceu/estrelas-gaia.bin vendor/ceu/estrelas-gaia.json
+          git commit -m "Catálogo do Gaia DR3 até G ${{ inputs.gmax || '10.5' }}" || exit 0
+          git push

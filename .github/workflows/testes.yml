@@ -1,7 +1,10 @@
 name: Testes
 on:
+  # na main e nos PRs (um push num branch com PR aberto rodava duas vezes)
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -14,8 +17,12 @@ jobs:
           node-version: 22
       - name: Testes de regras e do Worker (com respostas reais gravadas)
         run: npm test
+      - name: Nenhuma variável indefinida no app (um id de elemento pode mascarar o erro no navegador)
+        run: npx --yes eslint@8.57.0 --no-eslintrc -c scripts/eslint-indefinidas.json js/*.js sw.js
       - name: Auditoria de dependências
         run: npm audit --audit-level=moderate
       - name: Procura segredos óbvios
         run: |
           ! grep -rInE "INMET_TOKEN\s*=\s*['\"][^'\"]+" --exclude-dir=.git --exclude-dir=node_modules .
+      - name: Site do Cloudflare Pages monta sem faltar arquivo do service worker
+        run: scripts/montar-site.sh "$RUNNER_TEMP/site"

@@ -6,7 +6,7 @@ Painel de chuva e vento para celular, com Campo Bom (RS) como local padrão. Com
 
 | Parte | Onde | Para quê |
 |---|---|---|
-| App | `index.html`, `app.css`, `js/` | Frontend estático, publicado no GitHub Pages |
+| App | `index.html`, `app.css`, `js/` | Frontend estático, publicado no Cloudflare Pages |
 | Regras de confiança | `js/analise.js` (objeto `REGRAS`) | Todos os limites ajustáveis num lugar só |
 | Worker | `worker/` | Cloudflare Worker gratuito: METAR, INMET, El Niño, acerto dos modelos, tarefas agendadas |
 | Instalação | `manifest.json`, `sw.js`, `icones/` | Instalar na tela inicial e abrir sem internet |
@@ -16,12 +16,11 @@ Painel de chuva e vento para celular, com Campo Bom (RS) como local padrão. Com
 
 O app funciona sem o Worker: previsão, cenários, busca de cidades, radar, avisos do INMET e a última leitura da estação INMET de Campo Bom vêm direto do navegador. O Worker acrescenta METAR, estações INMET de qualquer região, histórico de chuva, tendência da pressão, previsto x medido, aba El Niño e taxa de acerto.
 
-## 1. Publicar o app no GitHub Pages
+## 1. Publicar o app (Cloudflare Pages)
 
-1. Ative a autenticação em dois fatores na conta GitHub.
-2. No repositório: Settings > Pages > Source: "Deploy from a branch", branch `main`, pasta `/ (root)`.
-3. O endereço será `https://sidegum.github.io/painel-meteo/`. O HTTPS é obrigatório para o GPS.
-4. Em Settings > Code security, ative "Secret scanning", "Push protection" e "Dependabot alerts".
+O app está em `https://tempo-rs.pages.dev/`. O GitHub Actions publica sozinho a cada mudança na `main` (`.github/workflows/pages.yml`), sem passo de compilação, com o repositório privado. Passo a passo e detalhes em [docs/CLOUDFLARE-PAGES.md](docs/CLOUDFLARE-PAGES.md). O HTTPS é obrigatório para o GPS.
+
+Na conta GitHub, mantenha a autenticação em dois fatores. No repositório, em Settings > Code security, mantenha ligados "Secret scanning", "Push protection" e "Dependabot alerts".
 
 ## 2. Publicar o Worker (Cloudflare, plano gratuito)
 
@@ -34,7 +33,7 @@ O app funciona sem o Worker: previsão, cenários, busca de cidades, radar, avis
    npx wrangler kv namespace create PAINEL_KV
    ```
 3. Copie o `id` mostrado para `worker/wrangler.toml` (linha `id = "COLE_AQUI_O_ID_DO_KV"`).
-4. Confira `ALLOWED_ORIGIN = "https://sidegum.github.io"` no mesmo arquivo.
+4. Confira `ALLOWED_ORIGIN = "https://tempo-rs.pages.dev"` no mesmo arquivo.
 5. Publique: `npx wrangler deploy`. Anote o endereço, algo como `https://painel-meteo.SEU-NOME.workers.dev`.
 6. Teste: abra `https://painel-meteo.SEU-NOME.workers.dev/v1/saude`.
 7. Ligue o app ao Worker, na raiz do repositório:

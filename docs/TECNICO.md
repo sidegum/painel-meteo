@@ -17,7 +17,7 @@ Documentos complementares:
 ## 1. Visão geral da arquitetura
 
 ```
-┌──────────────────────────── Navegador (PWA, GitHub Pages) ────────────────────────────┐
+┌──────────────────────────── Navegador (PWA, Cloudflare Pages) ────────────────────────┐
 │ index.html + app.css                                                                  │
 │ js/app.js ── orquestração, estado, renderização das abas                              │
 │   ├─ js/analise.js  funções puras (estatística, confiança, aprendizado)  ← testado    │
@@ -118,7 +118,7 @@ O `setInterval` de 60 s reescreve o cabeçalho ("Atualizado às HH:MM", com ", d
 
 1. Destrói faixas e gráficos anteriores (`limparGraficos`) para não vazar memória nem observadores.
 2. Desenha a primeira tela de Hoje e de Amanhã com `renderPrimeira`, que é o caminho crítico.
-3. Em `requestIdleCallback`, desenha os detalhes: `renderHojeDetalhes`, `renderAmanhaDetalhes`, `renderSemana`, `renderModelos` e, se a aba estiver aberta, `renderElNino`. Depois restaura `scrollY` para a tela não pular.
+3. Pré-desenha os detalhes de todas as abas numa fila (`filaRender`), uma aba por `requestIdleCallback` (prazo de 1,5 s): primeiro a aba aberta, depois Hoje, Amanhã, Semana, Modelos e El Niño. Assim nenhuma tarefa longa trava o toque. Se o usuário abrir uma aba antes da vez dela, `irPara` a desenha na hora (`renderPendente`). Uma atualização nova invalida a fila anterior (`geracao`). Ao esvaziar a fila, `preCarregarGlobo` insere um `<link rel=modulepreload>` do `globo.js`, que baixa e prepara o código sem executá-lo, exceto com economia de dados ligada. Quando a aba desenhada é a aberta, `scrollY` é restaurado para a tela não pular.
 
 ### 2.5 Objeto `estado`
 
@@ -263,7 +263,7 @@ Implementado em `app.js` (`MODELO_TEMP = 'ecmwf_ifs'`):
 - **Mínima e máxima do dia** (`analisarDia`): a do ECMWF IFS, lida da série já corrigida (3.7). Se o IFS não tiver dado, entra a mediana ponderada dos demais modelos. `tminFaixa` e `tmaxFaixa` guardam o intervalo entre os modelos, como informação de dispersão.
 - **Temperatura por hora** (`tempHora` e `serieTemp`): o valor horário do IFS, já corrigido. Se faltar, a mediana ponderada dos modelos.
 - **Temperatura "agora"** (`renderAgora`), em ordem de preferência:
-  1. A medição da estação mais próxima, a até 25 km e com até 2 h.
+  1. A medição da estação mais próxima, a até 25 km e com até 2 h, levada até o minuto atual (`temperaturaAgora`, desde a 1.5.1). O INMET publica com 40 a 70 min de atraso; o valor é a previsão sem ancoragem (`estado.prevSemAncora`) interpolada entre as horas para este minuto, mais a diferença entre medição e previsão no horário da leitura, que cai linearmente a zero em `REGRAS.ancoragem.horas` (a mesma regra de `ancorarTemperatura`). No instante da leitura o valor é a própria medição. Atualizado a cada minuto pelo relógio de `agendar`. A sensação de agora usa essa temperatura com o vapor e o vento da leitura. No bloco "Medições agora", temperatura e sensação continuam sendo as da leitura, com a nota "agora cerca de X°" quando a diferença passa de 0,5 °C. Sem ancoragem válida, fica a leitura pura.
   2. O campo `current` do IFS, em resolução de 15 min, corrigido.
   3. A mediana ponderada dos `current` dos modelos.
   4. A hora cheia mais recente.
@@ -311,7 +311,7 @@ Funções puras em `analise.js`, com limites em `REGRAS.pressao`:
   |---|---|---|
   | Indica piora | Chuva possível ou provável (≥ 40%) | "Confirma a chuva prevista" |
   | Indica piora | Sem chuva (< 40%) | "Mudança no tempo, sem chuva prevista" (mais nuvens ou vento) |
-  | Estável ou subindo | Chuva possível ou provável | "Pressão estável": a chuva prevista não depende de queda de pressão (por exemplo, pancadas de calor) |
+  | Estável ou subindo | Chuva possível ou provável | "Pressão sem sinal de mudança": a chuva prevista não depende de queda de pressão (por exemplo, pancadas de calor) |
   | Subindo ou alta | Sem chuva | "Tempo firme" |
 
   O teste `pressão nunca contradiz a chance de chuva principal` percorre combinações de pressão e de chance e garante que a pressão nunca anuncia chuva quando a previsão não tem chuva, nem tempo firme quando a previsão tem chuva.
@@ -409,10 +409,11 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
 
 ### 5.3 Primeira tela (`renderPrimeira`)
 
-Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mínima, a máxima e a chance, a resposta "Vai chover", o volume e a janela, o alerta (`linhaAlerta`), a rajada e o gráfico horário com três modos:
+Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mínima, a máxima e a chance, a resposta "Vai chover", o volume e a janela, o cartão de risco de temporal (`cartaoTemporal`, só com risco moderado ou alto), a rajada e o gráfico horário com três modos:
 
 - **Chuva** (`graficoChance`):
   - A chance por hora vem de `chanceHoraria(ms)`: a fração de **todos** os membros de cenários com 0,2 mm ou mais na hora, se houver 10 ou mais. Sem isso, a mediana de `precipitation_probability` dos modelos.
+  - `tetoDoDia`: a chance de uma hora nunca passa a chance principal do dia (calibrada, 1 mm ou mais no total). Vale para o gráfico, a tabela de horas e os períodos de amanhã, que assim nunca mostram mais chance do que o cartão do dia. Chuva medida ou vista no radar entra depois do teto (e o dia já sobe junto nesses casos).
   - Se está chovendo agora (medido), a barra da hora atual vira 100%, em cor de medição.
   - O eixo vertical vai de 0 a `TETO_CHANCE` = 115%, com marcas a cada 20%. A folga evita que as barras cheias encostem no topo.
 - **Temperatura** (`graficoTemperatura`): a série do ECMWF. O eixo vai de pouco abaixo da mínima a pouco acima da máxima, em passos de 2, 3 ou 5 °C conforme a amplitude, com pelo menos dois passos.
@@ -439,7 +440,7 @@ A ordem é:
 2. Medições agora (`instrumentos`), com a pressão atmosférica em destaque no topo (`painelPressao`, seção 3.10).
 3. **Previsto x medido.**
 4. Mapa.
-5. Meteograma.
+5. Hora a hora (meteograma, um gráfico por vez).
 6. Fontes de dados.
 
 - `previstoMedido(s)` mostra três gráficos sincronizados: temperatura (prevista pelo ECMWF), chuva acumulada e rajadas. A linha tracejada é a previsão e a linha cheia com pontos é a medição. A medição de cada hora é a leitura a até ±30 min. Na chuva acumulada, uma hora sem leitura interrompe a linha medida, para não somar lacunas como zero. Sem histórico de medições, a seção não aparece.
@@ -449,9 +450,26 @@ A ordem é:
 ### 5.5 Outras abas
 
 - **Amanhã** (`renderAmanhaDetalhes`): a mesma primeira tela, com `desdeAgora = false`, mais a tabela por modelo (`tabelaModelosDia`) e o índice UV (`textoUv`).
-- **Semana** (`renderSemana`, `tabelaLimites`, `tabelaFaixas`): um dia por linha, com as probabilidades de passar limites e as faixas entre modelos.
+- **Semana** (`renderSemana`, `tabelaLimites`, `tabelaFaixas`): um dia por linha com resumo, números e confiança, sem fontes nem tabela de modelos (o detalhe por modelo fica na aba Modelos). Gráficos e tabelas sem subdescrição.
+- **Dia** (aba `dia`, fora da barra; desde a 1.8.3). Tocar num dia da Semana chama `abrirDia(data)`: o dia de hoje vai para a aba Hoje e o de amanhã para a aba Amanhã. Os outros abrem o mesmo painel da Amanhã para aquele dia: `renderPrimeira` com `diaIndice` e `renderDiaDetalhes(alvo, data, diaIndice, id)`, a mesma função que a Amanhã usa.
+  - A tela abre mesmo nos dias distantes; a imprecisão aparece na confiança, calculada com o `diaIndice` real.
+  - O botão "Semana" (`[data-voltar-semana]`) volta, e a barra mantém Semana marcada.
+  - Deslizar passa para o dia seguinte ou anterior (do 3º dia anterior volta para Amanhã).
+  - O dia aberto fica em `estado.diaAberto` e é redesenhado na fila de `renderTudo`. Se a data sair da previsão, a tela volta para a Semana.
+- **Subdescrições**: um bloco autoexplicativo não leva texto abaixo do título. Ficam só a nota de fonte ("Fonte · Horário") onde ela existe e avisos que mudam a leitura do dado, como `notaConcordancia` (sem ensemble, a fração de modelos é concordância, não probabilidade).
 - **Modelos** (`renderModelos`, `resumoAprendizado`, `tabelaAcerto`): os pesos atuais, o que já foi aprendido e o acerto por modelo e antecedência.
 - **El Niño** (`renderElNino`, `painelEnso`, `intensidade`, `barrasProb`, `comparacaoHistorica`): os índices ONI e RONI, a discussão do CPC, as probabilidades do CPC e do IRI, e a estimativa diária do Niño 3.4.
+  - Desde a 1.8.5, a aba mostra também o que o El Niño faz no RS.
+  - **Ordem da tela (1.8.8):** resumo (`painelResumo`), notícias, efeitos no RS e episódios ficam abertos; tudo o que é técnico (`painelEnso`, gráficos, glossário, probabilidades da NOAA, IRI e status oficial) fica recolhido em "Dados técnicos" (`.enso-tecnico`). Na tela aberta não há siglas nem texto em inglês: trimestres viram meses (`trimestrePt`, ex.: OND → out–dez), RONI é "índice oficial", ONI "índice antigo" e o Niño 3.4 convencional "medida bruta".
+  - **Resumo** (`painelResumo`): estado atual pelo índice oficial, a frase com a anomalia e a tabela das próximas 6 janelas de 3 meses (chance de El Niño e força mais provável, da NOAA).
+  - **Aviso antecipado para o local** (`alertaEnsoLocal`, `blocoAlertaLocal`): só com El Niño em curso (índice oficial ≥ +0,5 °C) ou provável (chance da NOAA ≥ 50% no trimestre atual).
+    - Próximos dias: dias em que a chance de passar 30 mm de chuva ou 60 km/h de rajada (`LIMITE_CHUVA_FORTE`, `LIMITE_RAJADA_FORTE`, os limites mais altos da Semana) é "possível" ou mais (`REGRAS.ocorrencia`). Usa `analisarDia`, então as chances e a confiança são as mesmas da Semana. Tocar abre o dia.
+    - Épocas em que costuma chover mais: meses de `ENSO_RS_EFEITOS` (outubro e novembro do ano de início; abril a junho do ano seguinte) com chance oficial de El Niño ≥ 50% no trimestre centrado no mês. Meses consecutivos viram um período.
+    - Os mesmos dias de risco aparecem na aba Avisos como cartão "Previsão do painel, não é aviso oficial" e acendem o ponto de "Ver mais" (ids `enso|data|tipo` em `avisosVistos`). No `renderTudo` a aba Avisos é desenhada sem esse cálculo (`semAlertaEnso`), para não pesar a primeira tela; ele entra quando a aba El Niño é montada na fila.
+  - `renderTudo` apaga todos os gráficos; por isso limpa `desenhadoEm` do El Niño, que é redesenhado na fila (antes os gráficos ficavam em branco depois de uma atualização).
+  - **O que o El Niño costuma causar no RS** (`efeitosNoRs`): o padrão de chuva no estado (`ENSO_RS_EFEITOS`, de Fontana e Berlato 1997 e do resumo do CPTEC/INPE). Com episódio em curso, inclui a tendência para a primavera do ano de início e para abril a junho do ano seguinte. As fontes ficam em "De onde vem isso".
+  - **Nas notícias do RS** (`noticiasRs`): até 5 notícias dos últimos 45 dias, com título, veículo, data e link, marcadas como conteúdo de terceiros. Vêm da parte `noticias` de `atualizarEnso` (Worker 1.2.0 e GitHub Actions). A busca RSS do Google Notícias (`URL_NOTICIAS_ENSO`) exige "El Niño", o RS e um termo de tempo severo, nos últimos 30 dias. `parseNoticias` tira o veículo do título, aceita só links `https://news.google.com/`, descarta repetidas e devolve as 8 mais recentes.
+  - **El Niños marcantes e o que houve no RS** (`comparacaoHistorica` com `eventosEnso`): os episódios fortes pelo pico do índice, mais os de `ENSO_RS_EPISODIOS` (1982, 1997, 2015 e 2023), com o que foi registrado no RS. Um ano pertence ao episódio mais forte que passa por ele. Esses textos são fixos e verificados; revisá-los a cada novo episódio forte.
 
 ### 5.6 Alertas
 
@@ -459,11 +477,23 @@ A ordem é:
   - Para Campo Bom, usa a lista oficial de municípios por código IBGE (`municipioPadrao`).
   - Para outros locais, testa se o ponto está dentro do polígono do aviso. `dentroPoligono` usa *ray casting* e roda no aparelho, sem enviar a posição.
   - Sem área (RSS), aceita avisos que citam o RS e os marca como `incerto`.
-- `detalheAlertas` abre o texto oficial (riscos e instruções) num diálogo.
+- `avisosOrdenados()`: do mais grave ao menos grave; na mesma gravidade, o que começa antes.
+- Aba **Avisos** (`renderAvisos`, chamada no início de `renderTudo`, sem depender da previsão): um cartão por aviso do local (`cartaoAviso`: título, gravidade e período visíveis; riscos e orientações em `details`), a nota "INMET · HH:MM" da consulta, os outros avisos do RS recolhidos e os links oficiais. Desde a 1.5.0 os avisos não aparecem mais na primeira tela de Hoje e Amanhã; ficam só o cartão de risco de temporal e o ponto vermelho no botão "Ver mais" (`data-avisos`), só para aviso do local ainda não visto: ao abrir a aba Avisos, os identificadores dos avisos ativos vão para `prefs 'avisosVistos'` (`marcarAvisosVistos`) e o ponto some até chegar um aviso novo (`marcarBotaoAvisos`).
+- As listas `riscos` e `instrucoes` chegam do INMET como array JSON; `listaPython` (app e Worker) aceita também o formato antigo em texto `"['a', 'b']"`.
 
 ### 5.7 Navegação e gestos
 
-- `irPara(aba, rolarTopo, direcao)`: troca a aba visível, atualiza `aria-current` e aplica a animação de entrada (`entra`, `entra-dir`, `entra-esq`). A animação usa só `transform` e `opacity`, que são compostas na GPU.
+- Barra com Hoje, Amanhã, Semana e **Ver mais** (`#btn-mais`), que abre o diálogo `#dlg-mais` com Avisos, Globo, El Niño e Modelos (`ABAS_MAIS`). Nessas abas o botão Ver mais fica marcado.
+- Avisos, El Niño e Modelos têm o botão "Ver mais" (`[data-voltar-mais]`) acima do título, que reabre o menu: é o caminho de volta das telas do menu.
+- **Barra de cima recolhível** (`configurarCabecalho`, desde a 1.8.2). A `.cabeca` é `position: fixed`, e o `body` reserva a altura dela em `--alt-cab`, medida por `ResizeObserver`; por isso recolher não move o conteúdo.
+  - Recolhe quando a página rola mais de 6 px para baixo depois da altura da barra. No Globo, recolhe também depois de 4 s sem toque na barra (`OCIOSO_GLOBO_MS`).
+  - Volta ao rolar para cima, ao chegar ao topo ou ao trocar de aba (`cabecalho.aoMudarAba`).
+  - A alça `#alca-cabeca`, centrada na borda de baixo da barra, mostra e oculta a qualquer momento. Mostrada pela alça, a barra não se recolhe sozinha no Globo até a próxima troca de aba.
+  - No Globo (desde a 1.8.6), a página não rola: `body[data-aba=globo]` fica fixo do tamanho da janela, sem rodapé nem faixa de estado. Lá a barra só muda pela alça ou pelo tempo sem uso; o ouvinte de rolagem ignora essa aba.
+  - Fora da tela, a barra perde a altura (`data-recolhida`). No Globo, o `body` deixa de reservar o espaço (`body[data-aba=globo][data-cab=oculta]`) e um evento `resize` avisa o globo para ocupar a tela.
+- Filtros com muitas opções usam `seletor()` (`js/ui.js`): um único botão com a opção atual, que abre a lista nativa do sistema. Hoje isso vale para a camada do mapa e para o gráfico "Hora a hora", que mostra um gráfico por vez (`prefs 'paineis-v2'` guarda o escolhido).
+- Ordem de Hoje: Próximas horas (com legenda chance, chuva, vento e rajada), Mapa, Medições agora, Previsto x medido, Hora a hora e Fontes de dados. Os títulos das telas são os mesmos das abas (Semana, não "Próximos 7 dias"). Na Amanhã, o bloco "Confiança" não tem mais a tabela de modelos, que fica na aba Modelos.
+- `irPara(aba, rolarTopo, direcao)`: troca a aba visível, atualiza `aria-current` (barra e itens do menu) e aplica a animação de entrada (`entra`, `entra-dir`, `entra-esq`). A animação usa só `transform` e `opacity`, que são compostas na GPU.
 - `configurarNavegacao()`: deslizar entre Hoje, Amanhã e Semana. O gesto só vale com:
   - um dedo;
   - duração de até 450 ms;
@@ -476,7 +506,33 @@ A ordem é:
 - `configurarPuxar()`: puxar para atualizar. O indicador flutua (`transform`) sem empurrar o conteúdo. Dispara com mais de 110 px a partir do topo e é cancelado com movimento lateral acima de 40 px.
 - `html { overscroll-behavior-y: none }` desliga o "puxar" nativo do navegador. Os botões usam `touch-action: manipulation`, sem atraso de duplo toque.
 
-### 5.8 Tema e dados locais
+#- **Granizo (1.9.6):** `sinaisGranizo` (analise.js, regras em `REGRAS.granizo`, testado) entra no cartão de temporal como "Risco … de temporal e granizo possível". O motivo aparece ao tocar. As fontes, da mais forte para a mais fraca:
+  1. Um aviso do INMET válido no dia cujo texto cita granizo. Os avisos de Tempestade dizem "queda de granizo".
+  2. Código de tempo 96 ou 99 do UKMO. Pela documentação da Open-Meteo, os códigos 96 e 99 só vêm de modelos com previsão explícita de granizo (ICON, UKMO). Os ECMWF só informam 95 e 97.
+  3. Ambiente favorável, só com risco de temporal moderado ou alto: CAPE ≥ 2000 J/kg e nível de congelamento ≤ 4200 m nas horas de CAPE alto.
+
+  Para isso, `VARS_HORA` ganhou `weather_code` e `freezing_level_height`. Com granizo, o cartão aparece no mínimo como risco moderado. O cartão também passou a listar só os avisos válidos no dia dele (`avisosDia`).
+- **Estilo nativo (1.9.5):** bloco de regras no fim do `app.css`.
+  - Seções `.secao` viram cartões agrupados (fundo `--sup`, cantos de 16 px), com título pequeno em maiúsculas.
+  - Os seletores Chuva/Temperatura/Céu e Restantes/Dia todo viram controles segmentados (`.troca-modo` e `.troca-horas`).
+  - Faixa de aviso e linha de temporal perdem a barra colorida lateral. Botões `.chip` e `.mais-item` perdem o contorno.
+  - A lista de dias da Semana vira um cartão.
+  - Os textos "Toque num horário…" saíram; a linha só ganha texto ao tocar.
+- **Céu do bloco principal (1.9.4):** o `.resumo` de Hoje, Amanhã e do dia tem um canvas `.ceu-fundo` desenhado por `desenharCeu` (`js/fundo-ceu.js`).
+  - O desenho combina o degradê do céu pela fase (`faseDoCeu`: dia; sol baixo, de 1 h antes do pôr até 15 min depois e de 15 min antes do nascer até 1 h depois; noite), as nuvens procedurais na cobertura real (`ceu.cobertura`), o brilho do sol, estrelas e a chuva, e o tom de temporal ou de vento (`fundoDoResumo`, mesma prioridade da 1.9.3).
+  - É calculado uma vez por tamanho, em cerca de 5 ms. Não tem animação. Um `ResizeObserver` redesenha quando o bloco aparece ou muda de tamanho.
+  - O céu é igual nos dois temas. Por isso o bloco redefine `--texto`, `--fraco`, `--linha` e as cores de mínima, máxima e chuva para tons claros.
+- **Céu de agora com METAR (1.9.4):** o METAR só informa nuvens baixas e médias (CAVOK e NSC não dizem nada acima de 1.500 m). Por isso `ceuAgora` usa a maior cobertura entre o METAR e as nuvens médias e altas dos modelos. Antes, um céu de nuvens altas com CAVOK aparecia como "Ensolarado".
+- **Valores ausentes nunca viram texto (1.9.2):** `ui.js` envolve `append`, `prepend`, `replaceChildren`, `before`, `after` e `replaceWith` para ignorar `null`, `undefined` e `false`, que o DOM converteria no texto "null". Envolve também o `textContent` e os textos de `el()` (incluindo `title` e `aria-*`): as palavras soltas null, undefined e NaN viram "–", com um aviso "Valor ausente" no console. O caso que motivou a regra foi a sensação ao lado de "agora (prevista)". `sensacaoAgora` usava `agora` sem declarar; no navegador, isso pegava o elemento `#agora` (acesso por id em `window`), a busca da hora falhava e o `null` ia para `replaceChildren`. O workflow Testes roda o ESLint com `no-undef` (`scripts/eslint-indefinidas.json`) em `js/` e `sw.js`.
+- **Telas largas (1.8.12):** até 1099 px tudo fica como no celular (coluna de 720 px). A partir de 1100 px:
+  - a coluna cresce até 1240 px, ou até 1440 px a partir de 1600 px;
+  - os blocos de Hoje, Amanhã, dia, Semana, Modelos e El Niño ficam em duas colunas (grid);
+  - mapa, faixa de horas, gráficos largos, tabelas, títulos e notas (`.largura-total` ou filhos que não são `.secao`) ocupam a linha inteira;
+  - o mapa fica mais alto e a barra de abas continua com 720 px;
+  - no resumo do El Niño, o aviso para o local vai para a coluna da direita;
+  - com o Globo aberto, `main` perde o limite de largura e o Globo ocupa a janela inteira.
+
+## 5.8 Tema e dados locais
 
 - `aplicarTema()` alterna entre automático, claro e escuro (`data-tema` em `<html>`) e atualiza `theme-color`.
 - `configurarRodape()`: o botão "Apagar dados" remove os service workers, o Cache Storage, o `localStorage` e o `sessionStorage`.
@@ -534,7 +590,9 @@ A ordem é:
 
 - No `install`, guarda os arquivos do app em `painel-app-<versão>`. No `activate`, remove as versões antigas e assume as abas abertas (`clients.claim`).
 - No `fetch`, atende só `GET` do mesmo domínio. As APIs externas não passam pelo service worker.
-- A estratégia é **rede primeiro**, com `cache: 'no-cache'`, para ignorar os 10 min de cache HTTP do GitHub Pages. O cache local entra sem internet ou quando a rede demora mais de 4 s.
+- A estratégia é **rede primeiro**, com `cache: 'no-cache'`, para ignorar o cache HTTP do servidor. O cache local entra sem internet ou quando a rede demora mais de 4 s.
+- Todos os caminhos são relativos à pasta do `sw.js`, então o app funciona em qualquer endereço base.
+- O Cloudflare Pages redireciona `/index.html` para `/` e `/privacidade.html` para `/privacidade`. Uma resposta que passou por redirecionamento não pode ser entregue a uma navegação, então `semRedirecionamento` copia a resposta sem essa marca antes de guardá-la. A política de privacidade é reconhecida com e sem `.html`.
 - **A cada release, `VERSAO` sobe em `sw.js` e em `js/app.js`.** Isso troca o cache e mostra a versão no rodapé.
 
 ---
@@ -555,7 +613,7 @@ A ordem é:
 
 | Rota | Parâmetros | Função |
 |---|---|---|
-| `/v1/observacoes` | `lat`, `lon` (validados por `lerCoord` e arredondados) | Estações METAR numa caixa de ±1,2° (`normalizarMetar`: nós → km/h, umidade pela fórmula de Magnus) e até 4 estações do INMET a até 120 km. Com token: série de 7 dias. Sem token: última leitura (`ultimaInmet`) somada à série horária gravada no KV. `acumulados` calcula a chuva em 1 h, 24 h, 72 h e 7 dias, exigindo 90% das horas. `normalizarInmet` converte m/s → km/h e a pressão da estação para o nível do mar (fórmula barométrica). |
+| `/v1/observacoes` | `lat`, `lon` (validados por `lerCoord` e arredondados) | Estações METAR numa caixa de ±1,2° (`normalizarMetar`: nós → km/h, umidade pela fórmula de Magnus) e até 4 estações do INMET a até 120 km. Com token: série de 7 dias. Sem token: última leitura (`ultimaInmet`) somada à série horária gravada no KV. `acumulados` calcula a chuva em 1 h, 24 h, 72 h e 7 dias: `valor` só com 90% das horas; `soma` (total das horas que existem) sempre, usada pelo app como mínimo garantido ("≥ X mm") quando há pelo menos metade das horas. `normalizarInmet` converte m/s → km/h e a pressão da estação para o nível do mar (fórmula barométrica). |
 | `/v1/alertas` | — | Avisos ativos do INMET (`normalizarAvisos`, `poligonosGeojson` simplificado para até 400 pontos por anel, `listaPython`). Se falhar, usa o RSS do INMET (sem área). Se o RSS também falhar, responde 502 `indisponivel`. |
 | `/v1/enso` | — | Lê `enso:ultimo` do KV. Se tiver mais de 7 h, chama `atualizarEnso`. |
 | `/v1/acerto` | `estacao` | O histórico `acerto:<id>` resumido por `resumirAcerto` (taxa de acerto de chuva, MAE e viés por modelo e antecedência de 1 a 5 dias), mais `calibracao` (pares, índice de Brier e 10 faixas). |
@@ -565,7 +623,7 @@ A ordem é:
 
 | Cron | Tarefa |
 |---|---|
-| `5 * * * *` | `registrarSeries`: guarda a última leitura das estações INMET de verificação em `serie:<id>`, com janela de 8 dias. |
+| `5,25,45 * * * *` | `registrarSeries`: guarda a última leitura das estações INMET de verificação em `serie:<id>`, com janela de 8 dias. Três buscas por hora porque o INMET publica com 40 a 70 min de atraso e a API só dá a leitura mais recente; leitura repetida não é regravada. |
 | `0 */6 * * *` | `atualizarEnso`: baixa os índices semanais e mensais, o ONI, o RONI, a discussão, as probabilidades e as intensidades do CPC e o IRI. Se uma parte falhar, mantém a versão anterior marcada como `desatualizado`. |
 | `15 9 * * *` | `registrarAcerto`: para o dia anterior, junta as medições (`obsDoDia`, que exige 12 ou mais leituras de temperatura e 22 ou mais de chuva) e as previsões de 1 a 5 dias antes (Previous Runs API, `prevDoDia`) em `acerto:<id>`, com até 120 dias. `registrarPrevisaoPainel`: guarda a chance diária de 1 mm ou mais dos três sistemas de cenários (`probDiariaCenarios`) para os próximos 5 dias em `painel:<id>`, com até 600 registros. |
 
@@ -585,20 +643,28 @@ Nenhuma chave contém a localização ou o IP do usuário.
 
 ## 10. Automação, scripts e testes
 
-- `.github/workflows/testes.yml`: roda `npm test`, `npm audit` e a busca por segredos em cada push e PR.
+- `.github/workflows/testes.yml`: roda `npm test`, `npm audit` e a busca por segredos em cada PR e em cada push na `main`.
+- `.github/workflows/globo.yml`: a cada 3 h gera os dados da aba Globo (`scripts/globo/atualizar.py`) e publica no branch `globo-dados` (ver seção 12).
 - `.github/workflows/worker.yml`: publica o Worker quando `worker/**` muda na `main`.
-- `.github/workflows/enso.yml`: a cada 3 h, roda `scripts/atualizar-enso.mjs`.
+- `.github/workflows/enso.yml`: a cada 6 h, roda `scripts/atualizar-enso.mjs`.
   - O script reaproveita `atualizarEnso` do Worker com um "KV" de arquivo.
   - Também estima o Niño 3.4 diário: a média da temperatura do mar em 18 pontos entre 5°N e 5°S, 170°W e 120°W (Open-Meteo Marine), menos a climatologia mensal de 1991 a 2020 derivada do `sstoi.indices` do CPC e interpolada entre os meios dos meses.
   - O resultado é gravado em `dados/enso.json`.
-- `.github/workflows/calibracao.yml`: no dia 5 de cada mês (e quando os scripts da calibração mudam), roda:
-  - `scripts/historico.mjs`: baixa os ZIPs anuais do INMET (BDMEP), extrai a A884 (`scripts/lib/inmet.mjs`: leitor de ZIP próprio, CSV em Latin-1, controle de qualidade, dia local) e as previsões passadas da Previous Runs API (6 modelos, 1 a 5 dias antes, blocos de 60 dias). Grava `dados/historico/A884-diario.json` (uma linha por dia, incremental).
+- `.github/workflows/calibracao.yml`: todo dia às 07:40 de Brasília (e quando os scripts da calibração mudam), roda:
+  - `scripts/historico.mjs`: baixa os ZIPs anuais do INMET (BDMEP), extrai a A884 (`scripts/lib/inmet.mjs`: leitor de ZIP próprio, CSV em Latin-1, controle de qualidade, dia local) e as previsões passadas da Previous Runs API (6 modelos, 1 a 5 dias antes, blocos de 60 dias). Grava `dados/historico/A884-diario.json` (uma linha por dia, incremental: por modelo, só os 10 dias mais recentes e os que faltam a partir do primeiro dia com dado; blocos que não têm dia faltando não são pedidos).
   - `scripts/calibrar.mjs`: calcula `dados/calibracao.json` e `docs/calibracao-resultado.md` (`scripts/lib/calibracao.mjs`). Detalhes em CALIBRACAO.md.
+- `.github/workflows/pages.yml`: publica o site no Cloudflare Pages (Direct Upload, sem compilação) a cada push na `main`, depois da calibração e do workflow do Worker, e à mão. O `globo.yml` (a cada 3 h) e o `enso.yml` (quando o El Niño muda) publicam no próprio job, porque commits feitos com o `GITHUB_TOKEN` não disparam outros workflows. Passo a passo em CLOUDFLARE-PAGES.md.
+  - `scripts/montar-site.sh`: copia só o que o navegador usa (`index.html`, `privacidade.html`, `manifest.json`, `sw.js`, `app.css`, `js/`, `vendor/`, `icones/`, `dados/*.json`, `cloudflare/_headers` e `cloudflare/404.html`) e os campos do Globo em `globo-dados/`. Confere que todo arquivo da lista do service worker existe. O `testes.yml` roda essa montagem em cada PR e push na `main`.
+  - `scripts/publicar-pages.sh`: busca o branch `globo-dados` (se não vier pronto), monta o site, cria o projeto na primeira vez e publica com `wrangler pages deploy`.
+  - `CONFIG.globoDados` é `globo-dados/`, relativo ao próprio site, onde a publicação copia o branch `globo-dados`.
+  - O `404.html` desliga o modo de aplicação de página única do Pages: um arquivo que falta responde 404, e não o `index.html` com status 200.
+  - O Worker aceita como origem o que está em `ALLOWED_ORIGIN` no `wrangler.toml` mais `https://<PAGES_PROJETO>.pages.dev` e `https://<PAINEL_DOMINIO>`, variáveis do repositório lidas pelo `worker.yml` e passadas com `wrangler deploy --var`.
 - `scripts/configurar.mjs`: grava a URL do Worker em `js/config.js`.
 - `test/analise.test.mjs`: 21 testes das funções puras.
+- `test/ceu.test.mjs`: cálculos do céu conferidos com fatos publicados (equinócio, solstício, Gemínidas, eclipses de 2026, estrelas circumpolares).
 - `worker/test/worker.test.mjs`: 24 testes dos parsers e das regras do Worker, com fixtures reais.
 - `test/calibracao.test.mjs`: leitor de ZIP e CSV do INMET, agregação diária, viés, fator, validação fora da amostra e aplicação no app (séries, cenários, pesos).
-- O comando `npm test` roda os três.
+- O comando `npm test` roda os quatro.
 
 ---
 
@@ -642,7 +708,7 @@ Scriptable ── GPS (≈3 km, arredondado a 2 casas) ──► WebView: APP/?w
 
 ```js
 {
-  formato: 1, versao: '1.2.29', geradoMs, previsaoMs,
+  formato: 1, versao: '1.9.8', geradoMs, previsaoMs,
   valores: {               // só para cor e ícone no widget
     temperatura, temperaturaMedida, chance, chovendo, chegando,
     temporal: 'moderado' | 'alto' | null, aviso: boolean, rajadaKmh,
@@ -690,3 +756,154 @@ real (WebView, GPS e agenda do iOS) só é testado no iPhone.
 3. Rodar `npm test` e conferir no navegador, no celular (390 px) e no computador.
 4. Atualizar este documento na seção afetada.
 5. Abrir um PR para a `main`. O Pages publica em cerca de 1 min, e o Worker é publicado pelo workflow quando `worker/**` muda.
+
+---
+
+## 12. Aba Globo (`js/globo*.js` e `js/ceu.js`)
+
+Módulos, todos ES modules carregados só quando a aba abre:
+
+| Módulo | Papel |
+|---|---|
+| `globo.js` | cena Three.js, shaders da Terra (dia, noite com luzes das cidades, luar, nuvens, atmosfera), camadas, gestos, painel de toque, laço e qualidade adaptativa |
+| `globo-dados.js` | leitura dos arquivos do branch `globo-dados` (manifest, campos GFS, satélite, elementos orbitais, sondas) com validação |
+| `globo-regiao.js`, `globo-cidades.js` | mapa detalhado sob a câmera e cidades escolhidas à mão (RS e vizinhança) |
+| `globo-contornos.js` | litoral, lagos, fronteiras e divisas em vetor (Natural Earth 10 m) por cima de tudo, com profundidade puxada para a câmera |
+| `globo-grade.js` | grade de coordenadas: passo pelo zoom, rótulos nas bordas, obliquidade do dia para trópicos e círculos polares |
+| `ceu.js` | cálculo puro do céu (sem DOM, testado): Sol, Lua, planetas e estrelas pelo Astronomy Engine; satélites pelo SGP4; passagens visíveis, chuvas de meteoros (IMO, por longitude solar), eclipses, fases, estações, o resumo "Céu de hoje" e `ondeOlhar` (direção, altura em graus e em punhos, caminho no céu e a referência mais útil por perto: Lua, planeta brilhante ou uma das 24 estrelas e figuras de `REFERENCIAS`) |
+| `globo-ceu.js` | textos: bloco "Céu de hoje" e cartões de Sol, Lua, planetas, estrelas, satélites e sondas |
+| `globo-astro.js` | pontos subsolar e sublunar e posições para o sistema solar |
+| `globo-estrelas.js` | céu: 802.474 estrelas (HYG v4.1: 8.920 até magnitude 6,5 e 110.705 mais fracas; Gaia DR3: 682.849 até G 10,5 fora do Hipparcos, com distância de Bailer-Jones; as fracas carregadas depois em partes), Via Láctea, 12.162 galáxias, nebulosas e aglomerados (Messier, austrais famosos e OpenNGC) e linhas das 88 constelações; precessão e nutação para a data, giro pelo tempo sideral, tamanho e brilho pela magnitude e cor pelo B−V em shader próprio; no sistema solar, estrelas em 3D na distância real |
+| `globo-corpos.js` | cálculo puro (testado em `test/corpos.test.mjs`): luas, corpos menores, propagação kepleriana, polos e rotação da IAU (WGCCRE 2015), raios e planetas anões oficiais |
+| `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra, filtros e o sistema solar navegável (planetas, luas, corpos menores, cinturões reais e sondas) |
+| `globo-sondas.js` | fichas das missões e interpolação de Hermite dos vetores do JPL Horizons |
+| `globo-texturas.js` | texturas procedurais dos astros |
+| `globo-galaxia.js` | escala de galáxias (1.9.0): cena própria em kpc, Via Láctea vista de fora, estrelas reais em volta do Sol, galáxias do NGC/IC e aglomerados de galáxias, cartões e "Salvar imagem" |
+
+Escala de galáxias (1.9.0, `globo-galaxia.js`): botão "Via Láctea" no Sistema solar. Cena e câmera próprias em kpc,
+galactocêntricas (X = Yg, Y = Zg para o polo norte galáctico, Z = Xg; Sol em (0; 0,0208; −8,15)); direções J2000 viram
+galácticas pela matriz do Hipparcos. `globo.js` só repassa: `posicionarCamera`, `definirDist` (de 0,002 a 1,2 milhão
+de kpc), toques e o render do laço vão para o módulo enquanto `G.galaxia` existe; a órbita usa o mesmo `G.cam`.
+- Via Láctea: modelo de `scripts/globo/montar-via-lactea.py` (determinístico, semente fixa): braços de Reid et al. 2019
+  (tabela 2, espirais logarítmicas com dobra; trechos fora da faixa medida extrapolados e ditos assim no cartão), barra
+  de Wegg et al. 2015, disco de Bland-Hawthorn & Gerhard 2016, poeira no lado côncavo dos braços. Saídas: imagem de frente
+  (`via-lactea-4096.jpg` no computador e ao salvar; `via-lactea-2048.jpg` no celular) e 200 mil partículas 3D com
+  espessura do disco (`via-lactea.bin`, formato em `via-lactea.json`) mais 30 mil de poeira. A imagem some quando a
+  Galáxia fica de lado (`face`) e as partículas tomam o lugar.
+- Perto do Sol (até ~3 kpc) entram as estrelas do céu (HYG e Gaia DR3) na distância medida, e o modelo se apaga.
+- Galáxias do OpenNGC com distância (diâmetro real pelo tamanho aparente), aglomerados de Virgem e Fornax (distâncias
+  medidas) e de Centauro, Hidra, Norma, Perseu e Coma (desvio para o vermelho, H0 = 70).
+- `vendor/ceu/galaxia.json` (`scripts/globo/montar-galaxia.py`, a partir de `scripts/globo/fontes/`): 190 masers de
+  Reid et al. 2019 (só paralaxe/erro ≥ 3, distância = 1/paralaxe), 165 aglomerados globulares de Baumgardt & Vasiliev
+  2021 e 101 galáxias do Grupo Local de McConnachie 2012. Andrômeda, Triângulo e as Nuvens de Magalhães são discos com
+  inclinação e ângulo de posição medidos (fontes no script); as demais são pontos com o raio de meia luz.
+- Universo observável (1.9.1): esfera de raio comóvel 14,25 Gpc (46,5 bilhões de anos-luz, Planck 2018) centrada no
+  Sol, com borda acesa; aparece a partir de 2 milhões de kpc e pode ser vista "de fora" (até 4,5 × 10⁷ kpc), como ilustração.
+- Zoom sem fim (1.9.1, `seguirAfastando` em `globo.js`): insistir em afastar no limite passa à escala seguinte (Terra →
+  sistema solar → Via Láctea), somando o que se pediu além do limite (ln 0,35); aproximar zera a soma.
+- Nomes: os marcos da Galáxia aparecem por faixa de zoom; os objetos pontuais, quando estão na região vista (até 1,5×
+  o zoom do foco ou 2,5× da câmera), por prioridade e sem sobrepor nomes nem botões.
+- `salvarImagem`: renderiza a vista com o lado maior em até 4.096 px (ou o limite da GPU), desenha nomes, escala e
+  créditos num canvas 2D e entrega PNG (folha de compartilhar no celular, download no computador).
+
+Detalhes da Terra (1.9.7):
+- Contornos (`globo-contornos.js`, `vendor/terra/contornos.bin`): Int16 lon·32767/180, lat·32767/90 (passo de ~600 m),
+  fim de linha (−32768, −32768); 370 mil pontos em `LineSegments` de 1 pixel, a 130 m de altura, com a profundidade
+  puxada 0,05% em direção à câmera ao longo do raio de visão (a posição na tela não muda): nunca brigam com a malha
+  e o lado de trás continua escondido. Divisas de estados a partir de 2,4 raios; tudo some quando o mapa do OSM assume.
+- Grade (`globo-grade.js` e shader da Terra): passo escolhido para uma linha a cada ~160 px (de 3 a 8 linhas) (30° a 0,005°), linhas de
+  1 pixel por `fwidth`; equador e Greenwich mais fortes; trópicos e círculos polares tracejados na obliquidade do dia
+  (IAU 2006). Rótulos onde cada linha entra na tela (48 amostras por linha), recolhidos com os controles.
+- Cidades: as escolhidas à mão mais as 7.342 localidades do Natural Earth (sem repetir num raio de 0,12°), ordenadas
+  pelo zoom mínimo, capital e população. O zoom equivalente ao dos mapas da web sai da meia largura vista
+  (`meiaVisao`), +1,5 e a largura da tela; a lista é percorrida até o primeiro zoom que não cabe, com até 180 rótulos
+  reaproveitados (70 no celular) sem sobreposição. Temperatura do GFS em todas.
+- Leitura sob o cursor (só com mouse): coordenadas com 4 casas, distância até você, hora solar verdadeira (pelo ponto
+  subsolar), altura do Sol e período (crepúsculos civil, náutico e astronômico), temperatura, pressão, vento com
+  direção e rajadas, chuva e nuvens baixas, médias e altas do GFS da hora mostrada.
+- Dados de tempo robustos: cada leitura repete até 3 vezes em falha de rede, tempo ou 5xx; nuvens, camada e
+  temperaturas carregam independentes (`Promise.allSettled`); sem manifest, novas tentativas em 30 s, 1, 2 e até 5 min,
+  na volta da conexão e ao reabrir a aba; tocar na nota mostra o motivo e "Tentar agora".
+
+Mapa detalhado (1.9.1, `globo-regiao.js`): nível dos quadros do OSM e quantidade (até 16 × 16) calculados pelo tamanho do
+canvas em pixels de desenho, para ~0,85 pixel do mapa por pixel da tela, até o nível 17; zoom mínimo de ~3 km de altura.
+À noite o mapa fica visível em tons escuros e a imagem de luzes da NASA (10 km por pixel) vira só um brilho sobre ele.
+
+Tempo na Terra (1.9.0): um botão com o instante ("Agora · 19:03" ou "sex 00h · previsão"); ao tocar, abre a linha do
+tempo (faixa com os dias e botão de animar). Fora de agora, "Agora" volta ao tempo real.
+
+Iluminação da Terra (1.8.1): sempre a real, sem camada própria. Terminador entre o Sol 3° acima e 3° abaixo do
+horizonte, faixa quente estreita no nascer e no pôr, luzes das cidades acesas até o fim do crepúsculo civil (−6°) e
+apagadas pelas nuvens, noite quase preta com luar pela fase, nuvens noturnas só como sombra escura e reflexo do Sol
+no mar discreto.
+
+Referencial da cena: fixo na Terra, raio 1 = 6.371 km, `latLonVec(lat, lon) = (cos·cos, sen, −cos·sen)`. Sol, Lua e
+planetas entram pelo ponto sob o astro (ascensão reta menos o tempo sideral, do Astronomy Engine), as estrelas pelo
+grupo girado de −GST. No sistema solar, coordenadas heliocêntricas da eclíptica J2000 com distância comprimida
+(`1,25·UA^0,45`) e direção real.
+
+Sistema solar (1.7.0):
+- Planetas pelo Astronomy Engine (VSOP87); a órbita desenhada é uma volta pela própria efeméride, centrada em agora.
+  Cada malha é orientada a cada quadro pelo polo e pelo meridiano principal da IAU (`orientacao`): eixo inclinado
+  correto (Urano deitado, rotação retrógrada de Vênus) e, na Terra, Greenwich no lugar do tempo sideral.
+- Luas: Lua (ELP/MPP02) e galileanas (L1.2) pelo Astronomy Engine; as outras 16 por elementos osculantes do JPL
+  Horizons no dia (`corpos.json`). Em volta do planeta, distância `r·(1 + ln(d/R))` (r raio na tela, R raio real) e
+  direção real. Anéis de Saturno nos raios reais (C, B, Cassini, A, Encke) na mesma escala. As luas aparecem quando a
+  câmera chega a 40 raios do planeta; a Lua, sempre.
+- Corpos menores: 28 do JPL SBDB (planetas anões e candidatos, asteroides visitados por sondas, cometas periódicos),
+  órbita kepleriana em volta do Sol; a órbita dos anões fica à mostra, a dos outros ao tocar.
+- Cinturões: 6.000 asteroides do cinturão principal, 1.500 troianos de Júpiter e os transnetunianos numerados, com a
+  equação de Kepler resolvida no vertex shader (`VERTEX_POP`): atributos P·a, Q·b e (e, M, n); a CPU só passa os
+  dias. Sem `corpos.json`, anéis ilustrativos avisados no cartão.
+- Navegação: câmera em volta de um foco (`G.foco`); "Ir até" no cartão ou dois toques levam a câmera ao corpo e o
+  seguem; planetas com luas enquadram o sistema de luas (16 raios). "Visão geral" volta ao Sol. Zoom multiplicativo.
+- Filtros (`prefs` `globo:filtrosEspaco`): estrelas por magnitude, Via Láctea, objetos de céu profundo, nomes, linhas e nomes das constelações, planetas no céu, trilhas, órbitas, luas, corpos menores,
+  cinturões, sondas, rotas e nomes.
+- Montagem em partes (`pausa` entre planetas, populações e sondas): nenhuma tarefa longa enquanto o Globo abre.
+
+Céu profundo e navegação livre (1.8.0):
+- Estrelas em 3D: no sistema solar o grupo das estrelas gira −ε (eclíptica) e cada estrela com paralaxe vai para
+  `direção·1,25·(d_pc·206.264,8)^0,45`, a mesma compressão dos planetas. O brilho visto é recalculado no shader a
+  partir da distância real até a câmera (`camReal`, descomprimida na CPU): `m = M + 5·log10(d) − 5`. O Sol entra como
+  vértice especial (M = 4,83), aceso a partir de 12 unidades da origem; além de 60 (uns 5.000 UA) a maquete do sistema
+  solar some e só o rótulo do Sol fica. Estrelas sem distância ficam ao fundo, a 4.000 unidades da câmera.
+- `noFundo` (`z = 0,99999·w`): estrelas, Via Láctea e objetos nunca são cortados pelo plano distante. `projetar`
+  (`globo-espaco.js`) ignora o plano distante, para tocar e rotular estrelas além dele.
+- Via Láctea: polígonos do d3-celestial rasterizados com preenchimento XOR (anéis que dão a volta no céu fechados pela
+  borda) em `via-lactea.png`, esfera vista por dentro com mistura aditiva.
+- Objetos de céu profundo: pontos dimensionados pelo tamanho angular real (`pxPorGrau = altura/fov`), cor por tipo
+  (`TIPOS_OBJETO`), ficha em `cartaoObjeto` (`globo-ceu.js`).
+- Filtro por magnitude no shader (`uniforms.limite`): 21 (todas), 6,5, 4,5, 2,5 ou nenhuma.
+- Navegação livre (botão no canto inferior direito do sistema solar): câmera solta (`G.livre`: posição, guinada e
+  arfagem, Euler YXZ). Arrastar olha em volta; pinça, roda ou W/S avançam com passo proporcional à distância da
+  superfície mais próxima (`distanciaProxima`: Sol, planetas, luas, corpos menores, sondas e estrelas); dois toques
+  voam até o objeto tocado (parando a 6 raios) ou ao longo do raio tocado; "Ir até" na ficha de uma estrela leva até
+  ela. Planos próximo e distante se ajustam à escala. Limite de 7.000 unidades (~1 kpc), porque o catálogo é centrado
+  no Sol e fica rarefeito além disso. Um toque no mesmo botão, ou "Visão geral", volta ao modo de órbita.
+- `scripts/globo/montar-ceu-profundo.py` gera os quatro arquivos de `vendor/ceu` a partir do CSV do HYG e dos
+  `messier.json` e `mw.json` do d3-celestial.
+- Gaia DR3 (1.8.7): `scripts/globo/montar-ceu-gaia.py`, rodado pelo workflow `ceu-gaia.yml` (o Gaia Archive não é
+  acessível do ambiente de desenvolvimento), consulta o TAP com `MAXREC` (sem ele o serviço corta em 50 mil linhas sem
+  avisar) e grava `estrelas-gaia.bin` no próprio branch. O app junta HYG e Gaia num só conjunto de colunas
+  (`profundas.nHyg` marca onde o Gaia começa). Em aparelho lento, a qualidade adaptativa desenha só a metade mais
+  brilhante do Gaia (nível 2) ou só o HYG (nível 3), por `setDrawRange`, sem tirar nada das fichas.
+- Objetos NGC/IC do OpenNGC (`montar-ceu-profundo.py` com `NGC.csv` e `addendum.csv`): sem nome nem anel, só mancha fraca;
+  os de Messier, os austrais famosos e os que têm nome em português ganham anel e rótulo.
+- Rótulos do espaço não ficam sob os controles visíveis (`zonasDosControles`); com os controles recolhidos, usam a tela toda.
+
+Regras de visibilidade (constantes `VIS` em `ceu.js`): céu escuro com Sol a −6° ou menos (planetas muito brilhantes a
+partir de −1° a −4°, pela magnitude); pelo menos 10° de altura; satélite visível só iluminado pelo Sol (sombra
+cilíndrica da Terra) com o céu do observador escuro; elementos orbitais com mais de 3 dias são descartados. As nuvens
+de cada item usam a mesma mediana dos modelos e os mesmos limites (45% e 75%) da aba Hoje.
+
+Dados gerados pelo `globo.yml` (`scripts/globo/atualizar.py`): GFS 0,5° (NOMADS), mosaico infravermelho (NASA GIBS),
+ciclones (GDACS e NHC), elementos orbitais (CelesTrak) e, uma vez por dia, os vetores das 16 sondas pelo JPL Horizons
+(`sondas.json`: rota desde o lançamento até 2 anos à frente, trecho recente de 200 dias para cada lado com passo de 1
+dia, ou 12 h para a Parker, e trecho fino de 6 h em volta de agora; para o James Webb, também os vetores em relação à
+Terra no último ano). Uma vez por dia, também `corpos.json`: elementos das luas (Horizons, centro no planeta), dos 28
+corpos menores (`sbdb.api` com `full-prec`) e das populações dos cinturões (`sbdb_query.api`, classes MBA, TJN e
+TNO). `workflow_dispatch` com `so=sondas` ou `so=corpos` força a regeração.
+
+Pré-carregamento: assim que a Terra aparece, `prepararEspaco` monta em tempo ocioso os satélites, os planetas no céu e
+o sistema solar com as sondas, tudo escondido; abrir Espaço ou Sistema solar só torna visível.
+

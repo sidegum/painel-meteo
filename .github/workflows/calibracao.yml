@@ -63,4 +63,9 @@ jobs:
             for f in dados/calibracao.json docs/calibracao-resultado.md; do [ -e "$f" ] && git add "$f"; done
             git diff --cached --quiet || git commit -m "Recalcula a calibração após juntar com o branch"
           fi
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          # o GitHub às vezes recusa o push com erro interno passageiro ("fatal error in commit_refs"): até 4 tentativas
+          for espera in 0 10 30 60; do
+            sleep $espera
+            git push origin "HEAD:${GITHUB_REF_NAME}" && break
+            [ $espera = 60 ] && exit 1
+          done

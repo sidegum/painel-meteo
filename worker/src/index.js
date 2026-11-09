@@ -10,7 +10,7 @@
 // - INMET_TOKEN nunca aparece em respostas, erros ou logs.
 // - Nenhuma localização ou IP é gravado no KV ou em logs.
 
-const VERSAO = '1.1.0';
+const VERSAO = '1.2.1';
 
 export const DESTINOS = new Set([
   'apitempo.inmet.gov.br',
@@ -20,6 +20,7 @@ export const DESTINOS = new Set([
   'iri.columbia.edu',
   'previous-runs-api.open-meteo.com',
   'ensemble-api.open-meteo.com',
+  'news.google.com',
 ]);
 
 const USER_AGENT = 'painel-meteo-pessoal/1.0 (uso pessoal, nao comercial)';
@@ -222,11 +223,11 @@ export function normalizarInmet(est, linhas) {
     const ms = Date.parse(`${d}T${h.slice(0, 2)}:${h.slice(2)}:00Z`); // INMET publica em UTC
     const temp = faixa(num(l.TEM_INS), -30, 50);
     const pEst = faixa(num(l.PRE_INS), 700, 1085);
-    const alt = num(est.alt) ?? 0;
+    const alt = num(est.alt); // sem a altitude não há como reduzir ao nível do mar: pressao fica nula (nunca a da estação)
     serie.push({
       ms, temperatura: temp, umidade: faixa(num(l.UMD_INS), 0, 100), orvalho: faixa(num(l.PTO_INS), -40, 40),
       pressaoEstacao: pEst,
-      pressao: pEst !== null && temp !== null ? Math.round(10 * pEst * Math.pow(1 - (0.0065 * alt) / (temp + 0.0065 * alt + 273.15), -5.257)) / 10 : null,
+      pressao: pEst !== null && temp !== null && alt !== null ? Math.round(10 * pEst * Math.pow(1 - (0.0065 * alt) / (temp + 0.0065 * alt + 273.15), -5.257)) / 10 : null,
       vento: faixa(num(l.VEN_VEL), 0, 100) !== null ? Math.round(num(l.VEN_VEL) * ms2kmh) : null,
       rajada: faixa(num(l.VEN_RAJ), 0, 120) !== null ? Math.round(num(l.VEN_RAJ) * ms2kmh) : null,
       direcao: faixa(num(l.VEN_DIR), 0, 360), chuva: faixa(num(l.CHUVA), 0, 200),
@@ -237,14 +238,19 @@ export function normalizarInmet(est, linhas) {
   return { id: est.id, tipo: 'inmet', nome: est.nome, lat: est.lat, lon: est.lon, alt: est.alt, serie };
 }
 
+/**
+ * Chuva acumulada em 1 h, 24 h, 72 h e 7 dias a partir da série horária (INMET).
+ * valor: soma só com pelo menos 90% das horas registradas (senão null, nunca zero por falta de dado).
+ * soma: total das horas que existem, sempre presente; com horas faltando é um mínimo garantido.
+ * @returns {{h1:object, h24:object, h72:object, d7:object}} cada um {valor, soma, horas, esperado}
+ */
 export function acumulados(serie, agoraMs) {
   const somaAte = (h) => {
     const ini = agoraMs - h * 3600000;
-    const pts = serie.filter((p) => p.ms > ini && p.ms <= agoraMs);
+    const validos = serie.filter((p) => p.ms > ini && p.ms <= agoraMs && p.chuva !== null);
     const esperado = h; // INMET é horário
-    const validos = pts.filter((p) => p.chuva !== null);
-    if (validos.length < esperado * 0.9) return { valor: null, horas: validos.length, esperado };
-    return { valor: Math.round(validos.reduce((s, p) => s + p.chuva, 0) * 10) / 10, horas: validos.length, esperado };
+    const soma = Math.round(validos.reduce((s, p) => s + p.chuva, 0) * 10) / 10;
+    return { valor: validos.length >= esperado * 0.9 ? soma : null, soma, horas: validos.length, esperado };
   };
   return { h1: somaAte(1), h24: somaAte(24), h72: somaAte(72), d7: somaAte(168) };
 }
@@ -300,8 +306,11 @@ async function serieKv(env, id) {
   return (await env.KV.get(`serie:${id}`, 'json')) || [];
 }
 
-// Executado a cada hora: guarda a última leitura das estações de verificação.
-// Assim temos chuva de 24 h, 72 h e 7 dias e a tendência da pressão mesmo sem token.
+// Executado três vezes por hora (:05, :25 e :45): guarda a última leitura das estações de verificação.
+// Assim temos chuva de 24 h, 72 h e 7 dias e a tendência da pressão mesmo sem token. A API só entrega a
+// leitura mais recente e o INMET a publica com 40 a 70 min de atraso; com uma busca só por hora, uma
+// publicação atrasada fazia perder aquela hora para sempre (20 de 24 h registradas em 2026-11-05).
+// Leitura já guardada não é gravada de novo (poupa escritas no KV).
 export async function registrarSeries(env) {
   if (!env.KV) return;
   const lista = await estacoesInmet(env).catch(() => []);
@@ -312,7 +321,9 @@ export async function registrarSeries(env) {
       if (est.id !== v.id) continue;
       const ponto = normalizarInmet({ ...est, alt: meta?.alt ?? null }, [linha])?.serie?.[0];
       if (!ponto) continue;
-      const serie = (await serieKv(env, v.id)).filter((p) => p.ms !== ponto.ms && p.ms > Date.now() - 8 * 86400000);
+      const guardada = await serieKv(env, v.id);
+      if (guardada.some((p) => p.ms === ponto.ms)) continue;
+      const serie = guardada.filter((p) => p.ms > Date.now() - 8 * 86400000);
       serie.push(ponto);
       serie.sort((a, b) => a.ms - b.ms);
       await env.KV.put(`serie:${v.id}`, JSON.stringify(serie));
@@ -533,23 +544,49 @@ export function parseIri(html) {
   return { publicado, forca };
 }
 
+// Notícias recentes do RS que citam o El Niño, pela busca RSS do Google Notícias (agrega GZH, g1, MetSul, Correio do Povo...).
+// Conteúdo de terceiros: o app mostra título, veículo, data e link, marcado como notícia, sem tirar conclusões dele.
+const BUSCA_NOTICIAS_ENSO = '"El Niño" ("Rio Grande do Sul" OR gaúcho OR gaúcha OR "Porto Alegre") (chuva OR temporal OR tornado OR enchente OR cheia OR granizo OR ciclone OR vendaval OR estiagem) when:30d';
+export const URL_NOTICIAS_ENSO = `https://news.google.com/rss/search?q=${encodeURIComponent(BUSCA_NOTICIAS_ENSO)}&hl=pt-BR&gl=BR&ceid=BR:pt-419`;
+export function parseNoticias(xml, agora = Date.now()) {
+  xmlSeguro(xml);
+  const vistos = new Set(), out = [];
+  for (const m of xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
+    const campo = (n) => (m[1].match(new RegExp(`<${n}\\b[^>]*>([\\s\\S]*?)</${n}>`, 'i')) || [])[1] || '';
+    const veiculo = textoPuro(campo('source')).slice(0, 60);
+    let titulo = textoPuro(campo('title')).trim().slice(0, 240);
+    if (veiculo && titulo.endsWith(` - ${veiculo}`)) titulo = titulo.slice(0, -(veiculo.length + 3)).trim();
+    const link = textoPuro(campo('link')).trim();
+    const ms = Date.parse(textoPuro(campo('pubDate')).trim());
+    if (!titulo || !/^https:\/\/news\.google\.com\/[^\s"'<>]*$/.test(link) || !Number.isFinite(ms) || agora - ms > 45 * 86400000) continue;
+    const chave = titulo.toLowerCase().replace(/[^a-z0-9à-ú]+/g, '');
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    out.push({ titulo, veiculo, link, ms });
+  }
+  return out.sort((a, b) => b.ms - a.ms).slice(0, 8);
+}
+
 async function tentar(fn) { try { return { ok: true, dados: await fn() }; } catch (e) { return { ok: false, erro: String(e.message || 'falha').slice(0, 120) }; } }
 
 export async function atualizarEnso(env) {
   const base = 'https://www.cpc.ncep.noaa.gov';
   const iri = 'https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/';
   const t = (u, o) => buscarExterno(u, { tipo: 'texto', timeoutMs: 12000, maxBytes: 2_500_000, ...o });
-  const partes = {
-    relativoSemanal: await tentar(async () => parseSemanal(await t(`${base}/data/indices/rel_wksst9120.txt`)).slice(-260)),
-    convencionalSemanal: await tentar(async () => parseSemanal(await t(`${base}/data/indices/wksst9120.for`)).slice(-260)),
-    convencionalMensal: await tentar(async () => parseMensal(await t(`${base}/data/indices/sstoi.indices`))),
-    oni: await tentar(async () => parseOni(await t(`${base}/data/indices/oni.ascii.txt`))),
-    roni: await tentar(async () => parseOni(await t(`${base}/data/indices/RONI.ascii.txt`))),
-    discussao: await tentar(async () => parseDiscussao(await t(`${base}/products/analysis_monitoring/enso_advisory/ensodisc.shtml`))),
-    probCpc: await tentar(async () => parseProbabilidades(await t(`${base}/products/analysis_monitoring/enso/roni/probabilities/`))),
-    forcaCpc: await tentar(async () => parseForcas(await t(`${base}/products/analysis_monitoring/enso/roni/strengths/`))),
-    iri: await tentar(async () => parseIri(await t(iri))),
+  // As nove fontes são independentes: buscadas em paralelo, o total fica limitado à mais lenta (12 s), não à soma.
+  const tarefas = {
+    relativoSemanal: tentar(async () => parseSemanal(await t(`${base}/data/indices/rel_wksst9120.txt`)).slice(-260)),
+    convencionalSemanal: tentar(async () => parseSemanal(await t(`${base}/data/indices/wksst9120.for`)).slice(-260)),
+    convencionalMensal: tentar(async () => parseMensal(await t(`${base}/data/indices/sstoi.indices`))),
+    oni: tentar(async () => parseOni(await t(`${base}/data/indices/oni.ascii.txt`))),
+    roni: tentar(async () => parseOni(await t(`${base}/data/indices/RONI.ascii.txt`))),
+    discussao: tentar(async () => parseDiscussao(await t(`${base}/products/analysis_monitoring/enso_advisory/ensodisc.shtml`))),
+    probCpc: tentar(async () => parseProbabilidades(await t(`${base}/products/analysis_monitoring/enso/roni/probabilities/`))),
+    forcaCpc: tentar(async () => parseForcas(await t(`${base}/products/analysis_monitoring/enso/roni/strengths/`))),
+    iri: tentar(async () => parseIri(await t(iri))),
+    noticias: tentar(async () => parseNoticias(await t(URL_NOTICIAS_ENSO, { maxBytes: 1_500_000 }))),
   };
+  const partes = Object.fromEntries(await Promise.all(Object.entries(tarefas).map(async ([k, p]) => [k, await p])));
   const anterior = env.KV ? await env.KV.get('enso:ultimo', 'json') : null;
   const final = { verificadoEm: Date.now(), partes: {} };
   for (const [k, v] of Object.entries(partes)) {
@@ -563,7 +600,8 @@ export async function atualizarEnso(env) {
 
 async function rotaEnso(env) {
   let d = env.KV ? await env.KV.get('enso:ultimo', 'json') : null;
-  if (!d || Date.now() - d.verificadoEm > 7 * 3600000) d = await atualizarEnso(env);
+  // sem a parte de notícias (gravada por uma versão anterior do Worker), atualiza já em vez de esperar o cron
+  if (!d || Date.now() - d.verificadoEm > 7 * 3600000 || !d.partes?.noticias) d = await atualizarEnso(env);
   return json({ ...d, fontes: {
     cpc: 'https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml',
     cpcProb: 'https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso/roni/probabilities/',
@@ -790,7 +828,7 @@ export default {
     }
   },
   async scheduled(evento, env, ctx) {
-    // "5 * * * *" -> séries horárias; "0 */6 * * *" -> El Niño; "15 9 * * *" -> acerto diário
+    // "5,25,45 * * * *" -> séries horárias; "0 */6 * * *" -> El Niño; "15 9 * * *" -> acerto diário
     if (evento.cron === '15 9 * * *') ctx.waitUntil(Promise.all([registrarAcerto(env), registrarPrevisaoPainel(env)]));
     else if (evento.cron === '0 */6 * * *') ctx.waitUntil(atualizarEnso(env));
     else ctx.waitUntil(registrarSeries(env));

@@ -2,7 +2,7 @@ name: Dados do El Niño
 
 on:
   schedule:
-    - cron: '17 */3 * * *'   # a cada 3 horas
+    - cron: '17 */6 * * *'   # a cada 6 horas (NOAA CPC e IRI mudam por semana ou por mês)
   workflow_dispatch:
 
 permissions:
@@ -24,6 +24,7 @@ jobs:
       - name: Buscar NOAA CPC, IRI e temperatura do mar
         run: node scripts/atualizar-enso.mjs
       - name: Publicar se mudou
+        id: publicar
         run: |
           if git diff --quiet -- dados/enso.json; then echo "Sem mudança."; exit 0; fi
           git config user.name "github-actions[bot]"
@@ -31,3 +32,13 @@ jobs:
           git add dados/enso.json
           git commit -m "Atualiza dados do El Niño"
           git push
+          echo "mudou=true" >> "$GITHUB_OUTPUT"
+      # O commit acima (GITHUB_TOKEN) não dispara outros workflows, então o site do Cloudflare Pages é publicado aqui.
+      - name: Publicar no Cloudflare Pages
+        if: steps.publicar.outputs.mudou == 'true' && github.ref == 'refs/heads/main'
+        run: scripts/publicar-pages.sh
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJETO: ${{ vars.PAGES_PROJETO }}
+          PAGES_MENSAGEM: Dados do El Niño atualizados

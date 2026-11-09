@@ -4,6 +4,7 @@ name: Publicar Worker
 # Precisa de dois segredos do repositório: CLOUDFLARE_API_TOKEN e CLOUDFLARE_ACCOUNT_ID.
 # Sem eles, o workflow só avisa e termina sem erro.
 # O token do INMET (opcional) fica só na Cloudflare: painel do Worker > Settings > Variables and Secrets.
+# Variáveis opcionais do repositório: PAINEL_DOMINIO (subdomínio do site no Cloudflare Pages) e PAGES_PROJETO.
 
 on:
   push:
@@ -76,10 +77,33 @@ jobs:
           fi
           echo "url=https://painel-meteo.$sub.workers.dev" >> "$GITHUB_OUTPUT"
 
+      # Origens aceitas pelo CORS: as do wrangler.toml mais o site do Cloudflare Pages, montadas a partir
+      # das variáveis do repositório PAINEL_DOMINIO (ex.: tempo.seudominio.com.br) e PAGES_PROJETO (padrão tempo-rs).
       - name: Publicar
         if: steps.seg.outputs.ok == 'true'
         working-directory: worker
-        run: npx --yes wrangler@4 deploy
+        env:
+          PAINEL_DOMINIO: ${{ vars.PAINEL_DOMINIO }}
+          PAGES_PROJETO: ${{ vars.PAGES_PROJETO }}
+        run: |
+          set -euo pipefail
+          origens=$(sed -n 's/^ALLOWED_ORIGIN = "\(.*\)"$/\1/p' wrangler.toml)
+          # Endereço real do projeto no Pages (se o nome já tinha dono, a Cloudflare acrescenta letras no fim).
+          projeto=${PAGES_PROJETO:-tempo-rs}
+          sub=$(curl -sf -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$projeto" | jq -r '.result.subdomain // empty' || true)
+          origens="$origens,https://${sub:-$projeto.pages.dev}"
+          dominio=$(printf '%s' "${PAINEL_DOMINIO:-}" | sed -E 's#^https?://##; s#/.*$##' | tr 'A-Z' 'a-z')
+          if [ -n "$dominio" ]; then
+            if ! printf '%s' "$dominio" | grep -Eq '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$'; then
+              echo "::error::PAINEL_DOMINIO inválido: $PAINEL_DOMINIO (use só o nome, ex.: tempo.seudominio.com.br)"; exit 1
+            fi
+            origens="$origens,https://$dominio"
+          else
+            echo "::notice::Variável PAINEL_DOMINIO vazia: o Worker aceita só o endereço pages.dev."
+          fi
+          echo "Origens aceitas: $origens"
+          npx --yes wrangler@4 deploy --var "ALLOWED_ORIGIN:$origens"
 
       - name: Conferir saúde
         if: steps.seg.outputs.ok == 'true'
@@ -91,6 +115,15 @@ jobs:
             sleep 10
           done
           echo "::warning::O Worker foi publicado, mas ainda não respondeu. O endereço workers.dev pode levar alguns minutos na primeira vez."
+
+      # Resumo das medições de Campo Bom: quantas leituras horárias cada estação tem e os acumulados de chuva.
+      # Só informativo (não falha o workflow); ajuda a ver se o histórico gravado pelo cron está completo.
+      - name: Conferir medições
+        if: steps.seg.outputs.ok == 'true'
+        run: |
+          curl -s -H "Origin: https://tempo-rs.pages.dev" "${{ steps.cf.outputs.url }}/v1/observacoes?lat=-29.68&lon=-51.05" -o /tmp/obs.json || true
+          jq -c '.status' /tmp/obs.json || cat /tmp/obs.json
+          jq -c '.fontes[] | select(.tipo == "inmet") | {id, modo, leituras26h: (.serie | length), primeira: (.serie[0].ms / 1000 | todate), ultima: (.serie[-1].ms / 1000 | todate), acumulados}' /tmp/obs.json || true
 
       - name: Apontar o app para o Worker
         if: steps.seg.outputs.ok == 'true'

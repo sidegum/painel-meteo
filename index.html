@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://tile.openstreetmap.org https://tilecache.rainviewer.com; font-src 'self'; connect-src 'self' https://api.open-meteo.com https://ensemble-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.rainviewer.com https://tilecache.rainviewer.com https://apiprevmet3.inmet.gov.br https://painel-meteo.painel-566f64cc.workers.dev; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org https://tilecache.rainviewer.com; font-src 'self'; connect-src 'self' https://api.open-meteo.com https://ensemble-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.rainviewer.com https://tilecache.rainviewer.com https://apiprevmet3.inmet.gov.br https://painel-meteo.painel-566f64cc.workers.dev; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#111315">
@@ -21,7 +21,7 @@
 <body>
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 
-<div class="cabeca">
+<div class="cabeca" id="cabeca">
 <header class="topo">
   <button class="local" id="btn-local" type="button" aria-haspopup="dialog">
     <span class="local-hora" id="local-hora">aguardando dados</span>
@@ -34,10 +34,10 @@
   <button type="button" data-ir="hoje" aria-current="page">Hoje</button>
   <button type="button" data-ir="amanha">Amanhã</button>
   <button type="button" data-ir="semana">Semana</button>
-  <button type="button" data-ir="modelos">Modelos</button>
-  <button type="button" data-ir="elnino">El Niño</button>
+  <button type="button" id="btn-mais" aria-haspopup="dialog">Ver mais</button>
 </nav>
 </div>
+<button type="button" class="alca" id="alca-cabeca" aria-label="Ocultar barra de cima" aria-controls="cabeca" aria-expanded="true"><i></i></button>
 
 <div class="puxar" id="puxar" aria-hidden="true">Solte para atualizar</div>
 <div class="faixa-aviso" id="estado" role="status" aria-live="polite"></div>
@@ -54,21 +54,38 @@
     <div class="detalhes" id="amanha-detalhes"></div>
   </section>
   <section class="aba" id="aba-semana" data-aba="semana" aria-labelledby="t-semana" hidden>
-    <h1 class="titulo-aba" id="t-semana">Próximos 7 dias</h1>
+    <h1 class="titulo-aba" id="t-semana">Semana</h1>
     <div id="semana-conteudo"></div>
   </section>
+  <section class="aba" id="aba-dia" data-aba="dia" aria-labelledby="t-dia" hidden>
+    <button type="button" class="voltar-mais" data-voltar-semana>Semana</button>
+    <h1 class="sr" id="t-dia">Dia</h1>
+    <div class="primeira" id="dia-primeira"></div>
+    <div class="detalhes" id="dia-detalhes"></div>
+  </section>
+  <section class="aba" id="aba-avisos" data-aba="avisos" aria-labelledby="t-avisos" hidden>
+    <button type="button" class="voltar-mais" data-voltar-mais>Ver mais</button>
+    <h1 class="titulo-aba" id="t-avisos">Avisos</h1>
+    <div id="avisos-conteudo"></div>
+  </section>
   <section class="aba" id="aba-modelos" data-aba="modelos" aria-labelledby="t-modelos" hidden>
+    <button type="button" class="voltar-mais" data-voltar-mais>Ver mais</button>
     <h1 class="titulo-aba" id="t-modelos">Modelos</h1>
     <div id="modelos-conteudo"></div>
   </section>
   <section class="aba" id="aba-elnino" data-aba="elnino" aria-labelledby="t-elnino" hidden>
+    <button type="button" class="voltar-mais" data-voltar-mais>Ver mais</button>
     <h1 class="titulo-aba" id="t-elnino">El Niño</h1>
     <div id="elnino-conteudo"></div>
+  </section>
+  <section class="aba aba-globo" id="aba-globo" data-aba="globo" aria-labelledby="t-globo" hidden>
+    <h1 class="sr" id="t-globo">Globo</h1>
+    <div id="globo-conteudo"></div>
   </section>
 
   <footer class="rodape">
     <p class="oficial">Este painel é pessoal e não é fonte oficial. Em situação de risco, siga a <a href="https://www.defesacivil.rs.gov.br/" target="_blank" rel="noopener noreferrer">Defesa Civil RS</a> (telefone 199) e os avisos do <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener noreferrer">INMET</a>.</p>
-    <p class="atribuicao">Previsões: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>, licença <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, com dados de ECMWF, NOAA NCEP e DWD. Busca de cidades com dados de GeoNames. Radar: RainViewer. Mapa: © colaboradores do OpenStreetMap. Medições: INMET e METAR via AviationWeather (NOAA). El Niño: NOAA CPC e IRI.</p>
+    <p class="atribuicao">Previsões: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>, licença <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, com dados de ECMWF, NOAA NCEP e DWD. Busca de cidades com dados de GeoNames. Radar: RainViewer. Mapa: © colaboradores do OpenStreetMap. Medições: INMET e METAR via AviationWeather (NOAA). El Niño: NOAA CPC e IRI. Globo: texturas NASA Visible Earth, campos GFS (NOAA NCEP), satélites NASA GIBS, ciclones NHC e GDACS, órbitas CelesTrak.</p>
     <div class="acoes-rodape">
       <button type="button" id="btn-tema">Tema: automático</button>
       <a href="privacidade.html">Privacidade e dados</a>
@@ -89,6 +106,19 @@
     <input id="busca" type="search" autocomplete="off" inputmode="search" maxlength="60" placeholder="Ex.: Novo Hamburgo">
     <ul id="resultados" class="resultados" aria-live="polite"></ul>
     <p class="nota">A localização exata fica só neste aparelho. Às APIs vão coordenadas arredondadas para 2 casas (cerca de 1 km).</p>
+    <button value="fechar" class="largo secundario">Fechar</button>
+  </form>
+</dialog>
+
+<dialog id="dlg-mais" aria-labelledby="dlg-mais-t">
+  <form method="dialog" class="dlg">
+    <h2 id="dlg-mais-t">Ver mais</h2>
+    <div class="mais-lista">
+      <button type="button" class="mais-item" data-ir="avisos"><b>Avisos</b><span id="mais-avisos">Avisos oficiais do INMET para o local</span></button>
+      <button type="button" class="mais-item" data-ir="globo"><b>Globo</b><span>O tempo no mundo inteiro, em 3D</span></button>
+      <button type="button" class="mais-item" data-ir="elnino"><b>El Niño</b><span>Situação do Pacífico e o que ela indica para o RS</span></button>
+      <button type="button" class="mais-item" data-ir="modelos"><b>Modelos</b><span>Cada modelo lado a lado e como a confiança é calculada</span></button>
+    </div>
     <button value="fechar" class="largo secundario">Fechar</button>
   </form>
 </dialog>
