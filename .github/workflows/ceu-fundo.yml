@@ -1,0 +1,40 @@
+name: Céu de fundo
+
+# Gera a Via Láctea do céu de fundo (vendor/ceu/via-lactea-ceu-*.jpg) a partir do NASA SVS Deep Star Maps 2020
+# (scripts/globo/montar-ceu-fundo.py) e grava no próprio branch em que rodou. Sob demanda, ou ao mudar o script ou este
+# arquivo fora da main (a main recebe o resultado pelo pull request): a fonte é fixa.
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main, globo-dados]
+    paths:
+      - scripts/globo/montar-ceu-fundo.py
+      - .github/workflows/ceu-fundo.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ceu-fundo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependências
+        run: pip install --quiet numpy pillow OpenEXR tifffile imagecodecs
+      - name: Baixar e montar
+        run: python3 scripts/globo/montar-ceu-fundo.py vendor/ceu
+      - name: Gravar no branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vendor/ceu/via-lactea-ceu-8192.jpg vendor/ceu/via-lactea-ceu-4096.jpg vendor/ceu/via-lactea-ceu.json
+          git commit -m "Via Láctea do céu de fundo (NASA SVS Deep Star Maps 2020)" || exit 0
+          for espera in 0 10 30; do sleep $espera; git pull --rebase --quiet && git push && break; done
