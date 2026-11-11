@@ -1,0 +1,123 @@
+{
+ "fonte": "Solar System Scope (INOVE), https://www.solarsystemscope.com/textures/ — CC BY 4.0, a partir de dados da NASA e da ESA",
+ "texturas": {
+  "sol": {
+   "arquivo": "8k_sun.jpg",
+   "original": [
+    4096,
+    2048
+   ],
+   "saidas": {
+    "sol-2048.jpg": "f6dd9df794003318e7a23fe8824c8ab5aaf561aeb22e6aabe2c3f639ece47a00",
+    "sol-4096.jpg": "1453ee7ef6fabe41edf2edbbdea62bcc44074330bd85edbd2444d32477cf12d6"
+   }
+  },
+  "mercurio": {
+   "arquivo": "8k_mercury.jpg",
+   "original": [
+    8192,
+    4096
+   ],
+   "saidas": {
+    "mercurio-2048.jpg": "3618546006c945eb8456e333b2adbe4acbe1d97b16f5c1f14870c9bd36e36550",
+    "mercurio-4096.jpg": "3e30563d3731e02869fb84b33e878ac9417971bd20d1e7f0a1e9dec756dd4b63"
+   }
+  },
+  "venus": {
+   "arquivo": "4k_venus_atmosphere.jpg",
+   "original": [
+    4096,
+    2048
+   ],
+   "saidas": {
+    "venus-2048.jpg": "dcd559c0d7f015615980880331679b84a5a38114a59c5bc969e07e642367a78b",
+    "venus-4096.jpg": "01845e0b41ff685522067d97915698dd4ec35ac37507902fce511fdbaf03d552"
+   }
+  },
+  "venus-superficie": {
+   "arquivo": "8k_venus_surface.jpg",
+   "original": [
+    8192,
+    4096
+   ],
+   "saidas": {
+    "venus-superficie-2048.jpg": "e838911f46ef167263d619efecd1fd257cd95055ba1d38b0819bd1044d648412",
+    "venus-superficie-4096.jpg": "5abda305359d4183ad8c506327b50f0033f1af06146fb69864474aaffd6afcce"
+   }
+  },
+  "lua": {
+   "arquivo": "8k_moon.jpg",
+   "original": [
+    8192,
+    4096
+   ],
+   "saidas": {
+    "lua-2048.jpg": "602f919126fa2dffe0f2cf826117da18ff4fd78b5670e4b5c7bd703a47e38724",
+    "lua-4096.jpg": "a8b4eb786fbd8322b7c0e6682bccd8c95f3e23a9ff0acd10f18fece166cc9637"
+   }
+  },
+  "marte": {
+   "arquivo": "8k_mars.jpg",
+   "original": [
+    8192,
+    4096
+   ],
+   "saidas": {
+    "marte-2048.jpg": "9c2456d2ec77a3e403b06869a9e51b088bbdccd70e2e95e5e6c7932fcb925a8b",
+    "marte-4096.jpg": "bec0faf70985b147b045bbcee9bdad830e12dea1206ae43dc272e2ff4651e8e0"
+   }
+  },
+  "jupiter": {
+   "arquivo": "8k_jupiter.jpg",
+   "original": [
+    4096,
+    2048
+   ],
+   "saidas": {
+    "jupiter-2048.jpg": "ead2e1854e4fccba8df18d2c48f69265333b93d0ba01b444cf652200099c9462",
+    "jupiter-4096.jpg": "4af953f5fcc87c2088ebbb4c847c7d0a8fc930af2e217d1e63fd7aecdcf1739a"
+   }
+  },
+  "saturno": {
+   "arquivo": "8k_saturn.jpg",
+   "original": [
+    4096,
+    2048
+   ],
+   "saidas": {
+    "saturno-2048.jpg": "01af237ef0d914a58407f426b5e24e1523ba8f2350ed4f7944d66c69c03fb74d",
+    "saturno-4096.jpg": "6ce7f95ab84e60dc92ee29cb4dc90632bd7cf73218e352be4ea612ce00923fa1"
+   }
+  },
+  "urano": {
+   "arquivo": "2k_uranus.jpg",
+   "original": [
+    2048,
+    1024
+   ],
+   "saidas": {
+    "urano-2048.jpg": "80e66f4a66f3242b83715553685e61d09782c357c1eda27fbc5bee0c802f77d3"
+   }
+  },
+  "netuno": {
+   "arquivo": "2k_neptune.jpg",
+   "original": [
+    2048,
+    1024
+   ],
+   "saidas": {
+    "netuno-2048.jpg": "10d817b1f468941efdd6e12e50745ae69a33e359809df6ea18b0143d2a1381ba"
+   }
+  },
+  "saturno-anel": {
+   "arquivo": "8k_saturn_ring_alpha.png",
+   "original": [
+    8192,
+    500
+   ],
+   "saidas": {
+    "saturno-anel.png": "b6f97ce586431e508b2b8651b088146d801659b1b87db264b66a2853af4204db"
+   }
+  }
+ }
+}

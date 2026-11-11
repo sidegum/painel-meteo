@@ -19,7 +19,7 @@ import { CIDADES } from './globo-cidades.js';
 import { pontoSubsolar, pontoSublunar } from './globo-astro.js';
 import { faseLua, registroSatelite } from './ceu.js';
 import { cartaoAstro, criarBlocoCeu } from './globo-ceu.js';
-import { texturaPlaneta, texturaBrilho } from './globo-texturas.js';
+import { texturaPlaneta, texturaBrilho, texturaReal } from './globo-texturas.js';
 import { criarEstrelas, ajustarEscalaEstrelas } from './globo-estrelas.js';
 import { valido, direcaoTexto, partesLocais } from './analise.js';
 
@@ -55,6 +55,7 @@ const G = {
   particulas: null, tocado: null, erroDados: null, anim: 0, tempoLinha: { tocando: false, timer: null },
   espaco: null, espacoAberto: false, sistema: false, livre: null,
   foco: null, focoAlvo: null, animFoco: null, focoDistMin: 0.3, // sistema solar: ponto em volta do qual a câmera gira
+  diaNoite: prefs.ler('globoDiaNoite', true), // false: a Terra toda iluminada, com a luz vindo de trás de quem olha
 };
 
 const latLonVec = (lat, lon, r = RAIO, alvo = new THREE.Vector3()) => {
@@ -510,7 +511,8 @@ function montarCena() {
 
   // Lua: esfera na direção real, iluminada pelo Sol (a fase aparece sozinha), mais perto que a real (14 raios em vez
   // de 60) e com o dobro do tamanho aparente, para ser vista e tocada.
-  G.lua = new THREE.Mesh(new THREE.SphereGeometry(0.135, 48, 32), new THREE.MeshStandardMaterial({ map: texturaPlaneta(THREE, 'Lua'), roughness: 1, metalness: 0 }));
+  G.lua = new THREE.Mesh(new THREE.SphereGeometry(0.135, 64, 48), new THREE.MeshStandardMaterial({ map: texturaPlaneta(THREE, 'Lua'), roughness: 1, metalness: 0 }));
+  texturaReal(THREE, 'lua', (t) => { G.lua.material.map = t; G.lua.material.needsUpdate = true; });
   const luzSol = new THREE.DirectionalLight(0xffffff, 2.6); luzSol.name = 'sol';
   // Sol: brilho na direção real, atrás de tudo (a Terra o encobre quando está do outro lado)
   G.solBrilho = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaBrilho(THREE), color: 0xfff1d0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -576,6 +578,27 @@ function atualizarAstros() {
   latLonVec(sl.lat, sl.lon, 1, G.terra.material.uniforms.lua.value);
   G.terra.material.uniforms.luzLua.value = faseLua(ms).fracao;
   G.estrelas.girar(ms);
+}
+
+/**
+ * Dia e noite desligado: a luz vem de trás e um pouco acima de quem olha (como nas fotos da Terra cheia da DSCOVR), então
+ * o lado visível fica todo de dia, com o relevo marcado. O Sol, a Lua e as estrelas continuam nas posições reais.
+ */
+const _luz = { cima: null, dir: null };
+function iluminarDeFrente() {
+  if (!_luz.cima) { _luz.cima = new THREE.Vector3(); _luz.dir = new THREE.Vector3(); }
+  const sol = G.terra.material.uniforms.sol.value;
+  _luz.cima.setFromMatrixColumn(G.camera.matrixWorld, 1);
+  _luz.dir.setFromMatrixColumn(G.camera.matrixWorld, 0);
+  sol.copy(G.camera.position).normalize().addScaledVector(_luz.cima, 0.35).addScaledVector(_luz.dir, -0.25).normalize();
+}
+
+function alternarDiaNoite() {
+  G.diaNoite = !G.diaNoite;
+  prefs.gravar('globoDiaNoite', G.diaNoite);
+  G.dom.botoes.querySelector('.globo-btn-dianoite').setAttribute('aria-pressed', String(G.diaNoite));
+  if (G.diaNoite) atualizarAstros();
+  mostrarAviso(G.diaNoite ? 'Dia e noite em tempo real.' : 'Terra toda iluminada (sem a noite).', false);
 }
 
 function instanteMostrado() {
@@ -1163,6 +1186,8 @@ function montarDom(secao) {
   const botoes = el('div', { class: 'globo-botoes globo-recolhivel' },
     el('button', { type: 'button', title: 'Minha posição', 'aria-label': 'Centralizar na minha posição', onclick: () => { const l = G.estadoApp?.local; if (l) irPara(l.lat, l.lon, Math.min(G.cam.dist, DIST.cidade)); } },
       icone(svg('circle', { cx: 12, cy: 12, r: 6 }), svg('circle', { cx: 12, cy: 12, r: 1.6, class: 'cheio' }), svg('path', { d: 'M12 2v4M12 18v4M2 12h4M18 12h4' }))),
+    el('button', { type: 'button', title: 'Dia e noite em tempo real', class: 'globo-btn-dianoite', 'aria-label': 'Dia e noite em tempo real', 'aria-pressed': String(G.diaNoite), onclick: alternarDiaNoite },
+      icone(svg('circle', { cx: 12, cy: 12, r: 8 }), svg('path', { d: 'M12 4a8 8 0 0 1 0 16z', class: 'cheio' }))),
     el('button', { type: 'button', title: 'Espaço', class: 'globo-btn-espaco', 'aria-label': 'Espaço: satélites e sistema solar', 'aria-pressed': 'false', onclick: alternarEspaco },
       icone(svg('circle', { cx: 12, cy: 12, r: 5 }), svg('ellipse', { cx: 12, cy: 12, rx: 10, ry: 3.4, transform: 'rotate(-20 12 12)' }))),
     el('button', { type: 'button', title: 'Ajuda', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda },
@@ -1272,7 +1297,7 @@ async function atualizarTemperaturasCidades() {
  */
 function zoomEquivalente(largura) {
   const meia = meiaVisao(G.cam.dist, G.camera.fov, G.camera.aspect);
-  return Math.log2(360 / (2 * Math.max(meia, 1e-4))) + 2 + Math.log2(Math.max(0.6, largura / 1000));
+  return Math.log2(360 / (2 * Math.max(meia, 1e-4))) + 1 + Math.log2(Math.max(0.6, largura / 1000));
 }
 
 /** Projeta as cidades visíveis (lado da Terra voltado à câmera, conforme o zoom) nos rótulos sobre o canvas. */
@@ -1283,9 +1308,12 @@ function posicionarCidades() {
   const olho = G.camera.position, v = new THREE.Vector3();
   const ocupados = [];
   const soTemp = G.regiao?.estado.ativa && G.terra.material.uniforms.temRegiao.value > 0.5; // o mapa do OSM já traz os nomes
+  // com a Terra pequena na tela, poucos nomes: um a cada ~110 px do raio do disco (raio angular asin(1/d))
+  const raioPx = Math.tan(Math.asin(Math.min(1, 1 / G.cam.dist))) / Math.tan(G.camera.fov * RAD / 2) * r.height / 2;
+  const maximo = Math.min(G.rotulosCidades.length, Math.max(0, Math.round((raioPx / 110) ** 2 * 3)));
   let n = 0;
   for (const c of G.cidades) {
-    if (c.zMin > z || n >= G.rotulosCidades.length) break; // lista ordenada por zoom: as seguintes também não cabem
+    if (c.zMin > z || n >= maximo) break; // lista ordenada por zoom: as seguintes também não cabem
     v.copy(olho).sub(c.pos);
     if (c.pos.dot(v) <= 0.18 * c.pos.length() * v.length()) continue; // só o lado visível, longe da borda
     v.copy(c.pos).project(G.camera);
@@ -1620,7 +1648,7 @@ function mostrarAjuda() {
   mostrarInfo('Globo',
     el('p', { text: 'Arraste para girar, pince ou use a roda para aproximar, toque duas vezes para chegar perto. O botão “Agora” embaixo abre a linha do tempo da previsão. Toque num ponto da Terra para ver o tempo lá; toque no Sol, na Lua, num satélite, num planeta ou numa sonda para ver o que é, onde está e quando dá para ver daqui.' }),
     el('ul', {},
-      el('li', {}, 'Dia e noite (sempre ligado): o lado iluminado e o escuro pela posição real do Sol agora; a Lua clareia a noite conforme a fase e as luzes das cidades (NASA Black Marble) acendem no escuro. Ao mudar a hora na linha do tempo, o Sol acompanha.'),
+      el('li', {}, 'Dia e noite (botão de meia-lua à direita): o lado iluminado e o escuro pela posição real do Sol agora; a Lua clareia a noite conforme a fase e as luzes das cidades (NASA Black Marble) acendem no escuro. Ao mudar a hora na linha do tempo, o Sol acompanha. Desligado, a Terra fica toda iluminada, com a luz vindo de trás de quem olha.'),
       el('li', {}, 'Nuvens: imagem infravermelha dos satélites GOES-Leste, GOES-Oeste e Himawari (NASA GIBS), onde há cobertura; no resto, nuvens previstas pelo GFS.'),
       el('li', {}, 'Vento (linhas mostram para onde ele sopra, a 10 m), chuva (mm/h), temperatura (a 2 m) e pressão ao nível do mar (isóbaras a cada 4 hPa ao aproximar): modelo GFS 0,5° da NOAA, a cada 3 h até 48 h.'),
       el('li', {}, 'Ponto tocado: ECMWF IFS pela Open-Meteo, com fuso horário local. Ciclones: NHC e GDACS.'),
@@ -1630,7 +1658,7 @@ function mostrarAjuda() {
       el('li', {}, 'Espaço: ISS, Tiangong e satélites (CelesTrak, SGP4) em escala real de altura; planetas na direção real. Sistema solar com posições reais (Astronomy Engine), sondas pelo JPL Horizons e distâncias comprimidas para caber na tela.'),
       el('li', {}, 'Via Láctea (no Sistema solar): a Galáxia vista de fora é um modelo calculado pelos braços medidos por paralaxe (Reid et al. 2019), a barra (Wegg et al. 2015) e o disco (Bland-Hawthorn & Gerhard 2016); ninguém a fotografou de fora. Perto do Sol aparecem as 800 mil estrelas do céu na distância medida; longe, as galáxias do NGC/IC e os grandes aglomerados de galáxias. "Salvar imagem" gera um PNG de até 4.096 px com os nomes e a escala.')),
     el('p', { class: 'nota', text: `Nesta tela: ${(G.galaxia ? G.galaxia.notasFontes() : [G.dom.fonte.textContent, ...(G.espaco?.notasFontes?.() || [])]).filter(Boolean).join(' · ')}.` }),
-    el('p', { class: 'nota', text: `Texturas: NASA Visible Earth (Blue Marble e Black Marble, domínio público). Contornos e cidades: Natural Earth 10 m (domínio público). Dados gerados ${m?.gerado ? fmt.idade(Date.parse(m.gerado)) : '–'}. Este globo é um painel pessoal, não uma fonte oficial. Em situação de risco, siga a Defesa Civil e o INMET.` }));
+    el('p', { class: 'nota', text: `Texturas da Terra: NASA Visible Earth (Blue Marble e Black Marble, domínio público). Via Láctea do céu: NASA/Goddard SVS, Deep Star Maps 2020, com dados do Gaia (ESA), domínio público. Sol, Lua e planetas: Solar System Scope (CC BY 4.0), com imagens das missões da NASA e da ESA. Contornos e cidades: Natural Earth 10 m (domínio público). Dados gerados ${m?.gerado ? fmt.idade(Date.parse(m.gerado)) : '–'}. Este globo é um painel pessoal, não uma fonte oficial. Em situação de risco, siga a Defesa Civil e o INMET.` }));
 }
 
 // ---------- espaço: satélites e sistema solar (módulo globo-espaco.js, carregado ao tocar em Espaço) ----------
@@ -1753,6 +1781,7 @@ function laco(agora) {
   }
   if (G.galaxia) { /* a viagem da câmera na galáxia é do próprio módulo */ } else if (G.livre) moverLivre(agora); else if (G.sistema) moverFoco(agora);
   posicionarCamera();
+  if (!G.diaNoite && !G.sistema) iluminarDeFrente();
   G.estrelas.acompanharCamera(G.camera, G.dom.canvas.clientHeight * G.pixelRatio);
   const pulso = (Math.sin(agora / 500) + 1) / 2;
   if (!G.sistema) {

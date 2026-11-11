@@ -16,7 +16,7 @@ import * as C from './ceu.js';
 import { cartaoAstro, cartaoEstrela, cartaoObjeto, cartaoSatelite, cartaoSonda, cartaoLua, cartaoPequeno, fusoS } from './globo-ceu.js';
 import { DIST_ESCALA, DIST_EXP, posicaoObjeto } from './globo-estrelas.js';
 import { MISSOES, estadoSonda, interpolar, rotaCompleta } from './globo-sondas.js';
-import { ANEL_SATURNO_KM, texturaPlaneta, texturaSol, texturaAnel, texturaPonto, texturaBrilho, texturaAnelSelecao } from './globo-texturas.js';
+import { ANEL_SATURNO_KM, texturaPlaneta, texturaSol, texturaAnel, texturaPonto, texturaBrilho, texturaAnelSelecao, texturaReal, anelReal } from './globo-texturas.js';
 
 const num = (v, casas = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) : null);
 
@@ -645,6 +645,8 @@ const escalaLua = (rTela, raioKm, p, alvo) => {
   return alvo.set(p.x * f, p.z * f, -p.y * f);
 };
 const COR_LUA = { io: '#e8d27a', europa: '#e2d8c6', ganimedes: '#b2a898', calisto: '#7d7166', tita: '#e0ad55', encelado: '#ffffff', japeto: '#b9ada0', tritao: '#e4d6cf', caronte: '#b8aea6' };
+/** Corpo do Astronomy Engine -> mapa real em vendor/texturas/planetas (Plutão fica com a textura desenhada). */
+const MAPA_REAL = { Mercury: 'mercurio', Venus: 'venus', Mars: 'marte', Jupiter: 'jupiter', Saturn: 'saturno', Uranus: 'urano', Neptune: 'netuno' };
 const COR_PEQUENO = { anao: '#f0d2a8', asteroide: '#c8bfb0', cometa: '#9fe3ff' };
 const PRIORIDADE_PEQUENO = { anao: 26, cometa: 22, asteroide: 18 };
 // Populações reais dos cinturões (elementos do SBDB): cor e nome no cartão
@@ -710,7 +712,8 @@ async function montarSistema() {
   const agora = Date.now();
 
   // Sol: fotosfera, halo e coroa (aditivos)
-  const sol = new THREE.Mesh(new THREE.SphereGeometry(0.11, 48, 32), new THREE.MeshBasicMaterial({ map: texturaSol(THREE) }));
+  const sol = new THREE.Mesh(new THREE.SphereGeometry(0.11, 64, 48), new THREE.MeshBasicMaterial({ map: texturaSol(THREE) }));
+  texturaReal(THREE, 'sol', (t) => { sol.material.map = t; sol.material.needsUpdate = true; });
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaBrilho(THREE), color: 0xffd27a, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }));
   halo.scale.setScalar(0.62);
   const coroa = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaBrilho(THREE), color: 0xffb060, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }));
@@ -729,7 +732,9 @@ async function montarSistema() {
     const sistemaPlaneta = new THREE.Group(); sistemaPlaneta.name = p.nome;
     const mat = new THREE.MeshStandardMaterial({ map: texturaPlaneta(THREE, p.corpo === 'Pluto' ? 'Mercúrio' : p.nome), roughness: 0.9, metalness: 0 });
     if (p.corpo === 'Pluto') mat.color.set('#e6d2bc');
-    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 32), mat);
+    const real = MAPA_REAL[p.corpo];
+    if (real) texturaReal(THREE, real, (t) => { mat.map = t; mat.needsUpdate = true; });
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 96, 64), mat);
     sistemaPlaneta.add(m);
     rotulo(m, p.nome, p.corpo === 'Earth' ? 90 : 80 - PLANETAS.indexOf(p), p.corpo === 'Pluto' ? 'anao' : '');
     tocaveis.push({ objeto: m, acao: () => (p.corpo === 'Earth' ? mostrarTerra() : mostrarAstro(p.corpo, instanteSistema())), prioridade: 3 });
@@ -740,6 +745,7 @@ async function montarSistema() {
       const uv = geoAnel.attributes.uv, posA = geoAnel.attributes.position, v3 = new THREE.Vector3();
       for (let k = 0; k < uv.count; k++) { v3.fromBufferAttribute(posA, k); uv.setXY(k, (R * Math.exp(v3.length() / r - 1) - k0) / (k1 - k0), 0.5); }
       const anel = new THREE.Mesh(geoAnel, new THREE.MeshBasicMaterial({ map: texturaAnel(THREE), side: THREE.DoubleSide, transparent: true, depthWrite: false }));
+      anelReal(THREE, (t) => { anel.material.map = t; anel.material.needsUpdate = true; });
       anel.rotation.x = -Math.PI / 2; m.add(anel);
     }
     if (p.corpo === 'Earth') {
@@ -753,7 +759,8 @@ async function montarSistema() {
     for (const chave of luasPorPlaneta[p.corpo] || []) {
       const L = K.LUAS[chave], el0 = corpos?.luas?.[chave];
       const rl = Math.max(r * Math.sqrt(L.raioKm / raioKm) * 0.6, 0.0012);
-      const lm = new THREE.Mesh(new THREE.SphereGeometry(rl, 24, 16), new THREE.MeshStandardMaterial({ map: texturaPlaneta(THREE, 'Lua'), color: COR_LUA[chave] || '#d4cec6', roughness: 1 }));
+      const lm = new THREE.Mesh(new THREE.SphereGeometry(rl, chave === 'lua' ? 64 : 24, chave === 'lua' ? 48 : 16), new THREE.MeshStandardMaterial({ map: texturaPlaneta(THREE, 'Lua'), color: COR_LUA[chave] || '#d4cec6', roughness: 1 }));
+      if (chave === 'lua') texturaReal(THREE, 'lua', (t) => { lm.material.map = t; lm.material.color.set('#ffffff'); lm.material.needsUpdate = true; });
       lm.name = L.nome;
       luas.add(lm);
       rotulo(lm, L.nome, chave === 'lua' ? 60 : 50, 'lua');

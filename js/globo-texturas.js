@@ -127,3 +127,29 @@ export function texturaAnelSelecao(THREE) {
   c.strokeStyle = 'rgba(255,255,255,0.95)'; c.lineWidth = 4; c.beginPath(); c.arc(32, 32, 24, 0, Math.PI * 2); c.stroke();
   const t = textura(THREE, cv, false); cache.set('selecao', t); return t;
 }
+
+// ---------- texturas reais (vendor/texturas/planetas, Solar System Scope, CC BY 4.0; ver texturas.json) ----------
+
+const LADO_REAL = matchMedia('(pointer: coarse)').matches ? 2048 : 4096;
+const SO_2048 = new Set(['urano', 'netuno']);
+const reais = new Map();
+
+/**
+ * Carrega o mapa real de um corpo (sol, mercurio, venus, lua, marte, jupiter, saturno, urano, netuno) e o entrega a
+ * aplicar(textura). Enquanto não chega, ou sem rede, fica a textura desenhada. 4.096 px no computador, 2.048 no celular.
+ */
+export function texturaReal(THREE, nome, aplicar) {
+  const lado = SO_2048.has(nome) ? 2048 : LADO_REAL;
+  const url = new URL(`../vendor/texturas/planetas/${nome}-${lado}.jpg`, import.meta.url).href;
+  if (!reais.has(url)) {
+    reais.set(url, new THREE.TextureLoader().loadAsync(url).then((t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; })
+      .catch(() => { reais.delete(url); return null; }));
+  }
+  reais.get(url).then((t) => { if (t) aplicar(t); });
+}
+
+/** Anel de Saturno real (faixa radial com transparência, da borda interna para a externa). */
+export function anelReal(THREE, aplicar) {
+  new THREE.TextureLoader().loadAsync(new URL('../vendor/texturas/planetas/saturno-anel.png', import.meta.url).href)
+    .then((t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; aplicar(t); }).catch(() => {});
+}
