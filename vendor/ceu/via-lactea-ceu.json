@@ -1,0 +1,18 @@
+{
+ "fonte": "NASA/Goddard Space Flight Center Scientific Visualization Studio, Deep Star Maps 2020 (Gaia DR2: ESA/Gaia/DPAC). Domínio público.",
+ "pagina": "https://svs.gsfc.nasa.gov/4851",
+ "arquivo": "https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/milkyway_2020_8k.exr",
+ "larguraOriginal": 8192,
+ "alturaOriginal": 4096,
+ "orientacaoOriginal": {
+  "ar0NoCentro": false,
+  "arParaDireita": true
+ },
+ "convencao": "equirretangular, coluna 0 = AR 0h, AR crescendo para a direita, linha 0 = dec +90°",
+ "tom": "asinh(x/k)/asinh(p99,97/k), k = 0,8·mediana, sRGB",
+ "estatisticas": {
+  "p50": 0.002685546875,
+  "p99_97": 0.1454671174287796,
+  "k": 0.0021484375
+ }
+}
