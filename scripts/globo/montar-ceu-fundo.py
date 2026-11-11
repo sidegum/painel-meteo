@@ -130,15 +130,16 @@ def main():
     final = media_em(lum, *CENTRO_GALAXIA, False, True)
     log('Centro da Galáxia na convenção final:', final)
 
-    # tom: arco-seno hiperbólico (preserva o contraste das nuvens escuras e não estoura o bojo), em sRGB
-    p50, p999 = np.percentile(lum, [50, 99.97])
-    k = max(p50 * 0.8, 1e-9)
-    escala = np.arcsinh(p999 / k)
-    rgb = np.arcsinh(img / k) / escala
+    # tom: ponto preto no fundo do céu (percentil 45 do brilho, o céu longe do plano galáctico fica escuro como a olho
+    # nu), ponto branco no percentil 99,95 (bojo e Nuvens de Magalhães sem estourar), curva 0,8 para abrir as regiões
+    # fracas; um desfoque de 1,2 px a 8k tira o ruído de contagem do Gaia sem apagar as nuvens escuras
+    from PIL import ImageFilter
+    preto, branco = (float(v) for v in np.percentile(lum, [45, 99.95]))
+    rgb = np.clip((img - preto) / (branco - preto), 0, None) ** 0.8
     rgb = np.clip(rgb, 0, 1)
     srgb = np.where(rgb <= 0.0031308, rgb * 12.92, 1.055 * np.power(rgb, 1 / 2.4) - 0.055)
-    out = Image.fromarray((np.clip(srgb, 0, 1) * 255 + 0.5).astype(np.uint8), 'RGB')
-    estat = {'p50': float(p50), 'p99_97': float(p999), 'k': float(k)}
+    out = Image.fromarray((np.clip(srgb, 0, 1) * 255 + 0.5).astype(np.uint8), 'RGB').filter(ImageFilter.GaussianBlur(1.2 * W / 8192))
+    estat = {'preto': preto, 'branco': branco, 'curva': 0.8}
     log('Estatísticas', estat)
     for largura in (8192, 4096):
         nome = f'via-lactea-ceu-{largura}.jpg'
@@ -149,7 +150,7 @@ def main():
         'pagina': PAGINA, 'arquivo': url, 'larguraOriginal': W, 'alturaOriginal': H,
         'orientacaoOriginal': {'ar0NoCentro': ra0_centro, 'arParaDireita': ra_direita},
         'convencao': 'equirretangular, coluna 0 = AR 0h, AR crescendo para a direita, linha 0 = dec +90°',
-        'tom': 'asinh(x/k)/asinh(p99,97/k), k = 0,8·mediana, sRGB', 'estatisticas': estat,
+        'tom': '((x − preto)/(branco − preto))^0,8, preto = percentil 45, branco = percentil 99,95, desfoque 1,2 px a 8k, sRGB', 'estatisticas': estat,
     }, ensure_ascii=False, indent=1))
 
 
