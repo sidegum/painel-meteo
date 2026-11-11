@@ -11,8 +11,8 @@
  "convencao": "equirretangular, coluna 0 = AR 0h, AR crescendo para a direita, linha 0 = dec +90°",
  "tom": "((x − preto)/(branco − preto))^0,8, preto = percentil 45, branco = percentil 99,95, desfoque 1,2 px a 8k, sRGB",
  "estatisticas": {
-  "preto": 0.002166748046875,
-  "branco": 0.12654183570301392,
+  "preto": 0.0021616618614643812,
+  "branco": 0.1267262594327411,
   "curva": 0.8
  }
 }
