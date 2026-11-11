@@ -16,7 +16,7 @@ Saídas:
   via-lactea-ceu-8192.jpg, -4096.jpg    equirretangular (coluna 0 em AR 0h, AR crescendo para a direita; linha 0 em +90°)
   via-lactea-ceu.json                   idem, para o mapa da Via Láctea
 A orientação do arquivo original (AR para a esquerda ou direita, 0h na borda ou no centro) é detectada pelo brilho
-no centro da Galáxia (AR 266,4°, dec −28,9°), que é a região mais brilhante do céu.
+somado em quatro regiões (centro da Galáxia, Grande Nuvem de Magalhães, Carina e Cisne).
 """
 import hashlib
 import json
@@ -30,7 +30,8 @@ import numpy as np
 from PIL import Image
 
 PAGINA = 'https://svs.gsfc.nasa.gov/4851'
-CENTRO_GALAXIA = (266.405, -28.936)  # AR e dec J2000 (Sgr A*)
+# AR e dec J2000: centro da Galáxia (Sgr A*), Grande Nuvem de Magalhães, Nebulosa de Carina e a Via Láctea no Cisne
+REFERENCIAS = [(266.405, -28.936), (80.9, -69.8), (161.3, -59.7), (305.0, 40.0)]
 POLO_NORTE_GALACTICO = (192.859, 27.128)
 Image.MAX_IMAGE_PIXELS = None
 FONTE = 'NASA/Goddard Space Flight Center Scientific Visualization Studio, Deep Star Maps 2020 (Gaia DR2: ESA/Gaia/DPAC). Domínio público.'
@@ -118,14 +119,15 @@ def carregar(mapa, preferidos):
     log('Imagem', W, 'x', H)
     lum = img[::4, ::4].mean(axis=2)
 
-    # orientação: o centro da Galáxia é mais brilhante que o polo norte galáctico
+    # orientação: soma do brilho em quatro regiões brilhantes e bem separadas, contra o polo norte galáctico. Só o centro
+    # da Galáxia não basta: o espelho com 0h no centro o deixa a 8° do lugar, dentro do bojo.
     opcoes = []
     for ra0_centro in (False, True):
         for ra_direita in (True, False):
-            gc = media_em(lum, *CENTRO_GALAXIA, ra0_centro, ra_direita)
+            brilho = [media_em(lum, *ponto, ra0_centro, ra_direita) for ponto in REFERENCIAS]
             polo = media_em(lum, *POLO_NORTE_GALACTICO, ra0_centro, ra_direita)
-            opcoes.append((gc / max(polo, 1e-9), ra0_centro, ra_direita))
-            log(f'0h no centro={ra0_centro} AR para a direita={ra_direita}: centro {gc:.4g}, polo {polo:.4g}')
+            opcoes.append((sum(brilho) / max(polo, 1e-9), ra0_centro, ra_direita))
+            log(f'0h no centro={ra0_centro} AR para a direita={ra_direita}: referências {[round(v, 5) for v in brilho]}, polo {polo:.4g}')
     opcoes.sort(reverse=True)
     _, ra0_centro, ra_direita = opcoes[0]
     log('Orientação escolhida:', '0h no centro' if ra0_centro else '0h na borda', '· AR para a', 'direita' if ra_direita else 'esquerda')
