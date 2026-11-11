@@ -1,0 +1,36 @@
+{
+ "fonte": "NASA/Goddard Space Flight Center Scientific Visualization Studio, Deep Star Maps 2020 (Gaia DR2: ESA/Gaia/DPAC). Domínio público.",
+ "pagina": "https://svs.gsfc.nasa.gov/4851",
+ "arquivo": "https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_16k.exr",
+ "larguraOriginal": 16384,
+ "alturaOriginal": 8192,
+ "orientacaoOriginal": {
+  "ar0NoCentro": true,
+  "arParaDireita": false
+ },
+ "convencao": "cubo do WebGL (px, nx, py, ny, pz, nz) nos eixos do equador J2000: x = AR 0h, y = AR 6h, z = polo norte celeste",
+ "tom": "((x − preto)/(branco − preto))^0,8, preto = percentil 40, branco = percentil 99,9, sRGB",
+ "estatisticas": {
+  "preto": 0.000213623046875,
+  "branco": 0.0510457344353199,
+  "curva": 0.8
+ },
+ "lados": [
+  2048,
+  4096
+ ],
+ "arquivos": {
+  "ceu-px-4096.jpg": "ae7d1792607d186b49096b3e90c302914fd03fb54a03dc69be5d7c139ea40ecb",
+  "ceu-px-2048.jpg": "1825018b65ceca9923d42fc44b90854b5ac274d50d745ca6a7bd45d5d143f2c5",
+  "ceu-nx-4096.jpg": "8300d4e90521439dbe370030d69b3da93d777282c2254b6b043a4db1351b860c",
+  "ceu-nx-2048.jpg": "a01b160c83b90695e1512019512b29a71dcda6ebd5a97eaa6b7378762f0cf134",
+  "ceu-py-4096.jpg": "fc191f61d9cfc408236104c121c118905f7e2b2f72b6c149c531962779d7968b",
+  "ceu-py-2048.jpg": "9da67fcf4c92fafdc2b8ffde3a919273e51d7d0840bdd29aed0f8f307dbdad39",
+  "ceu-ny-4096.jpg": "1e76c3188575eb1ee48cdad839d05aa2fcbd1294c3e85d513b3222bc757cf0d8",
+  "ceu-ny-2048.jpg": "53b5af753d553f7094cda0e758e7dd43d8ad123832059238e7a83284836668a1",
+  "ceu-pz-4096.jpg": "f3ac66d1ae6d551e9217f8ab39ffcf94c3764f2ce3e96ae020a632f48162d3c5",
+  "ceu-pz-2048.jpg": "de3932f19845d276c7b75dfb9dbe997e290fa319aafa222cc7da00907dc623ca",
+  "ceu-nz-4096.jpg": "618e0ec528bdf01fbe8b6e5ad316519d74c284ff42744b88f6f5e97b9e26a169",
+  "ceu-nz-2048.jpg": "0b626b09afacc4a75fb5a648e95bc4c345fa143da61b0a330231762fe7ca2cf3"
+ }
+}

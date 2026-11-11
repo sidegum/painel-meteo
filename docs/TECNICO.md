@@ -772,6 +772,13 @@ visível fica todo de dia; o Sol, a Lua e as estrelas continuam nas posições r
 Nomes de cidades por zoom (1.9.9): além do nível de zoom, `posicionarCidades` limita a quantidade pelo tamanho do disco
 da Terra na tela (`(raioPx/110)²·3`), então a Terra pequena no modo Espaço fica sem nomes e a Terra inteira com poucos.
 
+Zoom contínuo Terra ↔ sistema solar (1.9.10): afastar além de `DIST.max` chama `entrarNoSistemaPelaTerra()`, que leva
+a direção da câmera do referencial da Terra para o da eclíptica (desfaz o tempo sideral e aplica a obliquidade J2000),
+foca a Terra do sistema solar na distância em que ela tem o mesmo tamanho na tela (`DIST.max × raio`) e mantém o norte
+da Terra para cima de perto; o céu de fundo não se mexe na troca. Ao afastar, o foco passa aos poucos para o Sol
+(`moverFoco`, entre 1,2 e 7 unidades) e o "para cima" para o norte da eclíptica. Aproximar de volta abaixo desse tamanho
+chama `voltarParaTerraPeloZoom()`, o caminho inverso. A passagem para a Via Láctea continua pedindo insistência no limite.
+
 Referencial da cena: fixo na Terra, raio 1 = 6.371 km, `latLonVec(lat, lon) = (cos·cos, sen, −cos·sen)`. Sol, Lua e
 planetas entram pelo ponto sob o astro (ascensão reta menos o tempo sideral, do Astronomy Engine), as estrelas pelo
 grupo girado de −GST. No sistema solar, coordenadas heliocêntricas da eclíptica J2000 com distância comprimida
@@ -804,11 +811,15 @@ Céu profundo e navegação livre (1.8.0):
   solar some e só o rótulo do Sol fica. Estrelas sem distância ficam ao fundo, a 4.000 unidades da câmera.
 - `noFundo` (`z = 0,99999·w`): estrelas, Via Láctea e objetos nunca são cortados pelo plano distante. `projetar`
   (`globo-espaco.js`) ignora o plano distante, para tocar e rotular estrelas além dele.
-- Via Láctea (1.9.9): mapa real do NASA SVS Deep Star Maps 2020 (luz difusa da Galáxia pelas contagens do Gaia DR2, sem
-  as estrelas individuais, que o app desenha por cima), `via-lactea-ceu-4096.jpg` primeiro e `-8192.jpg` no computador.
-  Esfera vista por dentro; o fragmento leva a direção da cena para o equador J2000 (`paraJ2000`), calcula AR e
-  declinação por pixel (sem costura nos polos) e usa `textureGrad` com a derivada contínua em AR 0h. Tom do arquivo em
-  `scripts/globo/montar-ceu-fundo.py` (preto no percentil 45, branco no 99,95, curva 0,8); no shader, curva 1,6.
+- Céu de fundo real (1.9.9, cubo em 1.9.10), NASA SVS Deep Star Maps 2020. No computador, o mapa "starmap" de 16k
+  (1,7 bilhão de estrelas do Gaia DR2 com a Via Láctea) em cubo de seis faces nos eixos do equador J2000
+  (`vendor/ceu/cubo`, 2.048 px por face primeiro e 4.096 px onde `maxCubemapSize` e a memória comportam): o fragmento
+  `FRAGMENT_CUBO` leva a direção da cena para J2000 (`paraJ2000`) e amostra o cubo, sem costura nem polos esticados. As
+  faces são decodificadas por `ImageBitmapLoader`, fora da linha principal. No celular, o mapa "milkyway" (só a luz
+  difusa) equirretangular de 4.096 px (`FRAGMENT_FUNDO`, AR e declinação por pixel, `textureGrad` com derivada contínua
+  em AR 0h), com as estrelas do app por cima. A orientação dos arquivos originais (0h no centro, AR para a esquerda) é
+  detectada em `montar-ceu-fundo.py` pelo brilho de quatro regiões; as estrelas brilhantes do cubo foram conferidas
+  com as posições de catálogo (Sirius, Canopus, Vega, Arcturus, Rigel).
 - Texturas reais (1.9.9): `texturaReal(nome)` e `anelReal()` em `globo-texturas.js` carregam
   `vendor/texturas/planetas/<corpo>-<2048|4096>.jpg` (4096 no computador; Urano e Netuno só 2048) por cima da textura
   procedural, que fica como reserva enquanto a imagem não chega. Usadas no Sol, nos planetas, no anel de Saturno e na

@@ -14,3 +14,4 @@ node_modules/
 test/capturas/
 .DS_Store
 .cache-inmet/
+__pycache__/

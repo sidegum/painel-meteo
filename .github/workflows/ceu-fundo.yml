@@ -1,6 +1,6 @@
 name: Céu de fundo
 
-# Gera a Via Láctea do céu de fundo (vendor/ceu/via-lactea-ceu-*.jpg, NASA SVS Deep Star Maps 2020,
+# Gera o céu de fundo (vendor/ceu/cubo e vendor/ceu/via-lactea-ceu-*.jpg, NASA SVS Deep Star Maps 2020,
 # scripts/globo/montar-ceu-fundo.py) e as texturas reais dos planetas (vendor/texturas/planetas, Solar System Scope,
 # scripts/globo/montar-texturas-planetas.py) e grava no próprio branch em que rodou. Sob demanda, ou ao mudar o script ou este
 # arquivo fora da main (a main recebe o resultado pelo pull request): a fonte é fixa.
@@ -30,10 +30,13 @@ jobs:
         with:
           python-version: '3.12'
       - name: Dependências
-        run: pip install --quiet numpy pillow OpenEXR tifffile imagecodecs
-      - name: Via Láctea
+        run: pip install --quiet numpy pillow OpenEXR tifffile imagecodecs opencv-python-headless
+      - name: Céu com estrelas (cubo)
         continue-on-error: true
-        run: python3 scripts/globo/montar-ceu-fundo.py vendor/ceu
+        run: python3 scripts/globo/montar-ceu-fundo.py vendor/ceu cubo
+      - name: Via Láctea (celular)
+        continue-on-error: true
+        run: python3 scripts/globo/montar-ceu-fundo.py vendor/ceu via-lactea
       - name: Texturas dos planetas
         continue-on-error: true
         run: python3 scripts/globo/montar-texturas-planetas.py vendor/texturas/planetas
@@ -41,6 +44,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add vendor/ceu/via-lactea-ceu-*.jpg vendor/ceu/via-lactea-ceu.json vendor/texturas/planetas 2>/dev/null || true
+          git add vendor/ceu/cubo vendor/ceu/via-lactea-ceu-*.jpg vendor/ceu/via-lactea-ceu.json vendor/texturas/planetas 2>/dev/null || true
           git commit -m "Céu de fundo e texturas dos planetas (NASA SVS, Solar System Scope)" || exit 0
           for espera in 0 10 30; do sleep $espera; git pull --rebase --quiet && git push && break; done

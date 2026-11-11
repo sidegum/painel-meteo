@@ -110,6 +110,18 @@ const FRAGMENT_FUNDO = /* glsl */`
     c = pow(c, vec3(1.6)); // curva entre o sRGB do mapa e o linear: o disco externo aparece sem estourar o bojo
     gl_FragColor = vec4(c * intensidade, 1.0);
   }`;
+// Céu inteiro com estrelas (o mapa "starmap" do mesmo trabalho da NASA: 1,7 bilhão de estrelas do Gaia DR2), em cubo de
+// seis faces nos eixos do equador J2000: nitidez de fotografia em qualquer direção, sem costura e sem polos esticados.
+const FRAGMENT_CUBO = /* glsl */`
+  uniform samplerCube mapa;
+  uniform float intensidade;
+  uniform mat3 paraJ2000;
+  varying vec3 vDir;
+  void main() {
+    vec3 d = normalize(vDir);
+    vec3 c = textureCube(mapa, paraJ2000 * vec3(d.x, -d.z, d.y)).rgb;
+    gl_FragColor = vec4(pow(c, vec3(1.6)) * intensidade, 1.0);
+  }`;
 // Objetos de céu profundo: mancha suave do tamanho aparente real (mínimo de alguns pixels), cor pelo tipo
 const VERTEX_OBJETOS = /* glsl */`
   ${COMUM}
@@ -184,7 +196,7 @@ export function descomprimir(v, alvo) {
  * - objetos: céu profundo (id, nome, designacao, tipo, ra, dec, mag, dim, distAnosLuz, posicao).
  * - constelacoes: sigla → { nome (latim), genitivo, centro (Vector3 no grupo) }.
  */
-export function criarEstrelas(THREE, pixelRatio) {
+export function criarEstrelas(THREE, pixelRatio, ladoCubo = 0) {
   const grupo = new THREE.Group(); grupo.name = 'estrelas';
   const U = {
     escala: { value: pixelRatio }, opacidade: { value: 1 }, modo3d: { value: 0 }, limite: { value: 21 },
@@ -283,7 +295,7 @@ export function criarEstrelas(THREE, pixelRatio) {
     return tipo === 'json' ? r.json() : r.arrayBuffer();
   });
 
-  // Via Láctea real: 4.096 px primeiro (chega rápido, e é a do celular); no computador, troca depois pela de 8.192 px
+  // Via Láctea real: o mapa equirretangular de 4.096 px chega rápido e é o do celular
   const paraJ2000 = new THREE.Matrix3().set(...rot[0], ...rot[1], ...rot[2]); // inversa (transposta) da J2000 → data
   const carregarVia = (largura) => new THREE.TextureLoader().loadAsync(new URL(`../vendor/ceu/via-lactea-ceu-${largura}.jpg`, import.meta.url).href).then((t) => {
     t.colorSpace = THREE.NoColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8;
@@ -296,7 +308,21 @@ export function criarEstrelas(THREE, pixelRatio) {
       grupo.add(ceu.via);
     } else { const antiga = ceu.via.material.uniforms.mapa.value; ceu.via.material.uniforms.mapa.value = t; antiga?.dispose?.(); }
   });
-  carregarVia(4096).then(() => { if (!matchMedia('(pointer: coarse)').matches) return carregarVia(8192); }).catch(() => {});
+  // Computador: o céu com estrelas em cubo, 2.048 px por face primeiro e depois o lado pedido (4.096 px onde a placa
+  // de vídeo comporta). As faces são decodificadas fora da linha principal (createImageBitmap) para não travar a tela.
+  const FACES = ['px', 'nx', 'py', 'ny', 'pz', 'nz'];
+  const carregarCubo = async (lado) => {
+    const leitor = new THREE.ImageBitmapLoader(); leitor.setOptions({ imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+    const faces = await Promise.all(FACES.map((f) => leitor.loadAsync(new URL(`../vendor/ceu/cubo/ceu-${f}-${lado}.jpg`, import.meta.url).href)));
+    const t = new THREE.CubeTexture(faces);
+    t.colorSpace = THREE.NoColorSpace; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 8; t.needsUpdate = true;
+    const antigo = ceu.via.material;
+    if (antigo.uniforms.mapa.value.isCubeTexture) { antigo.uniforms.mapa.value.dispose(); antigo.uniforms.mapa.value = t; return; }
+    ceu.via.material = new THREE.ShaderMaterial({ uniforms: { ...U, mapa: { value: t }, intensidade: antigo.uniforms.intensidade, paraJ2000: { value: paraJ2000 } }, vertexShader: VERTEX_FUNDO, fragmentShader: FRAGMENT_CUBO,
+      side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    antigo.uniforms.mapa.value.dispose(); antigo.dispose();
+  };
+  carregarVia(4096).then(() => (ladoCubo ? carregarCubo(2048).then(() => (ladoCubo > 2048 ? carregarCubo(ladoCubo) : null)) : null)).catch(() => {});
 
   ceu.pronto = baixar('estrelas.json').then((cat) => {
     const n = cat.estrelas.length, N = n + 1; // + o Sol, que só aparece longe dele no modo 3D
