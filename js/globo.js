@@ -505,7 +505,9 @@ function montarCena() {
   G.cena.add(G.atmosfera);
 
   // céu de fundo: estrelas reais do catálogo, giradas pelo tempo sideral em atualizarAstros
-  G.estrelas = criarEstrelas(THREE, G.pixelRatio);
+  // céu de fundo com estrelas em cubo só no computador; 4.096 px por face (512 MB de vídeo) onde há memória para isso
+  const ladoCubo = CELULAR ? 0 : G.renderer.capabilities.maxCubemapSize >= 4096 && (navigator.deviceMemory ?? 8) >= 8 ? 4096 : 2048;
+  G.estrelas = criarEstrelas(THREE, G.pixelRatio, ladoCubo);
   G.cena.add(G.estrelas.grupo);
   G.estrelas.pronto.then(() => G.estrelas.girar(instanteMostrado())).catch(() => {});
 
@@ -624,7 +626,9 @@ function posicionarCamera() {
     const near = Math.max(0.0002, Math.min(0.05, c.dist * 0.02));
     if (Math.abs(near - G.camera.near) > near * 0.25) { G.camera.near = near; G.camera.updateProjectionMatrix(); }
     latLonVec(c.lat, c.lon, c.dist, G.camera.position).add(G.foco);
-    G.camera.up.set(0, 1, 0);
+    // vindo da Terra, o norte da Terra fica para cima de perto e o da eclíptica assume ao afastar
+    if (G.focoTerra) G.camera.up.set(0, Math.cos(OBLIQUIDADE_J2000 * RAD), -Math.sin(OBLIQUIDADE_J2000 * RAD)).lerp(EIXO_Y, suave(0.6, 3, c.dist)).normalize();
+    else G.camera.up.set(0, 1, 0);
     G.camera.lookAt(G.foco);
     return;
   }
@@ -779,31 +783,70 @@ function distanciaQueCabe() {
 function definirDist(d) {
   if (G.galaxia) { const [min, max] = G.galaxia.limitesDistancia(); G.cam.dist = Math.max(min, Math.min(max, d)); return; }
   const max = G.sistema ? DIST_MAX_SISTEMA : DIST.max;
+  if (G.sistema && G.focoTerra && !G.trocandoEscala && !G.livre && d < DIST.max * G.focoTerra.raio * 0.97) { voltarParaTerraPeloZoom(); return; }
   G.cam.dist = G.sistema ? Math.max(G.focoDistMin || 0.3, Math.min(max, d)) : Math.max(DIST.min, Math.min(max, d)); // no sistema solar, de rente ao corpo em foco até além das Voyager
   seguirAfastando(d, max);
 }
 
 /**
- * Zoom sem fim para fora: insistir em afastar no limite de uma escala passa para a seguinte (Terra → sistema solar →
- * Via Láctea → universo próximo). Conta o quanto se pediu além do limite; aproximar zera a conta.
+ * Zoom contínuo entre as escalas. Afastar além do limite da Terra entra no sistema solar com a câmera na mesma direção,
+ * a Terra do mesmo tamanho na tela e o mesmo céu de fundo, então a roda ou a pinça seguem sem salto; aproximar de volta
+ * devolve à Terra. No limite do sistema solar, insistir em afastar abre a Via Láctea (cena própria, em kpc).
  */
 const DIST_MAX_SISTEMA = 40;
 function seguirAfastando(pedido, max) {
   if (G.livre || G.animCam) return;
   if (pedido <= max * 1.0001) { G.alemDoLimite = 0; return; }
   G.alemDoLimite = (G.alemDoLimite || 0) + Math.log(pedido / max);
-  if (G.alemDoLimite < 0.35 || G.trocandoEscala) return; // uns três toques da roda ou um movimento de pinça
+  if (G.alemDoLimite < (G.sistema ? 0.35 : 0.08) || G.trocandoEscala) return; // na Terra basta passar do limite; para a galáxia, uns três toques da roda
   G.alemDoLimite = 0; G.trocandoEscala = true;
   setTimeout(() => { G.trocandoEscala = false; }, 1500);
   if (G.sistema) { abrirGalaxia(); return; }
-  (async () => { // da Terra para o sistema solar: abre o espaço (se preciso) e liga o sistema solar quando ficar pronto
+  (async () => { // da Terra para o sistema solar: abre o espaço (se preciso) e entra pela Terra quando ele ficar pronto
     if (!G.espacoAberto) await alternarEspaco();
     for (let i = 0; i < 40 && G.espacoAberto && !G.sistema; i++) {
-      const chip = G.dom.raiz.querySelector('.globo-chip-sistema');
-      if (chip && !chip.hidden && !chip.disabled) { chip.click(); break; }
+      if (G.espaco?.terraDoSistema?.()) { entrarNoSistemaPelaTerra(); break; }
       await new Promise((ok) => setTimeout(ok, 250));
     }
   })();
+}
+
+const EIXO_Y = new THREE.Vector3(0, 1, 0);
+const _escala = { v: new THREE.Vector3(), q: new THREE.Quaternion(), e: new THREE.Euler(), cima: new THREE.Vector3(), terra: new THREE.Vector3() };
+/** Rotação do céu no sistema solar (eclíptica J2000) em relação ao catálogo equatorial das estrelas. */
+const giroEcliptica = () => _escala.q.setFromEuler(_escala.e.set(-OBLIQUIDADE_J2000 * RAD, 0, 0));
+/** Põe a câmera (lat, lon da órbita) na direção do vetor dado. */
+function apontarCamera(v) {
+  const n = v.length() || 1;
+  G.cam.lat = Math.max(-85, Math.min(85, Math.asin(Math.max(-1, Math.min(1, v.y / n))) / RAD));
+  G.cam.lon = Math.atan2(-v.z, v.x) / RAD;
+  G.cam.vLat = G.cam.vLon = 0; G.animCam = null;
+}
+
+/** Terra → sistema solar sem salto: mesma direção em relação às estrelas, Terra do mesmo tamanho, foco na Terra. */
+function entrarNoSistemaPelaTerra() {
+  const giroTerra = G.estrelas.grupo.rotation.y; // tempo sideral: do catálogo das estrelas para a cena presa à Terra
+  const v = latLonVec(G.cam.lat, G.cam.lon, 1, _escala.v).applyAxisAngle(EIXO_Y, -giroTerra);
+  if (!G.espaco.definirSistema(true)) return;
+  const { malha, raio } = G.espaco.terraDoSistema();
+  apontarCamera(v.applyQuaternion(giroEcliptica()));
+  G.focoTerra = { malha, raio };
+  G.espaco.marcarFoco(malha);
+  G.focoAlvo = () => malha.getWorldPosition(_escala.terra);
+  G.focoDistMin = raio * 1.4; G.animFoco = null;
+  G.cam.dist = DIST.max * raio;
+  G.autoGira = false;
+}
+
+/** Sistema solar → Terra sem salto, quando se aproxima da Terra em foco até o tamanho em que o globo assume. */
+function voltarParaTerraPeloZoom() {
+  const v = latLonVec(G.cam.lat, G.cam.lon, 1, _escala.v).applyQuaternion(giroEcliptica().invert());
+  G.focoTerra = null; G.trocandoEscala = true;
+  setTimeout(() => { G.trocandoEscala = false; }, 800);
+  G.espaco.definirSistema(false);
+  atualizarAstros(); // acerta o tempo sideral das estrelas antes de medir a direção
+  apontarCamera(v.applyAxisAngle(EIXO_Y, G.estrelas.grupo.rotation.y));
+  G.cam.dist = DIST.max;
 }
 
 /**
@@ -812,6 +855,7 @@ function seguirAfastando(pedido, max) {
  * @param {number} dist distância da câmera ao chegar; distMin o mais perto que o zoom deixa chegar
  */
 function focarSistema(posicao, dist, distMin = 0.3) {
+  G.focoTerra = null;
   G.focoAlvo = posicao;
   G.focoDistMin = distMin;
   G.animFoco = MOVIMENTO_REDUZIDO ? null : { de: G.foco.clone(), dist0: G.cam.dist, dist, t0: performance.now(), ms: 1100 };
@@ -830,7 +874,7 @@ function navegacaoLivre(ligar) {
   if (ligar && G.sistema && !G.livre) {
     const dir = G.camera.getWorldDirection(new THREE.Vector3());
     G.livre = { pos: G.camera.position.clone(), yaw: Math.atan2(-dir.x, -dir.z), pitch: Math.asin(Math.max(-1, Math.min(1, dir.y))), escala: 1, anim: null };
-    G.animFoco = null; G.focoAlvo = null;
+    G.animFoco = null; G.focoAlvo = null; G.focoTerra = null;
     medirEscalaLivre();
   } else if (!ligar && G.livre) {
     const p = G.livre.pos, d = Math.max(0.3, Math.min(40, p.length()));
@@ -894,6 +938,7 @@ function moverLivre(agora) {
 /** A cada quadro: o foco acompanha o corpo escolhido (com a viagem suave até ele quando o foco acabou de mudar). */
 function moverFoco(agora) {
   const alvo = G.focoAlvo ? G.focoAlvo() : ORIGEM;
+  if (G.focoTerra) alvo.multiplyScalar(1 - suave(Math.log(1.2), Math.log(7), Math.log(G.cam.dist))); // vindo da Terra: ao afastar, o centro passa aos poucos para o Sol
   const a = G.animFoco;
   if (!a) { G.foco.copy(alvo); return; }
   const t = Math.min(1, (agora - a.t0) / a.ms), e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -1658,7 +1703,7 @@ function mostrarAjuda() {
       el('li', {}, 'Espaço: ISS, Tiangong e satélites (CelesTrak, SGP4) em escala real de altura; planetas na direção real. Sistema solar com posições reais (Astronomy Engine), sondas pelo JPL Horizons e distâncias comprimidas para caber na tela.'),
       el('li', {}, 'Via Láctea (no Sistema solar): a Galáxia vista de fora é um modelo calculado pelos braços medidos por paralaxe (Reid et al. 2019), a barra (Wegg et al. 2015) e o disco (Bland-Hawthorn & Gerhard 2016); ninguém a fotografou de fora. Perto do Sol aparecem as 800 mil estrelas do céu na distância medida; longe, as galáxias do NGC/IC e os grandes aglomerados de galáxias. "Salvar imagem" gera um PNG de até 4.096 px com os nomes e a escala.')),
     el('p', { class: 'nota', text: `Nesta tela: ${(G.galaxia ? G.galaxia.notasFontes() : [G.dom.fonte.textContent, ...(G.espaco?.notasFontes?.() || [])]).filter(Boolean).join(' · ')}.` }),
-    el('p', { class: 'nota', text: `Texturas da Terra: NASA Visible Earth (Blue Marble e Black Marble, domínio público). Via Láctea do céu: NASA/Goddard SVS, Deep Star Maps 2020, com dados do Gaia (ESA), domínio público. Sol, Lua e planetas: Solar System Scope (CC BY 4.0), com imagens das missões da NASA e da ESA. Contornos e cidades: Natural Earth 10 m (domínio público). Dados gerados ${m?.gerado ? fmt.idade(Date.parse(m.gerado)) : '–'}. Este globo é um painel pessoal, não uma fonte oficial. Em situação de risco, siga a Defesa Civil e o INMET.` }));
+    el('p', { class: 'nota', text: `Texturas da Terra: NASA Visible Earth (Blue Marble e Black Marble, domínio público). Céu de fundo: NASA/Goddard SVS, Deep Star Maps 2020, com 1,7 bilhão de estrelas do Gaia (ESA), domínio público. Sol, Lua e planetas: Solar System Scope (CC BY 4.0), com imagens das missões da NASA e da ESA. Contornos e cidades: Natural Earth 10 m (domínio público). Dados gerados ${m?.gerado ? fmt.idade(Date.parse(m.gerado)) : '–'}. Este globo é um painel pessoal, não uma fonte oficial. Em situação de risco, siga a Defesa Civil e o INMET.` }));
 }
 
 // ---------- espaço: satélites e sistema solar (módulo globo-espaco.js, carregado ao tocar em Espaço) ----------
@@ -1727,7 +1772,7 @@ function modoSistema(ligar) {
   G.marcadorUsuario.visible = !ligar && !!G.estadoApp?.local;
   fecharPainel();
   if (!ligar) navegacaoLivre(false);
-  G.foco.set(0, 0, 0); G.focoAlvo = null; G.animFoco = null; G.focoDistMin = 0.3;
+  G.foco.set(0, 0, 0); G.focoAlvo = null; G.animFoco = null; G.focoDistMin = 0.3; G.focoTerra = null;
   G.estrelas.definir3d(ligar); // no sistema solar as estrelas ficam na distância real (comprimida) e o brilho é o visto da câmera
   // estrelas: no sistema solar a cena está na eclíptica J2000 (y para o polo norte da eclíptica); fora dele, no equador
   G.estrelas.grupo.rotation.set(ligar ? -OBLIQUIDADE_J2000 * RAD : 0, 0, 0);

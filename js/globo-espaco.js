@@ -43,7 +43,7 @@ const E = {
 
 const MAGS = [[21, 'Todas (800 mil, inclusive as de telescópio)'], [6.5, 'As visíveis a olho nu'], [4.5, 'As de céu de cidade'], [2.5, 'Só as mais brilhantes'], [0, 'Nenhuma']];
 const FILTROS_PADRAO = { magEstrelas: 21, viaLactea: true, objetos: true, nomesEstrelas: true, linhas: true, nomesConst: false, planetas: true, trilhas: true,
-  orbitas: true, luas: true, pequenos: true, cinturoes: true, sondas: true, rotasSondas: true, rotulos: true, escala: true, tabela: true };
+  orbitas: true, luas: true, pequenos: true, cinturoes: true, sondas: true, rotasSondas: true, rotulos: true, escala: true, dados: false };
 const F = { ...FILTROS_PADRAO, ...prefs.ler('globo:filtrosEspaco', {}) };
 const MAG_ROTULO_ESTRELA = 1.6; // estrelas com nome que ganham rótulo (as ~25 mais brilhantes)
 
@@ -142,6 +142,12 @@ export function fecharEspaco() {
 }
 
 export const sistemaAtivo = () => E.modo === 'sistema';
+/** Liga ou desliga o sistema solar por fora do botão (zoom contínuo do globo); false enquanto ele ainda está sendo montado. */
+export function definirSistema(ligar) { if (ligar && !E.sistema) return false; if ((E.modo === 'sistema') !== ligar) alternarSistema(ligar); return true; }
+/** A Terra do sistema solar (malha) e o seu raio na cena, para o globo casar o tamanho na troca de escala. */
+export const terraDoSistema = () => (SIS.terra ? { malha: SIS.terra, raio: raioCena(SIS.terra) } : null);
+/** Marca um corpo como o foco da câmera (continua visível de perto e o botão de visão geral aparece). */
+export function marcarFoco(malha) { SIS.focado = malha; if (SIS.dom) SIS.dom.geral.hidden = false; }
 
 function montarInterface() {
   const G = E.G;
@@ -749,7 +755,7 @@ async function montarSistema() {
       anel.rotation.x = -Math.PI / 2; m.add(anel);
     }
     if (p.corpo === 'Earth') {
-      new THREE.TextureLoader().load('vendor/texturas/terra-dia-1024.jpg', (t) => { t.colorSpace = THREE.SRGBColorSpace; mat.map = t; mat.needsUpdate = true; });
+      new THREE.TextureLoader().load(`vendor/texturas/terra-dia-${matchMedia('(pointer: coarse)').matches ? 1024 : 4096}.jpg`, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; mat.map = t; mat.needsUpdate = true; });
       SIS.terra = m;
     }
     // luas
@@ -991,8 +997,8 @@ const largo = () => matchMedia('(min-width: 900px)').matches;
 function mostrarTabela() {
   if (!SIS.dom) return;
   const ligado = E.modo === 'sistema' && !E.G.galaxia;
-  SIS.dom.dados.setAttribute('aria-pressed', String(F.tabela && largo()));
-  SIS.dom.tabela.hidden = !(ligado && F.tabela && largo());
+  SIS.dom.dados.setAttribute('aria-pressed', String(F.dados && largo()));
+  SIS.dom.tabela.hidden = !(ligado && F.dados && largo());
   if (ligado && !largo() && SIS.pediuTabela) mostrarInfo('Planetas agora', montarTabela(instanteSistema()));
   SIS.pediuTabela = false;
   if (!SIS.dom.tabela.hidden) atualizarTabela(instanteSistema(), true);
@@ -1058,7 +1064,7 @@ function montarControlesSistema() {
   const hoje = el('button', { type: 'button', class: 'globo-hoje', text: 'Hoje', hidden: true, 'aria-label': 'Voltar para hoje', onclick: () => { SIS.desloc = 0; definirVelocidade(0); } });
   const geral = el('button', { type: 'button', class: 'globo-visao-geral', text: 'Visão geral', hidden: true, onclick: visaoGeral });
   const livre = el('button', { type: 'button', class: 'globo-livre', text: 'Navegação livre', 'aria-pressed': 'false', onclick: () => alternarLivre(!E.G.livre) });
-  const dados = el('button', { type: 'button', class: 'globo-btn-tabela', text: 'Dados', 'aria-pressed': String(F.tabela), title: 'Tabela dos planetas agora', onclick: () => { if (largo()) { F.tabela = !F.tabela; gravarFiltros(); } else SIS.pediuTabela = true; mostrarTabela(); } });
+  const dados = el('button', { type: 'button', class: 'globo-btn-tabela', text: 'Dados', 'aria-pressed': String(F.dados), title: 'Tabela dos planetas agora', onclick: () => { if (largo()) { F.dados = !F.dados; gravarFiltros(); } else SIS.pediuTabela = true; mostrarTabela(); } });
   const tabela = el('div', { class: 'globo-tabela-planetas', hidden: true });
   const galaxia = el('button', { type: 'button', class: 'globo-ir-galaxia', text: 'Via Láctea', title: 'Sair do sistema solar e ver a Via Láctea de fora', onclick: () => E.G.abrirGalaxia() });
   const dica = el('p', { class: 'globo-dica', hidden: true, text: 'Arraste para olhar em volta · afaste os dedos para avançar · dois toques para ir até algo' });

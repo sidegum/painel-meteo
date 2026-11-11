@@ -13,7 +13,7 @@ Saídas:
   cubo/ceu-<face>-4096.jpg e -2048.jpg  faces px, nx, py, ny, pz, nz na convenção do WebGL, com os eixos do equador
                                         J2000: x para AR 0h, y para AR 6h, z para o polo norte celeste
   cubo/ceu.json                         fonte, arquivo baixado, orientação detectada, tom e hashes
-  via-lactea-ceu-8192.jpg, -4096.jpg    equirretangular (coluna 0 em AR 0h, AR crescendo para a direita; linha 0 em +90°)
+  via-lactea-ceu-4096.jpg               equirretangular (coluna 0 em AR 0h, AR crescendo para a direita; linha 0 em +90°)
   via-lactea-ceu.json                   idem, para o mapa da Via Láctea
 A orientação do arquivo original (AR para a esquerda ou direita, 0h na borda ou no centro) é detectada pelo brilho
 somado em quatro regiões (centro da Galáxia, Grande Nuvem de Magalhães, Carina e Cisne).
@@ -157,10 +157,9 @@ def via_lactea(saida):
     H, W, _ = img.shape
     pixels, estat = tom(img, [45, 99.95], 0.8)
     out = Image.fromarray(pixels, 'RGB').filter(ImageFilter.GaussianBlur(1.2 * W / 8192))
-    for largura in (8192, 4096):
-        nome = f'via-lactea-ceu-{largura}.jpg'
-        out.resize((largura, largura // 2), Image.LANCZOS).save(saida / nome, quality=88 if largura > 4096 else 90, optimize=True, progressive=True)
-        log(nome, (saida / nome).stat().st_size)
+    nome = 'via-lactea-ceu-4096.jpg'
+    out.resize((4096, 2048), Image.LANCZOS).save(saida / nome, quality=90, optimize=True, progressive=True)
+    log(nome, (saida / nome).stat().st_size)
     (saida / 'via-lactea-ceu.json').write_text(json.dumps({
         'fonte': FONTE, 'pagina': PAGINA, 'arquivo': url, 'larguraOriginal': W, 'alturaOriginal': H, 'orientacaoOriginal': orientacao,
         'convencao': 'equirretangular, coluna 0 = AR 0h, AR crescendo para a direita, linha 0 = dec +90°',
