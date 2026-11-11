@@ -594,6 +594,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 @media (min-width: 760px) { #dlg-info:has(.filtros) { margin: auto; border-radius: 14px; max-height: min(88vh, 900px); overflow: auto; } }
 #dlg-info:has(.filtros)::backdrop { background: rgba(4, 6, 11, .2); } /* o efeito de cada filtro aparece por trás */
 .globo-btn-espaco[aria-pressed="true"] { background: #eceef0 !important; color: #0b0f16 !important; }
+.globo-btn-dianoite[aria-pressed="false"] { color: #ffd166 !important; border-color: rgba(255,209,102,.6) !important; }
 .globo-espaco { position: absolute; left: 0; right: 0; top: 52px; padding: 0 12px; pointer-events: none; }
 .globo-espaco > * { pointer-events: auto; }
 .globo-espaco .globo-chips button[aria-pressed="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }

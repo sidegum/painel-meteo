@@ -84,19 +84,31 @@ const FRAGMENT = /* glsl */`
 // Via Láctea: esfera de fundo com o brilho dos contornos, somado ao céu
 const VERTEX_FUNDO = /* glsl */`
   ${COMUM}
-  varying vec2 vUv;
+  varying vec3 vDir;
   void main() {
-    vUv = uv;
+    vDir = position; // direção na cena (esfera unitária)
     vec3 p = modo3d > 0.5 ? cam + position * ${RAIO_FUNDO.toFixed(1)} : position * ${RAIO_ESTRELAS.toFixed(1)};
     gl_Position = noFundo(projectionMatrix * modelViewMatrix * vec4(p, 1.0));
   }`;
+// Via Láctea real (NASA SVS Deep Star Maps 2020, a luz difusa da Galáxia medida pelo Gaia, sem as estrelas que o app
+// desenha por cima): equirretangular em AR e declinação J2000, coluna 0 em AR 0h. A direção de cada pixel volta para
+// J2000 pela mesma matriz de precessão das estrelas; os gradientes vêm de uma longitude sem emenda (sem risco em 0h).
 const FRAGMENT_FUNDO = /* glsl */`
   uniform sampler2D mapa;
   uniform float intensidade;
-  varying vec2 vUv;
+  uniform mat3 paraJ2000;
+  varying vec3 vDir;
   void main() {
-    float v = texture2D(mapa, vUv).r;
-    gl_FragColor = vec4(vec3(0.78, 0.82, 1.0) * v * intensidade, 1.0);
+    vec3 d = normalize(vDir);
+    vec3 eq = paraJ2000 * vec3(d.x, -d.z, d.y);
+    float ra = atan(eq.y, eq.x) / 6.2831853; // −0,5 a 0,5
+    float u = fract(ra), u2 = fract(ra + 0.5) - 0.5;
+    float v = 0.5 + asin(clamp(eq.z, -1.0, 1.0)) / 3.1415927;
+    vec2 uv = vec2(u, v);
+    vec2 dx = vec2(dFdx(u2), dFdx(v)), dy = vec2(dFdy(u2), dFdy(v));
+    vec3 c = textureGrad(mapa, uv, dx, dy).rgb;
+    c = pow(c, vec3(1.6)); // curva entre o sRGB do mapa e o linear: o disco externo aparece sem estourar o bojo
+    gl_FragColor = vec4(c * intensidade, 1.0);
   }`;
 // Objetos de céu profundo: mancha suave do tamanho aparente real (mínimo de alguns pixels), cor pelo tipo
 const VERTEX_OBJETOS = /* glsl */`
@@ -271,15 +283,20 @@ export function criarEstrelas(THREE, pixelRatio) {
     return tipo === 'json' ? r.json() : r.arrayBuffer();
   });
 
-  // Via Láctea (textura pequena, chega antes de tudo)
-  new THREE.TextureLoader().load(new URL('../vendor/ceu/via-lactea.png', import.meta.url).href, (t) => {
-    t.colorSpace = THREE.NoColorSpace;
-    const m = new THREE.ShaderMaterial({ uniforms: { ...U, mapa: { value: t }, intensidade: { value: 0.8 } }, vertexShader: VERTEX_FUNDO, fragmentShader: FRAGMENT_FUNDO,
-      side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-    ceu.via = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 48), m);
-    ceu.via.frustumCulled = false; ceu.via.renderOrder = -4;
-    grupo.add(ceu.via);
+  // Via Láctea real: 4.096 px primeiro (chega rápido, e é a do celular); no computador, troca depois pela de 8.192 px
+  const paraJ2000 = new THREE.Matrix3().set(...rot[0], ...rot[1], ...rot[2]); // inversa (transposta) da J2000 → data
+  const carregarVia = (largura) => new THREE.TextureLoader().loadAsync(new URL(`../vendor/ceu/via-lactea-ceu-${largura}.jpg`, import.meta.url).href).then((t) => {
+    t.colorSpace = THREE.NoColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8;
+    t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+    if (!ceu.via) {
+      const m = new THREE.ShaderMaterial({ uniforms: { ...U, mapa: { value: t }, intensidade: { value: 0.95 }, paraJ2000: { value: paraJ2000 } }, vertexShader: VERTEX_FUNDO, fragmentShader: FRAGMENT_FUNDO,
+        side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+      ceu.via = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 48), m);
+      ceu.via.frustumCulled = false; ceu.via.renderOrder = -4;
+      grupo.add(ceu.via);
+    } else { const antiga = ceu.via.material.uniforms.mapa.value; ceu.via.material.uniforms.mapa.value = t; antiga?.dispose?.(); }
   });
+  carregarVia(4096).then(() => { if (!matchMedia('(pointer: coarse)').matches) return carregarVia(8192); }).catch(() => {});
 
   ceu.pronto = baixar('estrelas.json').then((cat) => {
     const n = cat.estrelas.length, N = n + 1; // + o Sol, que só aparece longe dele no modo 3D

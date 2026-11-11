@@ -765,6 +765,13 @@ horizonte, faixa quente estreita no nascer e no pôr, luzes das cidades acesas a
 apagadas pelas nuvens, noite quase preta com luar pela fase, nuvens noturnas só como sombra escura e reflexo do Sol
 no mar discreto.
 
+Dia e noite desligável (1.9.9): botão de meia-lua (`alternarDiaNoite`, preferência `globoDiaNoite`, ligado por padrão).
+Desligado, `iluminarDeFrente()` põe o uniforme `sol` atrás e um pouco acima de quem olha a cada quadro, então o lado
+visível fica todo de dia; o Sol, a Lua e as estrelas continuam nas posições reais.
+
+Nomes de cidades por zoom (1.9.9): além do nível de zoom, `posicionarCidades` limita a quantidade pelo tamanho do disco
+da Terra na tela (`(raioPx/110)²·3`), então a Terra pequena no modo Espaço fica sem nomes e a Terra inteira com poucos.
+
 Referencial da cena: fixo na Terra, raio 1 = 6.371 km, `latLonVec(lat, lon) = (cos·cos, sen, −cos·sen)`. Sol, Lua e
 planetas entram pelo ponto sob o astro (ascensão reta menos o tempo sideral, do Astronomy Engine), as estrelas pelo
 grupo girado de −GST. No sistema solar, coordenadas heliocêntricas da eclíptica J2000 com distância comprimida
@@ -797,8 +804,15 @@ Céu profundo e navegação livre (1.8.0):
   solar some e só o rótulo do Sol fica. Estrelas sem distância ficam ao fundo, a 4.000 unidades da câmera.
 - `noFundo` (`z = 0,99999·w`): estrelas, Via Láctea e objetos nunca são cortados pelo plano distante. `projetar`
   (`globo-espaco.js`) ignora o plano distante, para tocar e rotular estrelas além dele.
-- Via Láctea: polígonos do d3-celestial rasterizados com preenchimento XOR (anéis que dão a volta no céu fechados pela
-  borda) em `via-lactea.png`, esfera vista por dentro com mistura aditiva.
+- Via Láctea (1.9.9): mapa real do NASA SVS Deep Star Maps 2020 (luz difusa da Galáxia pelas contagens do Gaia DR2, sem
+  as estrelas individuais, que o app desenha por cima), `via-lactea-ceu-4096.jpg` primeiro e `-8192.jpg` no computador.
+  Esfera vista por dentro; o fragmento leva a direção da cena para o equador J2000 (`paraJ2000`), calcula AR e
+  declinação por pixel (sem costura nos polos) e usa `textureGrad` com a derivada contínua em AR 0h. Tom do arquivo em
+  `scripts/globo/montar-ceu-fundo.py` (preto no percentil 45, branco no 99,95, curva 0,8); no shader, curva 1,6.
+- Texturas reais (1.9.9): `texturaReal(nome)` e `anelReal()` em `globo-texturas.js` carregam
+  `vendor/texturas/planetas/<corpo>-<2048|4096>.jpg` (4096 no computador; Urano e Netuno só 2048) por cima da textura
+  procedural, que fica como reserva enquanto a imagem não chega. Usadas no Sol, nos planetas, no anel de Saturno e na
+  Lua (sistema solar e Lua da Terra).
 - Objetos de céu profundo: pontos dimensionados pelo tamanho angular real (`pxPorGrau = altura/fov`), cor por tipo
   (`TIPOS_OBJETO`), ficha em `cartaoObjeto` (`globo-ceu.js`).
 - Filtro por magnitude no shader (`uniforms.limite`): 21 (todas), 6,5, 4,5, 2,5 ou nenhuma.

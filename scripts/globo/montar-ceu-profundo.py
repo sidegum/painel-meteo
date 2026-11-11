@@ -1,9 +1,9 @@
-"""Monta o céu profundo da aba Globo: estrelas além do olho nu, a Via Láctea e os objetos de céu profundo.
+"""Monta o céu profundo da aba Globo: estrelas além do olho nu e os objetos de céu profundo.
 
-Uso: python3 scripts/globo/montar-ceu-profundo.py hygdata_v41.csv messier.json mw.json vendor/ceu NGC.csv addendum.csv
+Uso: python3 scripts/globo/montar-ceu-profundo.py hygdata_v41.csv messier.json vendor/ceu NGC.csv addendum.csv
 Fontes:
 - HYG Database v4.1 (https://github.com/astronexus/HYG-Database, hyg/CURRENT/hygdata_v41.csv, CC BY-SA 4.0).
-- d3-celestial (https://github.com/ofrohn/d3-celestial, data/messier.json e data/mw.json, BSD-3-Clause).
+- d3-celestial (https://github.com/ofrohn/d3-celestial, data/messier.json, BSD-3-Clause).
 - OpenNGC (https://github.com/mattiaverga/OpenNGC, database_files/NGC.csv e addendum.csv, CC BY-SA 4.0): os objetos
   NGC e IC que não são de Messier nem estão entre os extras.
 
@@ -15,8 +15,6 @@ Saídas em vendor/ceu:
     ci int16[n] (×1000; 32767 = sem índice), classe uint8[n] (posição em CLASSES; 255 = sem tipo)
   Posições J2000 levadas à época 2026,0 pelo movimento próprio, como em montar-estrelas.py.
 - estrelas-profundas.json: nomes das que têm nome próprio ou designação de Gliese (índice → [nome, gliese]).
-- via-lactea.png: brilho da Via Láctea (contornos de 5 níveis de mw.json), equiretangular 2048×1024 em tons de cinza,
-  coluna = 0,5 + AR/360 (a mesma convenção de longitude da esfera do Three.js), linha 0 = declinação +90°.
 - objetos.json: os 110 objetos de Messier e objetos austrais famosos fora do catálogo, com tipo, magnitude, tamanho,
   nome em português e distância publicada quando conhecida (ver DISTANCIAS_ANOS_LUZ); depois, os objetos NGC/IC do
   OpenNGC (sem nome próprio; galáxias com distância pelo desvio para o vermelho quando z > 0,003, lei de Hubble com
@@ -29,8 +27,6 @@ import struct
 import sys
 from pathlib import Path
 
-import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
 
 EPOCA = 2026.0
 CLASSES = 'OBAFGKMCSNWDLTY'
@@ -105,36 +101,6 @@ def estrelas(origem, pasta):
                'n': n, 'classes': CLASSES, 'nomes': nomes},
               open(pasta / 'estrelas-profundas.json', 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     print(n, 'estrelas profundas,', len(nomes), 'com nome ou designação de Gliese')
-
-
-def via_lactea(origem, pasta):
-    """Cada nível de contorno é rasterizado por paridade (evenodd) de todos os anéis. Um anel que dá a volta no céu
-    (soma das variações de longitude de ±360°) é fechado pela borda de baixo; o "ou exclusivo" de dois desses anéis é a
-    faixa entre eles, o que dispensa saber de que lado fica o polo."""
-    W, H = 2048, 1024
-    soma = np.zeros((H, W), np.float32)
-    for f in json.load(open(origem, encoding='utf-8'))['features']:
-        nivel = np.zeros((H, W), bool)
-        for poligono in f['geometry']['coordinates']:
-            for anel in poligono:
-                lon = [anel[0][0]]
-                for a, _ in anel[1:]:
-                    d = (a - lon[-1] + 540) % 360 - 180
-                    lon.append(lon[-1] + d)
-                volta = round((lon[-1] - lon[0] + (anel[0][0] - anel[-1][0] + 540) % 360 - 180) / 360)
-                pts = [((0.5 + x / 360) * W, (90 - lat) / 180 * H) for x, (_, lat) in zip(lon, anel)]
-                if volta:  # dá a volta: fecha pela borda de baixo, cobrindo as três cópias da longitude
-                    pts = [(x + k * W * volta, y) for k in (-1, 0, 1) for x, y in pts]
-                    pts += [(pts[-1][0], H + 2), (pts[0][0], H + 2)]
-                mascara = Image.new('1', (W, H), 0)
-                desenho = ImageDraw.Draw(mascara)
-                for k in ((0,) if volta else (-1, 0, 1)):
-                    desenho.polygon([(x + k * W, y) for x, y in pts], fill=1)
-                nivel ^= np.array(mascara, bool)
-        soma += nivel * 48.0
-    img = Image.fromarray(np.clip(soma, 0, 255).astype(np.uint8), 'L').filter(ImageFilter.GaussianBlur(3))
-    img.save(pasta / 'via-lactea.png', optimize=True)
-    print('via-lactea.png', (pasta / 'via-lactea.png').stat().st_size, 'bytes')
 
 
 def objetos(origem, pasta, ngc=()):
@@ -220,7 +186,6 @@ def objetos_ngc(arquivos, existentes):
 
 
 if __name__ == '__main__':
-    destino = Path(sys.argv[4])
+    destino = Path(sys.argv[3])
     estrelas(sys.argv[1], destino)
-    objetos(sys.argv[2], destino, sys.argv[5:])
-    via_lactea(sys.argv[3], destino)
+    objetos(sys.argv[2], destino, sys.argv[4:])
