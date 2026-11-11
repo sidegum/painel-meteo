@@ -9,10 +9,10 @@
   "arParaDireita": true
  },
  "convencao": "equirretangular, coluna 0 = AR 0h, AR crescendo para a direita, linha 0 = dec +90°",
- "tom": "asinh(x/k)/asinh(p99,97/k), k = 0,8·mediana, sRGB",
+ "tom": "((x − preto)/(branco − preto))^0,8, preto = percentil 45, branco = percentil 99,95, desfoque 1,2 px a 8k, sRGB",
  "estatisticas": {
-  "p50": 0.002685546875,
-  "p99_97": 0.1454671174287796,
-  "k": 0.0021484375
+  "preto": 0.002166748046875,
+  "branco": 0.12654183570301392,
+  "curva": 0.8
  }
 }
