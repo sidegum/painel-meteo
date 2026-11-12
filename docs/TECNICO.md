@@ -779,6 +779,12 @@ da Terra para cima de perto; o céu de fundo não se mexe na troca. Ao afastar, 
 (`moverFoco`, entre 1,2 e 7 unidades) e o "para cima" para o norte da eclíptica. Aproximar de volta abaixo desse tamanho
 chama `voltarParaTerraPeloZoom()`, o caminho inverso. A passagem para a Via Láctea continua pedindo insistência no limite.
 
+Saída das escalas (1.9.11): o botão `.globo-voltar` ("‹ Terra" no sistema solar, "‹ Sistema solar" na Via Láctea) fica
+sempre à vista, fora do grupo que se recolhe na tela limpa; `mudouEscala()` o atualiza a cada troca e conta as trocas
+(`G.trocasDeEscala`), para a pinça em curso recomeçar da distância nova (`ancorar`). Na pinça, o quanto se passou do
+limite vale pelo tamanho do gesto (`definirDist(d, true)`), não pela soma dos eventos, que no celular abria a Via Láctea
+logo depois de entrar no sistema solar.
+
 Referencial da cena: fixo na Terra, raio 1 = 6.371 km, `latLonVec(lat, lon) = (cos·cos, sen, −cos·sen)`. Sol, Lua e
 planetas entram pelo ponto sob o astro (ascensão reta menos o tempo sideral, do Astronomy Engine), as estrelas pelo
 grupo girado de −GST. No sistema solar, coordenadas heliocêntricas da eclíptica J2000 com distância comprimida

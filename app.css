@@ -620,6 +620,9 @@ button.globo-rotulo { cursor: pointer; }
 #dlg-info .tabela-planetas { overflow-x: auto; }
 .globo.com-galaxia .globo-tabela-planetas { display: none !important; }
 .globo.com-espaco .globo-aviso { top: 104px; }
+.globo-voltar { position: absolute; left: 10px; top: 100px; z-index: 3; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.6); color: #eceef0; font-size: 13px; font-weight: 600; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-voltar::before { content: ''; position: absolute; inset: -4px; } /* área de toque de 44 px */
+.globo.com-voltar .globo-aviso { top: 146px; }
 .globo-rotulo-planeta.lua { color: #dfe4ec; font-size: 11px; padding: 1px 6px; }
 .globo-rotulo-planeta.cometa { color: #a8e6ff; }
 .globo-rotulo-planeta.sol { color: #ffe1a0; border-color: rgba(255,209,102,.4); }

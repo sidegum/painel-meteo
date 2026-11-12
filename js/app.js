@@ -16,7 +16,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.9.10';
+const VERSAO = '1.9.11';
 const $ = (s) => document.querySelector(s);
 
 const estado = {

@@ -192,7 +192,7 @@ async function abrirGalaxia() {
   fecharPainel();
   G.camAntesGalaxia = { ...G.cam, foco: G.foco.clone() };
   G.animFoco = null; G.animCam = null;
-  G.galaxia = m;
+  G.galaxia = m; mudouEscala();
   G.dom.raiz.classList.add('com-galaxia');
   m.abrirGalaxia();
 }
@@ -200,7 +200,7 @@ async function abrirGalaxia() {
 function fecharGalaxia() {
   if (!G.galaxia) return;
   G.galaxia.fecharGalaxia();
-  G.galaxia = null;
+  G.galaxia = null; mudouEscala();
   G.dom.raiz.classList.remove('com-galaxia');
   fecharPainel();
   const a = G.camAntesGalaxia;
@@ -670,7 +670,7 @@ function configurarGestos() {
   // Âncora do gesto: ponto da Terra sob o centro dos dedos, a altura no início e a última posição (para quando a âncora cai fora da Terra).
   const ancorar = () => {
     const c = centro();
-    gesto = { n: ponteiros.size, ancora: pontoNaTela(c.x, c.y), d0: c.d, dist0: G.cam.dist, ultimo: c };
+    gesto = { n: ponteiros.size, ancora: pontoNaTela(c.x, c.y), d0: c.d, dist0: G.cam.dist, ultimo: c, escala: G.trocasDeEscala };
   };
   const registrar = (agora) => {
     historico.push({ t: agora, lat: G.cam.lat, lon: G.cam.lon });
@@ -698,7 +698,8 @@ function configurarGestos() {
       gesto.ultimo = c;
       return;
     }
-    if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(G.sistema ? gesto.dist0 * (gesto.d0 / c.d) : 1 + (gesto.dist0 - 1) * (gesto.d0 / c.d)); // a pinça escala a altura (no sistema, a distância ao foco)
+    if (gesto.escala !== G.trocasDeEscala) ancorar(); // a escala mudou no meio da pinça: o gesto recomeça da distância nova
+    if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(G.sistema ? gesto.dist0 * (gesto.d0 / c.d) : 1 + (gesto.dist0 - 1) * (gesto.d0 / c.d), true); // a pinça escala a altura (no sistema, a distância ao foco)
     if (!gesto.ancora || !levarPontoA(gesto.ancora, c.x, c.y)) {
       // âncora fora da Terra (dedo no espaço) ou sistema solar: giro proporcional à altura
       const k = G.sistema ? 0.3 : 0.22 * Math.max(0.0015, (G.cam.dist - 1) / (DIST.inicial - 1));
@@ -780,12 +781,16 @@ function distanciaQueCabe() {
   return Math.min(DIST.max, 1 / Math.sin(Math.min(fovV, fovH) / 2 * 0.86));
 }
 
-function definirDist(d) {
+/**
+ * @param {number} d distância pedida
+ * @param {boolean} [continuo] gesto contínuo (pinça): o quanto passou do limite vale pelo tamanho do gesto, não pela soma dos eventos
+ */
+function definirDist(d, continuo = false) {
   if (G.galaxia) { const [min, max] = G.galaxia.limitesDistancia(); G.cam.dist = Math.max(min, Math.min(max, d)); return; }
   const max = G.sistema ? DIST_MAX_SISTEMA : DIST.max;
   if (G.sistema && G.focoTerra && !G.trocandoEscala && !G.livre && d < DIST.max * G.focoTerra.raio * 0.97) { voltarParaTerraPeloZoom(); return; }
   G.cam.dist = G.sistema ? Math.max(G.focoDistMin || 0.3, Math.min(max, d)) : Math.max(DIST.min, Math.min(max, d)); // no sistema solar, de rente ao corpo em foco até além das Voyager
-  seguirAfastando(d, max);
+  seguirAfastando(d, max, continuo);
 }
 
 /**
@@ -794,10 +799,10 @@ function definirDist(d) {
  * devolve à Terra. No limite do sistema solar, insistir em afastar abre a Via Láctea (cena própria, em kpc).
  */
 const DIST_MAX_SISTEMA = 40;
-function seguirAfastando(pedido, max) {
+function seguirAfastando(pedido, max, continuo) {
   if (G.livre || G.animCam) return;
   if (pedido <= max * 1.0001) { G.alemDoLimite = 0; return; }
-  G.alemDoLimite = (G.alemDoLimite || 0) + Math.log(pedido / max);
+  G.alemDoLimite = continuo ? Math.log(pedido / max) : (G.alemDoLimite || 0) + Math.log(pedido / max);
   if (G.alemDoLimite < (G.sistema ? 0.35 : 0.08) || G.trocandoEscala) return; // na Terra basta passar do limite; para a galáxia, uns três toques da roda
   G.alemDoLimite = 0; G.trocandoEscala = true;
   setTimeout(() => { G.trocandoEscala = false; }, 1500);
@@ -809,6 +814,25 @@ function seguirAfastando(pedido, max) {
       await new Promise((ok) => setTimeout(ok, 250));
     }
   })();
+}
+
+/** A escala mudou (Terra, sistema solar ou Via Láctea): gestos em curso recomeçam e o botão de voltar acompanha. */
+function mudouEscala() {
+  G.trocasDeEscala = (G.trocasDeEscala || 0) + 1;
+  const b = G.dom.voltar;
+  b.hidden = !G.sistema;
+  b.textContent = G.galaxia ? '‹ Sistema solar' : '‹ Terra';
+  b.setAttribute('aria-label', G.galaxia ? 'Voltar ao sistema solar' : 'Voltar à Terra');
+  G.dom.raiz.classList.toggle('com-voltar', !!G.sistema);
+}
+
+/** Botão de voltar: da Via Láctea para o sistema solar; do sistema solar para a Terra, de frente para o local. */
+function voltarEscala() {
+  if (G.galaxia) { fecharGalaxia(); return; }
+  if (!G.sistema) return;
+  G.espaco.definirSistema(false);
+  const local = G.estadoApp?.local;
+  if (local) irPara(local.lat, local.lon, DIST.inicial, 900);
 }
 
 const EIXO_Y = new THREE.Vector3(0, 1, 0);
@@ -1241,9 +1265,11 @@ function montarDom(secao) {
   const cidades = el('div', { class: 'globo-cidades', 'aria-hidden': 'true' });
   const grade = el('div', { class: 'globo-grade globo-recolhivel', 'aria-hidden': 'true' });
   const leitura = el('div', { class: 'globo-leitura', hidden: true, 'aria-hidden': 'true' });
-  const raiz = el('div', { class: 'globo' }, canvas, grade, cidades, el('div', { class: 'globo-topo globo-recolhivel' }, chips), botoes, aviso, painel, leitura, rodape);
+  // saída sempre à vista do sistema solar e da Via Láctea (não se recolhe com os outros controles)
+  const voltar = el('button', { type: 'button', class: 'globo-voltar', hidden: true, onclick: voltarEscala });
+  const raiz = el('div', { class: 'globo' }, canvas, grade, cidades, el('div', { class: 'globo-topo globo-recolhivel' }, chips), botoes, voltar, aviso, painel, leitura, rodape);
   secao.append(raiz);
-  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, ciclones, faixa, rotuloHora, voltarAgora, tocar, dias, linha, painel, rodape, botoes, cidades, grade, leitura };
+  G.dom = { raiz, canvas, chips, voltar, aviso, legenda, fonte, ciclones, faixa, rotuloHora, voltarAgora, tocar, dias, linha, painel, rodape, botoes, cidades, grade, leitura };
   // leitura sob o cursor: só com mouse (no toque, o painel do ponto tocado faz esse papel)
   canvas.addEventListener('pointermove', (e) => { G.mouse = e.pointerType === 'mouse' ? { x: e.clientX, y: e.clientY } : null; });
   canvas.addEventListener('pointerleave', () => { G.mouse = null; });
@@ -1764,7 +1790,7 @@ function distanciaVisaoGeral() {
 /** Troca entre a Terra e o sistema solar: esconde a Terra, as nuvens, os marcadores e a interface do tempo. */
 function modoSistema(ligar) {
   if (!ligar) fecharGalaxia();
-  G.sistema = ligar;
+  G.sistema = ligar; mudouEscala();
   for (const o of [G.terra, G.nuvens, G.atmosfera, G.contornos.grupo, G.lua, G.solBrilho, G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) o.visible = !ligar;
   G.dom.cidades.hidden = ligar; G.dom.grade.hidden = ligar;
   if (G.particulas) G.particulas.linhas.visible = !ligar;
