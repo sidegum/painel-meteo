@@ -1,6 +1,6 @@
 # Resultado da calibração (gerado automaticamente)
 
-Gerado em 2026-11-13 18:04 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
+Gerado em 2026-11-14 16:46 UTC por `scripts/calibrar.mjs`. Método em [CALIBRACAO.md](CALIBRACAO.md).
 
 Estação: INMET A884 Campo Bom. Medições de 2021-03-01 a 2026-10-31 (2071 dias válidos).
 
@@ -10,12 +10,12 @@ Todos os números de "depois" são **fora da amostra**: cada mês foi corrigido 
 
 | Modelo | No painel | De | Até | Dias |
 |---|---|---|---|---|
-| ECMWF IFS | sim | 2022-01-01 | 2026-11-12 | 1777 |
-| ECMWF AIFS | sim | 2025-02-18 | 2026-11-12 | 633 |
-| UKMO 10 km | sim | 2022-03-01 | 2026-11-12 | 1718 |
-| ECMWF IFS 0,25° | referência | 2024-02-04 | 2026-11-12 | 1013 |
-| GFS | referência | 2021-03-24 | 2026-11-12 | 2060 |
-| ICON | referência | 2022-11-17 | 2026-11-12 | 1457 |
+| ECMWF IFS | sim | 2022-01-01 | 2026-11-13 | 1778 |
+| ECMWF AIFS | sim | 2025-02-18 | 2026-11-13 | 634 |
+| UKMO 10 km | sim | 2022-03-01 | 2026-11-13 | 1719 |
+| ECMWF IFS 0,25° | referência | 2024-02-04 | 2026-11-13 | 1014 |
+| GFS | referência | 2021-03-24 | 2026-11-13 | 2061 |
+| ICON | referência | 2022-11-17 | 2026-11-13 | 1458 |
 
 ## Temperatura exibida (ECMWF IFS): erro médio em °C
 
@@ -223,7 +223,7 @@ Antecedências de 1 a 5 dias somadas. Usada quando o acerto sim/não sobe pelo m
 | UKMO 10 km | 3 | 78% | 4,3 | 1,7 | 28,1 | 647 |
 | UKMO 10 km | 5 | 73% | 4,9 | 2,1 | 24,2 | 642 |
 
-## Canoas (SBCO), sem correção: 2083 dias de 2021-03-01 a 2026-11-12
+## Canoas (SBCO), sem correção: 2084 dias de 2021-03-01 a 2026-11-13
 
 | Modelo | Antecedência | Acerto sim/não | Erro chuva (mm) | Erro máxima (°C) | Erro rajada (km/h) | Dias |
 |---|---|---|---|---|---|---|
@@ -237,7 +237,7 @@ Antecedências de 1 a 5 dias somadas. Usada quando o acerto sim/não sobe pelo m
 | UKMO 10 km | 3 | – | – | 1,5 | 25,3 | 658 |
 | UKMO 10 km | 5 | – | – | 1,9 | 21,9 | 652 |
 
-## Porto Alegre aeroporto (SBPA), sem correção: 1926 dias de 2021-03-01 a 2026-11-12
+## Porto Alegre aeroporto (SBPA), sem correção: 1927 dias de 2021-03-01 a 2026-11-13
 
 | Modelo | Antecedência | Acerto sim/não | Erro chuva (mm) | Erro máxima (°C) | Erro rajada (km/h) | Dias |
 |---|---|---|---|---|---|---|
@@ -247,8 +247,8 @@ Antecedências de 1 a 5 dias somadas. Usada quando o acerto sim/não sobe pelo m
 | ECMWF AIFS | 1 | – | – | 1,3 | – | 623 |
 | ECMWF AIFS | 3 | – | – | 1,3 | – | 621 |
 | ECMWF AIFS | 5 | – | – | 1,6 | – | 605 |
-| UKMO 10 km | 1 | – | – | 1,2 | 12,7 | 572 |
-| UKMO 10 km | 3 | – | – | 1,4 | 12,8 | 574 |
+| UKMO 10 km | 1 | – | – | 1,2 | 12,6 | 572 |
+| UKMO 10 km | 3 | – | – | 1,4 | 12,7 | 574 |
 | UKMO 10 km | 5 | – | – | 1,8 | 13,1 | 569 |
 
 ## Pesos dos modelos do painel (621 dias comuns)
