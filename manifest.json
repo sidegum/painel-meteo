@@ -1,0 +1,166 @@
+{
+ "gerado": "2026-11-14T18:17:47Z",
+ "versao": 1,
+ "grade": {
+  "largura": 720,
+  "altura": 361,
+  "lat0": 90,
+  "lat1": -90,
+  "lon0": -180,
+  "lon1": 179.5
+ },
+ "canais": {
+  "vento": {
+   "R": [
+    "u10",
+    "m/s",
+    -50,
+    50
+   ],
+   "G": [
+    "v10",
+    "m/s",
+    -50,
+    50
+   ],
+   "B": [
+    "rajada",
+    "m/s",
+    0,
+    70
+   ]
+  },
+  "campo": {
+   "R": [
+    "t2m",
+    "°C",
+    -70,
+    55
+   ],
+   "G": [
+    "pressao",
+    "hPa",
+    920,
+    1080
+   ],
+   "B": [
+    "chuva",
+    "mm/h",
+    0,
+    40,
+    "raiz"
+   ]
+  },
+  "nuvens": {
+   "R": [
+    "nuvens_baixas",
+    "%",
+    0,
+    100
+   ],
+   "G": [
+    "nuvens_medias",
+    "%",
+    0,
+    100
+   ],
+   "B": [
+    "nuvens_altas",
+    "%",
+    0,
+    100
+   ]
+  }
+ },
+ "gfs": {
+  "modelo": "GFS 0,5°",
+  "fonte": "NOAA NCEP via NOMADS",
+  "rodada": "2026-11-14T12:00Z",
+  "horas": [
+   0,
+   3,
+   6,
+   9,
+   12,
+   15,
+   18,
+   21,
+   24,
+   27,
+   30,
+   33,
+   36,
+   39,
+   42,
+   45,
+   48
+  ],
+  "arquivos": {
+   "vento": "vento-{h}.png",
+   "campo": "campo-{h}.png",
+   "nuvens": "nuvens-{h}.png"
+  }
+ },
+ "satelite": {
+  "arquivo": "satelite.png",
+  "largura": 2048,
+  "altura": 1024,
+  "fonte": "NASA GIBS (GOES-Leste, GOES-Oeste e Himawari, banda 13)",
+  "camadas": [
+   {
+    "camada": "GOES-East_ABI_Band13_Clean_Infrared",
+    "instante": "2026-11-14T17:20:00Z",
+    "pixelsComDado": 778426
+   },
+   {
+    "camada": "GOES-West_ABI_Band13_Clean_Infrared",
+    "instante": "2026-11-14T17:10:00Z",
+    "pixelsComDado": 778510
+   },
+   {
+    "camada": "Himawari_AHI_Band13_Clean_Infrared",
+    "instante": "2026-11-14T17:10:00Z",
+    "pixelsComDado": 732772
+   }
+  ],
+  "instante": "2026-11-14T17:20:00Z",
+  "alfa": true
+ },
+ "ciclones": [],
+ "satelites": {
+  "arquivo": "satelites.json",
+  "gerado": "2026-11-14T18:17:47Z",
+  "grupos": {
+   "estacoes": 18,
+   "brilhantes": 156,
+   "meteorologicos": 74,
+   "gps": 32
+  }
+ },
+ "sondas": {
+  "arquivo": "sondas.json",
+  "gerado": "2026-11-14T01:29:50Z",
+  "lista": [
+   "bepicolombo",
+   "europaclipper",
+   "hera",
+   "juice",
+   "juno",
+   "jwst",
+   "lucy",
+   "newhorizons",
+   "osirisapex",
+   "parker",
+   "pioneer10",
+   "pioneer11",
+   "psyche",
+   "solarorbiter",
+   "voyager1",
+   "voyager2"
+  ]
+ },
+ "corpos": {
+  "arquivo": "corpos.json",
+  "gerado": "2026-11-14T01:29:50Z"
+ }
+}
