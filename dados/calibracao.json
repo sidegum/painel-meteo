@@ -1,6 +1,6 @@
 {
  "versao": 1,
- "geradoEm": "2026-11-16T20:43:09.845Z",
+ "geradoEm": "2026-11-17T19:25:41.273Z",
  "estacao": {
   "id": "A884",
   "nome": "Campo Bom",
@@ -29,33 +29,33 @@
  "cobertura": {
   "ecmwf_ifs": {
    "ini": "2022-01-01",
-   "fim": "2026-11-15",
-   "dias": 1780
+   "fim": "2026-11-16",
+   "dias": 1781
   },
   "ecmwf_aifs025_single": {
    "ini": "2025-02-18",
-   "fim": "2026-11-15",
-   "dias": 636
+   "fim": "2026-11-16",
+   "dias": 637
   },
   "ukmo_global_deterministic_10km": {
    "ini": "2022-03-01",
-   "fim": "2026-11-15",
-   "dias": 1721
+   "fim": "2026-11-16",
+   "dias": 1722
   },
   "ecmwf_ifs025": {
    "ini": "2024-02-04",
-   "fim": "2026-11-15",
-   "dias": 1016
+   "fim": "2026-11-16",
+   "dias": 1017
   },
   "ncep_gfs_seamless": {
    "ini": "2021-03-24",
-   "fim": "2026-11-15",
-   "dias": 2063
+   "fim": "2026-11-16",
+   "dias": 2064
   },
   "dwd_icon_global": {
    "ini": "2022-11-17",
-   "fim": "2026-11-15",
-   "dias": 1460
+   "fim": "2026-11-16",
+   "dias": 1461
   }
  },
  "pesos": {
@@ -409,8 +409,8 @@
    },
    "periodo": {
     "ini": "2021-03-01",
-    "fim": "2026-11-15",
-    "diasComMedicao": 2086
+    "fim": "2026-11-16",
+    "diasComMedicao": 2087
    },
    "fontes": {
     "medicoes": "METAR SBCO Canoas, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
@@ -436,14 +436,14 @@
       "n": 378,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.52,
+      "maeTmax": 1.51,
       "maeRajada": null
      },
      "4": {
       "n": 396,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.67,
+      "maeTmax": 1.68,
       "maeRajada": null
      },
      "5": {
@@ -459,14 +459,14 @@
       "n": 622,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.32,
+      "maeTmax": 1.33,
       "maeRajada": null
      },
      "2": {
       "n": 621,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.37,
+      "maeTmax": 1.38,
       "maeRajada": null
      },
      "3": {
@@ -504,28 +504,28 @@
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.42,
-      "maeRajada": 11.21
+      "maeRajada": 11.22
      },
      "3": {
       "n": 658,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.5,
-      "maeRajada": 25.26
+      "maeRajada": 25.28
      },
      "4": {
       "n": 606,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.67,
-      "maeRajada": 11.74
+      "maeRajada": 11.75
      },
      "5": {
       "n": 652,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.91,
-      "maeRajada": 21.92
+      "maeRajada": 21.91
      }
     }
    }
@@ -540,8 +540,8 @@
    },
    "periodo": {
     "ini": "2021-03-01",
-    "fim": "2026-11-15",
-    "diasComMedicao": 1929
+    "fim": "2026-11-16",
+    "diasComMedicao": 1930
    },
    "fontes": {
     "medicoes": "METAR SBPA Porto Alegre aeroporto, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
@@ -553,7 +553,7 @@
       "n": 383,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.2,
+      "maeTmax": 1.19,
       "maeRajada": null
      },
      "2": {
@@ -628,34 +628,34 @@
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.18,
-      "maeRajada": 12.66
+      "maeRajada": 12.69
      },
      "2": {
       "n": 647,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.33,
-      "maeRajada": 12.41
+      "maeRajada": 12.44
      },
      "3": {
       "n": 574,
       "acertoChuva": null,
       "maeChuva": null,
       "maeTmax": 1.41,
-      "maeRajada": 12.75
+      "maeRajada": 12.77
      },
      "4": {
       "n": 567,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.57,
-      "maeRajada": 13.07
+      "maeTmax": 1.56,
+      "maeRajada": 13.1
      },
      "5": {
       "n": 569,
       "acertoChuva": null,
       "maeChuva": null,
-      "maeTmax": 1.83,
+      "maeTmax": 1.84,
       "maeRajada": 13.06
      }
     }
