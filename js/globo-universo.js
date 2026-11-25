@@ -20,8 +20,8 @@ const num = (v, casas = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { 
 const KPC = 1000; // kpc por Mpc
 
 /**
- * Objetos notáveis com coordenadas J2000 e desvio para o vermelho publicados (ou direção galáctica, para estruturas
- * extensas). "aprox": centro aproximado de uma estrutura extensa, dito no cartão.
+ * Objetos notáveis com coordenadas J2000 e desvio para o vermelho publicados (ou direção galáctica glon/glat, para
+ * estruturas extensas). "aprox": centro aproximado de uma estrutura extensa, dito no cartão.
  */
 export const NOTAVEIS = [
   { nome: '3C 273', ra: 187.2779, dec: 2.0524, z: 0.158, tipo: 'quasar', texto: 'O primeiro quasar identificado (Schmidt, 1963) e o mais brilhante do céu: um buraco negro de ~900 milhões de massas solares engolindo gás no centro de uma galáxia.', fonte: 'Schmidt 1963 · NED' },
@@ -40,11 +40,12 @@ export const NOTAVEIS = [
   { nome: 'Aglomerado da Bala', ra: 104.658, dec: -55.95, z: 0.296, tipo: 'aglomerado-notavel', texto: 'Dois aglomerados que se atravessaram: o gás quente (raios X) ficou para trás e a massa medida por lente ficou com as galáxias. É uma das provas diretas da matéria escura.', fonte: 'Clowe et al. 2006' },
   { nome: 'El Gordo', ra: 15.7208, dec: -49.2553, z: 0.870, tipo: 'aglomerado-notavel', texto: 'O maior aglomerado de galáxias conhecido àquela distância, também em colisão: ~2 mil trilhões de massas solares.', fonte: 'Menanteau et al. 2012 · Jee et al. 2014' },
   { nome: 'Abell 2744 (Pandora)', ra: 3.5813, dec: -30.3886, z: 0.308, tipo: 'aglomerado-notavel', texto: 'Aglomerado formado pela colisão de pelo menos quatro aglomerados; sua lente gravitacional mostra galáxias muito distantes (programas Frontier Fields e UNCOVER).', fonte: 'Merten et al. 2011 · Bezanson et al. 2024' },
+  { nome: 'Superaglomerado Local (de Virgem)', ra: 187.70, dec: 12.39, mpc: 16.5, tipo: 'estrutura', aprox: true, texto: 'O superaglomerado em volta do aglomerado de Virgem, com o Grupo Local na borda. Hoje é visto como um braço de Laniakea, uma estrutura bem maior.', fonte: 'de Vaucouleurs 1953 · Mei et al. 2007 (distância de Virgem)' },
   { nome: 'Grande Atrator', ra: 243.59, dec: -60.91, z: 0.0163, tipo: 'estrutura', aprox: true, texto: 'A concentração de massa para onde convergem as galáxias da nossa região, perto do aglomerado de Norma, escondida atrás do disco da Via Láctea. É o centro de atração de Laniakea, o superaglomerado de que fazemos parte: ~160 Mpc (520 milhões de anos-luz) e ~100 mil galáxias.', fonte: 'Lynden-Bell et al. 1988 · Tully et al. 2014' },
   { nome: 'Grande Muralha CfA2', ra: 195.0, dec: 29.0, z: 0.025, tipo: 'estrutura', aprox: true, texto: 'Parede de galáxias de ~500 milhões de anos-luz de comprimento, que passa pelo aglomerado de Coma. Foi a primeira grande estrutura do universo mapeada (1989).', fonte: 'Geller & Huchra 1989' },
   { nome: 'Grande Muralha Sloan', ra: 195.0, dec: 1.0, z: 0.073, tipo: 'estrutura', aprox: true, texto: 'Uma das maiores estruturas conhecidas: uma parede de galáxias de ~1,4 bilhão de anos-luz de comprimento, achada no mapa do Sloan.', fonte: 'Gott et al. 2005' },
   { nome: 'Vazio de Boötes', ra: 222.5, dec: 46.0, z: 0.05, raioMpc: 50, tipo: 'vazio', aprox: true, texto: 'Um dos maiores vazios conhecidos: uma região de ~330 milhões de anos-luz quase sem galáxias (só umas 60 foram achadas lá dentro).', fonte: 'Kirshner et al. 1981 · Kirshner et al. 1987' },
-  { nome: 'Supervazio de Erídano', l: 209, b: -57, z: 0.22, raioMpc: 300, tipo: 'vazio', aprox: true, texto: 'Supervazio na direção da Mancha Fria da radiação cósmica de fundo; ele pode explicar parte da mancha (efeito Sachs-Wolfe integrado), mas não toda.', fonte: 'Szapudi et al. 2015 · Mackenzie et al. 2017' },
+  { nome: 'Supervazio de Erídano', glon: 209, glat: -57, z: 0.22, raioMpc: 300, tipo: 'vazio', aprox: true, texto: 'Supervazio na direção da Mancha Fria da radiação cósmica de fundo; ele pode explicar parte da mancha (efeito Sachs-Wolfe integrado), mas não toda.', fonte: 'Szapudi et al. 2015 · Mackenzie et al. 2017' },
 ];
 
 // Cascas do tempo da luz (bilhões de anos): onde está hoje o que emitiu a luz que chega agora, saída há t
@@ -55,8 +56,8 @@ const U = { ctx: null, dados: null, itens: [], cascas: [], prontos: false };
 /** Direção (J2000 ou galáctica) e distância (Mpc) para a cena (kpc). */
 function lugar(o, dMpc, alvo) {
   const { cena, THREE } = U.ctx;
-  if (o.l != null) { // galáctica direto: a cena tem X = Yg, Y = Zg, Z = Xg a partir do centro
-    const l = o.l * RAD, b = o.b * RAD, { R0, zSol } = U.ctx.meta, d = dMpc * KPC;
+  if (o.glon != null) { // galáctica direto: a cena tem X = Yg, Y = Zg, Z = Xg a partir do centro
+    const l = o.glon * RAD, b = o.glat * RAD, { R0, zSol } = U.ctx.meta, d = dMpc * KPC;
     return (alvo || new THREE.Vector3()).set(Math.cos(b) * Math.sin(l) * d, Math.sin(b) * d + zSol, Math.cos(b) * Math.cos(l) * d - R0);
   }
   return cena(o.ra, o.dec, dMpc * KPC, alvo || new THREE.Vector3());
@@ -163,8 +164,8 @@ function montarAglomerados() {
   if (!U.aglomerados.length) return;
   U.pontosAglomerados = pontosAlvo(U.aglomerados);
   U.ctx.adicionar(U.pontosAglomerados);
-  // nomes: os de nome popular (Abell com nome, ou outro nome) mais massivos para a distância
-  const ordem = [...U.aglomerados].filter((a) => a.a || a.o).sort((x, y) => (y.m || 0) / (y.dMpc ** 1.2) - (x.m || 0) / (x.dMpc ** 1.2));
+  // nomes: só Abell e nomes populares (as siglas de levantamento em raios X ficam para o cartão), os mais massivos para a distância
+  const ordem = [...U.aglomerados].filter((a) => /^Abell |\(Abell /.test(a.nome) || /^[A-Z][a-zà-ú]+ ?[A-Za-zà-ú ]*$/.test(a.nome)).sort((x, y) => (y.m || 0) / (y.dMpc ** 1.2) - (x.m || 0) / (x.dMpc ** 1.2));
   for (const a of ordem.slice(0, CELULAR ? 60 : 140)) rotulo(a.nome, a.p, { prioridade: 22, de: a.dMpc * 120, ate: a.dMpc * 9000, classe: 'aglomerado', alvo: a });
 }
 
@@ -196,18 +197,19 @@ const VERTEX_ANEL = /* glsl */`
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     float px = diam * escalaPx / max(-mv.z, 1e-6);
-    gl_PointSize = clamp(px, 0.0, 900.0 * pr);
-    vA = alfa * clamp((px - 6.0 * pr) / (30.0 * pr), 0.0, 1.0) * clamp(900.0 * pr / max(px, 1.0), 0.0, 1.0);
+    gl_PointSize = clamp(px, 0.0, 400.0 * pr);
+    // só os anéis de tamanho médio na tela: pequenos viram ruído e grandes demais cobririam a cena
+    vA = alfa * clamp((px - 10.0 * pr) / (30.0 * pr), 0.0, 1.0) * clamp((260.0 * pr - px) / (160.0 * pr), 0.0, 1.0);
     gl_Position = projectionMatrix * mv;
   }`;
 const FRAGMENT_ANEL = /* glsl */`
   varying float vA;
-  void main() { vec2 p = gl_PointCoord - 0.5; float r = length(p) * 2.0; if (r > 1.0) discard; float borda = smoothstep(0.86, 0.97, r) * (1.0 - smoothstep(0.97, 1.0, r)); gl_FragColor = vec4(vec3(0.42, 0.55, 0.75) * vA * (borda * 0.9 + 0.05), 1.0); }`;
+  void main() { vec2 p = gl_PointCoord - 0.5; float r = length(p) * 2.0; if (r > 1.0) discard; float borda = smoothstep(0.9, 0.975, r) * (1.0 - smoothstep(0.975, 1.0, r)); gl_FragColor = vec4(vec3(0.42, 0.55, 0.75) * vA * borda * 0.45, 1.0); }`;
 
 /** Vazios: um contorno circular do tamanho do vazio (o vazio em si é a falta de galáxias, que já se vê na nuvem). */
 function montarVazios() {
   const { THREE, uniformes } = U.ctx;
-  U.vazios = (U.dados.vazios || []).map((v) => ({ tipo: 'vazio-sdss', ...v, p: lugar(v, CO.distanciaComovel(v.z)), diam: v.r * 2 * KPC }));
+  U.vazios = (U.dados.vazios || []).map((v) => ({ tipo: 'vazio-sdss', ...v, p: lugar(v, v.d), diam: v.r * 2 * KPC }));
   if (!U.vazios.length) return;
   const pos = new Float32Array(U.vazios.length * 3), diam = new Float32Array(U.vazios.length);
   U.vazios.forEach((v, i) => { pos.set([v.p.x, v.p.y, v.p.z], i * 3); diam[i] = v.diam; });
@@ -224,7 +226,7 @@ function montarNotaveis() {
   const { THREE, rotulo, pontosAlvo } = U.ctx;
   const COR = { quasar: '#9fb8ff', 'galaxia-distante': '#ffb38a', 'aglomerado-notavel': '#e2c4ff', estrutura: '#a8c8ff', vazio: '#8aa0bc', campo: '#ffffff' };
   U.notaveis = NOTAVEIS.map((o) => {
-    const d = o.z > 0 ? CO.distanciaComovel(o.z) : 0;
+    const d = o.mpc ?? (o.z > 0 ? CO.distanciaComovel(o.z) : 0);
     return { tipo: 'notavel', ...o, dMpc: d, p: lugar(o, Math.max(d, 1)), cor: COR[o.tipo], diam: (o.raioMpc ? o.raioMpc * 2 : 1.5) * KPC, minPx: o.tipo === 'vazio' ? 0 : 3.4, k: 1 };
   });
   const pontuais = U.notaveis.filter((o) => o.tipo !== 'campo' && o.tipo !== 'vazio');
@@ -232,7 +234,7 @@ function montarNotaveis() {
   for (const o of U.notaveis) {
     if (o.tipo === 'campo') continue;
     const longe = o.dMpc > 1500;
-    rotulo(o.nome, o.p, { prioridade: o.tipo === 'estrutura' || o.tipo === 'vazio' ? 58 : 40, de: longe ? 4e5 : 2e4, ate: longe ? 6e7 : 4e6, classe: `notavel ${o.tipo}`, alvo: o });
+    rotulo(o.nome, o.p, { prioridade: o.tipo === 'estrutura' || o.tipo === 'vazio' ? 58 : 40, de: longe ? 4e5 : 2e4, ate: longe ? 1.6e7 : 4e6, classe: `notavel ${o.tipo}`, alvo: o });
   }
   // linha de visada do Campo Ultraprofundo do Hubble: do Sol até z = 14 (o que ele enxerga em profundidade)
   const campo = U.notaveis.find((o) => o.tipo === 'campo');
@@ -243,7 +245,7 @@ function montarNotaveis() {
     U.linhaCampo.frustumCulled = false; U.linhaCampo.renderOrder = 2;
     U.ctx.adicionar(U.linhaCampo);
     campo.p = lugar(campo, CO.distanciaComovel(1));
-    rotulo(campo.nome, campo.p, { prioridade: 36, de: 6e5, ate: 6e7, classe: 'notavel campo', alvo: campo });
+    rotulo(campo.nome, campo.p, { prioridade: 36, de: 6e5, ate: 1.6e7, classe: 'notavel campo', alvo: campo });
   }
 }
 
@@ -329,11 +331,11 @@ export function atualizarUniverso(zoom, F, camera) {
   if (U.quasares) { const a = rampa(lz, 5.6, 6.5) * 0.9; U.quasares.material.uniforms.alfa.value = a; U.quasares.visible = F.quasares && a > 0.003; }
   if (U.pontosAglomerados) U.pontosAglomerados.visible = F.aglomerados && lz > 3.6;
   if (U.pontosSuper) U.pontosSuper.visible = F.superaglomerados && lz > 4.3;
-  if (U.pontosVazios) { const a = rampa(lz, 4.8, 5.4) * (1 - rampa(lz, 6.6, 7.0)) * 0.8; U.pontosVazios.material.uniforms.alfa.value = a; U.pontosVazios.visible = F.vazios && a > 0.003; }
+  if (U.pontosVazios) { const a = rampa(lz, 4.9, 5.5) * (1 - rampa(lz, 6.3, 6.7)); U.pontosVazios.material.uniforms.alfa.value = a; U.pontosVazios.visible = F.vazios && a > 0.003; }
   if (U.linhaCampo) U.linhaCampo.visible = F.notaveis && lz > 5.6;
   // radiação cósmica de fundo: some de perto (no céu real ela não se vê); acende quando o quadro passa de bilhões de anos-luz
   const aCmb = rampa(lz, 6.3, 7.1);
-  U.cmb.material.uniforms.alfa.value = aCmb * (zoom > CO.DIST_CMB_MPC * KPC ? 1 : 0.6);
+  U.cmb.material.uniforms.alfa.value = aCmb * (zoom > CO.DIST_CMB_MPC * KPC * 1.05 ? 1 : 0.32); // de dentro, fundo discreto
   U.cmb.visible = F.cmb && aCmb > 0.003;
   // cascas: anéis no plano da tela, rótulo no topo de cada anel
   U.grupoCascas.visible = F.cascas && lz > 5.4;
@@ -373,7 +375,7 @@ export function cartao(it, G, ir) {
       `${c.numeros}${it.membros?.length ? ` · aglomerados: ${it.membros.slice(0, 8).map((m) => m.replace(/^A0*/, 'Abell ').replace(/^S0*/, 'Abell S')).join(', ')}${it.nm > 8 ? '…' : ''}` : ''}`,
       'MSCC (Chow-Martínez et al. 2014) · distância: Planck 2018', [ir()]);
   } else if (it.tipo === 'notavel') {
-    const c = it.z > 0 ? textoCosmo(it.z) : null;
+    const c = it.mpc ? { frase: `Fica a ${num(it.mpc * 3.2616, 0)} milhões de anos-luz (distância medida).`, numeros: `${num(it.mpc, 1)} Mpc` } : it.z > 0 ? textoCosmo(it.z) : null;
     const extra = it.aprox ? ' · posição do centro aproximada (estrutura extensa)' : '';
     G.mostrarPainel(it.nome, it.texto, `${c ? c.frase + ' ' : ''}${c ? c.numeros : 'Direção do campo: as galáxias dele estão de z ≈ 0,1 a z > 10'}${extra}`, it.fonte, [ir()]);
   } else if (it.tipo === 'cmb') {

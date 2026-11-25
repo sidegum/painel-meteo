@@ -590,14 +590,9 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 @media (min-width: 760px) { .globo { border-radius: 0 0 10px 10px; } }
 /* Monitor grande (o app tira o limite de largura com o Globo aberto): a linha do tempo e as notas não se esticam. */
 @media (min-width: 1100px) { .globo-rodape > * { max-width: 960px; } }
-/* Filtros do espaço no computador: janela no centro da tela, inteira, rolando por dentro se faltar altura */
-@media (min-width: 760px) { #dlg-info:has(.filtros) { margin: auto; border-radius: 14px; max-height: min(88vh, 900px); overflow: auto; } }
-#dlg-info:has(.filtros)::backdrop { background: rgba(4, 6, 11, .2); } /* o efeito de cada filtro aparece por trás */
-.globo-btn-espaco[aria-pressed="true"] { background: #eceef0 !important; color: #0b0f16 !important; }
 .globo-btn-dianoite[aria-pressed="false"] { color: #ffd166 !important; border-color: rgba(255,209,102,.6) !important; }
 .globo-espaco { position: absolute; left: 0; right: 0; top: 52px; padding: 0 12px; pointer-events: none; }
 .globo-espaco > * { pointer-events: auto; }
-.globo-espaco .globo-chips button[aria-pressed="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
 .globo-espaco-nota { margin: 2px 0 0; font-size: 11.5px; color: #aab3bd; max-width: 300px; }
 .globo-rotulo { position: absolute; left: 0; top: 0; padding: 2px 8px; border-radius: 10px; background: rgba(10,14,22,.75); color: #ffd166; font-size: 12px; font-weight: 650; border: 1px solid rgba(255,209,102,.5); margin: -28px 0 0 -16px; white-space: nowrap; pointer-events: auto; }
 button.globo-rotulo { cursor: pointer; }
@@ -620,9 +615,6 @@ button.globo-rotulo { cursor: pointer; }
 #dlg-info .tabela-planetas { overflow-x: auto; }
 .globo.com-galaxia .globo-tabela-planetas { display: none !important; }
 .globo.com-espaco .globo-aviso { top: 104px; }
-.globo-voltar { position: absolute; left: 10px; top: 100px; z-index: 3; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.6); color: #eceef0; font-size: 13px; font-weight: 600; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.globo-voltar::before { content: ''; position: absolute; inset: -4px; } /* área de toque de 44 px */
-.globo.com-voltar .globo-aviso { top: 146px; }
 .globo-rotulo-planeta.lua { color: #dfe4ec; font-size: 11px; padding: 1px 6px; }
 .globo-rotulo-planeta.cometa { color: #a8e6ff; }
 .globo-rotulo-planeta.sol { color: #ffe1a0; border-color: rgba(255,209,102,.4); }
@@ -630,13 +622,6 @@ button.globo-rotulo { cursor: pointer; }
 .globo-rotulo-estrela { margin: 6px 0 0 6px; padding: 0 4px; background: none; border: 0; font-size: 10.5px; font-weight: 500; color: rgba(205,216,235,.72); letter-spacing: .01em; }
 .globo-rotulo-objeto { margin: 6px 0 0 6px; padding: 0 4px; background: none; border: 0; font-size: 10.5px; font-weight: 500; font-style: italic; color: rgba(255,196,214,.7); }
 .globo-rotulo-constelacao { margin: 0; padding: 0; background: none; border: 0; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgba(150,175,215,.55); transform-origin: center; }
-.filtros h4 { margin: 14px 0 6px; font-size: 13px; color: var(--fraco); font-weight: 600; }
-.filtros h4:first-child { margin-top: 0; }
-.filtro { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 15px; cursor: pointer; }
-.filtro input { width: 20px; height: 20px; accent-color: var(--foco); flex: none; }
-.filtro-opcoes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
-.filtro-opcoes button { min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--linha); background: none; color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
-.filtro-opcoes button[aria-checked=true] { border-color: var(--foco); background: color-mix(in srgb, var(--foco) 14%, transparent); font-weight: 600; }
 .globo-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
 .globo-detalhe[aria-pressed="true"] { background: #eceef0; color: #0b0f16; }
 .globo-frase-media { font-size: 16px; font-weight: 650; line-height: 1.3; }
@@ -768,12 +753,75 @@ button.globo-rotulo { cursor: pointer; }
 .link-aviso { all: unset; cursor: pointer; color: var(--quente); font-weight: 650; min-height: 44px; display: inline-flex; align-items: center; }
 .aviso-card.painel-aviso { border-left-color: var(--chuva); }
 
+/* ---------- Globo: escalas (onde a câmera está) e camadas (o que aparece) ----------
+   Computador: régua vertical à esquerda, sempre à vista. Celular: "‹ Terra" e o nome da escala no alto; a lista abre
+   ao tocar. O painel de camadas fica à direita no computador e sobe de baixo no celular. */
+.globo-onde-caixa { position: absolute; left: 10px; top: 10px; z-index: 4; display: flex; gap: 6px; align-items: center; }
+.globo[data-escala="terra"] .globo-onde-caixa { display: none; }
+.globo-voltar, .globo-onde { position: relative; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.66); color: #eceef0; font-size: 13px; font-weight: 640; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-voltar[hidden] { display: none; }
+.globo-voltar::before, .globo-onde::before { content: ''; position: absolute; inset: -4px; } /* área de toque de 44 px */
+.globo-onde::after { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 0 3px 8px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: rotate(45deg); opacity: .8; }
+.globo-onde[aria-expanded="true"] { border-color: rgba(255,255,255,.65); }
+.globo-escalas { position: absolute; left: 10px; top: 56px; z-index: 5; display: none; max-height: calc(100% - 76px); overflow: auto; overscroll-behavior: contain; padding: 6px; border-radius: 14px; background: rgba(8,11,18,.92); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.globo-escalas.aberta { display: block; }
+.globo[data-escala="terra"] .globo-escalas { top: 56px; left: auto; right: 56px; }
+.globo-escalas-lista { list-style: none; margin: 0; padding: 0; position: relative; }
+.globo-escalas-lista::before { content: ''; position: absolute; left: 16px; top: 20px; bottom: 20px; width: 1px; background: rgba(255,255,255,.18); }
+.globo-escalas button { position: relative; display: grid; grid-template-columns: 22px 1fr; align-items: center; column-gap: 6px; width: 100%; min-height: 40px; padding: 4px 12px 4px 6px; border: 0; border-radius: 10px; background: none; color: #c3ccd6; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.globo-escalas button:hover { background: rgba(255,255,255,.07); color: #fff; }
+.escala-ponto { justify-self: center; width: 7px; height: 7px; border-radius: 50%; background: #0b0f16; border: 1.5px solid rgba(255,255,255,.55); }
+.escala-nome { font-weight: 600; white-space: nowrap; }
+.escala-texto { grid-column: 2; display: none; max-width: 230px; font-size: 11.5px; line-height: 1.3; color: #9fb0c4; }
+.globo-escalas button.atual { color: #fff; }
+.globo-escalas button.atual .escala-ponto { width: 11px; height: 11px; background: #ffd166; border-color: #ffd166; box-shadow: 0 0 10px rgba(255,209,102,.7); }
+.globo-escalas button.atual .escala-nome { font-weight: 720; }
+.globo-escalas button.atual .escala-texto { display: block; }
+.globo-btn-escalas[aria-expanded="true"] { background: #eceef0 !important; color: #0b0f16 !important; }
+/* fora da Terra, os controles do tempo (variáveis, legenda, linha do tempo) saem de cena */
+.globo:not([data-escala="terra"]) .globo-topo { display: none; }
+.globo:not([data-escala="terra"]) .globo-espaco, .globo:not([data-escala="terra"]) .globo-aviso { top: 56px; }
+.globo-cidades.desligada { display: none; }
+@media (min-width: 1100px) and (pointer: fine) {
+  .globo-onde-caixa, .globo-btn-escalas { display: none !important; }
+  .globo-escalas, .globo[data-escala="terra"] .globo-escalas { display: block; left: 12px; right: auto; top: 50%; transform: translateY(-50%); max-height: calc(100% - 220px); background: rgba(8,11,18,.42); border-color: rgba(255,255,255,.08); transition: background .2s; }
+  .globo-escalas:hover { background: rgba(8,11,18,.9); }
+  .globo-escalas button { min-height: 34px; font-size: 13px; }
+  .globo-escalas:not(:hover) button:not(.atual) .escala-nome { color: rgba(195,204,214,.72); }
+  .globo .globo-topo { padding-left: 12px; }
+}
+.globo-camadas { position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; max-height: 70%; display: flex; flex-direction: column; border-radius: 16px 16px 0 0; background: rgba(8,11,18,.94); border: 1px solid rgba(255,255,255,.14); border-bottom: 0; color: #eceef0; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding-bottom: var(--safe-b); touch-action: pan-y; }
+.globo-camadas[hidden] { display: none; }
+.camadas-topo { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 4px 16px; }
+.camadas-titulo { margin: 0; font-size: 15px; font-weight: 700; }
+.camadas-fechar { min-width: 40px; min-height: 40px; border: 0; background: none; color: #dfe4ea; font-size: 24px; line-height: 1; cursor: pointer; }
+.camadas-corpo { overflow: auto; overscroll-behavior: contain; padding: 0 16px 14px; }
+.camadas-secao h4 { margin: 14px 0 4px; font-size: 11.5px; font-weight: 680; letter-spacing: .07em; text-transform: uppercase; color: #8f9db0; }
+.camadas-secao:first-child h4 { margin-top: 4px; }
+.camadas-caixa { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; font-size: 14.5px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.06); }
+.camadas-texto { display: flex; flex-direction: column; min-width: 0; }
+.camadas-texto small { font-size: 11.5px; color: #8f9db0; font-variant-numeric: tabular-nums; }
+.camadas-caixa input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; border-radius: 11px; background: rgba(255,255,255,.18); cursor: pointer; transition: background .15s; }
+.camadas-caixa input::after { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #eceef0; transition: transform .15s; }
+.camadas-caixa input:checked { background: #ffd166; }
+.camadas-caixa input:checked::after { transform: translateX(16px); background: #0b0f16; }
+.camadas-caixa input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.camadas-opcoes { padding: 6px 0 8px; }
+.camadas-rotulo { display: block; margin-bottom: 6px; font-size: 13px; color: #b7c0c9; }
+.camadas-opcoes-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+.camadas-opcoes-lista button { min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid rgba(255,255,255,.22); background: none; color: #dfe4ea; font: inherit; font-size: 13px; cursor: pointer; }
+.camadas-opcoes-lista button[aria-checked="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
+.globo-btn-camadas[aria-pressed="true"] { background: #eceef0 !important; color: #0b0f16 !important; }
+@media (min-width: 760px) {
+  .globo-camadas { left: auto; right: 58px; top: 56px; bottom: auto; width: 320px; max-height: calc(100% - 140px); border-radius: 14px; border-bottom: 1px solid rgba(255,255,255,.14); padding-bottom: 0; }
+}
+
 /* Escala de galáxias (Via Láctea vista de fora): esconde o sistema solar e mostra só os controles dela */
 .globo.com-galaxia .globo-sistema-controles, .globo.com-galaxia .globo-espaco, .globo.com-galaxia .globo-rotulo:not(.galaxia-rotulo) { display: none !important; }
 .globo-galaxia-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none; }
 .globo-galaxia-controles[hidden] { display: none; }
 .globo-galaxia-controles > * { pointer-events: auto; }
-.globo-galaxia-voltar, .globo-ir-galaxia, .globo-btn-tabela, .globo-salvar { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
+.globo-btn-tabela, .globo-salvar { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
 .globo-btn-tabela[aria-pressed="true"] { border-color: #ffd166; color: #ffe1a0; }
 .globo-salvar { margin-left: auto; }
 .globo-salvar:disabled { opacity: .6; }

@@ -12,10 +12,15 @@
 //   (Reid et al. 2019), barra (Wegg et al. 2015) e disco (Bland-Hawthorn & Gerhard 2016). Ninguém a viu de fora.
 // - Estrelas perto do Sol: as 800 mil do céu (HYG e Gaia DR3), cada uma na distância medida.
 // - Masers, aglomerados globulares e galáxias do Grupo Local: catálogos (vendor/ceu/galaxia.json).
-// - Galáxias NGC/IC: direção do catálogo e distância publicada ou pelo desvio para o vermelho (H0 = 70).
-import { el } from './ui.js';
+// - Galáxias NGC/IC: direção do catálogo e distância medida (Karachentsev et al. 2013, quando a galáxia está no Volume
+//   Local) ou publicada, ou pelo desvio para o vermelho com a cosmologia do Planck 2018 (js/cosmologia.js).
+// - Além do Grupo Local: Volume Local, teia cósmica, aglomerados, superaglomerados, vazios, quasares e a radiação
+//   cósmica de fundo, no módulo js/globo-universo.js, que desenha na mesma cena.
+import { el, prefs } from './ui.js';
 import { TIPOS_OBJETO, corBV } from './globo-estrelas.js';
 import { cartaoObjeto } from './globo-ceu.js';
+import * as CO from './cosmologia.js';
+import * as UNI from './globo-universo.js';
 
 const RAD = Math.PI / 180;
 const AL_POR_KPC = 3261.56;
@@ -25,14 +30,13 @@ const EQ_GAL = [ // equatorial J2000 → galáctico (linhas: x para o centro, y 
   [-0.8676661490, -0.1980763734, 0.4559837762],
 ];
 const DIST = { min: 0.002, max: 4.5e7, inicial: 46 }; // kpc: de ~400 UA até ver de fora a esfera do universo observável
-const RAIO_UNIVERSO = 14250; // Mpc: raio comóvel do universo observável (46,5 bilhões de anos-luz; Planck 2018, ΛCDM)
+const RAIO_UNIVERSO = CO.HORIZONTE_MPC; // Mpc: horizonte de partículas (~46 bilhões de anos-luz; Planck 2018, ΛCDM)
 const CELULAR = matchMedia('(pointer: coarse)').matches;
 const MOVIMENTO_REDUZIDO = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const num = (v, casas = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) : '–');
 
 // Aglomerados de galáxias de referência (centro em J2000). Distância medida (Virgem: Mei et al. 2007; Fornax: Blakeslee
-// et al. 2009) ou pelo desvio para o vermelho com H0 = 70 km/s/Mpc, a mesma regra das galáxias do OpenNGC.
-const C_KMS = 299792.458, H0 = 70;
+// et al. 2009) ou pelo desvio para o vermelho com a cosmologia do Planck 2018 (distância comóvel).
 const AGLOMERADOS = [
   { nome: 'Aglomerado de Virgem', ra: 187.70, dec: 12.39, mpc: 16.5, fonte: 'Mei et al. 2007', n: 'cerca de 1.300 galáxias' },
   { nome: 'Aglomerado de Fornax', ra: 54.62, dec: -35.45, mpc: 20.0, fonte: 'Blakeslee et al. 2009', n: 'cerca de 60 galáxias grandes' },
@@ -42,6 +46,31 @@ const AGLOMERADOS = [
   { nome: 'Aglomerado de Perseu', ra: 49.95, dec: 41.51, z: 0.0179, fonte: 'Abell 426' },
   { nome: 'Aglomerado de Coma', ra: 194.95, dec: 27.98, z: 0.0231, fonte: 'Abell 1656', n: 'mais de 1.000 galáxias' },
 ];
+
+// ------------------------------------------------------------------ camadas (o que aparece nesta escala)
+
+/** Camadas da escala de galáxias e do universo, com o padrão de cada uma; gravadas em globo:camadasUniverso. */
+export const CAMADAS_UNIVERSO = [
+  { grupo: 'Nossa galáxia', itens: [['viaLactea', 'Via Láctea (modelo)'], ['estrelas', 'Estrelas perto do Sol (800 mil, distância medida)'], ['masers', 'Regiões de formação de estrelas (masers)'], ['globulares', 'Aglomerados globulares']] },
+  { grupo: 'Galáxias', itens: [['grupoLocal', 'Grupo Local'], ['galaxias', 'Galáxias próximas (NGC/IC e Volume Local)'], ['teia', 'Teia cósmica (2MASS Redshift Survey)']] },
+  { grupo: 'Grandes estruturas', itens: [['aglomerados', 'Aglomerados de galáxias (raios X)'], ['superaglomerados', 'Superaglomerados'], ['vazios', 'Vazios cósmicos'], ['notaveis', 'Lugares notáveis (quasares, recordes, muralhas)']] },
+  { grupo: 'Universo profundo', itens: [['quasares', 'Quasares (SDSS)'], ['cascas', 'Tempo da luz (anéis de 1 a 13 bilhões de anos)'], ['cmb', 'Radiação cósmica de fundo (Planck)']] },
+  { grupo: 'Tela', itens: [['nomes', 'Nomes']] },
+];
+const PADRAO_UNIVERSO = Object.fromEntries(CAMADAS_UNIVERSO.flatMap((g) => g.itens.map(([k]) => [k, true])));
+export const FG = { ...PADRAO_UNIVERSO, ...prefs.ler('globo:camadasUniverso', {}) };
+/** Liga ou desliga uma camada e grava a escolha. */
+export function definirCamada(chave, ligada) { FG[chave] = ligada; prefs.gravar('globo:camadasUniverso', { ...FG }); aplicarCamadas(); }
+
+/** Visibilidade dos objetos fixos de cada camada (as do universo mudam também pelo zoom, em atualizarUniverso). */
+function aplicarCamadas() {
+  if (!GX.cena) return;
+  if (GX.grupoMasers) GX.grupoMasers.visible = FG.masers;
+  if (GX.grupoGlobulares) GX.grupoGlobulares.visible = FG.globulares;
+  if (GX.estrelasReais) GX.estrelasReais.visible = FG.estrelas;
+  for (const o of GX.objGrupoLocal || []) o.visible = FG.grupoLocal;
+  for (const o of GX.objGalaxias || []) o.visible = FG.galaxias;
+}
 
 const GX = { G: null, THREE: null, preparo: null, aberto: false, rotulos: [], foco: null, anim: null, meta: null, dados: null };
 
@@ -85,9 +114,12 @@ export function prepararGalaxia(G, THREE) {
     montarMarcos();
     montarGrupoLocal();
     await pausa();
+    await UNI.prepararUniverso({ G, THREE, cena, meta, uniformes: GX.uniformes, rotulo, pontosAlvo, baixar, carregarImagem, adicionar: (...o) => GX.cena.add(...o) });
+    await pausa();
     montarGalaxiasNgc();
     montarCatalogos();
     montarInterface();
+    aplicarCamadas();
     return GX;
   })();
   return GX.preparo;
@@ -199,10 +231,13 @@ function pontosAlvo(lista) {
   return pts;
 }
 
+/** Camada de cada classe de rótulo: com a camada desligada, o nome some junto. */
+const CAMADA_DO_ROTULO = { faixa: 'viaLactea', aglomerado: 'aglomerados', super: 'superaglomerados', notavel: 'notaveis', casca: 'cascas', local: 'grupoLocal', ngc: 'galaxias', ungc: 'galaxias' };
 function rotulo(texto, p, { prioridade = 10, de = 0, ate = Infinity, classe = '', alvo = null, perto = false } = {}) {
   const e = el('span', { class: `globo-rotulo globo-rotulo-planeta galaxia-rotulo ${classe}`, text: texto, hidden: true });
   GX.G.dom.raiz.append(e);
-  const r = { el: e, p, prioridade, de, ate, perto, largura: texto.length * 7 + 18, alvo };
+  const camada = CAMADA_DO_ROTULO[classe.split(' ')[0]] || null;
+  const r = { el: e, p, prioridade, de, ate, perto, largura: texto.length * 7 + 18, alvo, camada };
   GX.rotulos.push(r);
   return r;
 }
@@ -224,10 +259,10 @@ function montarMarcos() {
     rotulo(b.nome, p, { prioridade: 40, de: 6, ate: 160, classe: 'faixa', alvo: { tipo: 'braco', ...b, p } });
   }
   for (const a of AGLOMERADOS) {
-    const kpc = (a.mpc ?? a.z * C_KMS / H0) * 1000;
+    const kpc = (a.mpc ?? CO.distanciaComovel(a.z)) * 1000;
     const it = { tipo: 'aglomerado', ...a, distKpc: kpc, p: cena(a.ra, a.dec, kpc, new THREE.Vector3()), diam: 2000, minPx: 0 };
     GX.marcos.push(it);
-    rotulo(a.nome, it.p, { prioridade: 50, de: 4000, ate: 2e6, alvo: it });
+    rotulo(a.nome, it.p, { prioridade: 50, de: 4000, ate: 2e6, classe: 'aglomerado', alvo: it });
   }
   GX.viaLactea = { tipo: 'galaxia-nossa', nome: 'Via Láctea', p: GX.centro };
   rotulo('Via Láctea', GX.centro, { prioridade: 90, de: 160, ate: 1.5e4, alvo: GX.viaLactea });
@@ -250,16 +285,21 @@ function montarMarcos() {
 function montarGrupoLocal() {
   const { THREE } = GX;
   const lista = GX.dados?.grupoLocal || [];
-  GX.locais = [];
+  GX.locais = []; GX.objGrupoLocal = [];
   for (const g of lista) {
     const p = cena(g.ra, g.dec, g.distKpc, new THREE.Vector3());
     const raioKpc = Math.max(0.05, (g.raioKpc || (g.rhPc ? g.rhPc / 1000 * 2.5 : 0.3)));
     const it = { tipo: 'local', ...g, p, cor: g.disco ? '#ffe7c4' : '#e8dcc8', diam: raioKpc * 2, minPx: g.disco ? 4 : 3, k: g.disco ? 0.9 : 0.6 };
     GX.locais.push(it);
-    if (g.disco) GX.cena.add(discoInclinado(g, p, raioKpc));
-    rotulo(g.nome, p, { prioridade: g.disco ? 70 : 30 - Math.min(20, Math.max(0, (g.mv ?? -10) + 15)), ate: g.disco ? 2e4 : 6e3, alvo: it, perto: true });
+    if (g.disco) { const d = discoInclinado(g, p, raioKpc); GX.cena.add(d); GX.objGrupoLocal.push(d); }
+    rotulo(g.nome, p, { classe: 'local', prioridade: g.disco ? 70 : 30 - Math.min(20, Math.max(0, (g.mv ?? -10) + 15)), ate: g.disco ? 2e4 : 6e3, alvo: it, perto: true });
   }
-  if (GX.locais.length) GX.cena.add(pontosAlvo(GX.locais));
+  if (GX.locais.length) { const pts = pontosAlvo(GX.locais); GX.cena.add(pts); GX.objGrupoLocal.push(pts); }
+  // centro aproximado do Grupo Local: meio do caminho entre a Via Láctea e Andrômeda (as duas têm massas parecidas)
+  const m31 = GX.locais.find((g) => g.catalogo === 'Andromeda');
+  GX.centroGrupoLocal = m31 ? new THREE.Vector3().addVectors(GX.centro, m31.p).multiplyScalar(0.5) : GX.centro.clone();
+  GX.grupoLocal = { tipo: 'grupo-local', nome: 'Grupo Local', p: GX.centroGrupoLocal };
+  rotulo('Grupo Local', GX.centroGrupoLocal, { classe: 'local estrutura', prioridade: 85, de: 1200, ate: 2.5e4, alvo: GX.grupoLocal });
 }
 
 /** Disco de uma galáxia grande do Grupo Local, com inclinação e ângulo de posição medidos. */
@@ -320,22 +360,65 @@ function texturaGalaxia(tipo) {
   return cv;
 }
 
-/** Galáxias do NGC/IC com distância: pontos com o diâmetro real (tamanho aparente × distância). */
+/** Separação angular (graus) entre duas direções J2000, pela fórmula de haversine. */
+function separacao(ra1, dec1, ra2, dec2) {
+  const s1 = Math.sin((dec2 - dec1) * RAD / 2), s2 = Math.sin((ra2 - ra1) * RAD / 2);
+  return 2 * Math.asin(Math.min(1, Math.sqrt(s1 * s1 + Math.cos(dec1 * RAD) * Math.cos(dec2 * RAD) * s2 * s2))) / RAD;
+}
+
+/** Busca rápida por direção: baldes de 1° de declinação. */
+function indiceDirecao(lista) {
+  const baldes = new Map();
+  for (const it of lista) { const k = Math.floor(it.dec); if (!baldes.has(k)) baldes.set(k, []); baldes.get(k).push(it); }
+  return (ra, dec, raio) => {
+    let melhor = null, dm = raio;
+    for (let k = Math.floor(dec - raio); k <= Math.floor(dec + raio); k++) for (const it of baldes.get(k) || []) { const d = separacao(ra, dec, it.ra, it.dec); if (d < dm) { dm = d; melhor = it; } }
+    return melhor;
+  };
+}
+
+/** Nome do catálogo de Karachentsev em forma legível: "MESSIER081" → "M81", "NGC4594" → "NGC 4594". */
+function nomeUngc(n) {
+  return n.replace(/^MESSIER0*(\d+)/, 'M$1').replace(/^(NGC|IC|UGC|ESO|PGC|DDO|KK|KKH|KKs|LV|AGC|HIPASS|UGCA|KDG|BTS|SDSS|FM|HS|CGCG|MCG|VCC)\s*0*(\d)/, '$1 $2').trim();
+}
+
+/**
+ * Galáxias além do Grupo Local: as do NGC/IC (OpenNGC) e as do Volume Local (Karachentsev et al. 2013). Quando a mesma
+ * galáxia está nos dois, vale a distância medida do Volume Local e o nome e a ficha do NGC/IC. Diâmetro real pelo
+ * tamanho aparente × distância (NGC/IC) ou pelo diâmetro linear medido (Volume Local, isofota de 26 mag/arcsec²).
+ */
 function montarGalaxiasNgc() {
   const { THREE, G } = GX;
   const objetos = G.estrelas?.objetos || [];
-  const locais = new Set((GX.dados?.grupoLocal || []).map((g) => g.ngc).filter(Boolean));
+  const grupo = GX.dados?.grupoLocal || [];
+  const locais = new Set(grupo.map((g) => g.ngc).filter(Boolean));
+  const doGrupoLocal = indiceDirecao(grupo);
+  const ungc = UNI.volumeLocal().filter((u) => !(u.d < 3.2 && doGrupoLocal(u.ra, u.dec, 0.4))); // as do Grupo Local já estão lá
+  const daUngc = indiceDirecao(ungc), usadas = new Set();
   GX.ngc = [];
   for (const ob of objetos) {
-    if (!/^(s|l|e|i|gg)$/.test(ob.tipo) || !ob.distAnosLuz || ob.distAnosLuz < 1.5e6 || locais.has(ob.designacao)) continue;
-    const dKpc = ob.distAnosLuz / AL_POR_KPC;
+    if (!/^(s|l|e|i|gg)$/.test(ob.tipo) || locais.has(ob.designacao)) continue;
+    const u = daUngc(ob.ra, ob.dec, 0.08);
+    if (u) usadas.add(u);
+    const dKpc = u ? u.d * 1000 : ob.distAnosLuz / AL_POR_KPC;
+    if (!(dKpc > 450)) continue;
     const tam = Math.max(...String(ob.dim || '0.5').split('x').map(Number).filter(Number.isFinite), 0.3); // minutos de arco
-    const diam = Math.max(0.5, dKpc * tam / 60 * RAD);
-    GX.ngc.push({ tipo: 'ngc', ob, p: cena(ob.ra, ob.dec, dKpc, new THREE.Vector3()), cor: TIPOS_OBJETO[ob.tipo]?.[1] || '#d8dce8', diam, minPx: ob.nome ? 3 : 2.2, k: ob.nome ? 1 : 0.75 });
+    const diam = u?.diam || Math.max(0.5, dKpc * tam / 60 * RAD);
+    GX.ngc.push({ tipo: 'ngc', ob, u, p: cena(ob.ra, ob.dec, dKpc, new THREE.Vector3()), cor: TIPOS_OBJETO[ob.tipo]?.[1] || '#d8dce8', diam, minPx: ob.nome ? 3 : 2.2, k: ob.nome ? 1 : 0.75 });
   }
-  GX.pontosNgc = pontosAlvo(GX.ngc);
+  GX.volume = [];
+  for (const u of ungc) {
+    if (usadas.has(u)) continue;
+    const espiral = u.tt != null && u.tt >= 1 && u.tt <= 9;
+    GX.volume.push({ tipo: 'ungc', u, nome: nomeUngc(u.n), p: cena(u.ra, u.dec, u.d * 1000, new THREE.Vector3()), cor: espiral ? '#cfdcf5' : u.tt != null && u.tt < 0 ? '#ffe3c0' : '#d9d4e6',
+      diam: Math.max(0.3, u.diam || 1), minPx: (u.lk || 7) > 9.5 ? 2.6 : 1.8, k: Math.max(0.4, Math.min(1, ((u.lk || 7) - 6.5) / 3.5)) });
+  }
+  GX.pontosNgc = pontosAlvo([...GX.ngc, ...GX.volume]);
   GX.cena.add(GX.pontosNgc);
-  for (const it of GX.ngc) if (it.ob.nome) rotulo(it.ob.nome, it.p, { prioridade: 20, ate: it.p.length() * 4, alvo: it, perto: true });
+  GX.objGalaxias = [GX.pontosNgc];
+  for (const it of GX.ngc) if (it.ob.nome) rotulo(it.ob.nome, it.p, { classe: 'ngc', prioridade: 20, ate: it.p.length() * 4, alvo: it, perto: true });
+  // Volume Local: nomes das galáxias mais luminosas (luminosidade na banda K, que acompanha a massa de estrelas)
+  for (const it of [...GX.volume].filter((v) => (v.u.lk || 0) >= 9.6).sort((a, b) => (b.u.lk || 0) - (a.u.lk || 0)).slice(0, CELULAR ? 14 : 30)) rotulo(it.nome, it.p, { classe: 'ungc', prioridade: 18, ate: 6e4, alvo: it, perto: true });
 }
 
 /** Masers com paralaxe (Reid et al. 2019) e aglomerados globulares (Baumgardt & Vasiliev 2021). */
@@ -374,19 +457,27 @@ async function montarEstrelasReais() {
   GX.estrelasReais.frustumCulled = false; GX.estrelasReais.renderOrder = 5;
   GX.nEstrelasReais = k;
   GX.cena.add(GX.estrelasReais);
+  aplicarCamadas();
 }
 
 // ------------------------------------------------------------------ interface
 
+/** Controles próprios desta escala: barra de escala e "Salvar imagem" (a navegação fica na régua de escalas). */
 function montarInterface() {
   const G = GX.G;
-  const voltar = el('button', { type: 'button', class: 'globo-galaxia-voltar', text: 'Sistema solar', onclick: () => G.fecharGalaxia() });
-  const geral = el('button', { type: 'button', class: 'globo-visao-geral', text: 'Via Láctea', hidden: true, onclick: () => irPara(GX.centro, DIST.inicial, 55) });
   const salvar = el('button', { type: 'button', class: 'globo-salvar', text: 'Salvar imagem', onclick: () => salvarImagem() });
   const escala = el('div', { class: 'globo-escala', 'aria-hidden': 'true' }, el('span', { class: 'globo-escala-barra' }), el('span', { class: 'globo-escala-texto' }));
-  const raiz = el('div', { class: 'globo-galaxia-controles globo-recolhivel', hidden: true }, escala, el('div', { class: 'globo-sistema-topo' }, voltar, geral, salvar));
+  const raiz = el('div', { class: 'globo-galaxia-controles globo-recolhivel', hidden: true }, escala, el('div', { class: 'globo-sistema-topo' }, salvar));
   G.dom.raiz.append(raiz);
-  GX.dom = { raiz, geral, salvar, escala, escalaBarra: escala.firstChild, escalaTexto: escala.lastChild };
+  GX.dom = { raiz, salvar, escala, escalaBarra: escala.firstChild, escalaTexto: escala.lastChild };
+}
+
+/** Seções do painel de camadas (js/globo-camadas.js) desta escala, com as contagens dos catálogos. */
+export function secoesCamadas() {
+  const n = UNI.contagens();
+  const detalhe = { teia: n.galaxias ? `${num(n.galaxias)} galáxias` : null, quasares: n.quasares ? `${num(n.quasares)} quasares` : null, aglomerados: n.aglomerados ? `${num(n.aglomerados)} aglomerados` : null,
+    superaglomerados: n.super ? `${num(n.super)} superaglomerados` : null, vazios: n.vazios ? `${num(n.vazios)} vazios do SDSS` : null, galaxias: `${num((GX.ngc?.length || 0) + (GX.volume?.length || 0))} galáxias` };
+  return CAMADAS_UNIVERSO.map((g) => ({ titulo: g.grupo, itens: g.itens.map(([chave, texto]) => ({ tipo: 'caixa', texto, detalhe: detalhe[chave] || null, valor: FG[chave], mudar: (v) => definirCamada(chave, v) })) }));
 }
 
 /** Abre a escala de galáxias saindo do Sol: a câmera começa colada nele e se afasta até ver a Galáxia inteira. */
@@ -413,6 +504,9 @@ function irPara(p, dist, lat = null, ms = 2200) {
   GX.anim = { de: GX.foco.clone(), para: p, dist0: G.cam.dist, dist1: dist, lat0: G.cam.lat, lat1: lat ?? G.cam.lat, t0: performance.now(), ms };
   G.cam.vLat = G.cam.vLon = 0;
 }
+
+/** Foco da câmera no Sol (para o zoom contínuo de volta ao sistema solar). */
+export const focoNoSol = () => !!GX.foco && GX.foco.distanceTo(GX.sol) < 0.05;
 
 export const limitesDistancia = () => [GX.focoMin ?? DIST.min, DIST.max];
 
@@ -445,15 +539,16 @@ export function atualizarGalaxia(agora) {
   const olhar = GX.camera.getWorldDirection(_v.a);
   GX.uniformes.face.value = Math.min(1, Math.max(0, (Math.abs(olhar.y) - 0.12) / 0.5));
   GX.disco.material.opacity = Math.pow(GX.uniformes.face.value, 1.5);
+  GX.disco.visible = FG.viaLactea;
   GX.esferaUniverso.visible = G.cam.dist > 2e6;
-  GX.particulas.visible = GX.poeira.visible = GX.uniformes.face.value < 0.97; // de frente, só a imagem (as partículas somariam ~0)
+  GX.particulas.visible = GX.poeira.visible = FG.viaLactea && GX.uniformes.face.value < 0.97; // de frente, só a imagem (as partículas somariam ~0)
+  UNI.atualizarUniverso(G.cam.dist, FG, GX.camera);
   // perto do Sol (até uns 3 kpc), as estrelas reais aparecem e o modelo se apaga um pouco
   const dSol = GX.camera.position.distanceTo(GX.sol);
   GX.uniformes.perto.value = Math.max(0, Math.min(1, (4 - dSol) / 3));
   GX.disco.material.color.setScalar(1 - 0.75 * GX.uniformes.perto.value);
   GX.uniformes.escalaPx.value = G.dom.canvas.clientHeight * G.pixelRatio / (2 * Math.tan(GX.camera.fov * RAD / 2));
   GX.uniformes.pr.value = G.pixelRatio;
-  GX.dom.geral.hidden = !!a || (GX.foco.distanceTo(GX.centro) < 0.5 && G.cam.dist > 15 && G.cam.dist < 200);
   if (G.quadro % 2 === 0) posicionarRotulos();
   if (G.quadro % 10 === 0) atualizarEscala();
 }
@@ -471,6 +566,7 @@ function posicionarRotulos() {
   for (const r of GX.rotulos) {
     // marcos da Galáxia: pela faixa de zoom (distância da câmera ao foco); objetos pontuais: por estarem na região
     // vista (perto do foco ou da câmera), para que um objeto distante atrás do foco não ganhe nome por engano
+    if (r.oculto || !FG.nomes || (r.camada && !FG[r.camada])) { r.el.hidden = true; continue; }
     const ok = r.perto ? zoom <= r.ate && (GX.foco.distanceTo(r.p) <= 1.5 * zoom || cam.distanceTo(r.p) <= 2.5 * zoom)
       : zoom >= r.de && zoom <= r.ate;
     const p = ok ? projetar(r.p, rect) : null;
@@ -524,7 +620,9 @@ const kpcTexto = (kpc) => textoAnosLuz(kpc * AL_POR_KPC).replace(/^(\d)/, '$1');
 // ------------------------------------------------------------------ toques e cartões
 
 function candidatos() {
-  return [...GX.marcos, ...GX.locais, ...GX.masers, ...GX.globulares, ...GX.ngc];
+  const zoom = GX.G.cam.dist;
+  return [...GX.marcos, ...(FG.grupoLocal ? GX.locais : []), ...(FG.masers ? GX.masers : []), ...(FG.globulares ? GX.globulares : []),
+    ...(FG.galaxias ? [...GX.ngc, ...GX.volume] : []), ...UNI.candidatos(FG, zoom)];
 }
 
 /** Objeto sob o dedo: o mais próximo na tela dentro de 24 px ou do tamanho desenhado. */
@@ -536,7 +634,7 @@ function alvoSob(cx, cy) {
     const p = projetar(it.p, rect); if (!p) continue;
     const d = Math.hypot(p.x - x, p.y - y);
     const raioPx = it.diam / 2 * GX.uniformes.escalaPx.value / GX.G.pixelRatio / Math.max(1e-9, GX.camera.position.distanceTo(it.p));
-    const lim = Math.max(it.tipo === 'ngc' && !it.ob.nome ? 14 : 24, Math.min(raioPx, 160));
+    const lim = Math.max((it.tipo === 'ngc' && !it.ob.nome) || it.tipo === 'ungc' || it.tipo === 'mcxc' ? 14 : 24, Math.min(raioPx, it.tipo === 'super' ? 60 : 160));
     if (d <= lim && d < dMelhor) { melhor = it; dMelhor = d; }
   }
   if (melhor) return melhor;
@@ -562,15 +660,20 @@ export function focarNoToque(cx, cy) {
 }
 
 function irAte(it) {
-  const raio = it.tipo === 'galaxia-nossa' ? 20 : it.tipo === 'braco' ? 3 : it.diam / 2;
+  const raio = it.tipo === 'galaxia-nossa' ? 20 : it.tipo === 'braco' ? 3 : (it.diam || 1) / 2;
   if (it.tipo === 'universo') { irPara(GX.sol, it.distKpc * 2.6, null, 3000); return; }
-  const dist = it.tipo === 'aglomerado' ? 9000 : it.tipo === 'sol' ? 0.6 : it.tipo === 'centro' ? 1.2 : Math.max(0.05, raio * 3.2);
-  irPara(it.p, dist, null, 2600);
+  if (it.tipo === 'grupo-local') { irEscala('grupo-local'); return; }
+  const dist = it.tipo === 'aglomerado' ? 9000 : it.tipo === 'sol' ? 0.6 : it.tipo === 'centro' ? 1.2 : it.tipo === 'mcxc' ? Math.max(6000, raio * 8)
+    : it.tipo === 'super' ? raio * 3.5 : it.tipo === 'notavel' ? Math.max(4000, raio * 4) : Math.max(0.05, raio * 3.2);
+  // viagens longas (bilhões de anos-luz) demoram um pouco mais, para a escala ser percebida
+  const ms = 2600 + Math.min(2400, Math.abs(Math.log10(Math.max(1, it.p.distanceTo(GX.foco)) / Math.max(1, GX.G.cam.dist))) * 500);
+  irPara(it.p, dist, null, MOVIMENTO_REDUZIDO ? 1 : ms);
 }
 
 function mostrarCartao(it) {
   const G = GX.G;
   const ir = (texto = 'Ir até') => ({ texto, onclick: () => { irAte(it); G.fecharPainel(); } });
+  if (UNI.cartao(it, G, ir)) return;
   const dSol = it.p.distanceTo(GX.sol);
   const R0 = GX.meta.R0;
   if (it.tipo === 'sol') {
@@ -593,9 +696,19 @@ function mostrarCartao(it) {
       [it.mv != null ? `Magnitude absoluta ${num(it.mv, 1)}` : null, it.raioKpc ? `${num(it.raioKpc * 2 * AL_POR_KPC / 1000, 0)} mil anos-luz de diâmetro` : null].filter(Boolean).join(' · '),
       it.fonte || 'McConnachie 2012', [ir()]);
   } else if (it.tipo === 'universo') {
-    G.mostrarPainel('Universo observável', 'Tudo de onde a luz já teve tempo de chegar até nós desde o Big Bang, há 13,8 bilhões de anos. Por causa da expansão, a borda hoje está a 46,5 bilhões de anos-luz.',
-      'A luz mais antiga que vemos é a radiação cósmica de fundo · o universo inteiro pode ser muito maior (ou infinito) · visto “de fora” só como ilustração',
-      'Planck Collaboration 2018 (ΛCDM)', []);
+    const borda = num(CO.HORIZONTE_MPC * CO.AL_POR_MPC / 1e9, 1), idade = num(CO.IDADE, 2);
+    G.mostrarPainel('Universo observável', `Tudo de onde a luz já teve tempo de chegar até nós desde o Big Bang, há ${idade} bilhões de anos. Por causa da expansão, a borda hoje está a ${borda} bilhões de anos-luz.`,
+      `A luz mais antiga que vemos é a radiação cósmica de fundo, numa casca a ${num(CO.DIST_CMB_MPC * CO.AL_POR_MPC / 1e9, 1)} bilhões de anos-luz · o universo inteiro pode ser muito maior (ou infinito) · visto “de fora” só como ilustração`,
+      'Planck Collaboration 2020 (ΛCDM: H0 = 67,66 km/s/Mpc, Ωm = 0,311)', []);
+  } else if (it.tipo === 'grupo-local') {
+    G.mostrarPainel('Grupo Local', 'Nosso grupo de galáxias: a Via Láctea e Andrômeda, as duas maiores, mais a do Triângulo e umas 100 galáxias anãs, num espaço de ~10 milhões de anos-luz.',
+      `Andrômeda está a ${kpcTexto(GX.locais.find((g) => g.catalogo === 'Andromeda')?.distKpc || 765)} e vem na nossa direção a ~110 km/s; as duas devem se fundir daqui a uns 4 a 5 bilhões de anos`,
+      'McConnachie 2012 · van der Marel et al. 2012', [ir('Aproximar')]);
+  } else if (it.tipo === 'ungc') {
+    const u = it.u, metodo = METODOS[u.m] || (u.m ? `método ${u.m}` : 'método não informado');
+    G.mostrarPainel(it.nome, `${tipoUngc(u.tt)} a ${kpcTexto(u.d * 1000)}, distância medida por ${metodo}.`,
+      [u.diam ? `${num(u.diam * AL_POR_KPC / 1000, 0)} mil anos-luz de diâmetro` : null, u.MB != null ? `magnitude absoluta ${num(u.MB, 1)} (azul)` : null, u.lk ? `luz de ~${num(10 ** u.lk / 1e9, u.lk < 9 ? 2 : 0)} bilhões de sóis no infravermelho` : null, u.hi ? `${num(10 ** u.hi / 1e6, 0)} milhões de massas solares de hidrogênio` : null].filter(Boolean).join(' · '),
+      'Volume Local: Karachentsev, Makarov & Kaisina 2013', [ir()]);
   } else if (it.tipo === 'aglomerado') {
     G.mostrarPainel(it.nome, `Aglomerado de galáxias${it.n ? ` (${it.n})` : ''} a ${kpcTexto(it.distKpc)}.`,
       it.mpc ? 'Distância medida' : `Distância pelo desvio para o vermelho (z = ${num(it.z, 4)}, H0 = 70 km/s/Mpc)`, it.fonte, [ir()]);
@@ -607,9 +720,57 @@ function mostrarCartao(it) {
       `A ${kpcTexto(it.p.length())} do centro da Galáxia`, 'Baumgardt & Vasiliev 2021', [ir()]);
   } else if (it.tipo === 'ngc') {
     const c = cartaoObjeto(it.ob, G.estadoApp);
-    G.mostrarPainel(c.titulo, `${TIPOS_OBJETO[it.ob.tipo]?.[0] || 'Galáxia'} a ${kpcTexto(dSol)}${it.ob.distFonte === 'z' ? ' (pelo desvio para o vermelho)' : ''}.`,
-      `Cerca de ${num(it.diam * AL_POR_KPC / 1000, 0)} mil anos-luz de diâmetro`, c.fonte.split(' · ')[0], [ir(), { texto: 'Ver detalhes', onclick: c.detalhes }].filter((x) => x.onclick));
+    const como = it.u ? `, medida por ${METODOS[it.u.m] || 'métodos diretos'}` : it.ob.distFonte === 'z' ? ' (pelo desvio para o vermelho)' : '';
+    G.mostrarPainel(c.titulo, `${TIPOS_OBJETO[it.ob.tipo]?.[0] || 'Galáxia'} a ${kpcTexto(dSol)}${como}.`,
+      `Cerca de ${num(it.diam * AL_POR_KPC / 1000, 0)} mil anos-luz de diâmetro`, it.u ? `${c.fonte.split(' · ')[0]} · distância: Karachentsev et al. 2013` : c.fonte.split(' · ')[0], [ir(), { texto: 'Ver detalhes', onclick: c.detalhes }].filter((x) => x.onclick));
   }
+}
+
+/** Métodos de distância do catálogo de Karachentsev et al. 2013 (coluna f_Dist). */
+const METODOS = {
+  Cep: 'cefeidas', TRGB: 'ponta do ramo das gigantes vermelhas', SBF: 'flutuações do brilho superficial', TF: 'Tully-Fisher (rotação do disco)',
+  SN: 'supernova', mem: 'pertença a um grupo de distância medida', h: 'lei de Hubble (desvio para o vermelho)', RRL: 'estrelas RR Lyrae', BS: 'estrelas mais brilhantes',
+  FP: 'plano fundamental', PNLF: 'nebulosas planetárias', GCLF: 'aglomerados globulares', txt: 'estimativa da literatura',
+};
+/** Tipo morfológico de de Vaucouleurs (T) em português. */
+function tipoUngc(t) {
+  if (t == null) return 'Galáxia';
+  if (t <= -4) return 'Galáxia elíptica';
+  if (t <= 0) return 'Galáxia lenticular';
+  if (t <= 8) return 'Galáxia espiral';
+  return 'Galáxia irregular';
+}
+
+// ------------------------------------------------------------------ escalas (atalhos do zoom contínuo)
+
+/**
+ * Escalas desta cena, do Sol até a borda do universo observável: foco, distância da câmera (kpc) e uma linha sobre o
+ * que se vê. A escala atual é a de distância mais próxima (em log) da câmera; ir até uma é só uma viagem da câmera.
+ */
+export const ESCALAS = [
+  { id: 'vizinhanca', nome: 'Vizinhança do Sol', texto: 'estrelas a até milhares de anos-luz', foco: () => GX.sol, dist: 0.6 },
+  { id: 'via-lactea', nome: 'Via Láctea', texto: 'nossa galáxia vista de fora', foco: () => GX.centro, dist: DIST.inicial, lat: 55 },
+  { id: 'grupo-local', nome: 'Grupo Local', texto: 'Andrômeda, Triângulo e ~100 galáxias anãs', foco: () => GX.centroGrupoLocal, dist: 2600, lat: 30 },
+  { id: 'volume-local', nome: 'Volume Local', texto: 'galáxias até ~35 milhões de anos-luz, com distância medida', foco: () => GX.sol, dist: 22000, lat: 25 },
+  { id: 'laniakea', nome: 'Laniakea', texto: 'nosso superaglomerado e o Grande Atrator', foco: () => GX.sol, dist: 2.2e5, lat: 20 },
+  { id: 'teia', nome: 'Teia cósmica', texto: 'filamentos, paredes e vazios até ~1 bilhão de anos-luz', foco: () => GX.sol, dist: 1.1e6, lat: 25 },
+  { id: 'profundo', nome: 'Universo profundo', texto: 'quasares e as galáxias mais distantes', foco: () => GX.sol, dist: 7e6, lat: 25 },
+  { id: 'observavel', nome: 'Universo observável', texto: 'a radiação cósmica de fundo e a borda do que se pode ver', foco: () => GX.sol, dist: 4.2e7, lat: 20 },
+];
+
+/** Escala mais próxima da vista atual (pela distância da câmera, em escala logarítmica). */
+export function escalaAtual() {
+  if (!GX.aberto) return null;
+  const lz = Math.log10(GX.G.cam.dist);
+  return ESCALAS.reduce((m, e) => (Math.abs(Math.log10(e.dist) - lz) < Math.abs(Math.log10(m.dist) - lz) ? e : m), ESCALAS[0]);
+}
+
+/** Viagem até uma escala desta cena. */
+export function irEscala(id, ms = 3200) {
+  const e = ESCALAS.find((x) => x.id === id); if (!e) return false;
+  GX.G.fecharPainel?.();
+  irPara(e.foco(), e.dist, e.lat ?? null, MOVIMENTO_REDUZIDO ? 1 : ms);
+  return true;
 }
 
 // ------------------------------------------------------------------ imagem em alta resolução
@@ -675,7 +836,7 @@ function desenharSobreposicao(ctx, pr) {
   // créditos quebrados em linhas que cabem na largura, embaixo; a barra de escala fica acima deles
   ctx.font = `${10 * pr}px system-ui, -apple-system, sans-serif`;
   const largura = ctx.canvas.width - 2 * m, linhas = [];
-  for (const parte of ['Via Láctea: modelo de Reid et al. 2019, Wegg et al. 2015 e Bland-Hawthorn & Gerhard 2016', 'Estrelas: HYG e Gaia DR3 (ESA/Gaia/DPAC) · masers: Reid et al. 2019 · aglomerados globulares: Baumgardt & Vasiliev 2021', 'Grupo Local: McConnachie 2012 · galáxias: OpenNGC', `Painel Meteo · ${new Date().toLocaleDateString('pt-BR')}`]) {
+  for (const parte of ['Via Láctea: modelo de Reid et al. 2019, Wegg et al. 2015 e Bland-Hawthorn & Gerhard 2016', 'Estrelas: HYG e Gaia DR3 (ESA/Gaia/DPAC) · masers: Reid et al. 2019 · aglomerados globulares: Baumgardt & Vasiliev 2021', 'Grupo Local: McConnachie 2012 · galáxias: OpenNGC e Karachentsev et al. 2013', ...(GX.G.cam.dist > 3000 ? [UNI.notasFontes().join(' · ')] : []), `Painel Meteo · ${new Date().toLocaleDateString('pt-BR')}`]) {
     let atual = '';
     for (const palavra of parte.split(' ')) {
       const tentativa = atual ? `${atual} ${palavra}` : palavra;
@@ -693,7 +854,7 @@ function desenharSobreposicao(ctx, pr) {
 }
 
 export function notasFontes() {
-  return ['Via Láctea: modelo (Reid et al. 2019, Wegg et al. 2015, Bland-Hawthorn & Gerhard 2016)', 'Masers: Reid et al. 2019', 'Grupo Local: McConnachie 2012', 'Aglomerados globulares: Baumgardt & Vasiliev 2021', 'Galáxias: OpenNGC'];
+  return ['Via Láctea: modelo (Reid et al. 2019, Wegg et al. 2015, Bland-Hawthorn & Gerhard 2016)', 'Masers: Reid et al. 2019', 'Grupo Local: McConnachie 2012', 'Aglomerados globulares: Baumgardt & Vasiliev 2021', 'Galáxias: OpenNGC', ...UNI.notasFontes()];
 }
 
 export const estado = () => GX;

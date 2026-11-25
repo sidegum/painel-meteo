@@ -22,6 +22,8 @@ import { cartaoAstro, criarBlocoCeu } from './globo-ceu.js';
 import { texturaPlaneta, texturaBrilho, texturaReal } from './globo-texturas.js';
 import { criarEstrelas, ajustarEscalaEstrelas } from './globo-estrelas.js';
 import { valido, direcaoTexto, partesLocais } from './analise.js';
+import { montarEscalas, atualizarEscalas, idAtual, fecharLista, nomeDaEscala } from './globo-escalas.js';
+import { montarCamadas, abrirCamadas, atualizarCamadas, fecharCamadas, camadasAbertas } from './globo-camadas.js';
 
 // ------------------------------------------------------------------ 1. estado e constantes
 
@@ -491,6 +493,8 @@ function montarCena() {
   G.contornos = criarContornos(THREE);
   G.cena.add(G.contornos.grupo);
   G.grade = criarGrade({ THREE, uniformes: uniTerra, camada: G.dom.grade, latLonVec });
+  G.grade.ligar(prefs.ler('globoGrade', true));
+  G.semCidades = prefs.ler('globoSemCidades', false); G.dom.cidades.classList.toggle('desligada', G.semCidades);
 
   G.nuvens = new THREE.Mesh(new THREE.SphereGeometry(RAIO * 1.0065, seg[0], seg[1]), new THREE.ShaderMaterial({
     uniforms: { tNuvem: { value: null }, temNuvem: { value: 0 }, opacNuvem: { value: 1 }, sol: uniTerra.sol, olho: uniTerra.olho },
@@ -786,7 +790,16 @@ function distanciaQueCabe() {
  * @param {boolean} [continuo] gesto contínuo (pinça): o quanto passou do limite vale pelo tamanho do gesto, não pela soma dos eventos
  */
 function definirDist(d, continuo = false) {
-  if (G.galaxia) { const [min, max] = G.galaxia.limitesDistancia(); G.cam.dist = Math.max(min, Math.min(max, d)); return; }
+  if (G.galaxia) {
+    const [min, max] = G.galaxia.limitesDistancia();
+    // zoom contínuo: aproximar do Sol além do limite da galáxia volta ao sistema solar, de longe
+    if (d < min * 0.8 && G.galaxia.focoNoSol() && !G.trocandoEscala) {
+      G.trocandoEscala = true; setTimeout(() => { G.trocandoEscala = false; }, 1200);
+      fecharGalaxia(); G.cam.dist = DIST_MAX_SISTEMA * 0.9; G.foco.set(0, 0, 0); G.focoAlvo = null; G.animFoco = null;
+      return;
+    }
+    G.cam.dist = Math.max(min, Math.min(max, d)); return;
+  }
   const max = G.sistema ? DIST_MAX_SISTEMA : DIST.max;
   if (G.sistema && G.focoTerra && !G.trocandoEscala && !G.livre && d < DIST.max * G.focoTerra.raio * 0.97) { voltarParaTerraPeloZoom(); return; }
   G.cam.dist = G.sistema ? Math.max(G.focoDistMin || 0.3, Math.min(max, d)) : Math.max(DIST.min, Math.min(max, d)); // no sistema solar, de rente ao corpo em foco até além das Voyager
@@ -819,20 +832,49 @@ function seguirAfastando(pedido, max, continuo) {
 /** A escala mudou (Terra, sistema solar ou Via Láctea): gestos em curso recomeçam e o botão de voltar acompanha. */
 function mudouEscala() {
   G.trocasDeEscala = (G.trocasDeEscala || 0) + 1;
-  const b = G.dom.voltar;
-  b.hidden = !G.sistema;
-  b.textContent = G.galaxia ? '‹ Sistema solar' : '‹ Terra';
-  b.setAttribute('aria-label', G.galaxia ? 'Voltar ao sistema solar' : 'Voltar à Terra');
-  G.dom.raiz.classList.toggle('com-voltar', !!G.sistema);
+  atualizarEscalas(true);
 }
 
-/** Botão de voltar: da Via Láctea para o sistema solar; do sistema solar para a Terra, de frente para o local. */
-function voltarEscala() {
-  if (G.galaxia) { fecharGalaxia(); return; }
-  if (!G.sistema) return;
-  G.espaco.definirSistema(false);
-  const local = G.estadoApp?.local;
-  if (local) irPara(local.lat, local.lon, DIST.inicial, 900);
+/**
+ * Leva a câmera até uma escala (régua do computador, lista do celular, "‹ Terra"). Monta o que faltar no caminho:
+ * espaço, sistema solar e galáxia são preparados de antemão, mas num aparelho lento podem ainda estar carregando.
+ * @param {string} id escala de destino (globo-escalas.js: terra, orbita, sistema ou uma da galáxia)
+ */
+async function irParaEscala(id) {
+  const pedido = (G.pedidoEscala = (G.pedidoEscala || 0) + 1);
+  const valendo = () => pedido === G.pedidoEscala;
+  fecharPainel();
+  if (id === 'terra' || id === 'orbita') {
+    if (G.galaxia) fecharGalaxia();
+    if (G.sistema) G.espaco.definirSistema(false);
+    if (id === 'terra' && G.espacoAberto) await alternarEspaco();
+    if (id === 'orbita' && !G.espacoAberto) await alternarEspaco();
+    const local = G.estadoApp?.local;
+    if (id === 'terra' && local) irPara(local.lat, local.lon, DIST.inicial, 900);
+    mudouEscala();
+    return;
+  }
+  // sistema solar e além: o espaço precisa estar aberto e o sistema solar montado
+  if (!G.espacoAberto) await alternarEspaco();
+  if (!valendo() || !G.espacoAberto) return;
+  for (let i = 0; i < 240 && !G.sistema; i++) {
+    if (G.espaco?.definirSistema(true)) break;
+    if (i === 2) mostrarAviso('Preparando o sistema solar…', false);
+    await new Promise((ok) => setTimeout(ok, 250));
+    if (!valendo()) return;
+  }
+  esconderAviso();
+  if (!G.sistema) { mostrarAviso('O sistema solar ainda não carregou. Tente de novo em instantes.', false); return; }
+  if (id === 'sistema') {
+    if (G.galaxia) fecharGalaxia();
+    G.focoTerra = null; G.focoAlvo = null; G.foco.set(0, 0, 0);
+    G.animFoco = MOVIMENTO_REDUZIDO ? null : { de: G.foco.clone(), dist0: G.cam.dist, dist: distanciaVisaoGeral(), t0: performance.now(), ms: 1200 };
+    mudouEscala();
+    return;
+  }
+  if (!G.galaxia) await abrirGalaxia();
+  if (!valendo() || !G.galaxia) return;
+  G.galaxia.irEscala(id);
 }
 
 const EIXO_Y = new THREE.Vector3(0, 1, 0);
@@ -1257,26 +1299,26 @@ function montarDom(secao) {
       icone(svg('circle', { cx: 12, cy: 12, r: 6 }), svg('circle', { cx: 12, cy: 12, r: 1.6, class: 'cheio' }), svg('path', { d: 'M12 2v4M12 18v4M2 12h4M18 12h4' }))),
     el('button', { type: 'button', title: 'Dia e noite em tempo real', class: 'globo-btn-dianoite', 'aria-label': 'Dia e noite em tempo real', 'aria-pressed': String(G.diaNoite), onclick: alternarDiaNoite },
       icone(svg('circle', { cx: 12, cy: 12, r: 8 }), svg('path', { d: 'M12 4a8 8 0 0 1 0 16z', class: 'cheio' }))),
-    el('button', { type: 'button', title: 'Espaço', class: 'globo-btn-espaco', 'aria-label': 'Espaço: satélites e sistema solar', 'aria-pressed': 'false', onclick: alternarEspaco },
+    el('button', { type: 'button', title: 'Escalas: da Terra ao universo observável', class: 'globo-btn-escalas', 'aria-label': 'Escalas: da Terra ao universo observável', onclick: () => document.querySelector('.globo-onde')?.click() },
       icone(svg('circle', { cx: 12, cy: 12, r: 5 }), svg('ellipse', { cx: 12, cy: 12, rx: 10, ry: 3.4, transform: 'rotate(-20 12 12)' }))),
+    el('button', { type: 'button', title: 'Camadas: o que aparece na tela', class: 'globo-btn-camadas', 'aria-label': 'Camadas: o que aparece na tela', onclick: () => alternarCamadas() },
+      icone(svg('path', { d: 'M12 3 2.5 8 12 13l9.5-5z' }), svg('path', { d: 'm2.5 12 9.5 5 9.5-5' }), svg('path', { d: 'm2.5 16 9.5 5 9.5-5' }))),
     el('button', { type: 'button', title: 'Ajuda', 'aria-label': 'Como usar e fontes', onclick: mostrarAjuda },
       icone(svg('path', { d: 'M9.2 9a2.9 2.9 0 1 1 4.3 2.5c-.9.5-1.5 1.1-1.5 2.1v.6' }), svg('circle', { cx: 12, cy: 17.6, r: 1.1, class: 'cheio' }))));
   const rodape = el('div', { class: 'globo-rodape globo-recolhivel' }, legenda, linha, el('div', { class: 'globo-tempo-terra' }, rotuloHora, voltarAgora), el('div', { class: 'globo-notas' }, fonte, ciclones));
   const cidades = el('div', { class: 'globo-cidades', 'aria-hidden': 'true' });
   const grade = el('div', { class: 'globo-grade globo-recolhivel', 'aria-hidden': 'true' });
   const leitura = el('div', { class: 'globo-leitura', hidden: true, 'aria-hidden': 'true' });
-  // saída sempre à vista do sistema solar e da Via Láctea (não se recolhe com os outros controles)
-  const voltar = el('button', { type: 'button', class: 'globo-voltar', hidden: true, onclick: voltarEscala });
-  const raiz = el('div', { class: 'globo' }, canvas, grade, cidades, el('div', { class: 'globo-topo globo-recolhivel' }, chips), botoes, voltar, aviso, painel, leitura, rodape);
+  const raiz = el('div', { class: 'globo', 'data-escala': 'terra' }, canvas, grade, cidades, el('div', { class: 'globo-topo globo-recolhivel' }, chips), botoes, aviso, painel, leitura, rodape);
   secao.append(raiz);
-  G.dom = { raiz, canvas, chips, voltar, aviso, legenda, fonte, ciclones, faixa, rotuloHora, voltarAgora, tocar, dias, linha, painel, rodape, botoes, cidades, grade, leitura };
+  G.dom = { raiz, canvas, chips, aviso, legenda, fonte, ciclones, faixa, rotuloHora, voltarAgora, tocar, dias, linha, painel, rodape, botoes, cidades, grade, leitura };
   // leitura sob o cursor: só com mouse (no toque, o painel do ponto tocado faz esse papel)
   canvas.addEventListener('pointermove', (e) => { G.mouse = e.pointerType === 'mouse' ? { x: e.clientX, y: e.clientY } : null; });
   canvas.addEventListener('pointerleave', () => { G.mouse = null; });
   desenharTocar(false);
   montarCidades();
   G.mostrarPainel = mostrarPainelTexto; G.fecharPainel = fecharPainel; G.modoSistema = modoSistema; G.focarSistema = focarSistema; G.distanciaVisaoGeral = distanciaVisaoGeral; G.navegacaoLivre = navegacaoLivre; G.voarLivreAte = voarLivreAte;
-  G.abrirGalaxia = abrirGalaxia; G.fecharGalaxia = fecharGalaxia; G.mostrarAviso = mostrarAviso;
+  G.abrirGalaxia = abrirGalaxia; G.fecharGalaxia = fecharGalaxia; G.mostrarAviso = mostrarAviso; G.irParaEscala = irParaEscala;
   window.__globo = G; G.pontoNaTela = pontoNaTela; G.pontoDesenhado = pontoDesenhado; // só para testes automáticos de tela
   new ResizeObserver(ajustarTamanho).observe(raiz);
   // a barra de cima do app se recolhe sozinha: o globo cresce para ocupar a altura liberada
@@ -1284,6 +1326,36 @@ function montarDom(secao) {
   window.visualViewport?.addEventListener('resize', ajustarTamanho);
   configurarRecolhimento(raiz);
   montarLegenda(CAMADAS.find((c) => c.id === G.camada), null);
+  // escalas (régua no computador, lista no celular; "‹ Terra" sempre à vista fora da Terra) e painel de camadas
+  montarEscalas(G, irParaEscala);
+  montarCamadas(raiz);
+  G.aoMudarEscala = (id) => { if (camadasAbertas()) atualizarCamadas(tituloCamadas(id), secoesCamadas); };
+}
+
+// ---------- painel de camadas (o que aparece em cada escala) ----------
+
+const tituloCamadas = (id = idAtual(G)) => `Camadas · ${nomeDaEscala(id)}`;
+
+/** Seções do painel de camadas da escala atual: a Terra aqui; o espaço e a galáxia vêm dos módulos deles. */
+function secoesCamadas() {
+  const id = idAtual(G);
+  const tempo = { titulo: 'Tempo na Terra', itens: [
+    { tipo: 'opcoes', texto: '', valor: G.camada, opcoes: CAMADAS.map((c) => [c.id, c.nome]), mudar: (v) => carregarCamada(v, G.hora ?? 0) },
+    { tipo: 'caixa', texto: 'Dia e noite em tempo real', valor: G.diaNoite, mudar: () => alternarDiaNoite() },
+  ] };
+  const mapa = { titulo: 'Mapa', itens: [
+    { tipo: 'caixa', texto: 'Cidades e temperaturas', valor: !G.semCidades, mudar: (v) => { G.semCidades = !v; prefs.gravar('globoSemCidades', G.semCidades); G.dom.cidades.classList.toggle('desligada', G.semCidades); } },
+    { tipo: 'caixa', texto: 'Grade de coordenadas', valor: G.grade.ligada, mudar: (v) => { G.grade.ligar(v); prefs.gravar('globoGrade', v); } },
+  ] };
+  if (id === 'terra') return [tempo, mapa];
+  if (G.galaxia) return G.galaxia.secoesCamadas();
+  return [...(G.espaco?.secoesCamadas?.() || []), id === 'orbita' ? tempo : null];
+}
+
+function alternarCamadas() {
+  if (camadasAbertas()) { fecharCamadas(); return; }
+  fecharPainel(); fecharLista();
+  abrirCamadas(tituloCamadas(), secoesCamadas);
 }
 
 // ---------- controles que se recolhem ----------
@@ -1735,18 +1807,17 @@ function mostrarAjuda() {
 // ---------- espaço: satélites e sistema solar (módulo globo-espaco.js, carregado ao tocar em Espaço) ----------
 
 async function alternarEspaco() {
-  const b = G.dom.botoes.querySelector('.globo-btn-espaco');
   if (G.espacoAberto) {
-    G.espacoAberto = false; b.setAttribute('aria-pressed', 'false'); G.dom.raiz.classList.remove('com-espaco');
+    G.espacoAberto = false; G.dom.raiz.classList.remove('com-espaco');
     G.espaco?.fecharEspaco();
     irPara(G.cam.lat, G.cam.lon, Math.min(G.cam.dist, DIST.inicial), 900);
     return;
   }
-  G.espacoAberto = true; b.setAttribute('aria-pressed', 'true'); G.dom.raiz.classList.add('com-espaco');
+  G.espacoAberto = true; G.dom.raiz.classList.add('com-espaco');
   if (!G.espaco) {
     if (!G.espacoModulo) G.espacoModulo = import('./globo-espaco.js').catch(() => null);
     G.espaco = await G.espacoModulo;
-    if (!G.espaco) { G.espacoModulo = null; G.espacoAberto = false; b.setAttribute('aria-pressed', 'false'); G.dom.raiz.classList.remove('com-espaco'); mostrarAviso('Não foi possível carregar o espaço. Verifique a conexão e toque de novo.', false); return; }
+    if (!G.espaco) { G.espacoModulo = null; G.espacoAberto = false; G.dom.raiz.classList.remove('com-espaco'); mostrarAviso('Não foi possível carregar o espaço. Verifique a conexão e toque de novo.', false); return; }
   }
   if (!G.espacoAberto) return;
   fecharPainel();
@@ -1837,6 +1908,7 @@ function laco(agora) {
   if (G.quadro % 4 === 2 && !G.sistema) atualizarGrade();
   if (G.quadro % 6 === 3) atualizarLeitura();
   if (G.quadro % 30 === 0) atualizarRelogio();
+  if (G.quadro % 12 === 6) atualizarEscalas();
   if (G.galaxia) G.galaxia.atualizarGalaxia(agora);
   else if (G.espaco && G.espacoAberto) G.espaco.atualizarEspaco(agora);
   if (G.camada === 'pressao') G.terra.material.uniforms.isobaras.value = Math.max(0, Math.min(1, (2.6 - c.dist) / 0.8));

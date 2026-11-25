@@ -15,7 +15,7 @@ Fontes e regras:
 - MCXC (Piffaretti et al. 2011): aglomerados de galáxias em raios X, com massa M500 e raio R500.
 - MSCC (Chow-Martínez et al. 2014): superaglomerados de aglomerados de Abell; nomes populares pelos membros
   (NOMES_SUPER: um superaglomerado leva o nome se contiver o aglomerado de referência).
-- Vazios: VoidFinder no SDSS DR7 (Douglass et al. 2023) ou Pan et al. 2012, o que vier.
+- Vazios: VoidFinder no SDSS DR7 (Douglass et al. 2023), esfera máxima de cada vazio, cosmologia do Planck 2018.
 - SDSS DR16Q (Lyke et al. 2020): amostra regular de 1 em 8 quasares (a amostra completa tem ~750 mil).
 """
 import json
@@ -196,36 +196,26 @@ def main():
                    'l': r(numero(c.get('L500')), 3)})
     dados['aglomerados'] = ag
     # superaglomerados
-    su = []
+    su, usados = [], set()
     for s in tabela(fontes / 'mscc.tsv'):
         z, ra, dec = numero(s.get('z')), numero(s.get('RAJ2000')), numero(s.get('DEJ2000'))
         if None in (z, ra, dec):
             continue
         membros = [m.strip() for m in s.get('memCl', '').split(',') if m.strip() and m.strip() != '...']
         nome = next((NOMES_SUPER[m[:5]] for m in membros if m[:5] in NOMES_SUPER), None)
+        nome = None if nome in usados else nome  # um nome por superaglomerado (o primeiro da lista)
+        usados.add(nome)
         su.append({'id': int(numero(s['Seq'])), 'n': nome, 'ra': ra, 'dec': dec, 'z': z, 'dmax': numero(s.get('dmax')),
                    'nm': int(numero(s.get('Nm')) or 0), 'membros': membros[:12]})
     dados['superaglomerados'] = su
-    # vazios
+    # vazios: esfera máxima de cada vazio (centro, distância comóvel s e raio efetivo Reff, em h⁻¹ Mpc)
     vz = []
-    for nome in ('vazios-douglass.tsv', 'vazios-pan.tsv'):
-        if not (fontes / nome).exists():
+    for v in tabela(fontes / 'vazios.tsv'):
+        ra, dec, s_, reff = (numero(v.get(k)) for k in ('RAJ2000', 'DEJ2000', 's', 'Reff'))
+        if None in (ra, dec, s_, reff) or v.get('Cosmo', 'Planck2018') != 'Planck2018':
             continue
-        try:
-            linhas = tabela(fontes / nome)
-        except StopIteration:
-            continue
-        for v in linhas:
-            ra = numero(v.get('RAJ2000') or v.get('_RA') or v.get('RA'))
-            dec = numero(v.get('DEJ2000') or v.get('_DE') or v.get('DE'))
-            z = numero(v.get('z') or v.get('Z'))
-            raio = numero(v.get('Reff') or v.get('R') or v.get('Rad') or v.get('radius'))
-            if None in (ra, dec, z, raio):
-                continue
-            vz.append({'ra': round(ra, 3), 'dec': round(dec, 3), 'z': round(z, 5), 'r': round(raio / H, 2)})  # h⁻¹ Mpc → Mpc
-        if vz:
-            dados['fontes']['vazios'] = nome
-            break
+        vz.append({'ra': round(ra, 3), 'dec': round(dec, 3), 'd': round(s_ / H, 1), 'r': round(reff / H, 1), 'borda': v.get('edge') == '1'})
+    dados['fontes']['vazios'] = 'Douglass et al. 2023, ApJS 265, 7 (VoidFinder no SDSS DR7; VizieR J/ApJS/265/7)'
     dados['vazios'] = vz
     # nuvens de pontos (binário)
     g2 = montar_2mrs(fontes)

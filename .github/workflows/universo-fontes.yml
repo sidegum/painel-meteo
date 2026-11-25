@@ -13,6 +13,7 @@ on:
     paths:
       - scripts/globo/baixar-fontes-universo.sh
       - scripts/globo/montar-cmb.py
+      - scripts/globo/reduzir-*.py
       - .github/workflows/universo-fontes.yml
 
 permissions:
@@ -27,16 +28,16 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Baixar os catálogos
-        run: scripts/globo/baixar-fontes-universo.sh scripts/globo/fontes/universo "$MODO"
       - uses: actions/setup-python@v5
-        if: env.MODO == 'completo'
         with:
           python-version: '3.12'
+      - name: Baixar os catálogos
+        run: scripts/globo/baixar-fontes-universo.sh scripts/globo/fontes/universo "$MODO"
       - name: Radiação cósmica de fundo (Planck)
         if: env.MODO == 'completo' && hashFiles('scripts/globo/montar-cmb.py') != ''
         continue-on-error: true
         run: |
+          if [ -f vendor/ceu/cmb-4096.jpg ]; then echo 'mapa já montado (apague vendor/ceu/cmb-4096.jpg para refazer)'; exit 0; fi
           pip install --quiet numpy healpy pillow
           python3 scripts/globo/montar-cmb.py vendor/ceu
       - name: Gravar no branch
