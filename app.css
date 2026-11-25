@@ -929,3 +929,59 @@ button.globo-rotulo { cursor: pointer; }
 @media (min-width: 1100px) {
   .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { column-gap: 16px; }
 }
+
+/* Resumo com quatro colunas (1.11.0): mínima, máxima, chuva e rajada. A rajada saiu da linha solta abaixo do
+   resumo e virou parte dele (regra do produto: destacar rajadas). */
+.resumo-temp { grid-template-columns: 1fr 1fr 1fr 1.15fr; }
+:root[data-visual="a"] .bloco-t + .bloco-t { padding-left: 10px; }
+.bloco-t.rajada b { color: var(--rajada-txt); }
+.bloco-t.rajada b i { font-style: normal; font-size: 12px; font-weight: 560; letter-spacing: 0; color: var(--fraco); }
+.bloco-t.rajada.r-fortes b, .bloco-t.rajada.r-muito-fortes b { color: var(--quente); }
+.bloco-t .raj-det { margin-top: 2px; font-size: 11.5px; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.bloco-t .raj-det .seta { width: 11px; height: 11px; }
+@media (max-width: 359px) { .bloco-t b { font-size: 21px; } }
+
+/* Radar de tempestade (1.11.0): bloco fixo logo abaixo do resumo de hoje. Radar desenhado à esquerda, leitura à
+   direita. A cor da borda segue o nível: neutro sem tempestade, âmbar com risco moderado, vermelho com tempestade
+   chegando, sobre o local ou forte. */
+.tempestade { display: flex; align-items: center; gap: 14px; width: 100%; margin: 10px 0 4px; padding: 12px 14px; border: 0; border-radius: 16px;
+  background: var(--sup); color: var(--texto); font: inherit; text-align: left; box-shadow: inset 3px 0 0 var(--linha); }
+.tempestade[data-nivel="moderado"] { box-shadow: inset 3px 0 0 var(--rajada); }
+.tempestade[data-nivel="alto"] { box-shadow: inset 3px 0 0 var(--quente); background: var(--alerta-fundo); }
+.tp-radar { width: 84px; height: 84px; flex: none; display: block; }
+.tp-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tp-rot { font-size: 12px; font-weight: 620; letter-spacing: .03em; text-transform: uppercase; color: var(--fraco); }
+.tp-txt strong { font-size: 16px; font-weight: 680; line-height: 1.2; }
+.tp-sub { font-size: 13.5px; color: var(--fraco); }
+.tp-prev { font-size: 13px; color: var(--fraco); margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--linha); }
+.tp-prev.com-risco { color: var(--rajada-txt); font-weight: 600; }
+.tempestade[data-nivel="alto"] .tp-prev.com-risco { color: var(--quente); }
+.tp-lista { margin: 0 0 10px; padding-left: 18px; }
+.tp-lista li { margin: 0 0 6px; }
+@media (min-width: 1100px) { .tp-radar { width: 104px; height: 104px; } .tp-txt strong { font-size: 18px; } }
+
+/* Computador (1.11.0): a primeira tela de Hoje, Amanhã e do dia aberto vira duas colunas, com o resumo e o radar
+   de tempestade à esquerda e o gráfico à direita, para tudo caber na primeira tela de um monitor. A partir de
+   1600 px o texto principal cresce um pouco (monitores de 2560 px). */
+@media (min-width: 1100px) {
+  .primeira { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: auto auto auto 1fr; column-gap: 24px; align-items: start; }
+  .primeira > .resumo { grid-column: 1; grid-row: 1 / span 2; margin-top: 6px; }
+  .primeira > .tempestade, .primeira > .linha-temporal { grid-column: 1; grid-row: 3; }
+  .primeira > .troca { grid-column: 2; grid-row: 1; margin-top: 6px; }
+  .primeira > .grafico-primeira { grid-column: 2; grid-row: 2 / span 3; }
+  .primeira > .frase, .primeira > p { grid-column: 1 / -1; }
+}
+@media (min-width: 1600px) {
+  .resumo[data-fundo] .resumo-agora b { font-size: 76px; }
+  .resumo-ceu .cond { font-size: 22px; }
+  .bloco-t b { font-size: 28px; }
+  .bloco-t small { font-size: 13px; }
+  .resumo-chuva strong { font-size: 18px; }
+  .resumo-chuva .det, .resumo-quando { font-size: 15px; }
+  .secao h2 { font-size: 14px; }
+  :root[data-visual] .nav button { font-size: 15px; }
+}
+
+/* Chuva medida (1.11.0): quatro colunas sem cortar o valor ("24,2 mm" cabia como "24…" no celular). */
+.chuvas .med { padding: 10px 8px; }
+.chuvas .med-v { font-size: 16px; white-space: normal; overflow: visible; overflow-wrap: anywhere; }

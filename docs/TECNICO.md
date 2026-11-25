@@ -422,7 +422,7 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
 
 ### 5.3 Primeira tela (`renderPrimeira`)
 
-Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mínima, a máxima e a chance, a resposta "Vai chover", o volume e a janela, o cartão de risco de temporal (`cartaoTemporal`, só com risco moderado ou alto), a rajada e o gráfico horário com três modos:
+Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mínima, a máxima, a chance e a rajada (`blocoRajada`, desde a 1.11.0 dentro do resumo: valor do consenso, direção e hora do pico), a resposta "Vai chover", o volume e a janela. Abaixo do resumo: em Hoje, o **radar de tempestade** (`blocoTempestade`, seção 5.3.1), sempre presente; nos outros dias, o cartão de risco de temporal (`cartaoTemporal`, só com risco moderado ou alto). Por fim, o gráfico horário com três modos. O modo inicial é Chuva quando há chance de chuva no dia (ou chuva agora ou chegando) e Temperatura quando não há, para a tela não abrir num gráfico vazio; a escolha da pessoa vale até fechar o app (`estado.modoGrafico`). A sensação máxima só aparece quando difere da máxima em 2 °C ou mais. No computador (1100 px ou mais), a primeira tela vira duas colunas: resumo e radar à esquerda, gráfico à direita.
 
 - **Chuva** (`graficoChance`):
   - A chance por hora vem de `chanceHoraria(ms)`: a fração de **todos** os membros de cenários com 0,2 mm ou mais na hora, se houver 10 ou mais. Sem isso, a mediana de `precipitation_probability` dos modelos.
@@ -445,6 +445,25 @@ Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mí
 2. Para na primeira hora com menos de 0,1 mm, com janela máxima de 12 h.
 3. Abaixo de 0,2 mm no total, devolve `{ fraca: true }`.
 
+### 5.3.1 Radar de tempestade (`blocoTempestade`, 1.11.0)
+
+Pedido do Gustavo: um bloco fixo logo abaixo do resumo de hoje que sempre mostre possíveis temporais se aproximando. Ele junta o que é **medido** (radar) e o que é **previsto** (modelos e INMET), sem contradizer o resto da tela.
+
+**Leitura do radar (`js/dados.js`).**
+- `dbzDoPixel(r, g, b, a)`: converte a cor de um pixel da paleta 2 da RainViewer ("Universal Blue") na refletividade exata em dBZ, pela tabela oficial de cores (`rainviewer_api_colors_table.csv`, conferida em 2026-11-25). Os tiles são pedidos sem suavização (`0_0`), então as cores são as da tabela: de -10 a 14 dBZ, bege com um alfa por valor (`DBZ_ALFA`); de 15 a 64 dBZ, uma cor opaca por valor (`DBZ_OPACO`); 65 ou mais, branco.
+- `gradeRadar` passou a devolver também `dbz`: a refletividade máxima em células de 2 x 2 pixels (256 x 256 células, cerca de 4 km no RS) do mesmo mosaico 2 x 2 de zoom 6 já usado pela chuva chegando. Nenhuma requisição a mais.
+- `buscarChegadaChuva` devolve, além da chegada da chuva: `tempestades` (`celulasTempestade`), `movimento` (velocidade e rumo dos ecos, o mesmo vetor da chuva chegando, só quando as medidas de 30 e 60 min concordam) e `mapa` (a grade de dBZ, para o desenho). Se um núcleo forte chega antes do que a regra da chuva chegando encontrou, a chegada da chuva passa a ser a dele: a tela nunca diz "tempestade chegando" e "não deve chover" ao mesmo tempo.
+
+**Núcleos (`celulasTempestade`, `classeNucleo`, em `js/analise.js`).** Limites em `REGRAS.tempestade`:
+- células com 40 dBZ ou mais viram núcleos por vizinhança de 8; classe pela refletividade máxima: 40 dBZ chuva forte, 45 dBZ tempestade (convecção, em geral com raios), 55 dBZ tempestade forte (granizo possível);
+- descarta núcleos menores que 30 km² (salvo acima de 50 dBZ) e além de 250 km;
+- distância = célula do núcleo mais perto do local; direção = centro do núcleo ponderado pela refletividade linear (Z);
+- chegada: cada célula segue o movimento medido; a chegada é o primeiro instante em que alguma passa a até 10 km do local, dentro de 3 h. Tendência: sobre o local, chegando, passando ao lado ou se afastando (cosseno entre o movimento e a direção ao local). Sem movimento medido, só a posição.
+
+**Risco.** `riscoTemporal` ganhou `nucleoRadar`: um núcleo de tempestade sobre o local ou chegando em até 2 h leva o risco de hoje a pelo menos moderado (forte: alto). O aviso do INMET continua prevalecendo; o radar só pode subir o nível. Com isso o fundo do resumo, o cartão e o bloco ficam coerentes.
+
+**Tela.** O bloco mostra o radar desenhado (`desenharRadarTempestade`: 250 km em volta, norte para cima, anéis de 50, 100 e 200 km, seta do movimento), a frase do núcleo que mais importa (`fraseNucleo`), quantas outras tempestades há no raio e o risco previsto para hoje e amanhã (`riscoPrevisto`, o mesmo `avaliarRisco` do cartão, com a janela de horas em que CAPE, chuva por hora ou rajada passam dos limites, ou o período do aviso). Cor: neutra sem risco, âmbar com risco moderado, vermelha com risco alto. Ao tocar (`detalheTempestade`): todos os núcleos, o movimento, os motivos, os avisos e "Como funciona" com os limites do método. Radar com mais de 30 min ou fora do ar aparece como tal; a previsão continua.
+
 ### 5.4 Hoje: detalhes (`renderHojeDetalhes`)
 
 A ordem é:
@@ -463,14 +482,15 @@ A ordem é:
 ### 5.5 Outras abas
 
 - **Amanhã** (`renderAmanhaDetalhes`): a mesma primeira tela, com `desdeAgora = false`, mais a tabela por modelo (`tabelaModelosDia`) e o índice UV (`textoUv`).
-- **Semana** (`renderSemana`, `tabelaLimites`, `tabelaFaixas`): um dia por linha com resumo, números e confiança, sem fontes nem tabela de modelos (o detalhe por modelo fica na aba Modelos). Gráficos e tabelas sem subdescrição.
+- **Semana** (`renderSemana`): um dia por linha com resumo, números e confiança, sem fontes nem tabela de modelos, e só dois gráficos de tendência (temperatura e rajada). Desde a 1.11.0 o gráfico de chuva diária (mediana sem condição, que mostrava 0 mm ao lado de "4 mm" na lista), a faixa provável e a tabela de limites saíram da Semana; as duas tabelas foram para a aba Modelos.
+- **Tabela de limites coerente** (`limitesCoerentes`, 1.11.0): a chance de passar de 1 mm é a própria chance do dia (calibrada); 10 e 30 mm mantêm a proporção dos cenários em relação a 1 mm. Antes, a tabela mostrava a fração bruta dos cenários (ex.: 43%) ao lado da chance calibrada do dia (26%).
 - **Dia** (aba `dia`, fora da barra; desde a 1.8.3). Tocar num dia da Semana chama `abrirDia(data)`: o dia de hoje vai para a aba Hoje e o de amanhã para a aba Amanhã. Os outros abrem o mesmo painel da Amanhã para aquele dia: `renderPrimeira` com `diaIndice` e `renderDiaDetalhes(alvo, data, diaIndice, id)`, a mesma função que a Amanhã usa.
   - A tela abre mesmo nos dias distantes; a imprecisão aparece na confiança, calculada com o `diaIndice` real.
   - O botão "Semana" (`[data-voltar-semana]`) volta, e a barra mantém Semana marcada.
   - Deslizar passa para o dia seguinte ou anterior (do 3º dia anterior volta para Amanhã).
   - O dia aberto fica em `estado.diaAberto` e é redesenhado na fila de `renderTudo`. Se a data sair da previsão, a tela volta para a Semana.
 - **Subdescrições**: um bloco autoexplicativo não leva texto abaixo do título. Ficam só a nota de fonte ("Fonte · Horário") onde ela existe e avisos que mudam a leitura do dado, como `notaConcordancia` (sem ensemble, a fração de modelos é concordância, não probabilidade).
-- **Modelos** (`renderModelos`, `resumoAprendizado`, `tabelaAcerto`): os pesos atuais, o que já foi aprendido e o acerto por modelo e antecedência.
+- **Modelos** (`renderModelos`, `resumoAprendizado`, `tabelaAcerto`): os pesos atuais, o que já foi aprendido, faixa provável e chance por limite (vindas da Semana) e o acerto por modelo e antecedência. Desde a 1.11.0 o acerto mostra aberta só a estação mais próxima e só a previsão feita na véspera; 2, 3 e 5 dias antes e as outras estações ficam num toque. A data de divergência traz o dia e a data (`quandoCurto`), porque "qua" sozinho é ambíguo quando cai na semana seguinte.
 - **El Niño** (`renderElNino`, `painelEnso`, `intensidade`, `barrasProb`, `comparacaoHistorica`): os índices ONI e RONI, a discussão do CPC, as probabilidades do CPC e do IRI, e a estimativa diária do Niño 3.4.
   - Desde a 1.8.5, a aba mostra também o que o El Niño faz no RS.
   - **Ordem da tela (1.8.8):** resumo (`painelResumo`), notícias, efeitos no RS e episódios ficam abertos; tudo o que é técnico (`painelEnso`, gráficos, glossário, probabilidades da NOAA, IRI e status oficial) fica recolhido em "Dados técnicos" (`.enso-tecnico`). Na tela aberta não há siglas nem texto em inglês: trimestres viram meses (`trimestrePt`, ex.: OND → out–dez), RONI é "índice oficial", ONI "índice antigo" e o Niño 3.4 convencional "medida bruta".
@@ -524,7 +544,7 @@ A ordem é:
   2. Código de tempo 96 ou 99 do UKMO. Pela documentação da Open-Meteo, os códigos 96 e 99 só vêm de modelos com previsão explícita de granizo (ICON, UKMO). Os ECMWF só informam 95 e 97.
   3. Ambiente favorável, só com risco de temporal moderado ou alto: CAPE ≥ 2000 J/kg e nível de congelamento ≤ 4200 m nas horas de CAPE alto.
 
-  Para isso, `VARS_HORA` ganhou `weather_code` e `freezing_level_height`. Com granizo, o cartão aparece no mínimo como risco moderado. O cartão também passou a listar só os avisos válidos no dia dele (`avisosDia`).
+  Para isso, `VARS_HORA` ganhou `weather_code` e `freezing_level_height`. **Correção 1.11.0:** ECMWF IFS, AIFS e UKMO não publicam `freezing_level_height` na Open-Meteo (conferido em 2026-11-25), então o sinal 3 nunca disparava. O nível de congelamento agora vem do GFS auxiliar (`prev.auxiliar.congelamento`, já pedido para o UV) quando os modelos da previsão não o têm. Com granizo, o cartão aparece no mínimo como risco moderado. O cartão também passou a listar só os avisos válidos no dia dele (`avisosDia`).
 - **Estilo nativo (1.9.5):** bloco de regras no fim do `app.css`.
   - Seções `.secao` viram cartões agrupados (fundo `--sup`, cantos de 16 px), com título pequeno em maiúsculas.
   - Os seletores Chuva/Temperatura/Céu e Restantes/Dia todo viram controles segmentados (`.troca-modo` e `.troca-horas`).
@@ -701,6 +721,8 @@ Nenhuma chave contém a localização ou o IP do usuário.
 - `test/ceu.test.mjs`: cálculos do céu conferidos com fatos publicados (equinócio, solstício, Gemínidas, eclipses de 2026, estrelas circumpolares).
 - `worker/test/worker.test.mjs`: 24 testes dos parsers e das regras do Worker, com fixtures reais.
 - `test/calibracao.test.mjs`: leitor de ZIP e CSV do INMET, agregação diária, viés, fator, validação fora da amostra e aplicação no app (séries, cenários, pesos).
+- `test/tempestade.test.mjs`: tabela de cores do radar, classes, núcleos (chegando, se afastando, passando, sobre o local, ruído), risco com radar e tabela de limites coerente.
+- `test/e2e/telas.mjs` (1.11.0): teste de tela. Abre o app no Chromium sem rede externa, com respostas reais gravadas (`test/e2e/amostra.json.gz`, gerado por `scripts/gravar-amostra.mjs` no workflow `amostra.yml`), percorre todas as abas no celular (390 px) e no computador (2560 px) e falha com "null", "undefined", "NaN", erro de console ou rolagem horizontal. Também injeta um cenário de tempestade. Com uma pasta como argumento, salva capturas (temas escuro e claro). Roda no `testes.yml`.
 - `test/cidades.test.mjs`: normalização da busca de cidades (com respostas reais da geocodificação), desambiguação, destaque, favoritas e recentes.
 - O comando `npm test` roda todos.
 

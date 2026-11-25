@@ -2,7 +2,7 @@
 import { CONFIG } from './config.js';
 import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
-  indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, horasProvaveisDeChuva, fraseDoDia,
+  indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, limitesCoerentes, horasProvaveisDeChuva, fraseDoDia,
   horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
   calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
@@ -18,7 +18,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.10.0';
+const VERSAO = '1.11.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -154,6 +154,8 @@ function lembrarGps(l) {
 }
 
 const pontoExato = () => estado.localExato || estado.local;
+// Nome do local no meio de uma frase: a posição do GPS vira "o seu local" (o rótulo "Sua localização" é do topo).
+const localNaFrase = () => (estado.local?.origem === 'gps' || !estado.local?.nome ? 'o seu local' : estado.local.nome);
 
 // Cidade escolhida à mão vale só nesta sessão; ao abrir o app de novo, volta para a posição atual.
 function marcarEscolha(sim) { try { if (sim) sessionStorage.setItem('localEscolhido', '1'); else sessionStorage.removeItem('localEscolhido'); } catch {} }
@@ -677,7 +679,7 @@ function analisarDia(data, diaIndice, desdeAgora) {
     tminFaixa: [minimo(resumosTodo.map((x) => x.tmin)), maximo(resumosTodo.map((x) => x.tmin))],
     tmaxFaixa: [minimo(resumosTodo.map((x) => x.tmax)), maximo(resumosTodo.map((x) => x.tmax))],
     rajadaPico: pico === null ? null : { ms: p.horas[pico], valor: cons.med[pico], dir: dirPico },
-    limites: probLimites(resumos, membros),
+    limites: limitesCoerentes(probLimites(resumos, membros), av.prob),
     modelosComDado: resumos.filter((x) => x.chuva !== null).map((x) => x.modelo),
   };
   cacheDias.set(chave, r);
@@ -890,7 +892,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     : `≈ ${fmt.mm(resto.mm)} ${resto.maisDe12h ? 'até pelo menos' : 'até'} ${fmt.hora(resto.ate, p.offset)}`;
   const origemAgora = chovendo ? (agoraChuva.estacao?.valor >= REGRAS.chuvaHoraMm ? `medido pela estação ${agoraChuva.estacao.fonte.nome}` : 'visto pelo radar') : '';
   if (!chovendo && temChuva && av.volume) detalhe.push(`cerca de ${fmt.mm(av.volume.mediana)}${av.volumeIncerto ? ` (provável entre ${fmt.n(av.volume.min, 0)} e ${fmt.n(av.volume.max, 0)} mm)` : ''}`);
-  if (chegando) detalhe.unshift(`deve começar por volta das ${fmt.horaMin(chegando.chegaMs, p.offset)}${chegando.vemDe ? `, vinda do ${chegando.vemDe}` : ''} (radar)`);
+  if (chegando) detalhe.unshift(`deve começar por volta das ${fmt.horaMin(chegando.chegaMs, p.offset)}${chegando.vemDe ? `, vinda do ${DIRECOES[chegando.vemDe] || chegando.vemDe}` : ''} (radar)`);
   const jan = a.horasChuva.janela;
   if (!chovendo && !chegando && temChuva && jan) detalhe.push(`mais provável ${fmt.hora(jan.ini, p.offset)} a ${fmt.hora(jan.fim + 3600000, p.offset)}`);
 
@@ -915,30 +917,28 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     el('div', { class: 'resumo-temp' },
       el('span', { class: 'bloco-t min' }, el('small', { text: 'mínima' }), el('b', { class: 'tmin', text: fmt.c(a.tmin) ?? '–' })),
       el('span', { class: 'bloco-t max' }, el('small', { text: 'máxima' }), el('b', { class: 'tmax', text: fmt.c(a.tmax) ?? '–' }),
-        valido(a.sensMax) && Math.round(a.sensMax) !== Math.round(a.tmax) ? el('small', { class: 'sens-max', text: `sensação ${fmt.c(a.sensMax)}` }) : null),
-      el('span', { class: 'bloco-t chuva' }, el('small', { text: 'chuva' }), el('b', { text: chovendo ? 'agora' : (av.prob === null ? '–' : fmt.pct(av.prob)) }))),
+        valido(a.sensMax) && Math.abs(Math.round(a.sensMax) - Math.round(a.tmax)) >= 2 ? el('small', { class: 'sens-max', text: `sensação ${fmt.c(a.sensMax)}` }) : null),
+      el('span', { class: 'bloco-t chuva' }, el('small', { text: 'chuva' }), el('b', { text: chovendo ? 'agora' : (av.prob === null ? '–' : fmt.pct(av.prob)) })),
+      blocoRajada(a, av, p)),
     el('div', { class: 'resumo-chuva' + (chovendo ? ' chovendo' : '') },
       el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
       el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
 
   const filhos = [resumo];
-  if (risco && risco.nivel !== 'baixo') filhos.push(cartaoTemporal(risco));
-
-  // rajada
-  const rp = a.rajadaPico;
-  filhos.push(el('div', { class: 'linha-rajada' },
-    el('span', { class: 'raj' },
-      el('span', { class: 'rot', text: 'Rajada ' }),
-      rp ? el('strong', { text: `${Math.round(av.rajada?.mediana ?? rp.valor)} km/h` }) : ausente('sem dado'),
-      rp ? el('span', { class: 'raj-det' }, ` de ${direcaoTexto(rp.dir) || '?'} `, setaVento(rp.dir), ` às ${fmt.hora(rp.ms, p.offset)}`) : '')));
-
+  // Hoje: o radar de tempestade fica sempre logo abaixo do resumo e já inclui o risco de temporal de hoje e amanhã.
+  // Nos outros dias, o cartão de risco aparece só quando há risco moderado ou alto.
+  if (diaIndice === 0) filhos.push(blocoTempestade(risco, data));
+  else if (risco && risco.nivel !== 'baixo') filhos.push(cartaoTemporal(risco));
 
   // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
   // só as horas deste dia: hoje, da hora atual até 23h; amanhã, de 0h a 23h
   const ini = p.horas[(desdeAgora && a.idxAgora.length ? a.idxAgora : a.idxTodo)[0]];
   const fim = p.horas[a.idxTodo[a.idxTodo.length - 1]] + 3600000;
   const caixa = el('div', { class: 'grafico-primeira' });
-  let modo = 'chance';
+  // Gráfico inicial: chuva quando há chance de chuva no dia (ou chuva agora/chegando); sem chuva, a temperatura,
+  // para não abrir num gráfico vazio. A escolha da pessoa vale até fechar o app (estado.modoGrafico).
+  estado.modoGrafico ||= {};
+  let modo = estado.modoGrafico[diaIndice] || (temChuva || chovendo || chegando ? 'chance' : 'temp');
   const botoes = el('div', { class: 'troca', role: 'group', 'aria-label': 'Gráfico' });
   const iniDia = p.horas[a.idxTodo[0]];
   const desenharModo = () => {
@@ -946,7 +946,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     const todas = desdeAgora && prefs.ler('horasTodas', false);
     const iniUsado = todas ? iniDia : ini;
     botoes.replaceChildren(el('span', { class: 'troca-modo' }, ...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
-      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; desenharModo(); } }, nome))),
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; estado.modoGrafico[diaIndice] = k; desenharModo(); } }, nome))),
     desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
       el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : '');
     caixa.replaceChildren();
@@ -957,6 +957,19 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   filhos.push(botoes, caixa);
   alvo.replaceChildren(...filhos);
   desenharModo();
+}
+
+/**
+ * Rajada máxima do dia no resumo, ao lado de mínima, máxima e chuva: valor do consenso (mediana dos modelos,
+ * a mesma da Semana) e, embaixo, de onde vem e a hora do pico.
+ */
+function blocoRajada(a, av, p) {
+  const rp = a.rajadaPico, v = av.rajada?.mediana ?? rp?.valor;
+  const classe = classeRajada(v);
+  return el('span', { class: 'bloco-t rajada' + (classe ? ` r-${classe.replace(' ', '-')}` : '') },
+    el('small', { text: 'rajada' }),
+    el('b', {}, valido(v) ? String(Math.round(v)) : '–', valido(v) ? el('i', { text: ' km/h' }) : null),
+    rp ? el('small', { class: 'raj-det' }, `${direcaoTexto(rp.dir) || ''} `, setaVento(rp.dir), ` ${fmt.hora(rp.ms, p.offset)}`) : null);
 }
 
 /**
@@ -1210,6 +1223,172 @@ function cartaoTemporal(risco) {
     el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal${risco.granizo ? ' e granizo possível' : ''}`, el('small', { text: `· ${risco.aviso || risco.granizo?.fonte === 'inmet' ? 'INMET' : 'Previsão'}` })));
 }
 
+// ------------------------------------------------------------------ radar de tempestade (aba Hoje)
+
+const DIRECOES = { N: 'norte', NE: 'nordeste', L: 'leste', SE: 'sudeste', S: 'sul', SO: 'sudoeste', O: 'oeste', NO: 'noroeste' };
+const NOME_NUCLEO = { severa: 'Tempestade forte', tempestade: 'Tempestade', forte: 'Chuva forte' };
+const direcaoNome = (graus) => DIRECOES[direcaoTexto(graus)] || null;
+
+/**
+ * Leitura do radar de tempestade válida agora: quadro de até REGRAS.tempestade.idadeMaxMin minutos.
+ * principal: o núcleo que mais importa (sobre o local, chegando, ou o mais perto, com tempestade antes de chuva forte).
+ * @returns {{ms:number, nucleos:object[], principal:object|null, movimento:object|null, mapa:object}|null}
+ */
+function tempestadeAgora() {
+  const c = estado.chegada;
+  if (!c?.tempestades || !c.mapa || Date.now() - c.ms > REGRAS.tempestade.idadeMaxMin * 60000) return null;
+  const nucleos = c.tempestades;
+  const urgente = nucleos.find((x) => x.tendencia === 'sobre' || x.chegaMin !== null);
+  const principal = urgente || nucleos.find((x) => x.classe !== 'forte') || nucleos[0] || null;
+  return { ms: c.ms, nucleos, principal, movimento: c.movimento, mapa: c.mapa };
+}
+
+/** dBZ do núcleo de tempestade sobre o local ou chegando nas próximas 2 h (entra no risco de temporal de hoje). */
+function nucleoRadarHoje() {
+  const t = tempestadeAgora(), x = t?.nucleos.find((n) => n.classe !== 'forte' && (n.tendencia === 'sobre' || (n.chegaMin !== null && n.chegaMin <= REGRAS.radar.horizonteMin)));
+  return x ? x.dbz : null;
+}
+
+/** Frase principal e complemento do radar, para o bloco e para o detalhe. */
+function fraseNucleo(x, offset, ms) {
+  const nome = NOME_NUCLEO[x.classe], dir = direcaoNome(x.rumo), km = `${Math.max(5, Math.round(x.distanciaKm / 5) * 5)} km`;
+  if (x.tendencia === 'sobre') return { titulo: `${nome} sobre o local agora`, sub: 'pelo radar' };
+  if (x.chegaMin !== null) return { titulo: `${nome} chegando por volta das ${fmt.horaMin(ms + x.chegaMin * 60000, offset)}`, sub: `a ${km}${dir ? `, vinda do ${dir}` : ''}` };
+  const rumo = { afastando: 'se afastando', passando: 'passando ao lado' }[x.tendencia] || 'movimento não medido';
+  return { titulo: `${nome} a ${km}${dir ? ` a ${dir}` : ''}`, sub: rumo };
+}
+
+/**
+ * Risco de temporal de hoje e de amanhã pela previsão (avaliarRisco, o mesmo do cartão dos outros dias), com a
+ * janela de horas em que os sinais aparecem; com aviso do INMET, o período do aviso.
+ * @returns {{texto:string, nivel:'baixo'|'moderado'|'alto', dias:Array<{nome:string, risco:object|null, janela:string|null}>}}
+ */
+function riscoPrevisto(riscoHoje, dataHoje) {
+  const ds = datas(), T = REGRAS.temporal, p = estado.prev, mods = modelosAtivos();
+  const dias = [{ nome: 'hoje', risco: riscoHoje, a: analisarDia(dataHoje, 0, true) }];
+  if (ds[1]) { const a1 = analisarDia(ds[1], 1, false); dias.push({ nome: 'amanhã', risco: avaliarRisco(a1, false, false), a: a1 }); }
+  const cape = consensoHorario(p, 'cape', mods).med, chuva = consensoHorario(p, 'precipitation', mods).med, raj = consensoHorario(p, 'wind_gusts_10m', mods).med;
+  for (const d of dias) {
+    d.janela = null;
+    if (!d.risco || d.risco.nivel === 'baixo') continue;
+    const horas = d.a.idx.filter((i) => cape[i] >= T.cape[0] || chuva[i] >= T.chuvaHoraMm[0] || raj[i] >= T.rajada[0]);
+    if (horas.length) d.janela = `${fmt.hora(p.horas[horas[0]], p.offset)} às ${fmt.hora(p.horas[horas[horas.length - 1]] + 3600000, p.offset)}`;
+    else if (d.risco.aviso) d.janela = periodoAviso(d.risco.aviso);
+  }
+  const com = dias.filter((d) => d.risco && d.risco.nivel !== 'baixo');
+  const ordem = ['baixo', 'moderado', 'alto'];
+  const nivel = com.reduce((m, d) => (ordem.indexOf(d.risco.nivel) > ordem.indexOf(m) ? d.risco.nivel : m), 'baixo');
+  const texto = !com.length ? `Sem sinal de temporal ${dias.length > 1 ? 'hoje e amanhã' : 'hoje'}`
+    : com.map((d) => `Risco ${d.risco.nivel} ${d.nome}${d.janela ? `, ${d.janela.replace(/^hoje, /, '')}` : ''}`).join(' · ');
+  return { texto, nivel, dias };
+}
+
+/**
+ * Bloco "Radar de tempestade", sempre logo abaixo do resumo de hoje. Mostra, nesta ordem: o núcleo que mais
+ * importa no radar (medido, até REGRAS.tempestade.raioKm) com a chegada estimada pelo movimento dos ecos, e o
+ * risco de temporal previsto para hoje e amanhã (o mesmo dos cartões de risco). Ao lado, o radar desenhado.
+ * Ao tocar: todos os núcleos, o movimento, os motivos da previsão, os avisos do INMET e os limites do método.
+ */
+function blocoTempestade(riscoHoje, dataHoje) {
+  const p = estado.prev, t = tempestadeAgora(), prev = riscoPrevisto(riscoHoje, dataHoje);
+  const R = REGRAS.tempestade;
+  const x = t?.principal;
+  const f = x ? fraseNucleo(x, p.offset, t.ms) : null;
+  const titulo = !t ? (estado.chegada === null && estado.chegadaEm ? 'Radar indisponível agora' : 'Radar sem leitura recente')
+    : f ? f.titulo : `Nenhuma tempestade até ${R.raioKm} km`;
+  const outros = t ? t.nucleos.filter((n) => n !== x && n.classe !== 'forte').length : 0;
+  const sub = [f?.sub, outros ? `mais ${outros} ${outros > 1 ? 'tempestades' : 'tempestade'} no raio` : null].filter(Boolean).join(' · ');
+  // cor do bloco = nível do risco de hoje e amanhã (que já inclui o radar); tempestade no raio, longe, é no mínimo moderado
+  const nivel = prev.nivel === 'baixo' && x && x.classe !== 'forte' ? 'moderado' : prev.nivel;
+  const tela = el('canvas', { class: 'tp-radar', 'aria-hidden': 'true', width: 1, height: 1 });
+  const bloco = el('button', { type: 'button', class: 'tempestade', 'data-nivel': nivel, 'aria-label': `Radar de tempestade. ${titulo}. ${sub}. ${prev.texto}. Toque para ver detalhes.`, onclick: () => detalheTempestade(t, prev) },
+    tela,
+    el('span', { class: 'tp-txt' },
+      el('small', { class: 'tp-rot', text: 'Radar de tempestade' }),
+      el('strong', { text: titulo }),
+      sub ? el('span', { class: 'tp-sub', text: sub }) : null,
+      el('span', { class: 'tp-prev' + (prev.nivel !== 'baixo' ? ' com-risco' : ''), text: prev.texto })));
+  requestAnimationFrame(() => desenharRadarTempestade(tela, t));
+  return bloco;
+}
+
+// Cores do radar desenhado, pela refletividade (as mesmas faixas de REGRAS.tempestade.dbz).
+const COR_DBZ = [[55, [236, 92, 236]], [45, [226, 54, 44]], [40, [255, 150, 0]], [30, [240, 214, 60]], [20, [70, 150, 230]], [10, [90, 170, 220]]];
+
+/**
+ * Desenha o radar do bloco: ecos de pelo menos 10 dBZ num círculo de REGRAS.tempestade.raioKm em volta do local
+ * (norte para cima), anéis de 50, 100 e 200 km, o local no centro e a seta do movimento dos ecos quando medido.
+ */
+function desenharRadarTempestade(tela, t) {
+  const css = tela.clientWidth || 96, dpr = Math.min(3, window.devicePixelRatio || 1), lado = Math.round(css * dpr);
+  tela.width = lado; tela.height = lado;
+  const c = tela.getContext('2d'), meio = lado / 2, raioPx = meio - 1.5 * dpr;
+  const est = getComputedStyle(tela), linha = est.getPropertyValue('--linha').trim() || '#2C3136', texto = est.getPropertyValue('--fraco').trim() || '#9BA4AC';
+  c.save(); c.beginPath(); c.arc(meio, meio, raioPx, 0, 2 * Math.PI); c.clip();
+  c.fillStyle = est.getPropertyValue('--sup2').trim() || '#23272B'; c.fillRect(0, 0, lado, lado);
+  if (t?.mapa) {
+    const { dbz, n, px, py, kmCelula } = t.mapa, R = REGRAS.tempestade.raioKm, r = Math.ceil(R / kmCelula), w = 2 * r + 1;
+    const img = new ImageData(w, w);
+    for (let j = 0; j < w; j++) for (let i = 0; i < w; i++) {
+      const x = Math.round(px) - r + i, y = Math.round(py) - r + j;
+      if (x < 0 || y < 0 || x >= n || y >= n) continue;
+      const v = dbz[y * n + x], cor = COR_DBZ.find(([lim]) => v >= lim);
+      if (!cor) continue;
+      const k = (j * w + i) * 4;
+      img.data.set([...cor[1], v >= 40 ? 255 : 150], k);
+    }
+    const tmp = Object.assign(document.createElement('canvas'), { width: w, height: w });
+    tmp.getContext('2d').putImageData(img, 0, 0);
+    c.imageSmoothingEnabled = true;
+    c.drawImage(tmp, meio - raioPx, meio - raioPx, 2 * raioPx, 2 * raioPx);
+    c.strokeStyle = linha; c.lineWidth = dpr;
+    for (const km of [50, 100, 200]) { c.beginPath(); c.arc(meio, meio, raioPx * km / R, 0, 2 * Math.PI); c.stroke(); }
+    const m = t.movimento;
+    if (m && m.kmh >= 5) {
+      const a = (m.paraGraus * Math.PI) / 180, comp = raioPx * 0.42, ex = meio + Math.sin(a) * comp, ey = meio - Math.cos(a) * comp;
+      c.strokeStyle = texto; c.fillStyle = texto; c.lineWidth = 1.6 * dpr;
+      c.beginPath(); c.moveTo(meio, meio); c.lineTo(ex, ey); c.stroke();
+      const h = 5 * dpr;
+      c.beginPath(); c.moveTo(ex, ey);
+      c.lineTo(ex - h * Math.sin(a - 0.5), ey + h * Math.cos(a - 0.5)); c.lineTo(ex - h * Math.sin(a + 0.5), ey + h * Math.cos(a + 0.5)); c.closePath(); c.fill();
+    }
+  }
+  c.restore();
+  c.strokeStyle = linha; c.lineWidth = dpr; c.beginPath(); c.arc(meio, meio, raioPx, 0, 2 * Math.PI); c.stroke();
+  c.fillStyle = est.getPropertyValue('--texto').trim() || '#ECEEF0';
+  c.beginPath(); c.arc(meio, meio, 2.6 * dpr, 0, 2 * Math.PI); c.fill();
+  c.font = `${9 * dpr}px system-ui, sans-serif`; c.textAlign = 'center'; c.fillStyle = texto;
+  c.fillText('N', meio, 10 * dpr);
+}
+
+/** Detalhe do radar de tempestade: núcleos, movimento, previsão, avisos e limites do método. */
+function detalheTempestade(t, prev) {
+  const p = estado.prev, D = REGRAS.tempestade.dbz;
+  const lista = t?.nucleos.slice(0, 6) || [];
+  const motivos = prev.dias.filter((d) => d.risco?.motivos?.length).map((d) => el('li', {}, el('b', { text: `${d.nome[0].toUpperCase()}${d.nome.slice(1)}: risco ${d.risco.nivel}. ` }), `${d.risco.motivos.join('; ')}.`));
+  const avisos = prev.dias.flatMap((d) => (d.risco?.avisosDia || []).filter((a) => /tempestade|granizo|vendaval/i.test(a.titulo || '')));
+  const unicos = [...new Map(avisos.map((a) => [idAviso(a), a])).values()];
+  mostrarInfo('Radar de tempestade',
+    el('h3', { text: t ? `Radar agora · ${fmt.horaMin(t.ms, p.offset)}` : 'Radar agora' }),
+    !t ? el('p', { text: 'Sem leitura recente do radar. A previsão abaixo continua valendo.' })
+      : lista.length ? el('ul', { class: 'tp-lista' }, ...lista.map((x) => {
+        const f = fraseNucleo(x, p.offset, t.ms);
+        return el('li', {}, el('b', { text: f.titulo }), el('br'), `${f.sub} · ${Math.round(x.dbz)} dBZ · área de ${fmt.n(x.areaKm2, 0)} km²`);
+      })) : el('p', { text: `Nenhum núcleo de chuva forte ou tempestade até ${REGRAS.tempestade.raioKm} km.` }),
+    t?.movimento ? el('p', { text: `Os ecos se movem para ${direcaoNome(t.movimento.paraGraus) || 'direção incerta'} a ${fmt.n(t.movimento.kmh, 0)} km/h (medido na última hora).` })
+      : t ? el('p', { text: 'Movimento dos ecos não medido agora (pouca chuva no radar ou medidas que não concordam): sem horário de chegada.' }) : null,
+    el('h3', { text: 'Previsão' }),
+    el('p', { text: `${prev.texto}.` }),
+    motivos.length ? el('ul', { class: 'tp-lista' }, ...motivos) : null,
+    unicos.length ? el('ul', { class: 'lt-avisos' }, ...unicos.map((x) => el('li', {}, el('b', { text: `${x.titulo}${x.severidade ? ` (${x.severidade.toLowerCase()})` : ''}` }), el('br'), periodoAviso(x) || 'horário não informado'))) : null,
+    el('details', {}, el('summary', { text: 'Como funciona' }),
+      el('p', { text: `O radar mede a refletividade da chuva em dBZ. A partir de ${D.forte} dBZ é chuva forte; de ${D.tempestade} dBZ, núcleo de tempestade, em geral com raios; de ${D.severa} dBZ, tempestade forte, com granizo possível. O desenho mostra ${REGRAS.tempestade.raioKm} km em volta do local, com o norte para cima e anéis de 50, 100 e 200 km; a seta é o movimento dos ecos.` }),
+      el('p', { text: 'A chegada supõe que a tempestade mantém a direção e a velocidade da última hora. Tempestades nascem, crescem e somem em minutos, e o radar não vê raios nem confirma granizo: use como alerta antecipado, não como certeza.' }),
+      el('p', { class: 'nota', text: 'Radar: RainViewer (composição de radares, quadros de 10 min). Previsão: mediana dos modelos (energia para tempestades, chuva por hora e rajadas) e avisos do INMET.' })),
+    el('p', { text: 'Durante o temporal, fique longe de árvores, postes e áreas abertas. Emergência: Defesa Civil, 199.' }),
+    linkExterno(CONFIG.radarOficial, 'Radar oficial da Defesa Civil RS'));
+}
+
 // Avisos do INMET válidos para o local, do mais grave ao menos grave; na mesma gravidade, o que começa antes.
 function avisosOrdenados() {
   const grau = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
@@ -1301,7 +1480,7 @@ function renderAvisos({ semAlertaEnso = false } = {}) {
   const outrosRS = estado.alertas.semArea ? [] : (estado.alertas.avisos || [])
     .filter((a) => !meus.includes(a) && /\bRS\b|rio grande do sul/i.test(a.estados || ''));
   alvo.replaceChildren(...[
-    meus.length ? null : el('p', { class: 'avisos-vazio', text: `Nenhum aviso do INMET para ${estado.local?.nome || 'este local'} agora.` }),
+    meus.length ? null : el('p', { class: 'avisos-vazio', text: `Nenhum aviso do INMET para ${localNaFrase()} agora.` }),
     ...meus.map(cartaoAviso),
     fonte,
     cartaoEnso,
@@ -1462,7 +1641,7 @@ function instrumentos() {
     bloco('Vento', ve, ve ? `${fmt.kmh(ve.valor)}${dir ? ' ' + direcaoTexto(dir.valor) : ''}` : null),
     bloco('Rajada', val('rajada'), val('rajada') ? fmt.kmh(val('rajada').valor) : null));
   const chuva = el('div', { class: 'medicoes chuvas' },
-    ...[['Última hora', 'chuva_h1'], ['24 h', 'chuva_h24'], ['72 h', 'chuva_h72'], ['7 dias', 'chuva_d7']]
+    ...[['1 hora', 'chuva_h1'], ['24 h', 'chuva_h24'], ['72 h', 'chuva_h72'], ['7 dias', 'chuva_d7']]
       .map(([n, k]) => {
         const c = val(k) || (k === 'chuva_h1' ? val('chuva') : null);
         const parcial = c?.fonte.leituras?.[k]?.parcial;
@@ -1556,9 +1735,13 @@ function avaliarRisco(a, chovendo, chegando) {
     rajada: a.av.rajada?.mediana ?? a.rajadaPico?.valor ?? null,
     d3Pressao: a.diaIndice === 0 ? dadosPressao().v3?.delta ?? null : null,
     aviso,
+    nucleoRadar: a.diaIndice === 0 ? nucleoRadarHoje() : null,
   });
   // granizo: aviso do INMET que o cita, código de granizo do UKMO ou ambiente favorável (REGRAS.granizo)
-  const capeH = consensoHorario(p, 'cape', mods).med, congH = consensoHorario(p, 'freezing_level_height', mods).med;
+  const capeH = consensoHorario(p, 'cape', mods).med;
+  // nível de congelamento: dos modelos da previsão quando houver; senão do GFS auxiliar (os três não o publicam)
+  const congModelos = consensoHorario(p, 'freezing_level_height', mods).med;
+  const congH = congModelos.some(valido) ? congModelos : p.auxiliar?.congelamento || [];
   const horasCape = a.idx.filter((i) => valido(capeH[i]) && capeH[i] >= REGRAS.granizo.cape);
   const ukmo = p.modelos.ukmo_global_deterministic_10km?.vars.weather_code;
   const granizo = sinaisGranizo({
@@ -1874,7 +2057,7 @@ function renderDiaDetalhes(alvo, data, diaIndice, id) {
     const t = idx.map((i) => tempHora(p, 'temperature_2m', i, mods));
     return el('div', { class: 'periodo' }, el('h3', { text: nome[0].toUpperCase() + nome.slice(1) }),
       el('div', { class: 'p', text: valido(prob) ? `${Math.round(prob)}% de chance` : 'chance sem dado' }),
-      el('div', { text: `${fmt.n(mm, 1)} mm` }),
+      el('div', { text: fmt.mm(mm) }),
       el('div', { class: 'g', text: valido(g) ? `rajada ${Math.round(g)} km/h` : 'rajada sem dado' }),
       el('div', {}, el('span', { class: 'tmin', text: fmt.c(minimo(t)) || '–' }), ' a ', el('span', { class: 'tmax', text: fmt.c(maximo(t)) || '–' })));
   });
@@ -1882,7 +2065,6 @@ function renderDiaDetalhes(alvo, data, diaIndice, id) {
   const met = secao('Hora a hora', null);
   met.classList.add('largura-total');
   filhos.push(met);
-  filhos.push(secao('Probabilidades de chuva e rajadas', notaConcordancia(a), tabelaLimites([a])));
   const k = p.diario.datas.indexOf(data);
   filhos.push(secao('Sol e UV', null,
     el('p', {}, `Nascer do sol ${fmt.horaMin(p.diario.nascer[k], p.offset)}, pôr do sol ${fmt.horaMin(p.diario.por[k], p.offset)}.`),
@@ -1959,22 +2141,15 @@ function renderSemana() {
       el('ul', { class: 'dias' }, ...extra.map((a) => item(a, true))));
     filhos.push(det);
   }
+  // Semana só com o resumo de cada dia e a confiança (regra do Gustavo). Abaixo, duas tendências que servem
+  // em qualquer ocasião: temperatura e rajada. Tabelas de limites e faixas ficam na aba Modelos.
   const x = dias.map((a) => p.horas[a.idxTodo[0]] + 12 * 3600000);
   const fmtDia = (u, vals) => vals.map((v) => { const d = dataNoFuso(v, p.fuso); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()]; });
-  const gChuva = secao('Chuva diária e acumulada', null);
   const gTemp = secao('Temperatura mínima e máxima', null);
   const gRaj = secao('Rajada máxima', null);
-  const faixas = secao('Faixa provável', null, tabelaFaixas(dias));
-  const probs = secao('Probabilidade por dia', notaConcordancia(dias[0]), tabelaLimites(dias));
-  filhos.push(gChuva, gTemp, gRaj, faixas, probs);
+  filhos.push(gTemp, gRaj);
   alvo.replaceChildren(...filhos);
-  const chuvaDia = dias.map((a) => mediana(a.resumos.map((r) => r.chuva)));
-  let ac = 0; const acum = chuvaDia.map((v) => (valido(v) ? (ac += v) : null));
   const base = { x, fuso: p.fuso, sync: 'semana', emitirHora: false, agora: false, formatoX: fmtDia, altura: 160 };
-  criarGrafico(gChuva, { ...base, series: [
-    { rotulo: 'no dia', valores: chuvaDia, corCss: '--chuva', barras: true, formato: (v) => fmt.mm(v) },
-    { rotulo: 'acumulada', valores: acum, corCss: '--texto', largura: 2, formato: (v) => fmt.mm(v) },
-  ], escalas: { y: { range: (u, a, b) => [0, Math.max(10, b)] } }, eixos: [{ formato: (v) => `${v}`, rotulo: 'mm' }] });
   criarGrafico(gTemp, { ...base, series: [
     { rotulo: 'mín baixa', valores: dias.map((a) => a.tminFaixa[0]), corCss: '--fria', faixa: true, semLegenda: true },
     { rotulo: 'mín alta', valores: dias.map((a) => a.tminFaixa[1]), corCss: '--fria', faixa: true, semLegenda: true },
@@ -2005,6 +2180,12 @@ function tabelaFaixas(dias) {
 
 // ------------------------------------------------------------------ Modelos
 
+// "hoje", "amanhã" ou "qua 02/12": o dia da semana sozinho é ambíguo quando cai na semana seguinte.
+function quandoCurto(ms, offset) {
+  const ds = datas(), d = partesLocais(ms, offset).data, k = ds.indexOf(d);
+  return k === 0 ? 'hoje' : k === 1 ? 'amanhã' : `${fmt.diaSemana(ms, offset)} ${fmt.dataCurta(ms, offset)}`;
+}
+
 function renderModelos() {
   const alvo = $('#modelos-conteudo');
   const p = estado.prev, mods = modelosAtivos();
@@ -2012,7 +2193,7 @@ function renderModelos() {
   const dias = ds.map((d, k) => analisarDia(d, k, k === 0));
   const filhos = [];
   const div = horizonteDivergencia(p, mods);
-  filhos.push(el('p', { class: 'frase', style: { 'font-size': '22px', 'min-height': '0' }, text: div ? `Os modelos começam a divergir ${fmt.diaSemana(div.ms, p.offset)} às ${fmt.hora(div.ms, p.offset)}` : 'Os modelos concordam nos próximos dias' }));
+  filhos.push(el('p', { class: 'frase', style: { 'font-size': '22px', 'min-height': '0' }, text: div ? `Os modelos começam a divergir ${quandoCurto(div.ms, p.offset)} às ${fmt.hora(div.ms, p.offset)}` : 'Os modelos concordam nos próximos dias' }));
   filhos.push(el('p', { class: 'nota', text: div ? `Motivo: ${div.motivo}. Antes disso, a previsão é mais confiável.` : 'Nenhum bloco de 6 h com diferença grande de chuva ou rajada.' }));
   const ausencias = mods.map((m) => p.modelos[m].ausentes.length ? `${MODELOS[m].nome} não fornece: ${p.modelos[m].ausentes.map(nomeVar).join(', ')}` : null).filter(Boolean);
   const faltam = Object.keys(MODELOS).filter((m) => !mods.includes(m));
@@ -2029,6 +2210,9 @@ function renderModelos() {
   const gR = secao('Rajadas por modelo', 'Faixa: cenários do ensemble (p10 a p90).');
   gC.classList.add('largura-total'); gR.classList.add('largura-total');
   filhos.push(gC, gR);
+  // vindas da Semana (1.11.0): faixas entre modelos e chances por limite, coerentes com a chance do dia
+  filhos.push(secao('Faixa provável por dia', null, tabelaFaixas(dias)));
+  filhos.push(secao('Chance por limite', notaConcordancia(dias[0]), tabelaLimites(dias)));
   filhos.push(secao('Acerto de cada modelo', null, tabelaAcerto()));
   filhos.push(secao('Regra de confiança', null, regraConfianca()));
   if (estado.ensErros?.length) filhos.push(el('p', { class: 'nota', text: `Ensemble: ${estado.ensErros.join('; ')}.` }));
@@ -2083,8 +2267,14 @@ function tabelaAcerto() {
   const pt = pontoExato();
   const dataBr = (d) => `${d.slice(5, 7)}/${d.slice(2, 4)}`;
   const cabecalho = el('thead', {}, el('tr', {}, el('th', { text: 'Previsão feita' }), el('th', { class: 'n', text: 'Acertou se chovia' }), el('th', { class: 'n', text: 'Erro na chuva' }), el('th', { class: 'n', text: 'Erro na rajada' }), el('th', { class: 'n', text: 'Erro na máxima' }), el('th', { class: 'n', text: 'Dias' })));
-  const tabela = (linhas) => el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', {}, cabecalho.cloneNode(true), el('tbody', {}, ...linhas)));
-  const linha = (m, d, acerto, volume, rajada, tmax, n) => el('tr', {}, el('td', { text: `${MODELOS[m].curto}, ${d === 1 ? 'na véspera' : `${d} dias antes`}` }),
+  // À vista, só a previsão feita na véspera (uma linha por modelo); 2, 3 e 5 dias antes ficam num toque.
+  const tabelaDe = (linhas) => el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', {}, cabecalho.cloneNode(true), el('tbody', {}, ...linhas)));
+  const tabela = (linhas) => {
+    const vespera = linhas.filter((l) => l.dataset.lead === '1'), resto = linhas.filter((l) => l.dataset.lead !== '1');
+    return el('div', {}, tabelaDe(vespera.length ? vespera : linhas),
+      vespera.length && resto.length ? el('details', {}, el('summary', { text: 'Previsões feitas 2, 3 e 5 dias antes' }), tabelaDe(resto)) : null);
+  };
+  const linha = (m, d, acerto, volume, rajada, tmax, n) => el('tr', { 'data-lead': String(d) }, el('td', { text: `${MODELOS[m].curto}, ${d === 1 ? 'na véspera' : `${d} dias antes`}` }),
     el('td', { class: 'n', text: valido(acerto) ? `${Math.round(acerto * 100)}%` : '–' }),
     el('td', { class: 'n', text: valido(volume) ? `${fmt.n(volume, 1)} mm` : '–' }),
     el('td', { class: 'n', text: valido(rajada) ? `${fmt.n(rajada, 0)} km/h` : '–' }),
@@ -2093,7 +2283,11 @@ function tabelaAcerto() {
   // erro em uso no painel: depois da correção quando ela foi aprovada, senão o bruto
   const erroUsado = (x) => (x ? (x.usar && x.origem !== 'curto prazo' ? x.maeDepois : x.origem === 'curto prazo' ? null : x.maeAntes) : null);
 
-  for (const v of VERIFICACAO) {
+  // estação mais próxima aberta; as outras num toque
+  const porDistancia = [...VERIFICACAO].sort((x, y) => distanciaKm(pt.lat, pt.lon, x.lat, x.lon) - distanciaKm(pt.lat, pt.lon, y.lat, y.lon));
+  const outras = [];
+  for (const v of porDistancia) {
+    if (v !== porDistancia[0] && !outras.length) outras.push(blocos.length);
     const a = estado.acerto[v.id];
     const k = estado.calib?.estacao?.id === v.id ? estado.calib : null;
     const o = estado.calib?.outras?.[v.id];
@@ -2134,6 +2328,10 @@ function tabelaAcerto() {
     } else if (!k && !o) {
       blocos.push(el('p', { class: 'nota', text: workerConfigurado() ? 'Sem histórico importado; os dias passam a contar a partir de amanhã.' : 'Sem histórico importado.' }));
     }
+  }
+  if (outras.length) {
+    const resto = blocos.splice(outras[0]);
+    blocos.push(el('details', {}, el('summary', { text: 'Outras estações' }), ...resto));
   }
   blocos.push(el('p', { class: 'nota', text: '"Acertou se chovia" conta os dias em que o modelo disse que ia chover e choveu, ou disse que não ia e não choveu. Os erros mostram, em média, quanto o modelo errou para mais ou para menos: quanto menor, melhor. Em Campo Bom, chuva, temperatura e rajada já com a correção que o painel aplica.' }));
   return el('div', {}, ...blocos);
@@ -2363,8 +2561,7 @@ function nomePeriodo(x) {
 // Bloco "Em <local>" do resumo do El Niño: próximos dias, épocas de atenção e avisos do INMET ativos.
 function blocoAlertaLocal(al) {
   if (!al?.ativo) return null;
-  const nome = estado.local?.nome || 'seu local';
-  const filhos = [el('h3', { text: `Em ${nome}` })];
+  const filhos = [el('h3', { text: estado.local?.origem === 'gps' || !estado.local?.nome ? 'No seu local' : `Em ${estado.local.nome}` })];
   if (estado.prev) {
     const ate = al.ultimoDia ? `${al.ultimoDia.slice(8, 10)}/${al.ultimoDia.slice(5, 7)}` : '';
     filhos.push(al.dias.length
@@ -2706,5 +2903,5 @@ function configurarRodape() {
 }
 
 // expõe só para testes automatizados
-window.__painel = { estado, REGRAS };
+window.__painel = { estado, REGRAS, irPara, renderTudo };
 void bus; void classeRajada; void MODELOS_ENSEMBLE;

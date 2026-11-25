@@ -1,7 +1,7 @@
 // Busca e normalização de dados. Toda resposta externa é tratada como não confiável:
 // só números e textos esperados são copiados, nada vai para innerHTML.
 import { CONFIG } from './config.js';
-import { arredondaCoord, isoLocalParaMs, valido, MODELOS, REGRAS, deslocamentoRadar, chegadaChuva, secoPeloRadar, direcaoTexto } from './analise.js';
+import { arredondaCoord, isoLocalParaMs, valido, MODELOS, REGRAS, deslocamentoRadar, chegadaChuva, secoPeloRadar, direcaoTexto, celulasTempestade } from './analise.js';
 import { normalizarResultados, LIMITES } from './cidades.js';
 
 const CACHE = 'painel-dados-v1';
@@ -118,7 +118,8 @@ export function urlPrevisao(lat, lon) {
   return 'https://api.open-meteo.com/v1/forecast?' + p;
 }
 
-// GFS só para dados diários que os outros não têm (índice UV); não entra na previsão.
+// GFS só para o que os modelos da previsão não têm: índice UV diário e nível de congelamento horário (ECMWF e
+// UKMO não publicam freezing_level_height na Open-Meteo; conferido em 2026-11-25). Não entra na previsão.
 export const MODELOS_AUXILIARES = ['ncep_gfs_seamless'];
 
 // Com vários modelos, cada chave vem com sufixo do modelo (testado em 2026-11-03).
@@ -160,7 +161,9 @@ export function normalizarPrevisao(j) {
     uvMax: pegar('uv_index_max').map((x) => (valido(x) ? x : null)),
   };
   const c = j.current || {};
+  const congelamento = j.hourly.freezing_level_height_ncep_gfs_seamless;
   return {
+    auxiliar: { congelamento: Array.isArray(congelamento) ? congelamento.map((x) => (valido(x) && x >= 0 && x <= 8000 ? x : null)) : [] },
     lat: Number(j.latitude), lon: Number(j.longitude), elevacao: Number(j.elevation),
     fuso: String(j.timezone || ''), offset: off, horas, modelos, diario,
     atual: { ms: c.time ? isoLocalParaMs(String(c.time), off) : null, temp: Object.fromEntries(Object.keys(MODELOS).map((m) => [m, valido(c[`temperature_2m_${m}`]) ? c[`temperature_2m_${m}`] : null])), geral: valido(c.temperature_2m) ? c.temperature_2m : null },
@@ -451,9 +454,36 @@ function intensidadePixel(r, g, b, a) {
 }
 
 /**
+ * Refletividade (dBZ) de um pixel da paleta 2 da RainViewer ("Universal Blue"), pela tabela oficial de cores
+ * (rainviewer.com/files/rainviewer_api_colors_table.csv, conferida em 2026-11-25). Os tiles pedidos sem
+ * suavização (opção 0_0) trazem as cores exatas da tabela. De -10 a 14 dBZ a cor é bege com alfa crescente
+ * (um alfa por valor); de 15 a 64 dBZ a cor é opaca e única para cada valor; 65 ou mais é branco.
+ * @returns {number|null} dBZ inteiro, ou null sem eco ou com cor fora da tabela
+ */
+export function dbzDoPixel(r, g, b, a) {
+  if (a === 0) return null;
+  if (a < 255) return DBZ_ALFA.get(a) ?? null;
+  return DBZ_OPACO.get((r << 16) | (g << 8) | b) ?? null;
+}
+// Universal Blue, -10 a 14 dBZ: alfa de cada valor (cor bege), na ordem da tabela oficial.
+const DBZ_ALFA = new Map([0x14, 0x19, 0x1e, 0x24, 0x29, 0x2e, 0x34, 0x39, 0x3e, 0x44, 0x49, 0x4e, 0x54, 0x59, 0x5e, 0x64,
+  0x6e, 0x78, 0x82, 0x8c, 0x96, 0xa0, 0xaa, 0xb4, 0xbe].map((a, i) => [a, i - 10]));
+// Universal Blue, 15 a 65 dBZ (cores opacas, uma por valor; branco = 65 ou mais), na ordem da tabela oficial.
+const DBZ_OPACO = new Map([
+  '88ddee', '6cd1eb', '51c5e8', '36bae5', '1baee2', '00a3e0', '009ad5', '0091ca', '0088bf', '007fb4', // 15–24
+  '0077aa', '0070a3', '00699c', '006295', '005b8e', '005588', '005180', '004e78', '004a70', '004768', // 25–34
+  'ffee00', 'ffe000', 'ffd200', 'ffc500', 'ffb700', 'ffaa00', 'ff9f00', 'ff9500', 'ff8b00', 'ff8100', // 35–44
+  'ff4400', 'f23600', 'e62800', 'd91b00', 'cd0d00', 'c10000', 'a80000', '8f0000', '760000', '5d0000', // 45–54
+  'ffaaff', 'ff9fff', 'ff95ff', 'ff8bff', 'ff81ff', 'ff77ff', 'ff6cff', 'ff62ff', 'ff58ff', 'ff4eff', // 55–64
+  'ffffff', // 65 ou mais (a tabela repete o branco até 74)
+].map((h, i) => [parseInt(h, 16), 15 + i]));
+
+/**
  * Mosaico 2 x 2 de tiles do radar (zoom 6, cerca de 2 km por pixel no RS) com o local dentro da metade central,
  * reduzido a 128 x 128 células de 4 x 4 pixels: fração de pixels com eco (alfa > 40) e intensidade média.
- * @returns {Promise<{eco:Float32Array, intensidade:Float32Array, n:number, px:number, py:number, kmCelula:number}>}
+ * Também a refletividade máxima (dBZ, dbzDoPixel) em 256 x 256 células de 2 x 2 pixels, para o radar de tempestade.
+ * @returns {Promise<{eco:Float32Array, intensidade:Float32Array, n:number, px:number, py:number, kmCelula:number,
+ *   dbz:Int8Array, nDbz:number}>} dbz: -128 sem eco
  */
 async function gradeRadar(host, path, lat, lon) {
   const z = 6, t = pixelDoPonto(lat, lon, z);
@@ -464,14 +494,17 @@ async function gradeRadar(host, path, lat, lon) {
   for (const [i, j, img] of imgs) c.drawImage(img, i * 256, j * 256);
   const d = c.getImageData(0, 0, 512, 512).data, n = 128;
   const eco = new Float32Array(n * n), intensidade = new Float32Array(n * n);
+  const nDbz = 256, dbz = new Int8Array(nDbz * nDbz).fill(-128);
   for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
     const k = (y * 512 + x) * 4, cel = (y >> 2) * n + (x >> 2);
     if (d[k + 3] > 40) eco[cel] += 1 / 16;
     intensidade[cel] += intensidadePixel(d[k], d[k + 1], d[k + 2], d[k + 3]) / 16;
+    const v = dbzDoPixel(d[k], d[k + 1], d[k + 2], d[k + 3]), c2 = (y >> 1) * nDbz + (x >> 1);
+    if (v !== null && v > dbz[c2]) dbz[c2] = v;
   }
   const px = ((t.x - x0) * 256 + t.px) / 4, py = ((t.y - y0) * 256 + t.py) / 4;
   const kmCelula = (40075 * Math.cos((lat * Math.PI) / 180) / (256 * 2 ** z)) * 4;
-  return { eco, intensidade, n, px, py, kmCelula };
+  return { eco, intensidade, n, px, py, kmCelula, dbz, nDbz };
 }
 
 /**
@@ -479,7 +512,10 @@ async function gradeRadar(host, path, lat, lon) {
  * (deslocamentoRadar sobre a intensidade). As duas velocidades precisam concordar dentro de
  * REGRAS.radar.concordanciaKmh; a de 60 min é extrapolada até o local (chegadaChuva). Coordenada arredondada.
  * secoMin: minutos garantidos sem chuva no local (secoPeloRadar), mesmo quando o movimento não pode ser medido.
- * @returns {Promise<{ms:number, minutos:number|null, chegaMs:number|null, kmh:number|null, vemDe:string|null, secoMin:number|null}|null>}
+ * tempestades: núcleos de chuva forte e de tempestade (celulasTempestade) com o mesmo movimento; mapa: a grade
+ * de refletividade usada, para o radar desenhado no bloco "Radar de tempestade"; movimento: velocidade e rumo dos ecos.
+ * @returns {Promise<{ms:number, minutos:number|null, chegaMs:number|null, kmh:number|null, vemDe:string|null, secoMin:number|null,
+ *   movimento:{kmh:number, paraGraus:number}|null, tempestades:object[], mapa:object}|null>}
  *   minutos/chegaMs/kmh/vemDe nulos quando o movimento não pode ser medido com segurança
  */
 export async function buscarChegadaChuva(lat, lon) {
@@ -490,23 +526,34 @@ export async function buscarChegadaChuva(lat, lon) {
   const q30 = antes(30), q60 = antes(R.intervaloMin);
   const la = arredondaCoord(lat), lo = arredondaCoord(lon);
   const g = await gradeRadar(r.host, ult.path, la, lo);
-  const semMovimento = { ms: ult.ms, minutos: null, chegaMs: null, kmh: null, vemDe: null, secoMin: secoPeloRadar(g.eco, g.n, g.px, g.py, null, g.kmCelula) };
-  if (!q30 || !q60) return semMovimento;
-  const [g60, g30] = await Promise.all([q60, q30].map((q) => gradeRadar(r.host, q.path, la, lo)));
-  // velocidade em células por REGRAS.radar.intervaloMin, normalizada pelo intervalo real entre os quadros
-  const vel = (ga, q) => {
-    const d = deslocamentoRadar(ga.intensidade, g.intensidade, g.n);
-    if (!d) return null;
-    const f = R.intervaloMin * 60000 / (ult.ms - q.ms);
-    return { dx: d.dx * f, dy: d.dy * f };
-  };
-  const v60 = vel(g60, q60), v30 = vel(g30, q30);
-  if (!v60 || !v30) return semMovimento;
-  const kmh = (v) => Math.hypot(v.dx, v.dy) * g.kmCelula * (60 / R.intervaloMin);
-  if (Math.hypot(v60.dx - v30.dx, v60.dy - v30.dy) * g.kmCelula * (60 / R.intervaloMin) > R.concordanciaKmh) return semMovimento;
-  const minutos = chegadaChuva(g.eco, g.n, g.px, g.py, v60);
+  // Movimento dos ecos (células por REGRAS.radar.intervaloMin), só quando as medidas de 30 e 60 min concordam.
+  let v60 = null;
+  if (q30 && q60) {
+    const [g60, g30] = await Promise.all([q60, q30].map((q) => gradeRadar(r.host, q.path, la, lo)));
+    // velocidade em células por REGRAS.radar.intervaloMin, normalizada pelo intervalo real entre os quadros
+    const vel = (ga, q) => {
+      const d = deslocamentoRadar(ga.intensidade, g.intensidade, g.n);
+      if (!d) return null;
+      const f = R.intervaloMin * 60000 / (ult.ms - q.ms);
+      return { dx: d.dx * f, dy: d.dy * f };
+    };
+    const a60 = vel(g60, q60), a30 = vel(g30, q30);
+    if (a60 && a30 && Math.hypot(a60.dx - a30.dx, a60.dy - a30.dy) * g.kmCelula * (60 / R.intervaloMin) <= R.concordanciaKmh) v60 = a60;
+  }
+  const kmh = v60 ? Math.hypot(v60.dx, v60.dy) * g.kmCelula * (60 / R.intervaloMin) : null;
+  // Radar de tempestade: núcleos de refletividade alta na grade de 2 x 2 pixels, com o mesmo movimento medido.
+  const fator = g.nDbz / g.n;
+  const tempestades = celulasTempestade({ dbz: g.dbz, n: g.nDbz, px: g.px * fator, py: g.py * fator, kmCelula: g.kmCelula / fator,
+    vel: v60 ? { lesteKmh: v60.dx * g.kmCelula * (60 / R.intervaloMin), sulKmh: v60.dy * g.kmCelula * (60 / R.intervaloMin) } : null });
+  let minutos = v60 ? chegadaChuva(g.eco, g.n, g.px, g.py, v60) : null;
+  // um núcleo forte chegando é chuva chegando: a chegada da chuva nunca fica depois da do núcleo
+  const nucleo = tempestades.find((c) => c.chegaMin !== null && c.chegaMin <= R.horizonteMin);
+  if (nucleo && (minutos === null || nucleo.chegaMin < minutos)) minutos = Math.floor(nucleo.chegaMin / R.passoMin) * R.passoMin;
+  let secoMin = secoPeloRadar(g.eco, g.n, g.px, g.py, v60, g.kmCelula);
+  if (minutos !== null && valido(secoMin)) secoMin = Math.min(secoMin, minutos);
   // direção de onde a chuva vem (meteorológica): oposta ao movimento; o eixo y da imagem aponta para o sul
-  const vemDe = kmh(v60) >= 5 ? direcaoTexto((Math.atan2(-v60.dx, v60.dy) * 180 / Math.PI + 360) % 360) : null;
-  return { ms: ult.ms, minutos, chegaMs: minutos === null ? null : ult.ms + minutos * 60000, kmh: kmh(v60), vemDe,
-    secoMin: secoPeloRadar(g.eco, g.n, g.px, g.py, v60, g.kmCelula) };
+  const vemDe = v60 && kmh >= 5 ? direcaoTexto((Math.atan2(-v60.dx, v60.dy) * 180 / Math.PI + 360) % 360) : null;
+  return { ms: ult.ms, minutos, chegaMs: minutos === null ? null : ult.ms + minutos * 60000, kmh, vemDe, secoMin,
+    movimento: v60 ? { kmh, paraGraus: (Math.atan2(v60.dx, -v60.dy) * 180 / Math.PI + 360) % 360 } : null,
+    tempestades, mapa: { dbz: g.dbz, n: g.nDbz, px: g.px * fator, py: g.py * fator, kmCelula: g.kmCelula / fator } };
 }
