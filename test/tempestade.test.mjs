@@ -81,3 +81,8 @@ test('tabela de limites segue a chance principal do dia (nenhuma tabela contradi
   assert.equal(c.chuva[2].p, 0);
   assert.equal(limitesCoerentes(lim, null), lim);
 });
+
+test('eco que conta como chuva no radar equivale a REGRAS.chuvaHoraMm (Marshall-Palmer)', () => {
+  const dbz = 10 * Math.log10(200 * REGRAS.chuvaHoraMm ** 1.6);
+  assert.equal(Math.round(dbz), REGRAS.radar.dbzChuva);
+});

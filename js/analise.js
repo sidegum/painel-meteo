@@ -78,6 +78,9 @@ export const REGRAS = {
   },
   // Chuva chegando: extrapolação do movimento dos ecos de radar (nowcasting por correlação de blocos).
   radar: {
+    // Eco que conta como chuva: 12 dBZ, a refletividade de 0,2 mm/h (REGRAS.chuvaHoraMm) pela relação de
+    // Marshall-Palmer (Z = 200 R^1,6). Abaixo disso o radar vê garoa que evapora, poeira ou ruído (antes: qualquer eco).
+    dbzChuva: 12,
     intervaloMin: 60,          // intervalo entre os dois quadros comparados
     deslocMax: 12,             // busca de deslocamento: até 12 células em cada eixo no intervalo
     ecoMin: 0.3,               // fração de pixels com eco para a célula contar como chuva (chegada)

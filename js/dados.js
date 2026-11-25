@@ -367,7 +367,7 @@ export function pixelDoPonto(lat, lon, z = 7) {
 }
 /**
  * Chuva sobre o ponto pelo radar: lê o tile do quadro mais recente (zoom 7) e conta pixels com eco
- * (alfa > 40) num quadrado 5 x 5 em volta do ponto arredondado. Chovendo com 3 ou mais pixels.
+ * (refletividade de pelo menos REGRAS.radar.dbzChuva) num quadrado 5 x 5 em volta do ponto arredondado. Chovendo com 3 ou mais pixels.
  * @returns {Promise<{ms:number, eco:number, total:number, chuva:boolean}>}
  */
 // Lê um tile do radar como imagem (fetch sem credenciais, tempo limite de 10 s).
@@ -392,7 +392,7 @@ export async function buscarChuvaRadar(lat, lon) {
   const x0 = Math.max(0, t.px - 2), y0 = Math.max(0, t.py - 2);
   const d = c.getImageData(x0, y0, Math.min(5, 256 - x0), Math.min(5, 256 - y0)).data;
   let eco = 0, total = 0;
-  for (let i = 3; i < d.length; i += 4) { total++; if (d[i] > 40) eco++; }
+  for (let i = 0; i < d.length; i += 4) { total++; if (dbzDoPixel(d[i], d[i + 1], d[i + 2], d[i + 3]) >= REGRAS.radar.dbzChuva) eco++; }
   return { ms: q.ms, eco, total, chuva: eco >= 3 };
 }
 
@@ -480,7 +480,7 @@ const DBZ_OPACO = new Map([
 
 /**
  * Mosaico 2 x 2 de tiles do radar (zoom 6, cerca de 2 km por pixel no RS) com o local dentro da metade central,
- * reduzido a 128 x 128 células de 4 x 4 pixels: fração de pixels com eco (alfa > 40) e intensidade média.
+ * reduzido a 128 x 128 células de 4 x 4 pixels: fração de pixels com chuva (REGRAS.radar.dbzChuva) e intensidade média.
  * Também a refletividade máxima (dBZ, dbzDoPixel) em 256 x 256 células de 2 x 2 pixels, para o radar de tempestade.
  * @returns {Promise<{eco:Float32Array, intensidade:Float32Array, n:number, px:number, py:number, kmCelula:number,
  *   dbz:Int8Array, nDbz:number}>} dbz: -128 sem eco
@@ -497,9 +497,9 @@ async function gradeRadar(host, path, lat, lon) {
   const nDbz = 256, dbz = new Int8Array(nDbz * nDbz).fill(-128);
   for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
     const k = (y * 512 + x) * 4, cel = (y >> 2) * n + (x >> 2);
-    if (d[k + 3] > 40) eco[cel] += 1 / 16;
-    intensidade[cel] += intensidadePixel(d[k], d[k + 1], d[k + 2], d[k + 3]) / 16;
     const v = dbzDoPixel(d[k], d[k + 1], d[k + 2], d[k + 3]), c2 = (y >> 1) * nDbz + (x >> 1);
+    if (v !== null && v >= REGRAS.radar.dbzChuva) eco[cel] += 1 / 16;
+    intensidade[cel] += intensidadePixel(d[k], d[k + 1], d[k + 2], d[k + 3]) / 16;
     if (v !== null && v > dbz[c2]) dbz[c2] = v;
   }
   const px = ((t.x - x0) * 256 + t.px) / 4, py = ((t.y - y0) * 256 + t.py) / 4;

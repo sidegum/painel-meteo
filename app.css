@@ -889,7 +889,7 @@ button.globo-rotulo { cursor: pointer; }
    redefinidas só dentro dele. Temperatura grande e fina; o resto como antes. */
 .resumo[data-fundo] {
   --texto: #FFFFFF; --fraco: rgba(255, 255, 255, .8); --linha: rgba(255, 255, 255, .28);
-  --fria: #D3E6FF; --quente: #FFD9C7; --chuva-txt: #DDF0FF; --chuva: #CFE8FF; --fundo: rgba(255, 255, 255, .0);
+  --fria: #D3E6FF; --quente: #FFD9C7; --chuva-txt: #DDF0FF; --chuva: #CFE8FF; --rajada-txt: #FFE6A6; --fundo: rgba(255, 255, 255, .0);
   position: relative; isolation: isolate; overflow: hidden; margin: 6px 0 4px; padding: 14px 16px 14px; border-radius: 18px;
   background: #4F7DB3; color: var(--texto); text-shadow: 0 1px 2px rgba(0, 0, 0, .18);
 }

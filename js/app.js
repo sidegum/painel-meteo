@@ -952,7 +952,8 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     caixa.replaceChildren();
     if (modo === 'chance') caixa.append(graficoChance(iniUsado, fim));
     else if (modo === 'temp') caixa.append(graficoTemperatura(iniUsado, fim));
-    else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: iniUsado, fimMs: fim, id: 'faixa-' + diaIndice }));
+    else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: iniUsado, fimMs: fim, id: 'faixa-' + diaIndice,
+      chance: (ms) => { const c = chanceHora(ms); return valido(c.p) ? c.p * 100 : null; } }));
   };
   filhos.push(botoes, caixa);
   alvo.replaceChildren(...filhos);
@@ -1859,7 +1860,10 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
     chips.replaceChildren(seletor('Gráfico', Object.entries(PAINEIS), abertos[0], (k) => { abertos = [k]; prefs.gravar('paineis-v2', abertos); desenhar(); }));
     const fonte = notaPrevisao(p.offset);
     if (abertos.includes('chuva')) {
-      const ch = C('precipitation'), pr = C('precipitation_probability');
+      // chance por hora como todas as telas mostram (chanceHora: cenários, teto do dia, radar e medição), nunca a
+      // precipitation_probability crua, que mostrava 15% com o dia em 0%
+      const ch = C('precipitation'), sit = situacaoAgora();
+      const pr = { med: idx.map((i) => { const c = chanceHora(p.horas[i], sit); return valido(c.p) ? c.p * 100 : null; }) };
       let acc = 0, falhou = false; const acum = ch.med.map((v) => { if (!valido(v)) { falhou = true; return null; } if (falhou) return null; acc += v; return acc; });
       criarGrafico(area, { ...base, titulo: 'Chuva por hora, acumulada e probabilidade', fonte,
         series: [
