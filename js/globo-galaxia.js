@@ -30,7 +30,7 @@ const EQ_GAL = [ // equatorial J2000 → galáctico (linhas: x para o centro, y 
   [0.4941094279, -0.4448296300, 0.7469822445],
   [-0.8676661490, -0.1980763734, 0.4559837762],
 ];
-const DIST = { min: 0.002, max: 4.5e7, inicial: 46 }; // kpc: de ~400 UA até ver de fora a esfera do universo observável
+const DIST = { min: 0.002, max: 1.2e8, inicial: 46 }; // kpc: de ~400 UA até ver de fora a esfera do universo observável
 const RAIO_UNIVERSO = CO.HORIZONTE_MPC; // Mpc: horizonte de partículas (~46 bilhões de anos-luz; Planck 2018, ΛCDM)
 const CELULAR = matchMedia('(pointer: coarse)').matches;
 const MOVIMENTO_REDUZIDO = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -67,14 +67,14 @@ export function definirCamada(chave, ligada) { FG[chave] = ligada; prefs.gravar(
 /** Visibilidade dos objetos fixos de cada camada (as do universo mudam também pelo zoom, em atualizarUniverso). */
 function aplicarCamadas() {
   if (!GX.cena) return;
+  GX.revisao++;
   if (GX.grupoMasers) GX.grupoMasers.visible = FG.masers;
   if (GX.grupoGlobulares) GX.grupoGlobulares.visible = FG.globulares;
-  if (GX.estrelasReais) GX.estrelasReais.visible = FG.estrelas;
   for (const o of GX.objGrupoLocal || []) o.visible = FG.grupoLocal;
   for (const o of GX.objGalaxias || []) o.visible = FG.galaxias;
 }
 
-const GX = { G: null, THREE: null, preparo: null, aberto: false, rotulos: [], foco: null, anim: null, meta: null, dados: null };
+const GX = { G: null, THREE: null, preparo: null, aberto: false, rotulos: [], foco: null, anim: null, meta: null, dados: null, revisao: 0, chaveQuadro: '', ultimoDesenho: 0 };
 
 const baixar = (arquivo, tipo = 'json') => fetch(new URL(`../vendor/ceu/${arquivo}`, import.meta.url)).then((r) => {
   if (!r.ok) throw new Error(`${arquivo}: HTTP ${r.status}`);
@@ -138,6 +138,8 @@ export function prepararGalaxia(G, THREE) {
     // as 800 mil estrelas com distância dependem do céu profundo, que carrega em partes: espera até 25 s e segue
     await Promise.race([montarEstrelasReais(), new Promise((ok) => setTimeout(ok, 25000))]);
     // compila os shaders desta cena agora, para a primeira troca de escala não engasgar
+    G.pos.adaptar(GX.cena);
+    await aquecerTexturas(GX.cena);
     try { G.renderer.compile(GX.cena, GX.camera); } catch { /* sem pré-compilação: compila ao abrir */ }
     carga('imagens');
     return GX;
@@ -154,13 +156,45 @@ function carregarImagem(arquivo) {
   });
 }
 
+/**
+ * Textura de uma imagem já baixada, decodificada fora da linha principal e enviada na hora à placa de vídeo: quando a
+ * imagem aparecer pela primeira vez, não há mais nada a fazer (sem engasgo). Sem `createImageBitmap` com opções
+ * (navegador antigo), a decodificação cai no caminho comum.
+ * @param {Blob} blob
+ */
+async function texturaDeBlob(blob) {
+  const { THREE, G } = GX;
+  let fonte, bitmap = true;
+  try { fonte = await createImageBitmap(blob, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' }); }
+  catch {
+    bitmap = false;
+    fonte = await new Promise((ok, falha) => { const img = new Image(), url = URL.createObjectURL(blob); img.onload = () => { URL.revokeObjectURL(url); ok(img); }; img.onerror = () => { URL.revokeObjectURL(url); falha(new Error('imagem não decodificou')); }; img.src = url; });
+  }
+  const tex = new THREE.Texture(fonte);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  // um ImageBitmap chega à placa de vídeo sem a inversão vertical das imagens comuns; a inversão vai na transformação
+  // da própria textura, que funciona igual em todo navegador (a opção imageOrientation não é confiável no Safari)
+  if (bitmap) { tex.flipY = false; tex.repeat.set(1, -1); tex.offset.set(0, 1); }
+  tex.anisotropy = Math.min(4, G.renderer.capabilities.getMaxAnisotropy()); tex.needsUpdate = true;
+  G.renderer.initTexture(tex);
+  return tex;
+}
+const baixarBlob = (url) => fetch(new URL(url, import.meta.url)).then((r) => { if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.blob(); });
+
+/** Envia já à placa de vídeo todas as texturas de uma cena (as que ainda não foram), uma por vez, sem tarefa longa. */
+async function aquecerTexturas(raiz) {
+  const { G } = GX, vistas = new Set();
+  raiz.traverse((o) => { for (const m of [].concat(o.material || [])) { if (m.map?.isTexture) vistas.add(m.map); for (const u of Object.values(m.uniforms || {})) if (u.value?.isTexture) vistas.add(u.value); } });
+  for (const t of vistas) { if (!t.image) continue; try { G.renderer.initTexture(t); } catch { /* fica para o primeiro uso */ } await pausa(); }
+}
+
 /** Plano com a imagem do modelo, visto de frente; some quando a Galáxia é vista de lado (aí ficam as partículas). */
 function montarDisco(imagem) {
   const { THREE } = GX;
   const tex = new THREE.Texture(imagem);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(8, GX.G.renderer.capabilities.getMaxAnisotropy()); tex.needsUpdate = true;
   const L = GX.meta.metade * 2;
-  GX.uniformes = { face: { value: 1 }, escalaPx: { value: 800 }, pr: { value: 1 }, perto: { value: 0 } };
+  GX.uniformes = { face: { value: 1 }, escalaPx: { value: 800 }, pr: { value: 1 }, perto: { value: 0 }, zoom: { value: 1 } };
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide });
   GX.disco = new THREE.Mesh(new THREE.PlaneGeometry(L, L), mat);
   GX.disco.rotation.x = -Math.PI / 2;
@@ -371,10 +405,12 @@ async function montarFotos(progresso) {
   GX.objFotos = [];
   let feitas = 0;
   await Promise.all(ligadas.map(async (f) => {
-    const img = await carregarImagem(`../galaxias/${f.id}${CELULAR ? '-1024' : ''}.jpg`).catch(() => null);
+    // prévia de 512 px sempre na memória; o arquivo inteiro já fica baixado e só vira textura quando a galáxia cresce na tela
+    const tex = await baixarBlob(`../vendor/galaxias/${f.id}-512.jpg`).then(texturaDeBlob).catch(() => null);
+    f.blobCheio = await baixarBlob(`../vendor/galaxias/${f.id}${CELULAR ? '-1024' : ''}.jpg`).catch(() => null);
     progresso(++feitas / ligadas.length);
-    if (!img) { f.item.foto = null; return; }
-    const tex = new THREE.Texture(img); tex.colorSpace = THREE.SRGBColorSpace; tex.needsUpdate = true;
+    if (!tex) { f.item.foto = null; return; }
+    f.previa = tex;
     const m = f.imagem, d25 = f.leda?.logD25 != null ? 0.1 * 10 ** f.leda.logD25 : null; // minutos de arco
     // largura angular da imagem: D25 ≈ 4 desvios-padrão da luz ao longo do eixo maior (2σ para cada lado)
     const larguraArcmin = d25 ? d25 / (4 * Math.max(0.04, m.sigmaMaior)) : (f.item.diam / f.dKpc / RAD * 60) / (4 * Math.max(0.04, m.sigmaMaior));
@@ -406,7 +442,28 @@ function atualizarFotos() {
     const o = camada && FG.fotos ? Math.min(1, Math.max(0, (px - 18) / 30)) : 0;
     f.malha.visible = o > 0.01;
     f.malha.material.opacity = o;
+    f.px = f.malha.visible ? px : 0;
+    if (px > 300 && f.malha.visible && !f.cheia && !f.carregando && f.blobCheio) carregarFotoCheia(f);
   }
+}
+
+/** Limite de fotografias em resolução cheia ao mesmo tempo na placa de vídeo (as outras ficam com a prévia). */
+const FOTOS_CHEIAS = CELULAR ? 2 : 4;
+
+/** Troca a prévia pela imagem inteira de uma galáxia que cresceu na tela; as menos vistas voltam à prévia. */
+async function carregarFotoCheia(f) {
+  f.carregando = true;
+  try {
+    const tex = await texturaDeBlob(f.blobCheio);
+    f.cheia = tex; f.malha.material.map = tex; GX.revisao++;
+    GX.fotosCheias = [...(GX.fotosCheias || []).filter((x) => x !== f), f];
+    while (GX.fotosCheias.length > FOTOS_CHEIAS) {
+      const sai = GX.fotosCheias.reduce((m, x) => (x !== f && (!m || x.px < m.px) ? x : m), null);
+      if (!sai) break;
+      sai.malha.material.map = sai.previa; sai.cheia.dispose(); sai.cheia = null;
+      GX.fotosCheias = GX.fotosCheias.filter((x) => x !== sai);
+    }
+  } catch { /* fica com a prévia */ } finally { f.carregando = false; }
 }
 
 /** Textura procedural de uma galáxia (espiral, irregular com barra ou irregular), com semente fixa por nome. */
@@ -575,6 +632,7 @@ export async function abrirGalaxia() {
   await GX.preparo;
   const { G } = GX;
   GX.aberto = true;
+  G.pos.adaptar(GX.cena);
   GX.dom.raiz.hidden = false;
   GX.foco.copy(GX.sol);
   G.cam.dist = 0.004; G.cam.lat = 20; G.cam.lon = 180; G.cam.vLat = G.cam.vLon = 0;
@@ -640,9 +698,15 @@ export function atualizarGalaxia(agora) {
   // perto do Sol (até uns 3 kpc), as estrelas reais aparecem e o modelo se apaga um pouco
   const dSol = GX.camera.position.distanceTo(GX.sol);
   GX.uniformes.perto.value = Math.max(0, Math.min(1, (4 - dSol) / 3));
+  if (GX.estrelasReais) GX.estrelasReais.visible = FG.estrelas && GX.uniformes.perto.value > 0.002; // longe do Sol somariam zero: nem são desenhadas
   GX.disco.material.color.setScalar(1 - 0.75 * GX.uniformes.perto.value);
   GX.uniformes.escalaPx.value = G.dom.canvas.clientHeight * G.pixelRatio / (2 * Math.tan(GX.camera.fov * RAD / 2));
   GX.uniformes.pr.value = G.pixelRatio;
+  GX.uniformes.zoom.value = G.cam.dist;
+  // halo de luz: discreto perto das fotografias e da Via Láctea, forte na teia cósmica, onde é ele que desenha os filamentos
+  const halo = Math.max(0, Math.min(1, (Math.log10(G.cam.dist) - 3.4) / 2));
+  G.pos.ajustes.forca = 0.16 + 0.55 * halo;
+  G.pos.ajustes.tinta = [1 - 0.08 * halo, 1 - 0.03 * halo, 1 + 0.08 * halo];
   if (G.quadro % 2 === 0) posicionarRotulos();
   if (G.quadro % 10 === 0) atualizarEscala();
 }
@@ -875,7 +939,10 @@ export function escalaAtual() {
 export function irEscala(id, ms = 3200) {
   const e = ESCALAS.find((x) => x.id === id); if (!e) return false;
   GX.G.fecharPainel?.();
-  irPara(e.foco(), e.dist, e.lat ?? null, MOVIMENTO_REDUZIDO ? 1 : ms);
+  // em tela estreita (celular em pé), a esfera do universo observável precisa de mais distância para caber na largura
+  const meiaLargura = Math.atan(Math.tan(GX.camera.fov * RAD / 2) * GX.G.camera.aspect);
+  const dist = id === 'observavel' ? Math.max(e.dist, CO.DIST_CMB_MPC * 1000 / Math.sin(meiaLargura) * 1.12) : e.dist;
+  irPara(e.foco(), dist, e.lat ?? null, MOVIMENTO_REDUZIDO ? 1 : ms);
   return true;
 }
 
@@ -903,7 +970,7 @@ export async function salvarImagem() {
     r.setPixelRatio(pr); r.setSize(w, h, false);
     const prAntes = G.pixelRatio; G.pixelRatio = pr;
     atualizarGalaxia(performance.now());
-    r.render(GX.cena, GX.camera);
+    G.pos.desenhar(GX.cena, GX.camera);
     const out = document.createElement('canvas'); out.width = cv.width; out.height = cv.height;
     const ctx = out.getContext('2d');
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, out.width, out.height);
@@ -964,3 +1031,19 @@ export function notasFontes() {
 }
 
 export const estado = () => GX;
+
+/**
+ * Diz se o quadro precisa ser desenhado: só quando a câmera, o tamanho da tela ou o conteúdo (camadas, texturas que
+ * chegaram) mudaram desde o último. Parado, um quadro a cada 400 ms cobre qualquer mudança que não passe por aqui.
+ * @param {number} agora instante do quadro (ms)
+ */
+export function precisaDesenhar(agora) {
+  const c = GX.G.cam, cv = GX.G.renderer.domElement, f = GX.foco;
+  const chave = `${c.lat.toFixed(4)} ${c.lon.toFixed(4)} ${c.dist.toPrecision(7)} ${f.x.toPrecision(7)} ${f.y.toPrecision(7)} ${f.z.toPrecision(7)} ${cv.width}x${cv.height} ${GX.revisao}`;
+  if (!GX.anim && chave === GX.chaveQuadro && agora - GX.ultimoDesenho < 400) return false;
+  GX.chaveQuadro = chave; GX.ultimoDesenho = agora;
+  return true;
+}
+
+/** Nível de qualidade adaptativa do globo (0 = tudo): repassa às nuvens de galáxias, que desenham uma fração dos pontos. */
+export function definirQualidade(nivel) { UNI.definirQualidade(nivel); GX.revisao++; }
