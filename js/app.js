@@ -1603,7 +1603,7 @@ function renderHojeDetalhes() {
   meteograma(met, Date.now() - 2 * 3600000, Date.now() + 48 * 3600000, 24, 'hoje');
   previstoMedido(pm);
   estado.desligarMapa?.(); estado.desligarMapa = null;
-  import('./mapa.js').then((m) => { estado.desligarMapa = m.secaoMapa(mapa, estado); }).catch(() => mapa.append(el('p', { class: 'nota', text: 'Mapa indisponível.' })));
+  import('./mapa.js').then((m) => { estado.desligarMapa = m.secaoMapa(mapa, estado); ocioso(() => m.preCarregarMapa(estado.local.lat, estado.local.lon)); }).catch(() => mapa.append(el('p', { class: 'nota', text: 'Mapa indisponível.' })));
   void p;
 }
 
@@ -2149,8 +2149,15 @@ function abrirDia(data) {
   if (k === 1) return irPara('amanha');
   if (k < 0) return irPara('semana');
   estado.diaAberto = data;
-  renderDia();
+  // Resposta no mesmo quadro do toque: primeiro o resumo do dia e a troca de aba; os detalhes (gráficos e
+  // tabelas, a parte pesada) entram logo depois de a tela ser pintada, se a pessoa ainda estiver nesse dia.
+  limparGraficos($('#aba-dia'));
+  $('#dia-detalhes').replaceChildren();
+  renderPrimeira($('#dia-primeira'), data, k, false);
   irPara('dia');
+  requestAnimationFrame(() => setTimeout(() => {
+    if (estado.diaAberto === data && estado.prev) renderDiaDetalhes($('#dia-detalhes'), data, k, 'dia');
+  }, 0));
 }
 
 function renderDia() {

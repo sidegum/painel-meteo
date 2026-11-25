@@ -66,6 +66,9 @@ for (const tela of TELAS) {
     if (capturas) await pag.addStyleTag({ content: '.secao, .detalhes > .secao, #semana-conteudo > .secao, #modelos-conteudo > .secao, #elnino-conteudo > .secao { content-visibility: visible !important; }' });
     await pag.waitForFunction(() => document.querySelector('#hoje-primeira')?.textContent.length > 40, null, { timeout: 30000 });
     await pag.waitForTimeout(2500);
+    // Pré-carregamento: o mapa já está montado sem ninguém rolar até ele, e as abas escondidas têm a largura real.
+    if (!await pag.evaluate(() => !!document.querySelector('.mapa .leaflet-pane'))) problemas.push(`${tela.nome}: o mapa não foi montado antes de aparecer na tela`);
+    if (await pag.evaluate(() => document.querySelector('#aba-semana').clientWidth === 0)) problemas.push(`${tela.nome}: aba escondida sem largura (os gráficos seriam redesenhados ao abrir)`);
     for (const aba of ABAS) {
       await pag.evaluate((a) => window.__painel?.irPara?.(a) ?? document.querySelector(`[data-ir="${a}"]`)?.click(), aba);
       await pag.waitForTimeout(900);

@@ -158,8 +158,23 @@ function gestosDoisDedos(L, mapa, caixa) {
   caixa.addEventListener('touchcancel', fim, { passive: true });
 }
 
+const ocioso = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 50));
+
+/**
+ * Baixa antes da hora o que o mapa precisa e não depende da tela: a biblioteca Leaflet e a grade de pontos das
+ * camadas (temperatura, vento, nuvens etc., guardada por 10 min em `grade`). Trocar de camada deixa de esperar a
+ * rede. Falhas são ignoradas: o mapa tenta de novo quando for usado.
+ * @param {number} lat
+ * @param {number} lon
+ */
+export function preCarregarMapa(lat, lon) {
+  if (navigator.connection?.saveData || navigator.onLine === false) return;
+  carregarLeaflet().catch(() => {});
+  grade(lat, lon).catch(() => {});
+}
+
 export function secaoMapa(container, estado) {
-  const caixa = el('div', { class: 'mapa', role: 'region', 'aria-label': 'Mapa do tempo' }, el('p', { class: 'nota', style: { padding: '16px' }, text: 'O mapa carrega quando esta parte aparece na tela.' }));
+  const caixa = el('div', { class: 'mapa', role: 'region', 'aria-label': 'Mapa do tempo' }, el('p', { class: 'nota', style: { padding: '16px' }, text: 'Carregando o mapa…' }));
   const escolha = el('div', { class: 'camadas' });
   const titulo = el('p', { class: 'mapa-titulo', 'aria-live': 'polite' });
   const barra = el('div', { class: 'mapa-barra', hidden: true });
@@ -184,12 +199,19 @@ export function secaoMapa(container, estado) {
   const limpezas = [];
   const destruir = () => { destruido = true; io.disconnect(); for (const f of limpezas.splice(0)) f(); };
 
-  const io = new IntersectionObserver(async (ents) => {
+  // O mapa é montado antes de aparecer: assim que a aba Hoje está aberta (em qualquer ponto da rolagem), num
+  // momento ocioso, para já estar pronto quando a pessoa chega nele. Com economia de dados ligada no aparelho,
+  // só quando chega perto da tela. Numa aba escondida a seção não cruza a tela, então ele espera a aba abrir.
+  const economia = !!navigator.connection?.saveData;
+  const io = new IntersectionObserver((ents) => {
     if (!ents.some((e) => e.isIntersecting)) return;
     io.disconnect();
-    try { await montar(); } catch (e) { caixa.replaceChildren(el('p', { class: 'nota', style: { padding: '16px' }, text: 'Mapa indisponível: ' + e.message })); }
-  }, { rootMargin: '200px' });
-  io.observe(caixa);
+    ocioso(async () => {
+      if (destruido) return;
+      try { await montar(); } catch (e) { caixa.replaceChildren(el('p', { class: 'nota', style: { padding: '16px' }, text: 'Mapa indisponível: ' + e.message })); }
+    });
+  }, { rootMargin: economia ? '200px' : '100000px 0px' });
+  io.observe(container);
   return destruir;
 
   async function montar() {
