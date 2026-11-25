@@ -469,6 +469,17 @@ Pedido do Gustavo: um bloco fixo logo abaixo do resumo de hoje que sempre mostre
 
 **Responsivo e autoexplicativo (1.11.1).** Pedido do Gustavo: radar responsivo, explicativo e acima do mapa. O bloco é uma grade (`.tempestade`): desenho à esquerda, leitura à direita e a legenda embaixo; abaixo de 360 px tudo empilha. O desenho cresce com a tela (112 a 148 px no celular, 168 px a partir de 1100 px, 208 px a partir de 1600 px) e é redesenhado por um `ResizeObserver` quando o bloco muda de tamanho. A partir de 120 px ele escreve N, S, L, O e a distância dos anéis de 100 e 200 km. A legenda (`.tp-leg`) fica sempre à vista: "Você no centro · 250 km em volta" (e o sentido da seta, quando há movimento medido) e as quatro cores (chuva, chuva forte, tempestade, tempestade forte; as classes `.tp-c-*` repetem `COR_DBZ`). O rótulo traz a hora do quadro do radar ("Fonte · Horário") e "Ver detalhes ›" indica o toque. Ordem em Hoje, nos dois layouts: resumo, radar de tempestade, gráfico, próximas horas, mapa.
 
+### 5.3.2 Pré-carregamento e navegação instantânea (1.11.2)
+
+Pedido do Gustavo: tudo o que é pesado deve ser pré-carregado, para a navegação ficar extremamente rápida. O que já existia: a fila ociosa de `renderTudo` desenha todas as abas depois da primeira tela, `preCarregarLocais` renova as cidades favoritas e `preCarregarGlobo` baixa o código do Globo. O que a 1.11.2 acrescenta, com a medição feita antes e depois (Chromium, celular de 390 px com a CPU 4 vezes mais lenta, tempo do toque até a tela pintada):
+
+- **Abas escondidas com a largura real** (`app.css`, `.aba[hidden]:not(.aba-globo)`): em vez de `display: none`, altura zero, invisíveis e fora da leitura de tela. Antes, os gráficos nasciam com largura zero e eram todos redesenhados pelo `ResizeObserver` quando a aba abria (uma tarefa de 60 a 80 ms depois do toque). Agora nascem no tamanho certo na fila ociosa. Abrir Amanhã foi de 101 para 28 ms; Modelos, de 80 para 21 ms; sem tarefa longa depois.
+- **Mapa montado antes de aparecer** (`js/mapa.js`): o `IntersectionObserver` de `secaoMapa` observa a seção com margem enorme, então o mapa (Leaflet, mapa base e o quadro mais recente do radar) é montado num momento ocioso assim que a aba Hoje está aberta, e não quando a pessoa rola até ele. `preCarregarMapa(lat, lon)` baixa o Leaflet e a grade das camadas (temperatura, vento, nuvens; guardada por 10 min), para trocar de camada sem esperar a rede. Com a economia de dados do aparelho ligada (`navigator.connection.saveData`), vale o comportamento antigo.
+- **Dia da Semana em duas etapas** (`abrirDia`): o resumo do dia e a troca de aba acontecem no quadro do toque; gráficos e tabelas (`renderDiaDetalhes`) entram logo depois da pintura. O código no toque caiu de cerca de 62 para 30 ms no celular lento.
+- **Módulos pedidos de uma vez** (`index.html`, `<link rel="modulepreload">`): o navegador não descobre mais os módulos em cascata na abertura.
+
+`test/e2e/telas.mjs` confere que o mapa está montado sem rolagem e que uma aba escondida tem largura. Não medido em aparelho real: os números são do Chromium com CPU limitada, não de um iPhone.
+
 ### 5.4 Hoje: detalhes (`renderHojeDetalhes`)
 
 A ordem é:
