@@ -108,21 +108,25 @@ function montarLevantamentos(bin) {
   if (String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3)) !== 'LEV1') return;
   const total = v.getUint32(4, true), esc = v.getFloat32(8, true), passo = CELULAR ? 2 : 1;
   const q = new Int16Array(bin.slice(12, 12 + 6 * total)), fonte = new Uint8Array(bin, 12 + 6 * total, total);
-  const CORES = [[1, 0.9, 0.72], [0.8, 0.88, 1], [1, 0.66, 0.5]]; // 6dFGS, SDSS, BOSS (galáxias vermelhas luminosas)
   // duas nuvens, porque o brilho de cada uma cai em zooms diferentes: 6dFGS e SDSS (até z ≈ 0,2) e BOSS (0,2 < z < 0,75)
   const nuvemDe = (longe, px) => {
-    const pos = [], cor = [], br = [];
-    for (let k = 0; k < total; k += passo) {
-      if ((fonte[k] === 2) !== longe) continue;
+    const indices = [];
+    for (let k = 0; k < total; k += passo) if ((fonte[k] === 2) === longe) indices.push(k);
+    // ordem embaralhada (com semente fixa): desenhar só o começo da lista dá uma amostra uniforme do céu todo
+    let semente = 12345;
+    for (let i = indices.length - 1; i > 0; i--) { semente = (semente * 1664525 + 1013904223) >>> 0; const j = semente % (i + 1); const t = indices[i]; indices[i] = indices[j]; indices[j] = t; }
+    const pos = new Float32Array(indices.length * 3);
+    indices.forEach((k, i) => {
       const x = q[k * 3] / 32767 * esc, y = q[k * 3 + 1] / 32767 * esc, z = q[k * 3 + 2] / 32767 * esc;
-      pos.push(y * KPC, z * KPC + meta.zSol, x * KPC - meta.R0);
-      cor.push(...(CORES[fonte[k]] || CORES[1]));
-      br.push(0.4);
-    }
-    return nuvem(new Float32Array(pos), new Float32Array(cor), new Float32Array(br), px);
+      pos[i * 3] = y * KPC; pos[i * 3 + 1] = z * KPC + meta.zSol; pos[i * 3 + 2] = x * KPC - meta.R0;
+    });
+    const n = pos.length / 3, cor = new Float32Array(n * 3), br = new Float32Array(n);
+    const dens = densidadeLocal(pos, (longe ? 24 : 7) * KPC * passo ** (1 / 3)); // célula maior onde a amostra é mais rala
+    for (let i = 0; i < n; i++) naRampa(longe ? RAMPA_LONGE : RAMPA_TEIA, dens[i], cor, i, br);
+    return nuvem(pos, cor, br, px);
   };
-  U.levantamentos = nuvemDe(false, 1.5);
-  U.levantamentosLonge = nuvemDe(true, 1.5);
+  U.levantamentos = nuvemDe(false, 1.7);
+  U.levantamentosLonge = nuvemDe(true, 1.7);
   U.levantamentos.userData = { n: total };
   U.ctx.adicionar(U.levantamentos, U.levantamentosLonge);
 }
@@ -130,19 +134,64 @@ function montarLevantamentos(bin) {
 /** Galáxias do Volume Local com distância medida; as que casam com o NGC/IC dão a distância ao objeto do NGC. */
 export function volumeLocal() { return U.dados?.ungc || []; }
 
+// Cada galáxia é um ponto com núcleo nítido e um halo fraco. As que estão mais perto da câmera que o foco ficam maiores
+// e mais claras, e as do fundo mais fracas: é o que dá profundidade ao atravessar a teia. A soma de muitos pontos no
+// mesmo pixel é guardada sem estourar (alvo de alta faixa dinâmica, ver globo-pos.js) e vira o brilho dos filamentos.
 const VERTEX_NUVEM = /* glsl */`
   attribute vec3 cor; attribute float brilho;
-  uniform float pr, alfa, px;
+  uniform float pr, alfa, px, zoom;
   varying vec3 vCor;
   void main() {
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    gl_PointSize = px * pr * (0.75 + 0.6 * brilho);
-    vCor = cor * alfa * (0.35 + 0.65 * brilho);
+    float g = clamp(zoom / max(-mv.z, zoom * 0.02), 0.35, 9.0);
+    gl_PointSize = px * pr * (0.75 + 0.6 * brilho) * clamp(pow(g, 0.55), 0.8, 3.2);
+    vCor = cor * alfa * (0.35 + 0.65 * brilho) * clamp(pow(g, 0.9), 0.4, 3.5);
     gl_Position = projectionMatrix * mv;
   }`;
 const FRAGMENT_NUVEM = /* glsl */`
   varying vec3 vCor;
-  void main() { vec2 p = gl_PointCoord - 0.5; float r2 = dot(p, p) * 4.0; if (r2 > 1.0) discard; gl_FragColor = vec4(vCor * exp(-2.6 * r2), 1.0); }`;
+  void main() {
+    vec2 p = gl_PointCoord - 0.5; float r2 = dot(p, p) * 4.0; if (r2 > 1.0) discard;
+    gl_FragColor = vec4(vCor * (exp(-9.0 * r2) + 0.2 * exp(-2.4 * r2) * (1.0 - r2)), 1.0);
+  }`;
+
+/**
+ * Densidade local de cada ponto, de 0 (isolado) a 1 (o mais denso), em posto percentual: conta os vizinhos na própria
+ * célula de uma grade e nas seis células encostadas. Serve para colorir a teia: vazios e filamentos finos em azul, nós
+ * e aglomerados em dourado. É uma medida feita sobre o próprio catálogo, não um dado do levantamento.
+ * @param {Float32Array} pos posições (x, y, z) em kpc
+ * @param {number} celula lado da célula, em kpc
+ * @returns {Float32Array}
+ */
+function densidadeLocal(pos, celula) {
+  const n = pos.length / 3, chave = new Int32Array(n), conta = new Map();
+  for (let i = 0; i < n; i++) {
+    const k = ((Math.floor(pos[i * 3] / celula) + 512) << 20) | ((Math.floor(pos[i * 3 + 1] / celula) + 512) << 10) | (Math.floor(pos[i * 3 + 2] / celula) + 512);
+    chave[i] = k; conta.set(k, (conta.get(k) || 0) + 1);
+  }
+  const viz = new Uint32Array(n); let maximo = 0;
+  for (let i = 0; i < n; i++) {
+    const k = chave[i];
+    const v = conta.get(k) * 2 + (conta.get(k + 1) || 0) + (conta.get(k - 1) || 0) + (conta.get(k + 1024) || 0) + (conta.get(k - 1024) || 0) + (conta.get(k + 1048576) || 0) + (conta.get(k - 1048576) || 0);
+    viz[i] = v; if (v > maximo) maximo = v;
+  }
+  const hist = new Uint32Array(maximo + 2);
+  for (let i = 0; i < n; i++) hist[viz[i] + 1]++;
+  for (let v = 1; v < hist.length; v++) hist[v] += hist[v - 1];
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = hist[viz[i]] / n;
+  return out;
+}
+
+/** Cor e brilho pela densidade local: paradas [posto, r, g, b, brilho]. */
+const RAMPA_TEIA = [[0, 0.26, 0.38, 1.0, 0.16], [0.45, 0.5, 0.64, 1.0, 0.3], [0.78, 0.96, 0.88, 0.86, 0.55], [0.93, 1.0, 0.84, 0.6, 0.8], [1, 1.0, 0.95, 0.86, 1]];
+const RAMPA_LONGE = [[0, 0.62, 0.26, 0.5, 0.2], [0.5, 0.95, 0.45, 0.4, 0.35], [0.85, 1.0, 0.68, 0.42, 0.65], [1, 1.0, 0.9, 0.74, 1]]; // BOSS: galáxias vermelhas luminosas, mais distantes
+function naRampa(rampaCor, t, cor, i, brilho) {
+  let k = 1; while (k < rampaCor.length - 1 && t > rampaCor[k][0]) k++;
+  const a = rampaCor[k - 1], b = rampaCor[k], f = Math.max(0, Math.min(1, (t - a[0]) / (b[0] - a[0])));
+  cor[i * 3] = a[1] + (b[1] - a[1]) * f; cor[i * 3 + 1] = a[2] + (b[2] - a[2]) * f; cor[i * 3 + 2] = a[3] + (b[3] - a[3]) * f;
+  brilho[i] = a[4] + (b[4] - a[4]) * f;
+}
 
 /** 2MRS e quasares: nuvens de pontos com brilho pela luminosidade e transparência pelo zoom. */
 function montarNuvens(bin) {
@@ -179,7 +228,7 @@ function nuvem(pos, cor, brilho, px) {
   const { THREE, uniformes } = U.ctx;
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('cor', new THREE.BufferAttribute(cor, 3)); g.setAttribute('brilho', new THREE.BufferAttribute(brilho, 1));
-  const p = new THREE.Points(g, new THREE.ShaderMaterial({ uniforms: { pr: uniformes.pr, alfa: { value: 0 }, px: { value: px * (CELULAR ? 1.1 : 1) } }, vertexShader: VERTEX_NUVEM, fragmentShader: FRAGMENT_NUVEM,
+  const p = new THREE.Points(g, new THREE.ShaderMaterial({ uniforms: { pr: uniformes.pr, zoom: uniformes.zoom, alfa: { value: 0 }, px: { value: px * (CELULAR ? 1.1 : 1) } }, vertexShader: VERTEX_NUVEM, fragmentShader: FRAGMENT_NUVEM,
     transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }));
   p.frustumCulled = false; p.renderOrder = 3;
   return p;
@@ -199,7 +248,7 @@ function montarAglomerados() {
   U.ctx.adicionar(U.pontosAglomerados);
   // nomes: só Abell e nomes populares (as siglas de levantamento em raios X ficam para o cartão), os mais massivos para a distância
   const ordem = [...U.aglomerados].filter((a) => /^Abell |\(Abell /.test(a.nome) || /^[A-Z][a-zà-ú]+ ?[A-Za-zà-ú ]*$/.test(a.nome)).sort((x, y) => (y.m || 0) / (y.dMpc ** 1.2) - (x.m || 0) / (x.dMpc ** 1.2));
-  for (const a of ordem.slice(0, CELULAR ? 24 : 60)) rotulo(a.nome, a.p, { prioridade: 22, de: a.dMpc * 120, ate: Math.min(a.dMpc * 9000, 2.5e6), classe: 'aglomerado', alvo: a });
+  for (const a of ordem.slice(0, CELULAR ? 12 : 32)) rotulo(a.nome, a.p, { prioridade: 22, de: a.dMpc * 120, ate: Math.min(a.dMpc * 9000, 2.5e6), classe: 'aglomerado', alvo: a });
 }
 
 function nomeAglomerado(a) {
@@ -216,7 +265,7 @@ function montarSuperaglomerados() {
   const { rotulo, pontosAlvo } = U.ctx;
   U.super = (U.dados.superaglomerados || []).map((s) => {
     const d = CO.distanciaComovel(s.z);
-    return { tipo: 'super', ...s, nome: s.n || `Superaglomerado MSCC ${s.id}`, p: lugar(s, d), dMpc: d, cor: '#7fa6e8', diam: Math.max(8, s.dmax || 10) * KPC, minPx: 1.6, k: 0.35 };
+    return { tipo: 'super', ...s, nome: s.n || `Superaglomerado MSCC ${s.id}`, p: lugar(s, d), dMpc: d, cor: '#6f8fe0', diam: Math.max(8, s.dmax || 10) * KPC, minPx: 1.6, k: 0.1 };
   });
   if (!U.super.length) return;
   U.pontosSuper = pontosAlvo(U.super);
@@ -292,22 +341,30 @@ const VERTEX_CMB = /* glsl */`
   }`;
 // direção na cena (X = Yg, Y = Zg, Z = Xg) → longitude e latitude galácticas → posição no mapa equiretangular
 const FRAGMENT_CMB = /* glsl */`
-  uniform sampler2D mapa; uniform float alfa; uniform float temMapa;
+  uniform sampler2D mapa; uniform float alfa, temMapa, parede;
   varying vec3 vDir; varying vec3 vN; varying vec3 vV;
   void main() {
     float l = atan(vDir.x, vDir.z);
     float b = asin(clamp(vDir.y, -1.0, 1.0));
     vec2 uv = vec2(fract(l / 6.28318530718), 0.5 + b / 3.14159265359);
     vec3 c = temMapa > 0.5 ? texture2D(mapa, uv).rgb : vec3(1.0, 0.62, 0.38) * 0.35;
-    float borda = pow(1.0 - abs(dot(vN, vV)), 3.0);
-    gl_FragColor = vec4(c * alfa * (0.85 + 0.4 * borda), 1.0);
+    float rasante = 1.0 - abs(dot(vN, vV));
+    if (gl_FrontFacing) {
+      // de fora, a metade da casca virada para nós é quase transparente, só com o contorno aceso: vê-se o interior
+      float a = alfa * (0.03 + 0.97 * pow(rasante, 3.0));
+      gl_FragColor = vec4(mix(c, vec3(1.0, 0.74, 0.5), 0.5) * 1.3, a);
+    } else {
+      // parede do fundo: de fora (parede < 1) o mapa aparece cheio perto da borda e se apaga para o centro, onde ficam as galáxias
+      float centro = mix(1.0, mix(0.1, 1.0, pow(rasante, 1.4)), step(parede, 0.99));
+      gl_FragColor = vec4(c * (0.9 + 0.5 * pow(rasante, 3.0)), alfa * centro);
+    }
   }`;
 
 /** Radiação cósmica de fundo: o mapa do Planck numa esfera no raio da última dispersão, centrada em nós. */
 function montarCmb() {
   const { THREE, carregarImagem, meta, G } = U.ctx;
   const R = CO.DIST_CMB_MPC * KPC;
-  const uni = { mapa: { value: null }, alfa: { value: 0 }, temMapa: { value: 0 } };
+  const uni = { mapa: { value: null }, alfa: { value: 0 }, temMapa: { value: 0 }, parede: { value: 1 } };
   U.cmb = new THREE.Mesh(new THREE.SphereGeometry(R, 128, 64), new THREE.ShaderMaterial({ uniforms: uni, vertexShader: VERTEX_CMB, fragmentShader: FRAGMENT_CMB, side: THREE.DoubleSide, transparent: true, depthWrite: false, depthTest: false }));
   U.cmb.position.set(0, meta.zSol, -meta.R0);
   U.cmb.renderOrder = -2; U.cmb.frustumCulled = false; U.cmb.visible = false;
@@ -356,24 +413,33 @@ const _q = { v: null };
  * @param {number} zoom distância da câmera ao foco (kpc)
  * @param {object} F filtros ligados
  */
+/** Fração dos pontos dos levantamentos desenhada em cada nível de qualidade; o brilho compensa, para a imagem não escurecer. */
+const FRACAO_POR_NIVEL = [1, 0.8, 0.6, 0.45, 0.35];
+export function definirQualidade(nivel) {
+  U.fracao = FRACAO_POR_NIVEL[Math.min(nivel, FRACAO_POR_NIVEL.length - 1)];
+  for (const o of [U.levantamentos, U.levantamentosLonge]) if (o) o.geometry.setDrawRange(0, Math.round(o.geometry.attributes.position.count * U.fracao));
+}
+
 export function atualizarUniverso(zoom, F, camera) {
   if (!U.prontos) return;
   const lz = Math.log10(zoom);
   // galáxias do 2MRS: aparecem a partir de ~3 Mpc de zoom e somem quando o quadro passa de ~5 bilhões de anos-luz; de longe, milhares de pontos se somam no mesmo pixel, então o brilho de cada um cai
-  if (U.galaxias) { const a = rampa(lz, 3.3, 4.1) * (1 - rampa(lz, 6.3, 6.8)) * (1 - 0.8 * rampa(lz, 5.0, 6.2)); U.galaxias.material.uniforms.alfa.value = a; U.galaxias.visible = F.teia && a > 0.003; }
+  if (U.galaxias) { const a = rampa(lz, 3.3, 4.1) * (1 - rampa(lz, 6.3, 6.8)) * (0.85 - 0.45 * rampa(lz, 5.0, 6.2)); U.galaxias.material.uniforms.alfa.value = a; U.galaxias.visible = F.teia && a > 0.003; }
   if (U.levantamentos) {
-    const perto = rampa(lz, 4.5, 5.3) * (1 - rampa(lz, 6.9, 7.4)) * (0.8 - 0.68 * rampa(lz, 5.5, 6.6)), longe = rampa(lz, 5.2, 5.9) * (1 - rampa(lz, 7.0, 7.5)) * (0.9 - 0.45 * rampa(lz, 6.3, 7.0));
-    U.levantamentos.material.uniforms.alfa.value = perto; U.levantamentos.visible = F.levantamentos && perto > 0.003;
-    U.levantamentosLonge.material.uniforms.alfa.value = longe; U.levantamentosLonge.visible = F.levantamentos && longe > 0.003;
+    const perto = rampa(lz, 4.5, 5.3) * (1 - rampa(lz, 6.9, 7.4)) * (0.7 - 0.45 * rampa(lz, 5.6, 6.8)), longe = rampa(lz, 5.2, 5.9) * (1 - rampa(lz, 7.0, 7.5)) * (0.8 - 0.4 * rampa(lz, 6.4, 7.2));
+    U.levantamentos.material.uniforms.alfa.value = perto / (U.fracao || 1); U.levantamentos.visible = F.levantamentos && perto > 0.003;
+    U.levantamentosLonge.material.uniforms.alfa.value = longe / (U.fracao || 1); U.levantamentosLonge.visible = F.levantamentos && longe > 0.003;
   }
   if (U.quasares) { const a = rampa(lz, 5.6, 6.5) * 0.9; U.quasares.material.uniforms.alfa.value = a; U.quasares.visible = F.quasares && a > 0.003; }
   if (U.pontosAglomerados) U.pontosAglomerados.visible = F.aglomerados && lz > 3.6;
   if (U.pontosSuper) U.pontosSuper.visible = F.superaglomerados && lz > 4.3;
-  if (U.pontosVazios) { const a = rampa(lz, 4.9, 5.5) * (1 - rampa(lz, 6.1, 6.5)) * 0.2; U.pontosVazios.material.uniforms.alfa.value = a; U.pontosVazios.visible = F.vazios && a > 0.003; }
+  if (U.pontosVazios) { const a = rampa(lz, 4.9, 5.5) * (1 - rampa(lz, 6.1, 6.5)) * 0.09; U.pontosVazios.material.uniforms.alfa.value = a; U.pontosVazios.visible = F.vazios && a > 0.003; }
   if (U.linhaCampo) U.linhaCampo.visible = F.notaveis && lz > 5.6;
   // radiação cósmica de fundo: some de perto (no céu real ela não se vê); acende quando o quadro passa de bilhões de anos-luz
   const aCmb = rampa(lz, 6.3, 7.1);
-  U.cmb.material.uniforms.alfa.value = aCmb * (zoom > CO.DIST_CMB_MPC * KPC * 1.05 ? 1 : 0.16); // de dentro, fundo discreto
+  const fora = zoom > CO.DIST_CMB_MPC * KPC * 1.05;
+  U.cmb.material.uniforms.alfa.value = aCmb * (fora ? 1 : 0.07); // de dentro, fundo bem discreto
+  U.cmb.material.uniforms.parede.value = fora ? 0.5 : 1;         // de fora, a parede do fundo se apaga no centro (ver o shader)
   U.cmb.visible = F.cmb && aCmb > 0.003;
   // cascas: anéis no plano da tela, rótulo no topo de cada anel
   U.grupoCascas.visible = F.cascas && lz > 5.4;
@@ -433,7 +499,7 @@ export function contagens() {
 export function notasFontes() {
   const f = U.dados?.fontes || {};
   return ['Teia cósmica: 2MRS (Huchra et al. 2012)', 'Volume Local: Karachentsev et al. 2013', 'Aglomerados: MCXC (Piffaretti et al. 2011)', 'Superaglomerados: MSCC (Chow-Martínez et al. 2014)',
-    f.vazios ? `Vazios: ${/douglass/.test(f.vazios) ? 'Douglass et al. 2023' : 'Pan et al. 2012'}` : null, 'Quasares: SDSS DR16Q (Lyke et al. 2020)', 'Radiação cósmica de fundo: Planck (ESA), SMICA', f.boss ? 'Levantamentos profundos: 6dFGS (Jones et al. 2009), SDSS DR10 (Tempel et al. 2014), BOSS DR12 (Reid et al. 2016)' : null, 'Distâncias: ΛCDM do Planck 2018'].filter(Boolean);
+    f.vazios ? `Vazios: ${/douglass/.test(f.vazios) ? 'Douglass et al. 2023' : 'Pan et al. 2012'}` : null, 'Quasares: SDSS DR16Q (Lyke et al. 2020)', 'Radiação cósmica de fundo: Planck (ESA), SMICA', f.boss ? 'Levantamentos profundos: 6dFGS (Jones et al. 2009), SDSS DR10 (Tempel et al. 2014), BOSS DR12 (Reid et al. 2016); a cor indica a densidade local de galáxias, medida no próprio catálogo' : null, 'Distâncias: ΛCDM do Planck 2018'].filter(Boolean);
 }
 
 export const estado = () => U;

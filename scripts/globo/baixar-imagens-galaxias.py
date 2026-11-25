@@ -7,7 +7,7 @@ Para cada galáxia do manifesto (scripts/globo/imagens-galaxias.json):
 1. Procura o primeiro arquivo candidato que existe no Commons e lê de lá autor, crédito e licença. Só entram
    licenças livres (domínio público, CC0, CC BY, CC BY-SA).
 2. Baixa a versão de 2048 px, escurece o fundo (o céu vira preto, para a imagem se somar à cena sem moldura) e apaga
-   as bordas em degradê. Grava <id>.jpg (até 2048 px) e <id>-1024.jpg (celular).
+   as bordas em degradê. Grava <id>.jpg (até 2048 px), <id>-1024.jpg (celular) e <id>-512.jpg (prévia que fica sempre na memória).
 3. Mede a galáxia na própria imagem pelos momentos da luz: centro, ângulo do eixo maior e tamanhos, usados pelo app
    para alinhar a foto com o ângulo de posição do catálogo.
 4. Busca no HyperLEDA (VizieR VII/237) o diâmetro D25, a razão de eixos e o ângulo de posição da galáxia.
@@ -146,6 +146,10 @@ def main():
     for g in lista:
         print(g['id'])
         if g['id'] in antes and (saida / f"{g['id']}.jpg").exists():  # já baixada numa rodada anterior
+            if not (saida / f"{g['id']}-512.jpg").exists():
+                previa = Image.open(saida / f"{g['id']}-1024.jpg")
+                previa.thumbnail((512, 512), Image.LANCZOS)
+                previa.save(saida / f"{g['id']}-512.jpg", quality=85, optimize=True)
             feitas.append({**antes[g['id']], **distancia(g)})
             mini = Image.open(saida / f"{g['id']}-1024.jpg")
             mini.thumbnail((256, 256))
@@ -175,6 +179,9 @@ def main():
         f = 1024 / max(img.size)
         peq = img if f >= 1 else img.resize((round(img.width * f), round(img.height * f)), Image.LANCZOS)
         peq.save(saida / f"{g['id']}-1024.jpg", quality=86, optimize=True)
+        previa = img.copy()
+        previa.thumbnail((512, 512), Image.LANCZOS)
+        previa.save(saida / f"{g['id']}-512.jpg", quality=85, optimize=True)
         cat = leda(g['ra'], g['dec'])
         feitas.append({'id': g['id'], 'nome': g['nome'], 'ra': g['ra'], 'dec': g['dec'], **{k: info[k] for k in ('arquivo', 'pagina', 'licenca', 'autor', 'credito')},
                        'imagem': medidas, 'leda': cat, **distancia(g)})
