@@ -15,6 +15,17 @@
 <link rel="preload" href="vendor/fontes/archivo-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="vendor/uplot/uPlot.min.css">
+<!-- Módulos do app pedidos todos de uma vez (sem isso o navegador descobre um por um, em cascata). -->
+<link rel="modulepreload" href="js/config.js">
+<link rel="modulepreload" href="js/analise.js">
+<link rel="modulepreload" href="js/cidades.js">
+<link rel="modulepreload" href="js/dados.js">
+<link rel="modulepreload" href="js/ui.js">
+<link rel="modulepreload" href="js/locais.js">
+<link rel="modulepreload" href="js/faixa.js">
+<link rel="modulepreload" href="js/fundo-ceu.js">
+<link rel="modulepreload" href="js/graficos.js">
+<link rel="modulepreload" href="js/mapa.js">
 <script src="vendor/uplot/uPlot.iife.min.js" defer></script>
 <script src="js/app.js" type="module"></script>
 </head>

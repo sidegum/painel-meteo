@@ -112,6 +112,10 @@ body[data-aba="globo"] .rodape, body[data-aba="globo"] #estado { display: none; 
 
 .puxar { position: fixed; left: 50%; top: 64px; z-index: 30; transform: translate(-50%, 0); opacity: 0; pointer-events: none;
   padding: 8px 14px; border-radius: 18px; background: var(--sup2, var(--sup)); color: var(--texto); font-size: 14px; transition: opacity .12s; will-change: transform; }
+/* Abas fora da tela continuam com a largura real (altura zero, invisíveis e fora da leitura de tela), em vez de
+   display: none. Assim os gráficos já são desenhados no tamanho certo na fila ociosa e a aba abre pronta, sem
+   redesenhar nada no toque. O Globo fica de fora: ele só é montado quando a aba abre. */
+.aba[hidden]:not(.aba-globo) { display: block !important; visibility: hidden; height: 0 !important; min-height: 0 !important; overflow: hidden; padding-block: 0 !important; margin-block: 0 !important; border: 0 !important; contain: layout paint; }
 .aba.entra { animation: aba-entra .16s ease-out; }
 .aba.entra-dir { animation: aba-dir .2s ease-out; }
 .aba.entra-esq { animation: aba-esq .2s ease-out; }
