@@ -1912,7 +1912,7 @@ function laco(agora) {
   if (G.quadro % 4 === 2 && !G.sistema) atualizarGrade();
   if (G.quadro % 6 === 3) atualizarLeitura();
   if (G.quadro % 30 === 0) atualizarRelogio();
-  if (G.quadro % 12 === 6) atualizarEscalas();
+  if (agora - (G.ultimaEscala || 0) > 200) { G.ultimaEscala = agora; atualizarEscalas(); } // por tempo, não por quadro: com a cena pesada, a régua não pode atrasar
   if (G.galaxia) G.galaxia.atualizarGalaxia(agora);
   else if (G.espaco && G.espacoAberto) G.espaco.atualizarEspaco(agora);
   if (G.camada === 'pressao') G.terra.material.uniforms.isobaras.value = Math.max(0, Math.min(1, (2.6 - c.dist) / 0.8));

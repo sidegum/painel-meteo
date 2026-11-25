@@ -54,7 +54,7 @@ const AGLOMERADOS = [
 export const CAMADAS_UNIVERSO = [
   { grupo: 'Nossa galáxia', itens: [['viaLactea', 'Via Láctea (modelo)'], ['estrelas', 'Estrelas perto do Sol (800 mil, distância medida)'], ['masers', 'Regiões de formação de estrelas (masers)'], ['globulares', 'Aglomerados globulares'],
     ['aglomeradosEstelares', 'Aglomerados estelares'], ['pulsares', 'Pulsares'], ['exoplanetas', 'Estrelas com planetas']] },
-  { grupo: 'Galáxias', itens: [['grupoLocal', 'Grupo Local'], ['galaxias', 'Galáxias próximas (NGC/IC e Volume Local)'], ['teia', 'Teia cósmica (2MASS Redshift Survey)'], ['levantamentos', 'Levantamentos profundos (6dF, SDSS e BOSS)']] },
+  { grupo: 'Galáxias', itens: [['grupoLocal', 'Grupo Local'], ['galaxias', 'Galáxias próximas (NGC/IC e Volume Local)'], ['fotos', 'Fotografias reais das galáxias'], ['teia', 'Teia cósmica (2MASS Redshift Survey)'], ['levantamentos', 'Levantamentos profundos (6dF, SDSS e BOSS)']] },
   { grupo: 'Grandes estruturas', itens: [['aglomerados', 'Aglomerados de galáxias (raios X)'], ['superaglomerados', 'Superaglomerados'], ['vazios', 'Vazios cósmicos'], ['notaveis', 'Lugares notáveis (quasares, recordes, muralhas)']] },
   { grupo: 'Universo profundo', itens: [['quasares', 'Quasares (SDSS)'], ['cascas', 'Tempo da luz (anéis de 1 a 13 bilhões de anos)'], ['cmb', 'Radiação cósmica de fundo (Planck)']] },
   { grupo: 'Tela', itens: [['nomes', 'Nomes']] },
@@ -101,13 +101,15 @@ export function prepararGalaxia(G, THREE) {
   if (GX.preparo) return GX.preparo;
   GX.G = G; GX.THREE = THREE;
   GX.preparo = (async () => {
-    const [meta, bin, dados, imagem] = await Promise.all([
-      baixar('via-lactea.json'), baixar('via-lactea.bin', 'bin'), baixar('galaxia.json').catch(() => null),
+    const [meta, bin, dados, fotos, imagem] = await Promise.all([
+      baixar('via-lactea.json'), baixar('via-lactea.bin', 'bin'), baixar('galaxia.json').catch(() => null), baixar('../galaxias/galaxias.json').catch(() => null),
       carregarImagem(CELULAR ? 'via-lactea-2048.jpg' : `via-lactea-${4096}.jpg`),
     ]);
     const carga = (id, f) => G.carga?.etapa(id, f);
     carga('via-lactea', 0.4);
     GX.meta = meta; GX.dados = dados;
+    GX.fotos = (fotos?.galaxias || []).map((f) => ({ ...f, usada: false }));
+    GX.fotoDe = indiceDirecao(GX.fotos);
     GX.cena = new THREE.Scene();
     GX.camera = new THREE.PerspectiveCamera(G.camera.fov, G.camera.aspect, 0.0005, 2e6);
     GX.foco = new THREE.Vector3();
@@ -127,10 +129,13 @@ export function prepararGalaxia(G, THREE) {
     montarGalaxiasNgc();
     montarCatalogos();
     montarInterface();
+    await montarFotos((f) => carga('imagens', 0.1 + 0.4 * f));
     aplicarCamadas();
-    carga('imagens', 0.4);
+    carga('imagens', 0.5);
     // as 800 mil estrelas com distância dependem do céu profundo, que carrega em partes: espera até 25 s e segue
     await Promise.race([montarEstrelasReais(), new Promise((ok) => setTimeout(ok, 25000))]);
+    // compila os shaders desta cena agora, para a primeira troca de escala não engasgar
+    try { G.renderer.compile(GX.cena, GX.camera); } catch { /* sem pré-compilação: compila ao abrir */ }
     carga('imagens');
     return GX;
   })();
@@ -234,7 +239,7 @@ const FRAGMENT_ALVOS = /* glsl */`
 function pontosAlvo(lista) {
   const { THREE } = GX;
   const n = lista.length, pos = new Float32Array(n * 3), cor = new Float32Array(n * 3), diam = new Float32Array(n), minPx = new Float32Array(n), c = new THREE.Color();
-  lista.forEach((it, i) => { pos.set([it.p.x, it.p.y, it.p.z], i * 3); c.set(it.cor); cor.set([c.r * (it.k ?? 1), c.g * (it.k ?? 1), c.b * (it.k ?? 1)], i * 3); diam[i] = it.diam; minPx[i] = it.minPx; });
+  lista.forEach((it, i) => { pos.set([it.p.x, it.p.y, it.p.z], i * 3); c.set(it.cor); cor.set([c.r * (it.k ?? 1), c.g * (it.k ?? 1), c.b * (it.k ?? 1)], i * 3); diam[i] = it.foto ? 0 : it.diam; minPx[i] = it.minPx; });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('cor', new THREE.BufferAttribute(cor, 3));
   g.setAttribute('diam', new THREE.BufferAttribute(diam, 1)); g.setAttribute('minPx', new THREE.BufferAttribute(minPx, 1));
@@ -244,7 +249,7 @@ function pontosAlvo(lista) {
 }
 
 /** Camada de cada classe de rótulo: com a camada desligada, o nome some junto. */
-const CAMADA_DO_ROTULO = { faixa: 'viaLactea', estelar: 'aglomeradosEstelares', pulsar: 'pulsares', exo: 'exoplanetas', aglomerado: 'aglomerados', super: 'superaglomerados', notavel: 'notaveis', casca: 'cascas', local: 'grupoLocal', ngc: 'galaxias', ungc: 'galaxias' };
+const CAMADA_DO_ROTULO = { faixa: 'viaLactea', estelar: 'aglomeradosEstelares', pulsar: 'pulsares', exo: 'exoplanetas', aglomerado: 'aglomerados', super: 'superaglomerados', notavel: 'notaveis', casca: 'cascas', vizinha: 'grupoLocal', ngc: 'galaxias', ungc: 'galaxias' };
 function rotulo(texto, p, { prioridade = 10, de = 0, ate = Infinity, classe = '', alvo = null, perto = false } = {}) {
   const e = el('span', { class: `globo-rotulo globo-rotulo-planeta galaxia-rotulo ${classe}`, text: texto, hidden: true });
   GX.G.dom.raiz.append(e);
@@ -303,15 +308,16 @@ function montarGrupoLocal() {
     const raioKpc = Math.max(0.05, (g.raioKpc || (g.rhPc ? g.rhPc / 1000 * 2.5 : 0.3)));
     const it = { tipo: 'local', ...g, p, cor: g.disco ? '#ffe7c4' : '#e8dcc8', diam: raioKpc * 2, minPx: g.disco ? 4 : 3, k: g.disco ? 0.9 : 0.6 };
     GX.locais.push(it);
-    if (g.disco) { const d = discoInclinado(g, p, raioKpc); GX.cena.add(d); GX.objGrupoLocal.push(d); }
-    rotulo(g.nome, p, { classe: 'local', prioridade: g.disco ? 70 : 30 - Math.min(20, Math.max(0, (g.mv ?? -10) + 15)), ate: g.disco ? 2e4 : 6e3, alvo: it, perto: true });
+    ligarFoto(it, g.ra, g.dec, g.distKpc);
+    if (g.disco && !it.foto) { const d = discoInclinado(g, p, raioKpc); GX.cena.add(d); GX.objGrupoLocal.push(d); }
+    rotulo(g.nome, p, { classe: 'vizinha', prioridade: g.disco ? 70 : 30 - Math.min(20, Math.max(0, (g.mv ?? -10) + 15)), ate: g.disco ? 2e4 : 6e3, alvo: it, perto: true });
   }
   if (GX.locais.length) { const pts = pontosAlvo(GX.locais); GX.cena.add(pts); GX.objGrupoLocal.push(pts); }
   // centro aproximado do Grupo Local: meio do caminho entre a Via Láctea e Andrômeda (as duas têm massas parecidas)
   const m31 = GX.locais.find((g) => g.catalogo === 'Andromeda');
   GX.centroGrupoLocal = m31 ? new THREE.Vector3().addVectors(GX.centro, m31.p).multiplyScalar(0.5) : GX.centro.clone();
   GX.grupoLocal = { tipo: 'grupo-local', nome: 'Grupo Local', p: GX.centroGrupoLocal };
-  rotulo('Grupo Local', GX.centroGrupoLocal, { classe: 'local estrutura', prioridade: 85, de: 1200, ate: 2.5e4, alvo: GX.grupoLocal });
+  rotulo('Grupo Local', GX.centroGrupoLocal, { classe: 'vizinha estrutura', prioridade: 85, de: 1200, ate: 2.5e4, alvo: GX.grupoLocal });
 }
 
 /** Disco de uma galáxia grande do Grupo Local, com inclinação e ângulo de posição medidos. */
@@ -334,6 +340,70 @@ function discoInclinado(g, p, raioKpc) {
   m.position.copy(p);
   m.renderOrder = 3;
   return m;
+}
+
+// ------------------------------------------------------------------ fotografias reais de galáxias
+
+/**
+ * Se há fotografia real desta galáxia (vendor/galaxias, do Wikimedia Commons), guarda a ligação: a foto aparece no
+ * lugar do ponto quando a galáxia fica grande na tela. Cada foto é usada por uma galáxia só (a primeira a casar).
+ */
+function ligarFoto(it, ra, dec, dKpc) {
+  const f = GX.fotoDe?.(ra, dec, 0.2);
+  if (!f || f.usada) return;
+  f.usada = true; f.item = it; f.dKpc = dKpc;
+  it.foto = f;
+}
+
+/**
+ * Baixa as fotografias ligadas e monta cada uma como um retângulo no céu daquela galáxia, de frente para o Sol: é a
+ * galáxia como a vemos daqui, então de outro ângulo aparece como uma fotografia inclinada. O tamanho vem do diâmetro
+ * D25 do HyperLEDA e a rotação alinha o eixo maior medido na imagem com o ângulo de posição do catálogo (sem ângulo
+ * de posição, galáxia de frente: norte para cima). O centro de luz da imagem fica na posição da galáxia.
+ * @param {(fracao: number) => void} progresso avisa a barra de carregamento
+ */
+async function montarFotos(progresso) {
+  const { THREE } = GX;
+  const ligadas = GX.fotos.filter((f) => f.item);
+  GX.objFotos = [];
+  let feitas = 0;
+  await Promise.all(ligadas.map(async (f) => {
+    const img = await carregarImagem(`../galaxias/${f.id}${CELULAR ? '-1024' : ''}.jpg`).catch(() => null);
+    progresso(++feitas / ligadas.length);
+    if (!img) { f.item.foto = null; return; }
+    const tex = new THREE.Texture(img); tex.colorSpace = THREE.SRGBColorSpace; tex.needsUpdate = true;
+    const m = f.imagem, d25 = f.leda?.logD25 != null ? 0.1 * 10 ** f.leda.logD25 : null; // minutos de arco
+    // largura angular da imagem: D25 ≈ 4 desvios-padrão da luz ao longo do eixo maior (2σ para cada lado)
+    const larguraArcmin = d25 ? d25 / (4 * Math.max(0.04, m.sigmaMaior)) : (f.item.diam / f.dKpc / RAD * 60) / (4 * Math.max(0.04, m.sigmaMaior));
+    const L = larguraArcmin / 60 * RAD * f.dKpc, A = L * m.altura / m.largura;
+    const malha = new THREE.Mesh(new THREE.PlaneGeometry(L, A), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+    const a = f.ra * RAD, d = f.dec * RAD;
+    const vetor = (x, y, z) => { const e = [x, y, z]; const gg = EQ_GAL.map((l) => l[0] * e[0] + l[1] * e[1] + l[2] * e[2]); return new THREE.Vector3(gg[1], gg[2], gg[0]); };
+    const leste = vetor(-Math.sin(a), Math.cos(a), 0), norte = vetor(-Math.sin(d) * Math.cos(a), -Math.sin(d) * Math.sin(a), Math.cos(d));
+    // ângulo de posição do eixo maior numa imagem com o norte para cima (direita = oeste); o giro leva ao do catálogo
+    const t = m.anguloEixoMaior * RAD, paImagem = Math.atan2(-Math.cos(t), -Math.sin(t));
+    const giro = f.leda?.pa != null && m.sigmaMenor / m.sigmaMaior < 0.85 ? f.leda.pa * RAD - paImagem : 0;
+    const direita = leste.clone().multiplyScalar(-Math.cos(giro)).addScaledVector(norte, Math.sin(giro));
+    const cima = norte.clone().multiplyScalar(Math.cos(giro)).addScaledVector(leste, Math.sin(giro));
+    malha.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(direita, cima, new THREE.Vector3().crossVectors(direita, cima)));
+    malha.position.copy(f.item.p).addScaledVector(direita, (0.5 - m.centro[0]) * L).addScaledVector(cima, (m.centro[1] - 0.5) * A);
+    malha.renderOrder = 3; malha.visible = false; malha.frustumCulled = false;
+    f.malha = malha; f.tamanhoKpc = Math.max(L, A);
+    GX.cena.add(malha); GX.objFotos.push(f);
+  }));
+}
+
+/** Acende cada fotografia quando ela passa de ~20 px na tela (antes disso a galáxia é um ponto). */
+function atualizarFotos() {
+  if (!GX.objFotos) return;
+  const escala = GX.uniformes.escalaPx.value / GX.G.pixelRatio;
+  for (const f of GX.objFotos) {
+    const px = f.tamanhoKpc * escala / Math.max(1e-9, GX.camera.position.distanceTo(f.malha.position));
+    const camada = f.item.tipo === 'local' ? FG.grupoLocal : FG.galaxias;
+    const o = camada && FG.fotos ? Math.min(1, Math.max(0, (px - 18) / 30)) : 0;
+    f.malha.visible = o > 0.01;
+    f.malha.material.opacity = o;
+  }
 }
 
 /** Textura procedural de uma galáxia (espiral, irregular com barra ou irregular), com semente fixa por nome. */
@@ -417,6 +487,7 @@ function montarGalaxiasNgc() {
     const tam = Math.max(...String(ob.dim || '0.5').split('x').map(Number).filter(Number.isFinite), 0.3); // minutos de arco
     const diam = u?.diam || Math.max(0.5, dKpc * tam / 60 * RAD);
     GX.ngc.push({ tipo: 'ngc', ob, u, p: cena(ob.ra, ob.dec, dKpc, new THREE.Vector3()), cor: TIPOS_OBJETO[ob.tipo]?.[1] || '#d8dce8', diam, minPx: ob.nome ? 3 : 2.2, k: ob.nome ? 1 : 0.75 });
+    ligarFoto(GX.ngc.at(-1), ob.ra, ob.dec, dKpc);
   }
   GX.volume = [];
   for (const u of ungc) {
@@ -558,6 +629,7 @@ export function atualizarGalaxia(agora) {
   GX.particulas.visible = GX.poeira.visible = FG.viaLactea && GX.uniformes.face.value < 0.97; // de frente, só a imagem (as partículas somariam ~0)
   UNI.atualizarUniverso(G.cam.dist, FG, GX.camera);
   CAT.atualizarCatalogos(G.cam.dist, FG);
+  atualizarFotos();
   // perto do Sol (até uns 3 kpc), as estrelas reais aparecem e o modelo se apaga um pouco
   const dSol = GX.camera.position.distanceTo(GX.sol);
   GX.uniformes.perto.value = Math.max(0, Math.min(1, (4 - dSol) / 3));
@@ -685,8 +757,12 @@ function irAte(it) {
   irPara(it.p, dist, null, MOVIMENTO_REDUZIDO ? 1 : ms);
 }
 
+/** Crédito de uma fotografia do Commons: autor (ou crédito) e licença. */
+const creditoFoto = (f) => `Foto: ${(f.autor || f.credito || 'Wikimedia Commons').replace(/\s+/g, ' ').slice(0, 70)} (${f.licenca})`;
+
 function mostrarCartao(it) {
-  const G = GX.G;
+  // galáxia com fotografia: o crédito da foto entra na linha de fonte do cartão
+  const G = it.foto?.malha ? Object.assign(Object.create(GX.G), { mostrarPainel: (t, frase, numeros, fonte, acoes) => GX.G.mostrarPainel(t, frase, numeros, `${fonte} · ${creditoFoto(it.foto)}`, acoes) }) : GX.G;
   const ir = (texto = 'Ir até') => ({ texto, onclick: () => { irAte(it); G.fecharPainel(); } });
   if (UNI.cartao(it, G, ir) || CAT.cartao(it, G, ir, kpcTexto)) return;
   const dSol = it.p.distanceTo(GX.sol);
@@ -869,7 +945,7 @@ function desenharSobreposicao(ctx, pr) {
 }
 
 export function notasFontes() {
-  return ['Via Láctea: modelo (Reid et al. 2019, Wegg et al. 2015, Bland-Hawthorn & Gerhard 2016)', 'Masers: Reid et al. 2019', 'Grupo Local: McConnachie 2012', 'Aglomerados globulares: Baumgardt & Vasiliev 2021', 'Galáxias: OpenNGC', ...CAT.notasFontes(), ...UNI.notasFontes()];
+  return ['Via Láctea: modelo (Reid et al. 2019, Wegg et al. 2015, Bland-Hawthorn & Gerhard 2016)', 'Masers: Reid et al. 2019', 'Grupo Local: McConnachie 2012', 'Aglomerados globulares: Baumgardt & Vasiliev 2021', 'Galáxias: OpenNGC', GX.objFotos?.length ? 'Fotografias de galáxias: Wikimedia Commons (autor e licença no cartão de cada uma); medidas do HyperLEDA' : null, ...CAT.notasFontes(), ...UNI.notasFontes()].filter(Boolean);
 }
 
 export const estado = () => GX;

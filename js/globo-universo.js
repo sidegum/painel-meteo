@@ -106,19 +106,25 @@ function montarLevantamentos(bin) {
   const { meta } = U.ctx;
   const v = new DataView(bin);
   if (String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3)) !== 'LEV1') return;
-  const total = v.getUint32(4, true), esc = v.getFloat32(8, true), passo = CELULAR ? 2 : 1, n = Math.floor(total / passo);
+  const total = v.getUint32(4, true), esc = v.getFloat32(8, true), passo = CELULAR ? 2 : 1;
   const q = new Int16Array(bin.slice(12, 12 + 6 * total)), fonte = new Uint8Array(bin, 12 + 6 * total, total);
-  const pos = new Float32Array(n * 3), cor = new Float32Array(n * 3), br = new Float32Array(n);
   const CORES = [[1, 0.9, 0.72], [0.8, 0.88, 1], [1, 0.66, 0.5]]; // 6dFGS, SDSS, BOSS (galáxias vermelhas luminosas)
-  for (let i = 0; i < n; i++) {
-    const k = i * passo, x = q[k * 3] / 32767 * esc, y = q[k * 3 + 1] / 32767 * esc, z = q[k * 3 + 2] / 32767 * esc;
-    pos[i * 3] = y * KPC; pos[i * 3 + 1] = z * KPC + meta.zSol; pos[i * 3 + 2] = x * KPC - meta.R0;
-    cor.set(CORES[fonte[k]] || CORES[1], i * 3);
-    br[i] = fonte[k] === 2 ? 0.55 : 0.35;
-  }
-  U.levantamentos = nuvem(pos, cor, br, 1.5);
+  // duas nuvens, porque o brilho de cada uma cai em zooms diferentes: 6dFGS e SDSS (até z ≈ 0,2) e BOSS (0,2 < z < 0,75)
+  const nuvemDe = (longe, px) => {
+    const pos = [], cor = [], br = [];
+    for (let k = 0; k < total; k += passo) {
+      if ((fonte[k] === 2) !== longe) continue;
+      const x = q[k * 3] / 32767 * esc, y = q[k * 3 + 1] / 32767 * esc, z = q[k * 3 + 2] / 32767 * esc;
+      pos.push(y * KPC, z * KPC + meta.zSol, x * KPC - meta.R0);
+      cor.push(...(CORES[fonte[k]] || CORES[1]));
+      br.push(0.4);
+    }
+    return nuvem(new Float32Array(pos), new Float32Array(cor), new Float32Array(br), px);
+  };
+  U.levantamentos = nuvemDe(false, 1.5);
+  U.levantamentosLonge = nuvemDe(true, 1.5);
   U.levantamentos.userData = { n: total };
-  U.ctx.adicionar(U.levantamentos);
+  U.ctx.adicionar(U.levantamentos, U.levantamentosLonge);
 }
 
 /** Galáxias do Volume Local com distância medida; as que casam com o NGC/IC dão a distância ao objeto do NGC. */
@@ -354,8 +360,12 @@ export function atualizarUniverso(zoom, F, camera) {
   if (!U.prontos) return;
   const lz = Math.log10(zoom);
   // galáxias do 2MRS: aparecem a partir de ~3 Mpc de zoom e somem quando o quadro passa de ~5 bilhões de anos-luz; de longe, milhares de pontos se somam no mesmo pixel, então o brilho de cada um cai
-  if (U.galaxias) { const a = rampa(lz, 3.3, 4.1) * (1 - rampa(lz, 6.4, 7.0)) * (1 - 0.72 * rampa(lz, 5.0, 6.3)); U.galaxias.material.uniforms.alfa.value = a; U.galaxias.visible = F.teia && a > 0.003; }
-  if (U.levantamentos) { const a = rampa(lz, 4.5, 5.3) * (1 - rampa(lz, 7.0, 7.5)) * (0.8 - 0.5 * rampa(lz, 5.7, 6.8)); U.levantamentos.material.uniforms.alfa.value = a; U.levantamentos.visible = F.levantamentos && a > 0.003; }
+  if (U.galaxias) { const a = rampa(lz, 3.3, 4.1) * (1 - rampa(lz, 6.3, 6.8)) * (1 - 0.8 * rampa(lz, 5.0, 6.2)); U.galaxias.material.uniforms.alfa.value = a; U.galaxias.visible = F.teia && a > 0.003; }
+  if (U.levantamentos) {
+    const perto = rampa(lz, 4.5, 5.3) * (1 - rampa(lz, 6.9, 7.4)) * (0.8 - 0.68 * rampa(lz, 5.5, 6.6)), longe = rampa(lz, 5.2, 5.9) * (1 - rampa(lz, 7.0, 7.5)) * (0.9 - 0.45 * rampa(lz, 6.3, 7.0));
+    U.levantamentos.material.uniforms.alfa.value = perto; U.levantamentos.visible = F.levantamentos && perto > 0.003;
+    U.levantamentosLonge.material.uniforms.alfa.value = longe; U.levantamentosLonge.visible = F.levantamentos && longe > 0.003;
+  }
   if (U.quasares) { const a = rampa(lz, 5.6, 6.5) * 0.9; U.quasares.material.uniforms.alfa.value = a; U.quasares.visible = F.quasares && a > 0.003; }
   if (U.pontosAglomerados) U.pontosAglomerados.visible = F.aglomerados && lz > 3.6;
   if (U.pontosSuper) U.pontosSuper.visible = F.superaglomerados && lz > 4.3;
