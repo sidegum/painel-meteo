@@ -69,7 +69,8 @@ O Worker existe por três motivos:
 2. **Primeira pintura com o cache.** `lerCache('previsao' | 'ensemble' | 'observacoes')` lê o Cache Storage. Se houver dados e um local salvo, `renderTudo()` desenha na hora e `estado.cacheAntigo = true` gera o aviso "Mostrando dados salvos".
 3. **Localização.**
    - Se uma cidade foi escolhida nesta sessão (`sessionStorage.localEscolhido`), o app usa essa cidade.
-   - Senão, `atualizar()` começa com o último local salvo, em paralelo com `localizarGps()`.
+   - Senão, `atualizar()` começa com o último local salvo, em paralelo com `localizarSozinho()`.
+   - `localizarSozinho()` só chama o GPS se a permissão já estiver concedida (`permissaoGps() === 'granted'`) ou se não houver nenhum local salvo. Assim o pedido de permissão não reaparece a cada abertura (iPhone com o app na tela inicial, ou "Permitir desta vez" no Chrome); a posição atual é pedida pelo botão "Usar minha localização atual".
    - Se a coordenada arredondada mudar depois do GPS, o app busca de novo com `local: true`.
 4. `agendar()` registra os gatilhos de atualização (seção 2.3).
 5. O service worker é registrado com `updateViaCache: 'none'`. No `controllerchange`, a página recarrega uma vez para assumir a versão nova.
@@ -97,7 +98,7 @@ Controle de concorrência:
 
 `atualizarTudo()` é a atualização completa (botão, puxar para baixo, voltar ao app):
 
-- Roda o GPS e `atualizar({ forcar: true })` em paralelo. Se a posição mudou, busca de novo.
+- Roda `localizarSozinho()` e `atualizar({ forcar: true })` em paralelo. Se a posição mudou, busca de novo.
 - Controle por `rodada`: uma rodada com mais de 45 s é abandonada. O `vigia` de 50 s chama `pararGiro()` em qualquer caso.
 - No fim, pede `registration.update()` ao service worker.
 
@@ -392,6 +393,8 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
   - Chama `getCurrentPosition` com `timeout` de 9 s.
   - Uma **trava de 12 s** encerra a espera mesmo se o navegador não chamar nenhum retorno (caso observado no iOS com o app na tela inicial). A flag `feito` garante uma única resolução.
   - Sem GPS, usa o último local salvo. Se não houver nenhum, usa o centro de Campo Bom.
+- `permissaoGps()` lê o estado da permissão pela Permissions API sem abrir o pedido (teto de 1 s; `null` sem a API).
+- `localizarSozinho()` é o GPS automático (abertura, volta ao app, rodada de 10 min): só roda com permissão concedida ou sem local salvo.
 - `definirLocal(l)` grava em `localStorage` só a coordenada arredondada (e o `id` do GeoNames, quando houver) e devolve se o local mudou. Com origem `gps`, `lembrarGps` guarda o último ponto em `pref:ultimoGps` e apaga os dados salvos do ponto anterior.
 - `configurarLocal()` cria as abas de cidade e a janela "Escolher local" (`criarLocais`, seção 5.9) e liga os retornos:
   - `escolherCidade(c)` marca a escolha da sessão e chama `trocarLocal`.

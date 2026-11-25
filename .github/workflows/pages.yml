@@ -1,6 +1,7 @@
 name: Publicar no Cloudflare Pages
 
-# Publica o app no Cloudflare Pages (Direct Upload, sem compilação) sempre que a main muda.
+# Publica o app nos dois endereços sempre que a main muda: Cloudflare Pages (Direct Upload, sem compilação) e
+# GitHub Pages (branch site-github, mesmo conteúdo). Ver scripts/publicar-pages.sh.
 # - push na main: mudanças feitas por pessoas (os commits dos robôs não disparam "push" com o GITHUB_TOKEN).
 # - workflow_run: depois dos robôs que gravam na main com pouca frequência (calibração diária, endereço do Worker).
 # - Os campos do Globo (a cada 3 h) e o El Niño (só quando muda) são publicados no próprio job que os gera, para
@@ -23,7 +24,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # push do branch site-github (GitHub Pages)
 
 concurrency:
   group: pages
@@ -38,6 +39,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PAGES_PROJETO: ${{ vars.PAGES_PROJETO }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,5 +49,5 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Montar e publicar (app da main + campos do Globo)
+      - name: Montar e publicar nos dois endereços (app da main + campos do Globo)
         run: scripts/publicar-pages.sh

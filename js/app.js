@@ -73,7 +73,7 @@ async function iniciar() {
   else {
     const antes = estado.local ? { lat: arredondaCoord(estado.local.lat), lon: arredondaCoord(estado.local.lon) } : null;
     const primeira = antes ? atualizar({ forcar: true }) : Promise.resolve();
-    await localizarGps(true, true);
+    await localizarSozinho();
     await primeira;
     const agora = { lat: arredondaCoord(estado.local.lat), lon: arredondaCoord(estado.local.lon) };
     if (!antes || antes.lat !== agora.lat || antes.lon !== agora.lon) await atualizar({ forcar: true, local: !!antes });
@@ -131,6 +131,28 @@ function localizarGps(silencioso, recente = false) {
       usarPadrao(m);
     }, { enableHighAccuracy: false, timeout: 9000, maximumAge: recente ? 0 : 2 * 60000 });
   });
+}
+
+/**
+ * Estado da permissão de localização sem abrir o pedido: 'granted', 'denied', 'prompt' ou null (navegador sem a API).
+ * Teto de 1 s para a abertura nunca esperar o navegador.
+ */
+async function permissaoGps() {
+  try {
+    const consulta = navigator.permissions.query({ name: 'geolocation' }).then((p) => p.state);
+    return await Promise.race([consulta, new Promise((ok) => setTimeout(() => ok(null), 1000))]);
+  } catch { return null; }
+}
+
+/**
+ * GPS automático (abrir o app, voltar a ele, rodada de 10 min): só roda quando a permissão já está concedida.
+ * Sem ela, cada chamada abre o pedido de novo (no iPhone, com o app na tela inicial, a cada abertura); então vale
+ * o último local salvo, e a posição atual fica para o botão "Usar minha localização atual".
+ * Na primeiríssima abertura, sem nenhum local salvo, o pedido aparece uma vez.
+ */
+async function localizarSozinho() {
+  if (estado.local && await permissaoGps() !== 'granted') return;
+  return localizarGps(true, true);
 }
 
 function definirLocal(l) {
@@ -397,7 +419,7 @@ async function atualizarTudo() {
     const chave = () => (estado.local ? `${arredondaCoord(estado.local.lat)},${arredondaCoord(estado.local.lon)}` : null);
     const antes = chave();
     // GPS e busca começam juntos: os dados chegam sem esperar o GPS; se a posição mudou, busca de novo.
-    const gps = escolha && estado.local?.origem === 'cidade' ? Promise.resolve() : localizarGps(true, true);
+    const gps = escolha && estado.local?.origem === 'cidade' ? Promise.resolve() : localizarSozinho();
     await atualizar({ forcar: true });
     await gps;
     if (chave() !== antes) await atualizar({ forcar: true, local: true });
