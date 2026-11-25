@@ -370,9 +370,86 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .dlg input { min-height: 48px; padding: 0 12px; border: 1.5px solid var(--linha); background: var(--sup); border-radius: 6px; width: 100%; }
 .largo { min-height: 48px; border-radius: 24px; border: 1.5px solid var(--texto); background: var(--texto); color: var(--fundo); font-weight: 650; }
 .largo.secundario { background: none; color: var(--texto); border-color: var(--linha); }
-.resultados { list-style: none; margin: 0; padding: 0; }
-.resultados button { width: 100%; min-height: 48px; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--linha); padding: 6px 0; }
-.resultados small { color: var(--fraco); display: block; }
+
+/* ---------- abas de cidade (topo) e janela "Escolher local" (js/locais.js) ---------- */
+/* Faixa de abas: só aparece com favoritas ou com uma cidade buscada em uso. Rola na horizontal sem barra. */
+.cidades { display: flex; gap: 6px; padding: 2px 16px 8px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; scroll-padding: 0 16px; }
+.cidades::-webkit-scrollbar { display: none; }
+.cidades[hidden] { display: none; }
+.aba-cidade { flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 34px; max-width: 46vw; padding: 0 13px; border: 0; border-radius: 17px;
+  background: var(--sup2); color: var(--texto); font-size: 14px; font-weight: 560; white-space: nowrap; }
+.aba-cidade span { overflow: hidden; text-overflow: ellipsis; }
+.aba-cidade[aria-current="true"] { background: var(--texto); color: var(--fundo); font-weight: 650; }
+.aba-cidade .ic { width: 15px; height: 15px; flex: none; }
+.aba-cidade .ic path { fill: currentColor; stroke: none; }
+.aba-buscar { padding: 0; width: 34px; justify-content: center; background: none; color: var(--fraco); }
+.aba-buscar .ic path { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.aba-buscar .ic { width: 18px; height: 18px; }
+.aba-avulsa { flex: none; display: inline-flex; align-items: center; border-radius: 17px; background: var(--texto); }
+.aba-avulsa .aba-cidade { padding-right: 4px; }
+.aba-estrela { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-height: 34px; padding: 0 8px 0 2px; border: 0; background: none; color: var(--fundo); }
+.aba-estrela .ic { width: 18px; height: 18px; }
+.aba-estrela .ic path { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+@media (hover: hover) {
+  .aba-cidade:not([aria-current="true"]):hover { background: var(--linha); }
+  .aba-estrela:hover .ic path { fill: currentColor; }
+}
+
+/* Janela: folha de baixo no celular, cartão centralizado no computador. A lista rola; busca e título ficam fixos. */
+.dlg-local[open] { display: flex; flex-direction: column; height: min(640px, 88dvh); border-radius: 18px 18px 0 0; overflow: hidden; }
+.dlg-local .dlg { flex: 1; min-height: 0; gap: 8px; padding-bottom: calc(10px + var(--safe-b)); }
+.dlg-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dlg-topo .fechar { width: 40px; height: 40px; border: 0; border-radius: 20px; background: var(--sup2); color: var(--fraco); display: inline-flex; align-items: center; justify-content: center; }
+.dlg-topo .fechar svg, .campo-busca svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.campo-busca { position: relative; display: flex; align-items: center; }
+.campo-busca > svg { position: absolute; left: 12px; color: var(--fraco); pointer-events: none; }
+.dlg .campo-busca input { padding: 0 44px 0 40px; border-radius: 12px; border: 0; background: var(--sup2); font-size: 17px; -webkit-appearance: none; appearance: none; }
+.campo-busca input::-webkit-search-cancel-button { display: none; }
+.campo-busca input:focus-visible { outline: 2px solid var(--foco); outline-offset: 0; }
+.campo-busca .limpar { position: absolute; right: 4px; width: 40px; height: 40px; border: 0; background: none; color: var(--fraco); display: inline-flex; align-items: center; justify-content: center; }
+.busca-estado { margin: 0; font-size: 14px; color: var(--fraco); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.busca-estado[hidden] { display: none; }
+.lista-locais { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -16px; padding: 0 16px; }
+.grupo-locais { margin: 4px 0 10px; }
+.grupo-topo { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
+.grupo-locais h3 { margin: 0; font-size: 12px; font-weight: 620; letter-spacing: .04em; text-transform: uppercase; color: var(--fraco); }
+.grupo-acao { border: 0; background: none; color: var(--texto); font-size: 14px; font-weight: 600; min-height: 32px; padding: 0 2px; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--linha); }
+.grupo-locais ul { list-style: none; margin: 0; padding: 0; border-radius: 14px; background: var(--sup); overflow: hidden; }
+.linha-local { display: flex; align-items: stretch; }
+.linha-local + .linha-local { background: linear-gradient(var(--linha), var(--linha)) right top / calc(100% - 52px) 1px no-repeat; }
+.local-escolher { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 4px 6px 14px; border: 0; background: none; text-align: left; color: var(--texto); }
+.local-marca { flex: none; width: 24px; display: inline-flex; justify-content: center; color: var(--fraco); }
+.local-marca .ic { width: 18px; height: 18px; }
+.local-marca .ic path { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.local-marca .ic-fav path { fill: var(--rajada); stroke: var(--rajada); }
+.local-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.local-txt b { font-weight: 560; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.local-txt b mark { background: none; color: inherit; font-weight: 720; }
+.local-txt small { font-size: 13px; color: var(--fraco); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.local-escolher[aria-current="true"] b { font-weight: 680; }
+.local-uso { flex: none; color: var(--texto); display: inline-flex; }
+.local-uso .ic { width: 20px; height: 20px; }
+.local-uso .ic path { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.local-estrela { flex: none; width: 52px; border: 0; background: none; color: var(--fraco); display: inline-flex; align-items: center; justify-content: center; }
+.local-estrela .ic { width: 22px; height: 22px; }
+.local-estrela .ic path { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.local-estrela[aria-pressed="true"] { color: var(--rajada); }
+.local-estrela[aria-pressed="true"] .ic path { fill: currentColor; }
+.local-ordem { flex: none; display: inline-flex; padding-right: 4px; }
+.local-ordem button { width: 44px; border: 0; background: none; color: var(--texto); display: inline-flex; align-items: center; justify-content: center; }
+.local-ordem button:disabled { opacity: .3; }
+.local-ordem .ic { width: 20px; height: 20px; }
+.local-ordem .ic path { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.dlg-local .nota { margin: 0; font-size: 12px; }
+@media (hover: hover) {
+  .local-escolher:hover, .local-estrela:hover, .local-ordem button:hover:not(:disabled) { background: var(--sup2); }
+}
+@media (min-width: 760px) {
+  .dlg-local[open] { margin: auto; border-radius: 18px; width: min(560px, 92vw); height: min(680px, 84vh); }
+}
+
+/* Troca para uma cidade sem dados salvos: a tela anterior fica esmaecida até a previsão nova chegar. */
+main[aria-busy="true"] .aba { opacity: .35; pointer-events: none; transition: opacity .15s; }
 
 /* desempenho e movimento */
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
@@ -439,7 +516,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 /* Um só padrão para celular e computador: a mesma coluna, a mesma ordem e os mesmos tamanhos.
    Em telas largas a coluna fica centralizada com 720 px; nada muda de lugar. */
 @media (min-width: 760px) {
-  .cabeca > .topo, .nav, main, .faixa-aviso { max-width: 720px; margin-left: auto; margin-right: auto; }
+  .cabeca > .topo, .cidades, .nav, main, .faixa-aviso { max-width: 720px; margin-left: auto; margin-right: auto; }
   .mapa { margin: 8px 0; border-radius: 8px; overflow: hidden; }
   .camadas, .horas, .rolar, .tabela-rolar { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
 }
@@ -853,7 +930,7 @@ button.globo-rotulo { cursor: pointer; }
    detalhe ficam em duas colunas; mapa, gráficos largos e tabelas (.largura-total) ocupam a linha inteira.
    No Globo, o conteúdo ocupa a janela toda (a tela do Globo é da thread do Globo; aqui só a moldura). */
 @media (min-width: 1100px) {
-  .cabeca > .topo, .nav, main, .faixa-aviso { max-width: 1240px; }
+  .cabeca > .topo, .cidades, .nav, main, .faixa-aviso { max-width: 1240px; }
   .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; align-items: start;
   }
@@ -868,7 +945,7 @@ button.globo-rotulo { cursor: pointer; }
   body[data-aba="globo"] main { max-width: none; }
 }
 @media (min-width: 1600px) {
-  .cabeca > .topo, main, .faixa-aviso { max-width: 1440px; }
+  .cabeca > .topo, .cidades, main, .faixa-aviso { max-width: 1440px; }
   .mapa { height: 620px; }
 }
 
@@ -877,7 +954,7 @@ button.globo-rotulo { cursor: pointer; }
    redefinidas só dentro dele. Temperatura grande e fina; o resto como antes. */
 .resumo[data-fundo] {
   --texto: #FFFFFF; --fraco: rgba(255, 255, 255, .8); --linha: rgba(255, 255, 255, .28);
-  --fria: #D3E6FF; --quente: #FFD9C7; --chuva-txt: #DDF0FF; --chuva: #CFE8FF; --fundo: rgba(255, 255, 255, .0);
+  --fria: #D3E6FF; --quente: #FFD9C7; --chuva-txt: #DDF0FF; --chuva: #CFE8FF; --rajada-txt: #FFE6A6; --fundo: rgba(255, 255, 255, .0);
   position: relative; isolation: isolate; overflow: hidden; margin: 6px 0 4px; padding: 14px 16px 14px; border-radius: 18px;
   background: #4F7DB3; color: var(--texto); text-shadow: 0 1px 2px rgba(0, 0, 0, .18);
 }
@@ -917,3 +994,59 @@ button.globo-rotulo { cursor: pointer; }
 @media (min-width: 1100px) {
   .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { column-gap: 16px; }
 }
+
+/* Resumo com quatro colunas (1.11.0): mínima, máxima, chuva e rajada. A rajada saiu da linha solta abaixo do
+   resumo e virou parte dele (regra do produto: destacar rajadas). */
+.resumo-temp { grid-template-columns: 1fr 1fr 1fr 1.15fr; }
+:root[data-visual="a"] .bloco-t + .bloco-t { padding-left: 10px; }
+.bloco-t.rajada b { color: var(--rajada-txt); }
+.bloco-t.rajada b i { font-style: normal; font-size: 12px; font-weight: 560; letter-spacing: 0; color: var(--fraco); }
+.bloco-t.rajada.r-fortes b, .bloco-t.rajada.r-muito-fortes b { color: var(--quente); }
+.bloco-t .raj-det { margin-top: 2px; font-size: 11.5px; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.bloco-t .raj-det .seta { width: 11px; height: 11px; }
+@media (max-width: 359px) { .bloco-t b { font-size: 21px; } }
+
+/* Radar de tempestade (1.11.0): bloco fixo logo abaixo do resumo de hoje. Radar desenhado à esquerda, leitura à
+   direita. A cor da borda segue o nível: neutro sem tempestade, âmbar com risco moderado, vermelho com tempestade
+   chegando, sobre o local ou forte. */
+.tempestade { display: flex; align-items: center; gap: 14px; width: 100%; margin: 10px 0 4px; padding: 12px 14px; border: 0; border-radius: 16px;
+  background: var(--sup); color: var(--texto); font: inherit; text-align: left; box-shadow: inset 3px 0 0 var(--linha); }
+.tempestade[data-nivel="moderado"] { box-shadow: inset 3px 0 0 var(--rajada); }
+.tempestade[data-nivel="alto"] { box-shadow: inset 3px 0 0 var(--quente); background: var(--alerta-fundo); }
+.tp-radar { width: 84px; height: 84px; flex: none; display: block; }
+.tp-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tp-rot { font-size: 12px; font-weight: 620; letter-spacing: .03em; text-transform: uppercase; color: var(--fraco); }
+.tp-txt strong { font-size: 16px; font-weight: 680; line-height: 1.2; }
+.tp-sub { font-size: 13.5px; color: var(--fraco); }
+.tp-prev { font-size: 13px; color: var(--fraco); margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--linha); }
+.tp-prev.com-risco { color: var(--rajada-txt); font-weight: 600; }
+.tempestade[data-nivel="alto"] .tp-prev.com-risco { color: var(--quente); }
+.tp-lista { margin: 0 0 10px; padding-left: 18px; }
+.tp-lista li { margin: 0 0 6px; }
+@media (min-width: 1100px) { .tp-radar { width: 104px; height: 104px; } .tp-txt strong { font-size: 18px; } }
+
+/* Computador (1.11.0): a primeira tela de Hoje, Amanhã e do dia aberto vira duas colunas, com o resumo e o radar
+   de tempestade à esquerda e o gráfico à direita, para tudo caber na primeira tela de um monitor. A partir de
+   1600 px o texto principal cresce um pouco (monitores de 2560 px). */
+@media (min-width: 1100px) {
+  .primeira { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: auto auto auto 1fr; column-gap: 24px; align-items: start; }
+  .primeira > .resumo { grid-column: 1; grid-row: 1 / span 2; margin-top: 6px; }
+  .primeira > .tempestade, .primeira > .linha-temporal { grid-column: 1; grid-row: 3; }
+  .primeira > .troca { grid-column: 2; grid-row: 1; margin-top: 6px; }
+  .primeira > .grafico-primeira { grid-column: 2; grid-row: 2 / span 3; }
+  .primeira > .frase, .primeira > p { grid-column: 1 / -1; }
+}
+@media (min-width: 1600px) {
+  .resumo[data-fundo] .resumo-agora b { font-size: 76px; }
+  .resumo-ceu .cond { font-size: 22px; }
+  .bloco-t b { font-size: 28px; }
+  .bloco-t small { font-size: 13px; }
+  .resumo-chuva strong { font-size: 18px; }
+  .resumo-chuva .det, .resumo-quando { font-size: 15px; }
+  .secao h2 { font-size: 14px; }
+  :root[data-visual] .nav button { font-size: 15px; }
+}
+
+/* Chuva medida (1.11.0): quatro colunas sem cortar o valor ("24,2 mm" cabia como "24…" no celular). */
+.chuvas .med { padding: 10px 8px; }
+.chuvas .med-v { font-size: 16px; white-space: normal; overflow: visible; overflow-wrap: anywhere; }

@@ -66,16 +66,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Os campos novos também vão para o Cloudflare Pages (pasta globo-dados/ do site), no mesmo job, para gastar
-      # menos minutos do Actions. Só a partir da main: o app publicado é sempre o da main.
+      # menos minutos do Actions (o GitHub Pages recebe o mesmo site). Só a partir da main: o app publicado é sempre o da main.
       - uses: actions/setup-node@v4
         if: github.ref == 'refs/heads/main'
         with:
           node-version: '22'
-      - name: Publicar no Cloudflare Pages
+      - name: Publicar no Cloudflare Pages e no GitHub Pages
         if: github.ref == 'refs/heads/main'
         run: scripts/publicar-pages.sh saida/globo
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PAGES_PROJETO: ${{ vars.PAGES_PROJETO }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PAGES_MENSAGEM: Campos do Globo atualizados

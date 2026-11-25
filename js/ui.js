@@ -81,7 +81,8 @@ export function setaVento(graus, cor = 'currentColor') {
 const fmtN = (v, casas = 0) => (valido(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas, useGrouping: false }) : null);
 export const fmt = {
   n: fmtN,
-  mm(v) { if (!valido(v)) return null; return v < 1 && v > 0 ? `${fmtN(v, 1)} mm` : `${fmtN(v, 0)} mm`; },
+  // abaixo de 0,05 mm é zero na prática (os modelos e as estações têm resolução de 0,1 mm): "0 mm", nunca "0,0 mm"
+  mm(v) { if (!valido(v)) return null; return v < 1 && v >= 0.05 ? `${fmtN(v, 1)} mm` : `${fmtN(v, 0)} mm`; },
   kmh: (v) => (valido(v) ? `${fmtN(v)} km/h` : null),
   c: (v) => (valido(v) ? `${fmtN(v)}°` : null),
   c1: (v) => (valido(v) ? `${fmtN(v, 1)} °C` : null),

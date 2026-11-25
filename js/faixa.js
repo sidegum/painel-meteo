@@ -6,7 +6,12 @@ import { el, fmt, bus, cor } from './ui.js';
 
 const ALT = 120;
 
-export function criarFaixa(container, { prev, modelos, iniMs, fimMs, id }) {
+/**
+ * @param {{prev:object, modelos:string[], iniMs:number, fimMs:number, id:string, chance?:(ms:number)=>number|null}} op
+ *   chance: chance de chuva da hora em %, a mesma das outras telas (chanceHora em app.js); sem ela, a mediana
+ *   da probabilidade dos modelos
+ */
+export function criarFaixa(container, { prev, modelos, iniMs, fimMs, id, chance = null }) {
   const wrap = el('div', { class: 'ceu' });
   const canvas = el('canvas', { role: 'img', 'aria-label': 'Faixa do Céu: nuvens, chuva, pressão e vento hora a hora' });
   const info = el('p', { class: 'ceu-info', 'aria-live': 'polite' }, 'Toque num horário para ver os valores.');
@@ -19,7 +24,7 @@ export function criarFaixa(container, { prev, modelos, iniMs, fimMs, id }) {
   const d = {
     ms: idx.map((i) => prev.horas[i]),
     alta: med('cloud_cover_high'), media: med('cloud_cover_mid'), baixa: med('cloud_cover_low'),
-    chuva: med('precipitation'), prob: med('precipitation_probability'),
+    chuva: med('precipitation'), prob: chance ? idx.map((i) => chance(prev.horas[i])) : med('precipitation_probability'),
     pressao: med('pressure_msl'), vento: med('wind_speed_10m'), rajada: med('wind_gusts_10m'),
     dir: idx.map((i) => {
       // direção: média vetorial entre modelos
