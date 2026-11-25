@@ -1,5 +1,41 @@
+#
+#   VizieR Astronomical Server vizier.cfa.harvard.edu
+#    Date: 2026-11-25T21:31:47 [V7.6.1]
+#   In case of problem, please report to:	cds-question@unistra.fr
+#
+#
+#Coosys	J2000:	eq_FK5 J2000
+#INFO	service_protocol=ASU	  IVOID of the protocol through which the data was retrieved
+#INFO	request_date=2026-11-25T21:31:47	  Query execution date
+#INFO	request=https://vizier.cfa.harvard.edu/viz-bin/asu-tsv?-out=Cosmo,RAJ2000,DEJ2000,s,Reff,edge&-out.max=unlimited&-source=J/ApJS/265/7/table1&Cosmo=Planck2018	  Full request URL
+#INFO	contact=cds-question@unistra.fr	  Email or URL to contact publisher
+#INFO	server_software=VizieR/7.6.1	  Software version
+#INFO	publisher=CDS	  Data centre that produced the VOTable
+
+#RESOURCE=yCat_22650007
+#Name: J/ApJS/265/7
+#Title: Void catalogs from SDSS DR7 (Douglass+, 2023)
+#INFO	ivoid=ivo://cds.vizier/j/apjs/265/7	    IVOID of underlying data collection
+#INFO	data_ivoid=ivo://cds.vizier/j/apjs/265/7	    IVOID of underlying data collection
+#INFO	creator=Douglass K.A.	    First author or institution
+#INFO	cites=bibcode:2023ApJS..265....7D	    Article or Data origin sources
+#INFO	journal=ApJS	    Journal name
+#INFO	original_date=2023	    Year of the article publication
+#INFO	reference_url=https://cdsarc.cds.unistra.fr/viz-bin/cat/J/ApJS/265/7	    Dataset landing page
+#INFO	citation=doi:10.26093/cds/vizier.22650007	    Dataset identifier that can be used for citation
+#INFO	publication_date=2023-08-25	    Date of first publication in the data centre
+#INFO	rights_uri=https://cds.unistra.fr/vizier-org/licences_vizier.html	    Licence URI
+#Table	J_ApJS_265_7_table1:
+#Name: J/ApJS/265/7/table1
+#Title: VoidFinder output: Maximal spheres for two cosmologies
+#Column	Cosmo	(a10)	Cosmology, Plank 2018 or WMAP5 (G1)	[ucd=meta.id;stat.fit]
+#Column	RAJ2000	(F15.11)	[112.2/259.1] Right Ascension of maximal sphere center (J2000)	[ucd=pos.eq.ra;meta.main]
+#Column	DEJ2000	(F15.11)	[-2.1/67] Declination of maximal sphere center (J2000)	[ucd=pos.eq.dec;meta.main]
+#Column	s	(F8.4)	[27.37/327.5] Comoving distance of maximal sphere center	[ucd=pos.distance]
+#Column	Reff	(F7.4)	[10.17/30.74] Effective radius of the void to which the maximal sphere belongs	[ucd=phys.size.radius]
+#Column	edge	(I1)	[0/2] Flag identifying whether any part of the void falls outside of the survey mask	[ucd=meta.code]
 Cosmo	RAJ2000	DEJ2000	s	Reff	edge
- 	deg	deg	h-1.Mpc	h-1.Mpc	 
+ 	deg	deg	h-1.Mpc	h-1.Mpc	
 ----------	---------------	---------------	--------	-------	-
 Planck2018	136.06265545087	+41.73920417296	314.5975	27.8552	1
 Planck2018	158.87701577003	+61.77297685779	308.1877	30.6113	1
@@ -1164,3 +1200,4 @@ Planck2018	159.21354417206	 +7.37115250199	261.2031	13.0221	0
 Planck2018	176.45006490027	+61.68856633922	167.9342	13.1813	0
 Planck2018	231.45207833824	+58.27220365688	326.6253	10.2088	1
 Planck2018	128.75057016628	+20.61768533559	135.6006	13.6599	0
+

@@ -1,12 +1,12 @@
 #
 #   VizieR Astronomical Server vizier.cfa.harvard.edu
-#    Date: 2026-11-25T21:06:59 [V7.6.1]
+#    Date: 2026-11-25T21:31:47 [V7.6.1]
 #   In case of problem, please report to:	cds-question@unistra.fr
 #
 #
 #Coosys	J2000:	eq_FK5 J2000
 #INFO	service_protocol=ASU	  IVOID of the protocol through which the data was retrieved
-#INFO	request_date=2026-11-25T21:06:59	  Query execution date
+#INFO	request_date=2026-11-25T21:31:47	  Query execution date
 #INFO	request=https://vizier.cfa.harvard.edu/viz-bin/asu-tsv?-out=MCXC,OName,AName,RAJ2000,DEJ2000,z,L500,M500,R500&-out.max=unlimited&-source=J/A+A/534/A109/mcxc	  Full request URL
 #INFO	contact=cds-question@unistra.fr	  Email or URL to contact publisher
 #INFO	server_software=VizieR/7.6.1	  Software version
