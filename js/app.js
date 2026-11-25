@@ -1324,13 +1324,26 @@ function blocoTempestade(riscoHoje, dataHoje) {
   // cor do bloco = nível do risco de hoje e amanhã (que já inclui o radar); tempestade no raio, longe, é no mínimo moderado
   const nivel = prev.nivel === 'baixo' && x && x.classe !== 'forte' ? 'moderado' : prev.nivel;
   const tela = el('canvas', { class: 'tp-radar', 'aria-hidden': 'true', width: 1, height: 1 });
+  // Legenda sempre à vista: o que é o desenho (local no centro, raio, seta) e o que cada cor significa.
+  const seta = t?.movimento && t.movimento.kmh >= 5;
+  const legenda = el('span', { class: 'tp-leg', 'aria-hidden': 'true' },
+    el('span', { class: 'tp-como', text: `Você no centro · ${R.raioKm} km em volta${seta ? ' · seta: para onde a chuva vai' : ''}` }),
+    el('span', { class: 'tp-cores' }, ...[['chuva', 'chuva'], ['forte', 'chuva forte'], ['tempestade', 'tempestade'], ['severa', 'tempestade forte']].map(([k, nome]) =>
+      el('span', { class: 'tp-cor' }, el('i', { class: `tp-c-${k}` }), nome))));
   const bloco = el('button', { type: 'button', class: 'tempestade', 'data-nivel': nivel, 'aria-label': `Radar de tempestade. ${titulo}. ${sub}. ${prev.texto}. Toque para ver detalhes.`, onclick: () => detalheTempestade(t, prev) },
     tela,
     el('span', { class: 'tp-txt' },
-      el('small', { class: 'tp-rot', text: 'Radar de tempestade' }),
+      el('small', { class: 'tp-rot' }, 'Radar de tempestade', t ? el('span', { class: 'tp-hora', text: ` · ${fmt.horaMin(t.ms, p.offset)}` }) : null),
       el('strong', { text: titulo }),
       sub ? el('span', { class: 'tp-sub', text: sub }) : null,
-      el('span', { class: 'tp-prev' + (prev.nivel !== 'baixo' ? ' com-risco' : ''), text: prev.texto })));
+      el('span', { class: 'tp-prev' + (prev.nivel !== 'baixo' ? ' com-risco' : ''), text: prev.texto }),
+      el('span', { class: 'tp-mais', text: 'Ver detalhes ›' })),
+    legenda);
+  // O desenho acompanha o tamanho do bloco (girar o celular, redimensionar a janela, trocar de layout).
+  if (typeof ResizeObserver === 'function') {
+    let larguraDesenhada = 0;
+    new ResizeObserver(() => { if (tela.isConnected && tela.clientWidth && tela.clientWidth !== larguraDesenhada) { larguraDesenhada = tela.clientWidth; desenharRadarTempestade(tela, t); } }).observe(tela);
+  }
   requestAnimationFrame(() => desenharRadarTempestade(tela, t));
   return bloco;
 }
@@ -1340,7 +1353,8 @@ const COR_DBZ = [[55, [236, 92, 236]], [45, [226, 54, 44]], [40, [255, 150, 0]],
 
 /**
  * Desenha o radar do bloco: ecos de pelo menos 10 dBZ num círculo de REGRAS.tempestade.raioKm em volta do local
- * (norte para cima), anéis de 50, 100 e 200 km, o local no centro e a seta do movimento dos ecos quando medido.
+ * (norte para cima), anéis de 50, 100 e 200 km (com a distância escrita quando há espaço), pontos cardeais, o local
+ * no centro e a seta do movimento dos ecos quando medido. Redesenhado quando o bloco muda de tamanho.
  */
 function desenharRadarTempestade(tela, t) {
   const css = tela.clientWidth || 96, dpr = Math.min(3, window.devicePixelRatio || 1), lado = Math.round(css * dpr);
@@ -1380,8 +1394,18 @@ function desenharRadarTempestade(tela, t) {
   c.strokeStyle = linha; c.lineWidth = dpr; c.beginPath(); c.arc(meio, meio, raioPx, 0, 2 * Math.PI); c.stroke();
   c.fillStyle = est.getPropertyValue('--texto').trim() || '#ECEEF0';
   c.beginPath(); c.arc(meio, meio, 2.6 * dpr, 0, 2 * Math.PI); c.fill();
-  c.font = `${9 * dpr}px system-ui, sans-serif`; c.textAlign = 'center'; c.fillStyle = texto;
-  c.fillText('N', meio, 10 * dpr);
+  // Pontos cardeais e, quando o desenho tem tamanho para isso, a distância dos anéis.
+  const fonte = (css >= 120 ? 10 : 9) * dpr;
+  c.font = `600 ${fonte}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = texto;
+  c.fillText('N', meio, fonte);
+  if (css >= 120) {
+    c.fillText('S', meio, lado - fonte); c.fillText('L', lado - fonte, meio); c.fillText('O', fonte, meio);
+    if (t?.mapa) {
+      c.font = `${8.5 * dpr}px system-ui, sans-serif`;
+      const R = REGRAS.tempestade.raioKm, d = Math.SQRT1_2;
+      for (const km of [100, 200]) { const r = raioPx * km / R; c.fillText(`${km} km`, meio + r * d + 2 * dpr, meio + r * d - 5 * dpr); }
+    }
+  }
 }
 
 /** Detalhe do radar de tempestade: núcleos, movimento, previsão, avisos e limites do método. */

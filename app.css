@@ -1009,12 +1009,12 @@ button.globo-rotulo { cursor: pointer; }
 /* Radar de tempestade (1.11.0): bloco fixo logo abaixo do resumo de hoje. Radar desenhado à esquerda, leitura à
    direita. A cor da borda segue o nível: neutro sem tempestade, âmbar com risco moderado, vermelho com tempestade
    chegando, sobre o local ou forte. */
-.tempestade { display: flex; align-items: center; gap: 14px; width: 100%; margin: 10px 0 4px; padding: 12px 14px; border: 0; border-radius: 16px;
+.tempestade { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "radar txt" "leg leg"; align-items: center; gap: 10px 14px; width: 100%; margin: 10px 0 4px; padding: 12px 14px; border: 0; border-radius: 16px;
   background: var(--sup); color: var(--texto); font: inherit; text-align: left; box-shadow: inset 3px 0 0 var(--linha); }
 .tempestade[data-nivel="moderado"] { box-shadow: inset 3px 0 0 var(--rajada); }
 .tempestade[data-nivel="alto"] { box-shadow: inset 3px 0 0 var(--quente); background: var(--alerta-fundo); }
-.tp-radar { width: 84px; height: 84px; flex: none; display: block; }
-.tp-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tp-radar { grid-area: radar; width: clamp(112px, 34vw, 148px); aspect-ratio: 1; display: block; }
+.tp-txt { grid-area: txt; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tp-rot { font-size: 12px; font-weight: 620; letter-spacing: .03em; text-transform: uppercase; color: var(--fraco); }
 .tp-txt strong { font-size: 16px; font-weight: 680; line-height: 1.2; }
 .tp-sub { font-size: 13.5px; color: var(--fraco); }
@@ -1023,7 +1023,20 @@ button.globo-rotulo { cursor: pointer; }
 .tempestade[data-nivel="alto"] .tp-prev.com-risco { color: var(--quente); }
 .tp-lista { margin: 0 0 10px; padding-left: 18px; }
 .tp-lista li { margin: 0 0 6px; }
-@media (min-width: 1100px) { .tp-radar { width: 104px; height: 104px; } .tp-txt strong { font-size: 18px; } }
+.tp-hora { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.tp-mais { font-size: 12.5px; color: var(--fraco); margin-top: 4px; }
+/* Legenda do desenho: o que ele mostra e o que cada cor significa (mesmas cores de COR_DBZ em js/app.js). */
+.tp-leg { grid-area: leg; display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--linha); font-size: 12px; color: var(--fraco); }
+.tp-cores { display: flex; flex-wrap: wrap; gap: 3px 12px; }
+.tp-cor { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.tp-cor i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.tp-c-chuva { background: linear-gradient(90deg, rgb(70, 150, 230), rgb(240, 214, 60)); }
+.tp-c-forte { background: rgb(255, 150, 0); }
+.tp-c-tempestade { background: rgb(226, 54, 44); }
+.tp-c-severa { background: rgb(236, 92, 236); }
+@media (max-width: 359px) { .tempestade { grid-template-columns: minmax(0, 1fr); grid-template-areas: "radar" "txt" "leg"; } .tp-radar { justify-self: center; width: 148px; } }
+@media (min-width: 1100px) { .tp-radar { width: 168px; } .tp-txt strong { font-size: 18px; } .tp-leg { font-size: 13px; } }
+@media (min-width: 1600px) { .tp-radar { width: 208px; } .tp-leg { flex-direction: row; flex-wrap: wrap; justify-content: space-between; gap: 4px 20px; } }
 
 /* Computador (1.11.0): a primeira tela de Hoje, Amanhã e do dia aberto vira duas colunas, com o resumo e o radar
    de tempestade à esquerda e o gráfico à direita, para tudo caber na primeira tela de um monitor. A partir de
