@@ -130,6 +130,11 @@ def preparar(img):
     return Image.fromarray((a * 255).astype(np.uint8)), medidas
 
 
+def distancia(g):
+    """Distância informada no manifesto, para as galáxias sem distância nos catálogos do app."""
+    return {k: g[k] for k in ('distMpc', 'fonteDist') if k in g}
+
+
 def main():
     manifesto, saida = Path(sys.argv[1]), Path(sys.argv[2])
     saida.mkdir(parents=True, exist_ok=True)
@@ -141,7 +146,7 @@ def main():
     for g in lista:
         print(g['id'])
         if g['id'] in antes and (saida / f"{g['id']}.jpg").exists():  # já baixada numa rodada anterior
-            feitas.append(antes[g['id']])
+            feitas.append({**antes[g['id']], **distancia(g)})
             mini = Image.open(saida / f"{g['id']}-1024.jpg")
             mini.thumbnail((256, 256))
             miniaturas.append(mini)
@@ -172,7 +177,7 @@ def main():
         peq.save(saida / f"{g['id']}-1024.jpg", quality=86, optimize=True)
         cat = leda(g['ra'], g['dec'])
         feitas.append({'id': g['id'], 'nome': g['nome'], 'ra': g['ra'], 'dec': g['dec'], **{k: info[k] for k in ('arquivo', 'pagina', 'licenca', 'autor', 'credito')},
-                       'imagem': medidas, 'leda': cat})
+                       'imagem': medidas, 'leda': cat, **distancia(g)})
         print('  ok', info['arquivo'], '|', info['licenca'], '|', info['autor'][:60], '|', medidas, '|', cat)
         mini = img.copy()
         mini.thumbnail((256, 256))

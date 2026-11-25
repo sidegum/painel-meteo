@@ -650,7 +650,9 @@
     "logR25": null,
     "pa": null,
     "nomes": ""
-   }
+   },
+   "distMpc": 17.7,
+   "fonteDist": "cefeidas, Freedman et al. 2001"
   },
   {
    "id": "m94",
@@ -712,7 +714,9 @@
     "logR25": 0.06,
     "pa": 72.0,
     "nomes": "NGC1068               UGC2188               MCG0-07-083           CGCG388-98    "
-   }
+   },
+   "distMpc": 14.4,
+   "fonteDist": "Tully 1988"
   },
   {
    "id": "ngc6744",
