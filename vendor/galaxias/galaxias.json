@@ -1,0 +1,377 @@
+{
+ "fonte": "Wikimedia Commons (autor e licença de cada imagem em cada entrada); medidas do HyperLEDA (Makarov et al. 2014; VizieR VII/237)",
+ "galaxias": [
+  {
+   "id": "m77",
+   "nome": "M77",
+   "ra": 40.6696,
+   "dec": -0.0133,
+   "arquivo": "Messier 77 spiral galaxy by HST.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier_77_spiral_galaxy_by_HST.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA, ESA &amp; A. van der Hoeven",
+   "credito": "http://www.spacetelescope.org/news/heic1305/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1612,
+    "centro": [
+     0.4896,
+     0.4456
+    ],
+    "anguloEixoMaior": 22.8,
+    "sigmaMaior": 0.1539,
+    "sigmaMenor": 0.1205,
+    "fundo": 0.075
+   },
+   "leda": {
+    "pgc": "10266",
+    "tipo": "Sb",
+    "logD25": 1.84,
+    "logR25": 0.06,
+    "pa": 72.0,
+    "nomes": "NGC1068               UGC2188               MCG0-07-083           CGCG388-98    "
+   }
+  },
+  {
+   "id": "ngc6744",
+   "nome": "NGC 6744",
+   "ra": 287.4421,
+   "dec": -63.8575,
+   "arquivo": "Wide Field Imager view of a Milky Way look-alike NGC 6744.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Wide_Field_Imager_view_of_a_Milky_Way_look-alike_NGC_6744.jpg",
+   "licenca": "CC BY 3.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/public/images/eso1118a/ This is a featured picture on the Persian language Wikipedia (نگاره‌های برگزیده) and is considered one of the finest images. See its nomination here. If you ",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1724,
+    "centro": [
+     0.4713,
+     0.4942
+    ],
+    "anguloEixoMaior": -13.0,
+    "sigmaMaior": 0.151,
+    "sigmaMenor": 0.1078,
+    "fundo": 0.051
+   },
+   "leda": {
+    "pgc": "62836",
+    "tipo": "SBbc",
+    "logD25": 2.24,
+    "logR25": 0.2,
+    "pa": 16.0,
+    "nomes": "NGC6744               ESO104-42             ESO-LV1040420         IRAS19050-6354"
+   }
+  },
+  {
+   "id": "ngc1232",
+   "nome": "NGC 1232",
+   "ra": 47.4396,
+   "dec": -20.5794,
+   "arquivo": "NGC 1232.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:NGC_1232.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/gallery/v/ESOPIA/Galaxies/phot-37d-98.tif.html",
+   "imagem": {
+    "largura": 2032,
+    "altura": 2048,
+    "centro": [
+     0.6024,
+     0.5199
+    ],
+    "anguloEixoMaior": -4.9,
+    "sigmaMaior": 0.1646,
+    "sigmaMenor": 0.1477,
+    "fundo": 0.038
+   },
+   "leda": {
+    "pgc": "11819",
+    "tipo": "SBc",
+    "logD25": 1.82,
+    "logR25": 0.06,
+    "pa": 99.0,
+    "nomes": "NGC1232               ESO547-14             MCG-4-08-032          ESO-LV5470140 "
+   }
+  },
+  {
+   "id": "antenas",
+   "nome": "Galáxias das Antenas",
+   "ra": 180.4717,
+   "dec": -18.8769,
+   "arquivo": "Antennae Galaxies reloaded.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Antennae_Galaxies_reloaded.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESA/Hubble &amp; NASA",
+   "credito": "https://esahubble.org/images/potw1345a/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 2034,
+    "centro": [
+     0.5447,
+     0.4513
+    ],
+    "anguloEixoMaior": -87.7,
+    "sigmaMaior": 0.2158,
+    "sigmaMenor": 0.1544,
+    "fundo": 0.059
+   },
+   "leda": {
+    "pgc": "37967",
+    "tipo": "SBm",
+    "logD25": 1.63,
+    "logR25": 0.19,
+    "pa": 120.0,
+    "nomes": "NGC4038               (ESO572-47)           MCG-3-31-014          UGCA264       "
+   }
+  },
+  {
+   "id": "m63",
+   "nome": "Galáxia do Girassol",
+   "ra": 198.9555,
+   "dec": 42.0293,
+   "arquivo": "M63 (NGC 5055).jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M63_(NGC_5055).jpg",
+   "licenca": "Public domain",
+   "autor": "NASA/ESA - The Hubble Legacy Archive (HLA): Space Telescope Science Institute (STScI), the Space Telescope European Coordinating Facility (ST-ECF), and the Cana",
+   "credito": "Hubble Space Telescope",
+   "imagem": {
+    "largura": 1557,
+    "altura": 1055,
+    "centro": [
+     0.4785,
+     0.4336
+    ],
+    "anguloEixoMaior": -4.3,
+    "sigmaMaior": 0.1591,
+    "sigmaMenor": 0.0955,
+    "fundo": 0.0
+   },
+   "leda": {
+    "pgc": "46153",
+    "tipo": "Sbc",
+    "logD25": 2.12,
+    "logR25": 0.22,
+    "pa": 102.0,
+    "nomes": "NGC5055               UGC8334               MCG7-27-054           CGCG217-23    "
+   }
+  },
+  {
+   "id": "m100",
+   "nome": "M100",
+   "ra": 185.7288,
+   "dec": 15.8223,
+   "arquivo": "M100.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M100.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/gallery/v/ESOPIA/Galaxies/phot-08a-06.tif.html",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1661,
+    "centro": [
+     0.4904,
+     0.4442
+    ],
+    "anguloEixoMaior": -26.1,
+    "sigmaMaior": 0.1658,
+    "sigmaMenor": 0.1086,
+    "fundo": 0.026
+   },
+   "leda": {
+    "pgc": "40153",
+    "tipo": "SBbc",
+    "logD25": 1.88,
+    "logR25": 0.05,
+    "pa": 170.0,
+    "nomes": "NGC4321               UGC7450               MCG3-32-015           CGCG99-30     "
+   }
+  },
+  {
+   "id": "m66",
+   "nome": "M66",
+   "ra": 170.0626,
+   "dec": 12.9915,
+   "arquivo": "Phot-33c-03-fullres.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Phot-33c-03-fullres.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/public/images/eso0338c/",
+   "imagem": {
+    "largura": 2046,
+    "altura": 2048,
+    "centro": [
+     0.5122,
+     0.5181
+    ],
+    "anguloEixoMaior": 47.8,
+    "sigmaMaior": 0.2086,
+    "sigmaMenor": 0.0998,
+    "fundo": 0.0
+   },
+   "leda": {
+    "pgc": "34695",
+    "tipo": null,
+    "logD25": 1.93,
+    "logR25": 0.35,
+    "pa": 173.0,
+    "nomes": "NGC3627               UGC6346               MCG2-29-019           CGCG67-57     "
+   }
+  },
+  {
+   "id": "ngc2903",
+   "nome": "NGC 2903",
+   "ra": 143.0421,
+   "dec": 21.5008,
+   "arquivo": "NGC 2903.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:NGC_2903.jpg",
+   "licenca": "CC BY 2.0",
+   "autor": "Judy Schmidt",
+   "credito": "Flickr: NGC 2903",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1037,
+    "centro": [
+     0.4999,
+     0.5063
+    ],
+    "anguloEixoMaior": -11.9,
+    "sigmaMaior": 0.1875,
+    "sigmaMenor": 0.067,
+    "fundo": 0.17
+   },
+   "leda": {
+    "pgc": "27077",
+    "tipo": "SBbc",
+    "logD25": 2.06,
+    "logR25": 0.34,
+    "pa": 23.0,
+    "nomes": "NGC2903               NGC2905               UGC5079               MCG4-23-009   "
+   }
+  },
+  {
+   "id": "ngc7331",
+   "nome": "NGC 7331",
+   "ra": 339.2671,
+   "dec": 34.4156,
+   "arquivo": "NGC 7331.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:NGC_7331_zoomed.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA",
+   "credito": "NASA",
+   "imagem": {
+    "largura": 1239,
+    "altura": 645,
+    "centro": [
+     0.5115,
+     0.4815
+    ],
+    "anguloEixoMaior": 0.1,
+    "sigmaMaior": 0.1372,
+    "sigmaMenor": 0.0551,
+    "fundo": 0.0
+   },
+   "leda": {
+    "pgc": "69327",
+    "tipo": "Sbc",
+    "logD25": 2.02,
+    "logR25": 0.4,
+    "pa": 171.0,
+    "nomes": "NGC7331               UGC12113              MCG6-49-045           CGCG514-68    "
+   }
+  },
+  {
+   "id": "ic342",
+   "nome": "IC 342",
+   "ra": 56.7021,
+   "dec": 68.0961,
+   "arquivo": "IC342.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:IC342.jpg",
+   "licenca": "CC BY-SA 4.0",
+   "autor": "KeithSteffens",
+   "credito": "Own work",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1528,
+    "centro": [
+     0.5027,
+     0.5059
+    ],
+    "anguloEixoMaior": 3.7,
+    "sigmaMaior": 0.1557,
+    "sigmaMenor": 0.1241,
+    "fundo": 0.051
+   },
+   "leda": {
+    "pgc": "13826",
+    "tipo": "SBc",
+    "logD25": 2.34,
+    "logR25": 0.02,
+    "pa": null,
+    "nomes": "IC342                 UGC2847               MCG11-05-003          CGCG305-2     "
+   }
+  },
+  {
+   "id": "ngc300",
+   "nome": "NGC 300",
+   "ra": 13.7229,
+   "dec": -37.6844,
+   "arquivo": "NGC 300.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:View_of_the_southern_spiral_NGC_300.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/public/images/eso1037a/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 2048,
+    "centro": [
+     0.4851,
+     0.48
+    ],
+    "anguloEixoMaior": -10.9,
+    "sigmaMaior": 0.148,
+    "sigmaMenor": 0.1241,
+    "fundo": 0.02
+   },
+   "leda": {
+    "pgc": "3238",
+    "tipo": "Scd",
+    "logD25": 2.32,
+    "logR25": 0.19,
+    "pa": 114.0,
+    "nomes": "NGC300                ESO295-20             MCG-6-03-005          ESO-LV2950200 "
+   }
+  },
+  {
+   "id": "m32",
+   "nome": "M32",
+   "ra": 10.6743,
+   "dec": 40.8652,
+   "arquivo": "M32.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M32.jpg",
+   "licenca": "Public domain",
+   "autor": "",
+   "credito": "",
+   "imagem": {
+    "largura": 480,
+    "altura": 480,
+    "centro": [
+     0.5034,
+     0.4968
+    ],
+    "anguloEixoMaior": -74.1,
+    "sigmaMaior": 0.1237,
+    "sigmaMenor": 0.0984,
+    "fundo": 0.01
+   },
+   "leda": {
+    "pgc": "2555",
+    "tipo": "E",
+    "logD25": 1.96,
+    "logR25": 0.16,
+    "pa": 170.0,
+    "nomes": "NGC221                UGC452                MCG7-02-015           CGCG535-16    "
+   }
+  }
+ ]
+}
