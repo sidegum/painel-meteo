@@ -26,42 +26,55 @@ import numpy as np
 from PIL import Image
 
 Image.MAX_IMAGE_PIXELS = None
-AGENTE = {'User-Agent': 'globo-ceu/1.0 (GitHub Actions; uso educacional)'}
+AGENTE = {'User-Agent': 'globo-ceu-bot/1.1 (GitHub Actions; uso educacional; poucas dezenas de pedidos por execução)'}
 LIVRES = ('public domain', 'pd', 'cc0', 'cc by', 'cc-by', 'cc by-sa', 'cc-by-sa')
 VIZIER = ('https://vizier.cfa.harvard.edu', 'https://vizier.cds.unistra.fr')
 
 
-def buscar(url, tentativas=3):
+def buscar(url, tentativas=4):
+    """Baixa um endereço. Em "429 Too Many Requests" espera um minuto ou mais antes de tentar de novo."""
     for i in range(tentativas):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=AGENTE), timeout=120) as r:
                 return r.read()
         except Exception as e:  # noqa: BLE001 (rede: tenta de novo e registra)
             print('  falhou', url[:110], e)
-            time.sleep(3 * (i + 1))
+            time.sleep(60 * (i + 1) if '429' in str(e) else 5 * (i + 1))
     return None
 
 
 def texto_puro(html):
     import re
-    return re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', '', html or '')).strip()
+    import html as entidades
+    return re.sub(r'\s+', ' ', entidades.unescape(re.sub(r'<[^>]+>', '', html or ''))).strip()
 
 
-def no_commons(titulo):
-    """Endereço da miniatura de 2048 px e metadados de um arquivo do Commons, ou None."""
-    url = ('https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata'
-           '&iiurlwidth=2048&titles=' + urllib.parse.quote('File:' + titulo))
-    bruto = buscar(url)
-    if not bruto:
-        return None
-    pag = next(iter(json.loads(bruto)['query']['pages'].values()))
-    if 'imageinfo' not in pag:
-        return None
-    ii = pag['imageinfo'][0]
-    m = ii.get('extmetadata', {})
-    v = lambda k: texto_puro(m.get(k, {}).get('value', ''))
-    return {'arquivo': titulo, 'url': ii.get('thumburl') or ii['url'], 'pagina': ii.get('descriptionurl'), 'largura': ii.get('width'), 'altura': ii.get('height'),
-            'licenca': v('LicenseShortName'), 'autor': v('Artist')[:160], 'credito': v('Credit')[:200]}
+def no_commons(titulos):
+    """Metadados de vários arquivos do Commons numa consulta só (até 50 títulos por pedido), por título.
+
+    O Commons limita pedidos em rajada: uma consulta por lote, e não uma por arquivo.
+    """
+    achados = {}
+    for i in range(0, len(titulos), 40):
+        lote = titulos[i:i + 40]
+        url = ('https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata'
+               '&iiurlwidth=2048&titles=' + urllib.parse.quote('|'.join('File:' + t for t in lote)))
+        bruto = buscar(url)
+        if not bruto:
+            continue
+        consulta = json.loads(bruto)['query']
+        normal = {n['to']: n['from'] for n in consulta.get('normalized', [])}
+        for pag in consulta['pages'].values():
+            if 'imageinfo' not in pag:
+                continue
+            titulo = normal.get(pag['title'], pag['title'])[len('File:'):]
+            ii = pag['imageinfo'][0]
+            m = ii.get('extmetadata', {})
+            v = lambda k: texto_puro(m.get(k, {}).get('value', ''))  # noqa: E731, B023
+            achados[titulo] = {'arquivo': titulo, 'url': ii.get('thumburl') or ii['url'], 'pagina': ii.get('descriptionurl'), 'largura': ii.get('width'),
+                               'altura': ii.get('height'), 'licenca': v('LicenseShortName'), 'autor': v('Artist')[:160], 'credito': v('Credit')[:200]}
+        time.sleep(5)
+    return achados
 
 
 def leda(ra, dec):
@@ -120,12 +133,22 @@ def preparar(img):
 def main():
     manifesto, saida = Path(sys.argv[1]), Path(sys.argv[2])
     saida.mkdir(parents=True, exist_ok=True)
+    lista = json.loads(manifesto.read_text())['galaxias']
+    indice = saida / 'galaxias.json'
+    antes = {g['id']: g for g in json.loads(indice.read_text())['galaxias']} if indice.exists() else {}
+    commons = no_commons([t for g in lista if g['id'] not in antes for t in g['arquivos']])
     feitas, miniaturas = [], []
-    for g in json.loads(manifesto.read_text())['galaxias']:
+    for g in lista:
         print(g['id'])
+        if g['id'] in antes and (saida / f"{g['id']}.jpg").exists():  # já baixada numa rodada anterior
+            feitas.append(antes[g['id']])
+            mini = Image.open(saida / f"{g['id']}-1024.jpg")
+            mini.thumbnail((256, 256))
+            miniaturas.append(mini)
+            continue
         info = None
         for titulo in g['arquivos']:
-            info = no_commons(titulo)
+            info = commons.get(titulo)
             if info and any(l in info['licenca'].lower() for l in LIVRES):
                 break
             if info:
@@ -134,6 +157,7 @@ def main():
         if not info:
             print('  SEM IMAGEM:', g['arquivos'])
             continue
+        time.sleep(6)
         bruto = buscar(info['url'])
         if not bruto:
             continue
@@ -153,7 +177,6 @@ def main():
         mini = img.copy()
         mini.thumbnail((256, 256))
         miniaturas.append(mini)
-        time.sleep(1)
     (saida / 'galaxias.json').write_text(json.dumps({'fonte': 'Wikimedia Commons (autor e licença de cada imagem em cada entrada); medidas do HyperLEDA (Makarov et al. 2014; VizieR VII/237)',
                                                       'galaxias': feitas}, ensure_ascii=False, indent=1))
     if miniaturas:
