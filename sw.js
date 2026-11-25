@@ -1,7 +1,7 @@
 // Service worker simples: guarda só os arquivos do app para abrir sem internet.
 // Dados de previsão ficam no cache "painel-dados-v1", gravado pelo próprio app (dados públicos).
 // Todos os caminhos são relativos à pasta do próprio sw.js (o app funciona em qualquer endereço base).
-const VERSAO = 'painel-app-v1.12.2';
+const VERSAO = 'painel-app-v1.12.3';
 const ARQUIVOS = [
   './', './index.html', './app.css', './manifest.json', './privacidade.html',
   './js/app.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js', './js/fundo-ceu.js', './js/cidades.js', './js/locais.js',
@@ -10,6 +10,9 @@ const ARQUIVOS = [
   './vendor/fontes/archivo-latin-standard-normal.woff2', './vendor/fontes/archivo-latin-ext-standard-normal.woff2',
   './icones/icone.svg', './icones/icone-192.png', './icones/icone-512.png',
 ];
+
+// Endereços completos dos arquivos guardados na instalação, para reconhecer um pedido deles.
+const DO_APP = new Set(ARQUIVOS.map((a) => new URL(a, self.location.href).href));
 
 // O Cloudflare Pages redireciona /index.html para / e /privacidade.html para /privacidade. Uma resposta que passou por
 // redirecionamento não pode ser entregue a uma navegação (o navegador recusa), então ela é copiada sem essa marca.
@@ -43,14 +46,22 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  // Rede primeiro para todos os arquivos do app (cada abertura já pega a versão publicada), sem usar o
-  // cache HTTP do servidor; o cache local só entra sem internet ou se a rede demorar 4 s.
+  // Arquivos do app guardados na instalação (ARQUIVOS): cache primeiro, sem esperar a rede, para o app abrir na
+  // hora mesmo com conexão ruim. A versão nova chega pelo próprio service worker: cada versão publicada muda
+  // VERSAO, o navegador instala o sw.js novo (que guarda todos os arquivos de novo, num cache novo) e o app
+  // recarrega sozinho (controllerchange, em js/app.js). Um cache nunca mistura arquivos de duas versões.
+  // Todo o resto do mesmo domínio (código e dados do Globo, arquivos de dados): rede primeiro, sem usar o cache
+  // HTTP do servidor; o cache local só entra sem internet ou se a rede demorar 4 s.
   // Navegações: cada página tem a sua entrada (o app em index.html; a política de privacidade na dela),
   // seja qual for a URL pedida (raiz, ?parametros, #aba).
   const pagina = e.request.mode === 'navigate';
   const chave = !pagina ? e.request : /\/privacidade(\.html)?$/.test(url.pathname) ? './privacidade.html' : './index.html';
   e.respondWith((async () => {
     const cache = await caches.open(VERSAO);
+    if (pagina || DO_APP.has(url.origin + url.pathname)) {
+      const pronto = await cache.match(chave, { ignoreSearch: pagina });
+      if (pronto) return pronto;
+    }
     const daRede = fetch(e.request, { cache: 'no-cache' }).then((r) => {
       if (r.ok) guardar(cache, chave, r.clone()).catch(() => {});
       return r;

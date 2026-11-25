@@ -480,6 +480,19 @@ Pedido do Gustavo: tudo o que é pesado deve ser pré-carregado, para a navegaç
 
 `test/e2e/telas.mjs` confere que o mapa está montado sem rolagem e que uma aba escondida tem largura. Não medido em aparelho real: os números são do Chromium com CPU limitada, não de um iPhone.
 
+### 5.3.3 Nada travando: fila em etapas e abertura pelo cache (1.12.3)
+
+Pedido do Gustavo: nada pode travar, no computador e no iPhone, e tudo o que as telas precisam deve ser carregado ao entrar. O app já pedia todas as fontes em paralelo na abertura (`atualizar`) e desenhava todas as abas na fila ociosa. A medição (Chromium, 390 px, CPU 4 vezes mais lenta) mostrou onde ainda travava e o que mudou:
+
+- **Fila em etapas** (`filaRender`, `rodarEtapa`, `depois`, em `js/app.js`): antes, cada aba era uma tarefa só (Hoje 107 ms, Modelos 124 ms, El Niño 80 ms no celular lento), e a tela era redesenhada duas vezes na abertura. Agora cada aba é uma lista de etapas curtas: a primeira monta a estrutura e registra as partes pesadas com `depois(fn)` (gráficos, tabela de acerto, meteograma, previsto x medido, mapa). A fila roda uma etapa por momento ocioso; a maior etapa medida ficou em 41 ms. Se a pessoa abre a aba antes da vez dela, `renderPendente` roda de uma vez tudo o que falta dessa aba. Fora da fila, `depois` roda na hora.
+- **Espera o gesto terminar** (`ocioso`): durante toque, rolagem, roda do mouse ou tecla, a fila espera 200 ms sem gesto (no máximo 800 ms, para não deixar parte da tela em branco). O Safari do iPhone não tem `requestIdleCallback`; lá, cada etapa roda depois de um quadro pintado (antes, as abas rodavam em sequência com 30 ms de intervalo).
+- **Leque dos cenários** (`renderModelos`): os três quantis por hora saem de uma ordenação só (eram três), e cada gráfico é uma etapa.
+- **Mapa reaproveitado** (`estado.mapa`): se o local, o tema e as estações não mudaram e o mapa tem menos de 5 minutos, redesenhar a tela não refaz o Leaflet nem pede os quadros de novo. Depois de 5 minutos ele é refeito, para o radar não ficar velho.
+- **Faixa do céu** (`js/faixa.js`): o `ResizeObserver` só redesenha quando a largura muda (cada faixa era desenhada duas vezes).
+- **Abertura pelo cache** (`sw.js`): os arquivos guardados na instalação (`ARQUIVOS`) são servidos do cache sem esperar a rede. Antes era rede primeiro, com até 4 s de espera por arquivo em conexão ruim. No teste com 3 s de atraso por arquivo, reabrir o app foi de 7,1 s para 0,06 s. A versão nova continua chegando sozinha: cada versão muda `VERSAO`, o navegador instala o `sw.js` novo, que guarda todos os arquivos num cache novo, e o app recarrega uma vez (`controllerchange`). Por isso **toda mudança em arquivo do app precisa mudar `VERSAO` no `sw.js`**; sem isso, quem já tem o app instalado não recebe a mudança. O resto do mesmo domínio (código e dados do Globo) continua rede primeiro.
+
+Rolagem: nenhuma aba teve quadro acima de 34 ms no teste, antes ou depois. Dados por abertura: pela amostra gravada, as fontes de uma abertura completa (previsão, cenários, Worker, radar) somam cerca de 0,65 MB sem compressão, perto de 0,2 MB como trafegam (comprimidas), mais os quadros do mapa. Não medido em iPhone real.
+
 ### 5.4 Hoje: detalhes (`renderHojeDetalhes`)
 
 A ordem é:

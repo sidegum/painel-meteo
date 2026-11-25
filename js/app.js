@@ -18,7 +18,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.12.2';
+const VERSAO = '1.12.3';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -842,29 +842,75 @@ function renderTudo() {
   // Detalhes de todas as abas depois da primeira tela, uma aba por vez em momentos ociosos:
   // tudo fica pronto antes de ser aberto, sem uma tarefa longa que trave toque e rolagem.
   const tarefas = { dia: estado.diaAberto ? renderDia : null, hoje: renderHojeDetalhes, amanha: () => ds[1] && renderAmanhaDetalhes(ds[1]), semana: renderSemana, modelos: renderModelos, elnino: renderElNino };
-  filaRender.pendentes = new Map([estado.aba, 'hoje', 'amanha', 'semana', 'modelos', 'elnino', 'dia'].filter((n) => tarefas[n]).map((n) => [n, tarefas[n]]));
+  filaRender.pendentes = new Map([estado.aba, 'hoje', 'amanha', 'semana', 'modelos', 'elnino', 'dia'].filter((n) => tarefas[n]).map((n) => [n, [tarefas[n]]]));
   const geracao = ++filaRender.geracao;
   const passo = () => {
     if (geracao !== filaRender.geracao) return; // uma atualização mais nova assumiu a fila
     const proxima = filaRender.pendentes.keys().next().value;
     if (!proxima) { preCarregarGlobo(); return; }
-    renderPendente(proxima);
+    rodarEtapa(proxima);
     ocioso(passo);
   };
   ocioso(passo);
   atualizarCabecalho();
 }
 
-const filaRender = { geracao: 0, pendentes: new Map() };
-const ocioso = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 1500 }) : setTimeout(fn, 30));
+/**
+ * Fila de desenho das abas. Cada aba é uma lista de etapas curtas: a primeira monta a estrutura da aba e
+ * registra as partes pesadas (gráficos, tabelas grandes, mapa) com `depois`. A fila roda uma etapa por momento
+ * ocioso, então nenhuma tarefa segura o toque ou a rolagem por mais de um quadro longo.
+ */
+const filaRender = { geracao: 0, pendentes: new Map(), atual: null };
 
-// Desenha agora a aba que ainda está na fila (chamada também quando o usuário abre a aba antes da vez dela).
+// Último gesto da pessoa (toque, rolagem, roda do mouse, tecla): a fila espera o gesto terminar antes de trabalhar.
+let ultimoGesto = 0;
+for (const tipo of ['touchstart', 'touchmove', 'wheel', 'scroll', 'pointerdown', 'keydown']) {
+  window.addEventListener(tipo, () => { ultimoGesto = performance.now(); }, { passive: true, capture: true });
+}
+
+/**
+ * Roda `fn` num momento ocioso. Durante um gesto, espera ele terminar (no máximo `ESPERA_GESTO_MS`, para a tela
+ * não ficar com partes em branco). O Safari do iPhone não tem requestIdleCallback: lá a tarefa roda depois de
+ * um quadro pintado, para nunca cair no meio de uma animação.
+ */
+const ESPERA_GESTO_MS = 800;
+function ocioso(fn) {
+  const desde = performance.now();
+  const rodar = () => {
+    const t = performance.now();
+    if (t - ultimoGesto < 200 && t - desde < ESPERA_GESTO_MS) { setTimeout(rodar, 100); return; }
+    fn();
+  };
+  if (window.requestIdleCallback) requestIdleCallback(rodar, { timeout: 1500 });
+  else requestAnimationFrame(() => setTimeout(rodar, 0));
+}
+
+/**
+ * Registra uma parte pesada da aba que está sendo desenhada. Dentro da fila, vira a etapa seguinte dessa aba;
+ * fora dela (aba aberta antes da vez, dia aberto pelo toque), roda na hora.
+ * @param {() => void} fn
+ */
+function depois(fn) {
+  if (filaRender.atual) filaRender.atual.push(fn); else fn();
+}
+
+/** Roda a próxima etapa da aba na fila. Etapas registradas por `depois` entram logo depois dela, na ordem. */
+function rodarEtapa(aba) {
+  const etapas = filaRender.pendentes.get(aba);
+  if (!etapas) return;
+  const fn = etapas.shift();
+  const novas = [];
+  filaRender.atual = novas;
+  try { fn?.(); } finally { filaRender.atual = null; }
+  etapas.unshift(...novas);
+  if (!etapas.length) filaRender.pendentes.delete(aba);
+}
+
+// Desenha agora tudo o que falta da aba (chamada quando a pessoa abre a aba antes da vez dela na fila).
 function renderPendente(aba) {
-  const fn = filaRender.pendentes.get(aba);
-  if (!fn) return;
-  filaRender.pendentes.delete(aba);
+  if (!filaRender.pendentes.has(aba)) return;
   const y = window.scrollY;
-  fn();
+  while (filaRender.pendentes.has(aba)) rodarEtapa(aba);
   if (aba === estado.aba) window.scrollTo(0, y); // evita que a tela pule
 }
 
@@ -1589,7 +1635,11 @@ function renderHojeDetalhes() {
   const filhos = [];
   // Ordem: o que vem pela frente (horas e radar), o que se mede agora, e por fim os detalhes.
   filhos.push(proximasHoras());
-  const mapa = secao('Mapa', null);
+  // O mapa já montado é reaproveitado quando nada do que ele mostra mudou (mesmo local, tema e estações) e o
+  // radar dele tem menos de 5 minutos: redesenhar a tela não refaz o Leaflet nem pede os quadros de novo.
+  const chaveMapa = [chaveLocal(estado.local), document.documentElement.getAttribute('data-tema') || '', (estado.obs?.fontes || []).map((f) => f.nome).join()].join('|');
+  const mapaReaproveitado = !!estado.mapa && estado.mapa.chave === chaveMapa && Date.now() - estado.mapa.em < 5 * 60000;
+  const mapa = mapaReaproveitado ? estado.mapa.secao : secao('Mapa', null);
   mapa.classList.add('largura-total');
   filhos.push(mapa);
   filhos.push(instrumentos());
@@ -1600,10 +1650,17 @@ function renderHojeDetalhes() {
   filhos.push(met);
   filhos.push(estadoFontes());
   alvo.replaceChildren(...filhos);
-  meteograma(met, Date.now() - 2 * 3600000, Date.now() + 48 * 3600000, 24, 'hoje');
-  previstoMedido(pm);
-  estado.desligarMapa?.(); estado.desligarMapa = null;
-  import('./mapa.js').then((m) => { estado.desligarMapa = m.secaoMapa(mapa, estado); ocioso(() => m.preCarregarMapa(estado.local.lat, estado.local.lon)); }).catch(() => mapa.append(el('p', { class: 'nota', text: 'Mapa indisponível.' })));
+  // As partes pesadas entram em etapas próprias da fila, uma por momento ocioso.
+  depois(() => meteograma(met, Date.now() - 2 * 3600000, Date.now() + 48 * 3600000, 24, 'hoje'));
+  depois(() => previstoMedido(pm));
+  if (!mapaReaproveitado) depois(() => {
+    estado.desligarMapa?.(); estado.desligarMapa = null;
+    estado.mapa = { secao: mapa, chave: chaveMapa, em: Date.now() };
+    import('./mapa.js').then((m) => {
+      if (estado.mapa?.secao !== mapa) return; // uma atualização mais nova já trocou a seção
+      estado.desligarMapa = m.secaoMapa(mapa, estado); ocioso(() => m.preCarregarMapa(estado.local.lat, estado.local.lon));
+    }).catch(() => mapa.append(el('p', { class: 'nota', text: 'Mapa indisponível.' })));
+  });
   void p;
 }
 
@@ -2206,20 +2263,23 @@ function renderSemana() {
   const gRaj = secao('Rajada máxima', null);
   filhos.push(gTemp, gRaj);
   alvo.replaceChildren(...filhos);
-  const base = { x, fuso: p.fuso, sync: 'semana', emitirHora: false, agora: false, formatoX: fmtDia, altura: 160 };
-  criarGrafico(gTemp, { ...base, series: [
-    { rotulo: 'mín baixa', valores: dias.map((a) => a.tminFaixa[0]), corCss: '--fria', faixa: true, semLegenda: true },
-    { rotulo: 'mín alta', valores: dias.map((a) => a.tminFaixa[1]), corCss: '--fria', faixa: true, semLegenda: true },
-    { rotulo: 'máx baixa', valores: dias.map((a) => a.tmaxFaixa[0]), corCss: '--quente', faixa: true, semLegenda: true },
-    { rotulo: 'máx alta', valores: dias.map((a) => a.tmaxFaixa[1]), corCss: '--quente', faixa: true, semLegenda: true },
-    { rotulo: 'mínima', valores: dias.map((a) => a.tmin), corCss: '--fria', pontos: false, largura: 2.5, formato: (v) => fmt.c(v) },
-    { rotulo: 'máxima', valores: dias.map((a) => a.tmax), corCss: '--quente', largura: 2.5, formato: (v) => fmt.c(v) },
-  ], bandas: [{ de: 1, ate: 0, corCss: '--fria' }, { de: 3, ate: 2, corCss: '--quente' }], eixos: [{ formato: (v) => `${v}°` }] });
-  criarGrafico(gRaj, { ...base, series: [
-    { rotulo: 'baixa', valores: dias.map((a) => a.av.rajada?.min ?? null), corCss: '--rajada', faixa: true, semLegenda: true },
-    { rotulo: 'alta', valores: dias.map((a) => a.av.rajada?.max ?? null), corCss: '--rajada', faixa: true, semLegenda: true },
-    { rotulo: 'rajada máxima', valores: dias.map((a) => a.av.rajada?.mediana ?? null), corCss: '--rajada', largura: 2.5, pontos: true, formato: (v) => `${Math.round(v)} km/h` },
-  ], bandas: [{ de: 1, ate: 0, corCss: '--rajada' }], escalas: { y: { range: (u, a, b) => [0, Math.max(60, b + 10)] } }, eixos: [{ formato: (v) => `${v}`, rotulo: 'km/h' }] });
+  // Os gráficos entram numa etapa própria da fila, para nenhuma etapa passar de um quadro longo.
+  depois(() => {
+    const base = { x, fuso: p.fuso, sync: 'semana', emitirHora: false, agora: false, formatoX: fmtDia, altura: 160 };
+    criarGrafico(gTemp, { ...base, series: [
+      { rotulo: 'mín baixa', valores: dias.map((a) => a.tminFaixa[0]), corCss: '--fria', faixa: true, semLegenda: true },
+      { rotulo: 'mín alta', valores: dias.map((a) => a.tminFaixa[1]), corCss: '--fria', faixa: true, semLegenda: true },
+      { rotulo: 'máx baixa', valores: dias.map((a) => a.tmaxFaixa[0]), corCss: '--quente', faixa: true, semLegenda: true },
+      { rotulo: 'máx alta', valores: dias.map((a) => a.tmaxFaixa[1]), corCss: '--quente', faixa: true, semLegenda: true },
+      { rotulo: 'mínima', valores: dias.map((a) => a.tmin), corCss: '--fria', pontos: false, largura: 2.5, formato: (v) => fmt.c(v) },
+      { rotulo: 'máxima', valores: dias.map((a) => a.tmax), corCss: '--quente', largura: 2.5, formato: (v) => fmt.c(v) },
+    ], bandas: [{ de: 1, ate: 0, corCss: '--fria' }, { de: 3, ate: 2, corCss: '--quente' }], eixos: [{ formato: (v) => `${v}°` }] });
+    criarGrafico(gRaj, { ...base, series: [
+      { rotulo: 'baixa', valores: dias.map((a) => a.av.rajada?.min ?? null), corCss: '--rajada', faixa: true, semLegenda: true },
+      { rotulo: 'alta', valores: dias.map((a) => a.av.rajada?.max ?? null), corCss: '--rajada', faixa: true, semLegenda: true },
+      { rotulo: 'rajada máxima', valores: dias.map((a) => a.av.rajada?.mediana ?? null), corCss: '--rajada', largura: 2.5, pontos: true, formato: (v) => `${Math.round(v)} km/h` },
+    ], bandas: [{ de: 1, ate: 0, corCss: '--rajada' }], escalas: { y: { range: (u, a, b) => [0, Math.max(60, b + 10)] } }, eixos: [{ formato: (v) => `${v}`, rotulo: 'km/h' }] });
+  });
 }
 
 function tabelaFaixas(dias) {
@@ -2270,43 +2330,54 @@ function renderModelos() {
   // vindas da Semana (1.11.0): faixas entre modelos e chances por limite, coerentes com a chance do dia
   filhos.push(secao('Faixa provável por dia', null, tabelaFaixas(dias)));
   filhos.push(secao('Chance por limite', notaConcordancia(dias[0]), tabelaLimites(dias)));
-  filhos.push(secao('Acerto de cada modelo', null, tabelaAcerto()));
+  const secAcerto = secao('Acerto de cada modelo', null);
+  filhos.push(secAcerto);
+  depois(() => secAcerto.append(tabelaAcerto()));
   filhos.push(secao('Regra de confiança', null, regraConfianca()));
   if (estado.ensErros?.length) filhos.push(el('p', { class: 'nota', text: `Ensemble: ${estado.ensErros.join('; ')}.` }));
   alvo.replaceChildren(...filhos);
-
-  const ini = Date.now() - 3600000, fim = Date.now() + 7 * 86400000;
-  const idx = []; p.horas.forEach((ms, i) => { if (ms >= ini && ms <= fim) idx.push(i); });
-  const x = idx.map((i) => p.horas[i]);
-  const leque = (v, acumular) => {
-    if (!estado.ens) return null;
-    const membros = [];
-    for (const e of Object.values(estado.ens)) {
-      const pos = new Map(e.horas.map((ms, i) => [ms, i]));
-      for (const s of e.membros[v] || []) {
-        let a = 0, ok = true;
-        membros.push(x.map((ms) => { const i = pos.get(ms); const val = i === undefined ? null : s[i]; if (!valido(val)) { ok = false; return null; } if (acumular) { a += val; return ok ? a : null; } return val; }));
+  // Os gráficos (com o leque dos cenários, a conta mais cara da aba) entram numa etapa própria da fila.
+  depois(() => {
+    const ini = Date.now() - 3600000, fim = Date.now() + 7 * 86400000;
+    const idx = []; p.horas.forEach((ms, i) => { if (ms >= ini && ms <= fim) idx.push(i); });
+    const x = idx.map((i) => p.horas[i]);
+    const leque = (v, acumular) => {
+      if (!estado.ens) return null;
+      const membros = [];
+      for (const e of Object.values(estado.ens)) {
+        const pos = new Map(e.horas.map((ms, i) => [ms, i]));
+        for (const s of e.membros[v] || []) {
+          let a = 0, ok = true;
+          membros.push(x.map((ms) => { const i = pos.get(ms); const val = i === undefined ? null : s[i]; if (!valido(val)) { ok = false; return null; } if (acumular) { a += val; return ok ? a : null; } return val; }));
+        }
       }
-    }
-    if (membros.length < 10) return null;
-    const q = (qq) => x.map((_, k) => quantil(membros.map((m) => m[k]), qq));
-    return { p10: q(0.1), p50: q(0.5), p90: q(0.9), n: membros.length };
-  };
-  const serieModelo = (m, v, acumular) => { let a = 0, quebra = false; return idx.map((i) => { const val = p.modelos[m].vars[v]?.[i]; if (!valido(val)) { quebra = acumular; return null; } if (quebra) return null; a += val; return acumular ? a : val; }); };
-  const base = { x, fuso: p.fuso, sync: 'modelos', emitirHora: false, altura: 200, horasVisiveis: 72, noites: noitesDe(p.diario, ini, fim) };
-  for (const [caixa, v, acumular, unidade] of [[gC, 'precipitation', true, 'mm'], [gR, 'wind_gusts_10m', false, 'km/h']]) {
-    const l = leque(v, acumular);
-    const series = [];
-    const bandas = [];
-    if (l) {
-      series.push({ rotulo: 'p10', valores: l.p10, cor: '#7f9aa1', faixa: true, semLegenda: true }, { rotulo: 'p90', valores: l.p90, cor: '#7f9aa1', faixa: true, semLegenda: true },
-        { rotulo: `mediana de ${l.n} cenários`, valores: l.p50, cor: '#7f9aa1', largura: 2, dash: [2, 3], formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
-      bandas.push({ de: 1, ate: 0, cor: '#7f9aa1' });
-    }
-    for (const m of mods) if (p.modelos[m].vars[v]) series.push({ rotulo: MODELOS[m].curto, valores: serieModelo(m, v, acumular), corCss: MODELOS[m].cor.slice(4, -1), largura: 2, formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
-    if (!l) caixa.append(el('p', { class: 'nota', text: 'Leque de cenários indisponível: a Ensemble API não respondeu. Mostrando só os modelos.' }));
-    criarGrafico(caixa, { ...base, series, bandas, escalas: { y: { range: (u, a, b) => [0, Math.max(acumular ? 10 : 50, b)] } }, eixos: [{ formato: (z) => `${z}`, rotulo: unidade }] });
-  }
+      if (membros.length < 10) return null;
+      // Uma ordenação por hora serve aos três quantis (mesma interpolação de `quantil`, em js/analise.js).
+      const p10 = [], p50 = [], p90 = [];
+      const doOrdenado = (xs, qq) => { const pos = (xs.length - 1) * qq, lo = Math.floor(pos), hi = Math.ceil(pos); return xs[lo] + (xs[hi] - xs[lo]) * (pos - lo); };
+      for (let k = 0; k < x.length; k++) {
+        const xs = Float64Array.from(membros.map((m) => m[k]).filter(valido)).sort();
+        p10.push(xs.length ? doOrdenado(xs, 0.1) : null); p50.push(xs.length ? doOrdenado(xs, 0.5) : null); p90.push(xs.length ? doOrdenado(xs, 0.9) : null);
+      }
+      return { p10, p50, p90, n: membros.length };
+    };
+    const serieModelo = (m, v, acumular) => { let a = 0, quebra = false; return idx.map((i) => { const val = p.modelos[m].vars[v]?.[i]; if (!valido(val)) { quebra = acumular; return null; } if (quebra) return null; a += val; return acumular ? a : val; }); };
+    const base = { x, fuso: p.fuso, sync: 'modelos', emitirHora: false, altura: 200, horasVisiveis: 72, noites: noitesDe(p.diario, ini, fim) };
+    // um gráfico por etapa
+    for (const [caixa, v, acumular, unidade] of [[gC, 'precipitation', true, 'mm'], [gR, 'wind_gusts_10m', false, 'km/h']]) depois(() => {
+      const l = leque(v, acumular);
+      const series = [];
+      const bandas = [];
+      if (l) {
+        series.push({ rotulo: 'p10', valores: l.p10, cor: '#7f9aa1', faixa: true, semLegenda: true }, { rotulo: 'p90', valores: l.p90, cor: '#7f9aa1', faixa: true, semLegenda: true },
+          { rotulo: `mediana de ${l.n} cenários`, valores: l.p50, cor: '#7f9aa1', largura: 2, dash: [2, 3], formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
+        bandas.push({ de: 1, ate: 0, cor: '#7f9aa1' });
+      }
+      for (const m of mods) if (p.modelos[m].vars[v]) series.push({ rotulo: MODELOS[m].curto, valores: serieModelo(m, v, acumular), corCss: MODELOS[m].cor.slice(4, -1), largura: 2, formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
+      if (!l) caixa.append(el('p', { class: 'nota', text: 'Leque de cenários indisponível: a Ensemble API não respondeu. Mostrando só os modelos.' }));
+      criarGrafico(caixa, { ...base, series, bandas, escalas: { y: { range: (u, a, b) => [0, Math.max(acumular ? 10 : 50, b)] } }, eixos: [{ formato: (z) => `${z}`, rotulo: unidade }] });
+    });
+  });
 }
 
 function nomeVar(v) {
@@ -2446,35 +2517,37 @@ async function renderElNino() {
     el('p', { class: 'nota', text: `Dados verificados ${fmt.idade(E.verificadoEm)} (${E.origem || 'Worker'}; o app confere de novo a cada 6 horas).` })));
   filhos.push(el('p', { class: 'explica' }, 'El Niño indica tendências sazonais e não garante impactos específicos. Este painel não faz previsão própria de El Niño e não usa esses dados para alterar a previsão diária.'));
   alvo.replaceChildren(...filhos);
-
-  const fmtMes = (u, vals) => vals.map((v) => { const d = new Date(v * 1000); return `${d.getUTCMonth() + 1}/${String(d.getUTCFullYear()).slice(2)}`; });
-  const rel = P.relativoSemanal?.dados || [], conv = P.convencionalSemanal?.dados || [];
-  if (rel.length || conv.length) {
-    const tempos = [...new Set([...rel, ...conv].map((r) => r.ms))].sort((a, b) => a - b).slice(-104);
-    const mapa = (lista) => { const m = new Map(lista.map((r) => [r.ms, r.n34])); return tempos.map((t) => m.get(t) ?? null); };
-    criarGrafico(gInd, { x: tempos, agora: false, emitirHora: false, sync: 'enso', formatoX: fmtMes, altura: 180, 
-      fonte: `NOAA · semana de ${fmt.dataCurta(tempos[tempos.length - 1], 0)}`,
-      series: [
-        { rotulo: 'índice oficial', valores: mapa(rel), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
-        { rotulo: 'medida bruta', valores: mapa(conv), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
-      ], eixos: [{ formato: (v) => `${v}` }] });
-  } else gInd.append(el('p', { text: 'Índices semanais indisponíveis.' }), avisoParte('relativoSemanal'));
-  const oni = P.oni?.dados || [], roni = P.roni?.dados || [];
-  if (oni.length || roni.length) {
-    const centro = { DJF: 0, JFM: 1, FMA: 2, MAM: 3, AMJ: 4, MJJ: 5, JJA: 6, JAS: 7, ASO: 8, SON: 9, OND: 10, NDJ: 11 };
-    const ms = (r) => Date.UTC(r.ano, centro[r.seas], 15);
-    const tempos = [...new Set([...oni, ...roni].map(ms))].sort((a, b) => a - b);
-    const mapa = (lista) => { const m = new Map(lista.map((r) => [ms(r), r.anom])); return tempos.map((t) => m.get(t) ?? null); };
-    criarGrafico(gHist, { x: tempos, agora: false, emitirHora: false, sync: 'enso2', formatoX: (u, v) => v.map((s) => String(new Date(s * 1000).getUTCFullYear())), altura: 180,
-      fonte: `NOAA · ${[...oni, ...roni].sort((a, b) => ms(a) - ms(b)).map((r) => `${trimestrePt(r.seas)} de ${r.ano}`).pop()}`, horasVisiveis: 24 * 365 * 25, rolarFim: true,
-      series: [
-        { rotulo: 'índice antigo', valores: mapa(oni), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
-        { rotulo: 'índice oficial', valores: mapa(roni), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
-      ], eixos: [{ formato: (v) => `${v}` }] });
-  } else gHist.append(el('p', { text: 'Índice indisponível.' }));
-  // o gráfico desde 1950 nasce dentro de "Dados técnicos" fechado: ao abrir, mostra os anos mais recentes
-  alvo.querySelector('.enso-tecnico')?.addEventListener('toggle', (e) => {
-    if (e.target.open) requestAnimationFrame(() => { const r = gHist.querySelector('.rolar'); if (r) r.scrollLeft = r.scrollWidth; });
+  // Os dois gráficos entram numa etapa própria da fila.
+  depois(() => {
+    const fmtMes = (u, vals) => vals.map((v) => { const d = new Date(v * 1000); return `${d.getUTCMonth() + 1}/${String(d.getUTCFullYear()).slice(2)}`; });
+    const rel = P.relativoSemanal?.dados || [], conv = P.convencionalSemanal?.dados || [];
+    if (rel.length || conv.length) {
+      const tempos = [...new Set([...rel, ...conv].map((r) => r.ms))].sort((a, b) => a - b).slice(-104);
+      const mapa = (lista) => { const m = new Map(lista.map((r) => [r.ms, r.n34])); return tempos.map((t) => m.get(t) ?? null); };
+      criarGrafico(gInd, { x: tempos, agora: false, emitirHora: false, sync: 'enso', formatoX: fmtMes, altura: 180, 
+        fonte: `NOAA · semana de ${fmt.dataCurta(tempos[tempos.length - 1], 0)}`,
+        series: [
+          { rotulo: 'índice oficial', valores: mapa(rel), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
+          { rotulo: 'medida bruta', valores: mapa(conv), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
+        ], eixos: [{ formato: (v) => `${v}` }] });
+    } else gInd.append(el('p', { text: 'Índices semanais indisponíveis.' }), avisoParte('relativoSemanal'));
+    const oni = P.oni?.dados || [], roni = P.roni?.dados || [];
+    if (oni.length || roni.length) {
+      const centro = { DJF: 0, JFM: 1, FMA: 2, MAM: 3, AMJ: 4, MJJ: 5, JJA: 6, JAS: 7, ASO: 8, SON: 9, OND: 10, NDJ: 11 };
+      const ms = (r) => Date.UTC(r.ano, centro[r.seas], 15);
+      const tempos = [...new Set([...oni, ...roni].map(ms))].sort((a, b) => a - b);
+      const mapa = (lista) => { const m = new Map(lista.map((r) => [ms(r), r.anom])); return tempos.map((t) => m.get(t) ?? null); };
+      criarGrafico(gHist, { x: tempos, agora: false, emitirHora: false, sync: 'enso2', formatoX: (u, v) => v.map((s) => String(new Date(s * 1000).getUTCFullYear())), altura: 180,
+        fonte: `NOAA · ${[...oni, ...roni].sort((a, b) => ms(a) - ms(b)).map((r) => `${trimestrePt(r.seas)} de ${r.ano}`).pop()}`, horasVisiveis: 24 * 365 * 25, rolarFim: true,
+        series: [
+          { rotulo: 'índice antigo', valores: mapa(oni), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
+          { rotulo: 'índice oficial', valores: mapa(roni), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
+        ], eixos: [{ formato: (v) => `${v}` }] });
+    } else gHist.append(el('p', { text: 'Índice indisponível.' }));
+    // o gráfico desde 1950 nasce dentro de "Dados técnicos" fechado: ao abrir, mostra os anos mais recentes
+    alvo.querySelector('.enso-tecnico')?.addEventListener('toggle', (e) => {
+      if (e.target.open) requestAnimationFrame(() => { const r = gHist.querySelector('.rolar'); if (r) r.scrollLeft = r.scrollWidth; });
+    });
   });
 }
 
