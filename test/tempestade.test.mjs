@@ -86,3 +86,44 @@ test('eco que conta como chuva no radar equivale a REGRAS.chuvaHoraMm (Marshall-
   const dbz = 10 * Math.log10(200 * REGRAS.chuvaHoraMm ** 1.6);
   assert.equal(Math.round(dbz), REGRAS.radar.dbzChuva);
 });
+
+test('núcleo que não atinge o local mas passa perto: aproximando, com a menor distância e a hora', () => {
+  // 100 km a oeste e 24 km ao norte, indo para leste a 60 km/h: a borda sul passa a 16 km do local em cerca de 1h40
+  const [n] = celulasTempestade({ dbz: grade([{ x: C - 25, y: C - 6, dbz: 50 }]), n: N, px: C, py: C, kmCelula: KM, vel: { lesteKmh: 60, sulKmh: 0 } });
+  assert.equal(n.tendencia, 'aproximando');
+  assert.equal(n.chegaMin, null);
+  assert.equal(n.passaKm, 16);
+  assert.ok(n.passaMin >= 90 && n.passaMin <= 110, `passa em ${n.passaMin} min`);
+});
+
+test('núcleo que passa longe continua "passando", e o que chega não traz passaKm', () => {
+  const [longe] = celulasTempestade({ dbz: grade([{ x: C - 5, y: C - 15, dbz: 47 }]), n: N, px: C, py: C, kmCelula: KM, vel: { lesteKmh: 60, sulKmh: 0 } });
+  assert.equal(longe.tendencia, 'passando');
+  assert.ok(longe.passaKm > REGRAS.tempestade.pertoKm);
+  const [chega] = celulasTempestade({ dbz: grade([{ x: C - 15, y: C, dbz: 50 }]), n: N, px: C, py: C, kmCelula: KM, vel: { lesteKmh: 60, sulKmh: 0 } });
+  assert.equal(chega.tendencia, 'chegando');
+  assert.equal(chega.passaKm, null);
+});
+
+test('ordem: quem chega vem antes de quem só se aproxima, e este antes do que passa longe', () => {
+  const lista = celulasTempestade({ dbz: grade([{ x: C - 5, y: C - 15, dbz: 58 }, { x: C - 25, y: C - 6, dbz: 50 }, { x: C - 30, y: C, dbz: 46 }]), n: N, px: C, py: C, kmCelula: KM, vel: { lesteKmh: 60, sulKmh: 0 } });
+  assert.deepEqual(lista.map((x) => x.tendencia), ['chegando', 'aproximando', 'passando']);
+});
+
+test('evolução do núcleo em 30 min: nova, intensificando, enfraquecendo e estável', () => {
+  const vel = { lesteKmh: 60, sulKmh: 0 }; // em 30 min o núcleo andou 30 km para leste: estava em C - 22 ou C - 23
+  const agora = grade([{ x: C - 15, y: C, dbz: 52 }]);
+  const evol = (antes) => celulasTempestade({ dbz: agora, n: N, px: C, py: C, kmCelula: KM, vel, anterior: antes ? { dbz: antes, min: 30 } : null })[0].evolucao;
+  assert.equal(evol(null), null);
+  assert.equal(evol(grade([])), 'nova');
+  assert.equal(evol(grade([{ x: C - 22, y: C, dbz: 35 }])), 'nova'); // havia chuva, mas não forte
+  assert.equal(evol(grade([{ x: C - 22, y: C, dbz: 44 }])), 'intensificando');
+  assert.equal(evol(grade([{ x: C - 22, y: C, dbz: 60 }])), 'enfraquecendo');
+  assert.equal(evol(grade([{ x: C - 22, y: C, dbz: 50 }])), 'estavel');
+});
+
+test('posição do centro do núcleo em km (leste e sul positivos)', () => {
+  const [n] = celulasTempestade({ dbz: grade([{ x: C - 15, y: C + 10, dbz: 50 }]), n: N, px: C, py: C, kmCelula: KM });
+  assert.equal(Math.round(n.leste), -60);
+  assert.equal(Math.round(n.sul), 40);
+});

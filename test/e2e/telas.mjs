@@ -85,8 +85,11 @@ for (const tela of TELAS) {
       const n = 256, km = 4.2, c = 128, dbz = new Int8Array(n * n).fill(-128);
       const pinta = (x0, y0, r, v) => { for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r) dbz[(y0 + y) * n + x0 + x] = Math.max(dbz[(y0 + y) * n + x0 + x], v - Math.round(Math.hypot(x, y) * 4)); };
       pinta(c - 15, c - 2, 7, 52); pinta(c - 4, c + 30, 5, 58); pinta(c + 25, c - 25, 9, 38);
+      pinta(c - 25, c - 8, 4, 47); // não atinge o local, mas passa perto: "se aproximando"
+      // 30 min antes: o núcleo que chega era mais fraco (ganhando força); os outros não existiam (formaram-se há pouco)
+      const agora = dbz.slice(); dbz.fill(-128); pinta(c - 21, c - 2, 7, 45); const antes = dbz.slice(); dbz.set(agora);
       const vel = { lesteKmh: 50, sulKmh: 0 }, est = window.__painel.estado;
-      const tempestades = celulasTempestade({ dbz, n, px: c, py: c, kmCelula: km, vel });
+      const tempestades = celulasTempestade({ dbz, n, px: c, py: c, kmCelula: km, vel, anterior: { dbz: antes, min: 30 } });
       const ms = Date.now() - 6e5, chega = tempestades.find((t) => t.chegaMin !== null)?.chegaMin ?? null;
       est.chegada = { ms, minutos: chega, chegaMs: chega === null ? null : ms + chega * 60000, kmh: 50, vemDe: 'O', secoMin: chega,
         tempestades, movimento: { kmh: 50, paraGraus: 90 }, mapa: { dbz, n, px: c, py: c, kmCelula: km } };
@@ -97,7 +100,19 @@ for (const tela of TELAS) {
     await pag.waitForTimeout(1200);
     const textoTemp = await pag.evaluate(() => document.querySelector('main').innerText);
     if (/\b(null|undefined|NaN)\b/.test(textoTemp)) problemas.push(`${tela.nome}/tempestade: aparece null, undefined ou NaN`);
-    if (capturas) await pag.screenshot({ path: join(capturas, `${tela.nome}-${tema}-tempestade.png`) });
+    // O radar de tempestade fica colado logo acima do mapa e diz o que cada núcleo faz em relação ao local.
+    const radar = await pag.evaluate(() => { const r = document.querySelector('#hoje-detalhes .radar-t'); return r ? { antesDoMapa: !!r.nextElementSibling?.querySelector('.mapa'), texto: r.innerText } : null; });
+    if (!radar) problemas.push(`${tela.nome}/tempestade: seção do radar de tempestade ausente`);
+    else {
+      if (!radar.antesDoMapa) problemas.push(`${tela.nome}/tempestade: o radar não está logo acima do mapa`);
+      for (const esperado of [/vindo para cá/i, /se aproximando/i, /passa a \d+ km/i, /ganhando força/i]) if (!esperado.test(radar.texto)) problemas.push(`${tela.nome}/tempestade: falta "${esperado.source}" no radar`);
+    }
+    if (capturas) {
+      await pag.screenshot({ path: join(capturas, `${tela.nome}-${tema}-tempestade.png`) });
+      await pag.locator('#hoje-detalhes .radar-t').scrollIntoViewIfNeeded();
+      await pag.waitForTimeout(400);
+      await pag.locator('#hoje-detalhes .radar-t').screenshot({ path: join(capturas, `${tela.nome}-${tema}-radar.png`) });
+    }
     await ctx.close();
   }
 }

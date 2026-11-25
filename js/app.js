@@ -18,7 +18,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.12.3';
+const VERSAO = '1.13.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -993,10 +993,9 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
       el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
 
   const filhos = [resumo];
-  // Hoje: o radar de tempestade fica sempre logo abaixo do resumo e já inclui o risco de temporal de hoje e amanhã.
-  // Nos outros dias, o cartão de risco aparece só quando há risco moderado ou alto.
-  if (diaIndice === 0) filhos.push(blocoTempestade(risco, data));
-  else if (risco && risco.nivel !== 'baixo') filhos.push(cartaoTemporal(risco));
+  // Cartão de risco de temporal só com risco moderado ou alto (em Hoje, o radar já entra no risco). O radar de
+  // tempestade em si fica nos detalhes de Hoje, logo acima do mapa (secaoTempestade).
+  if (risco && risco.nivel !== 'baixo') filhos.push(cartaoTemporal(risco));
 
   // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
   // só as horas deste dia: hoje, da hora atual até 23h; amanhã, de 0h a 23h
@@ -1318,13 +1317,27 @@ function nucleoRadarHoje() {
   return x ? x.dbz : null;
 }
 
-/** Frase principal e complemento do radar, para o bloco e para o detalhe. */
+const NOME_EVOLUCAO = { nova: 'formou-se há pouco', intensificando: 'ganhando força', enfraquecendo: 'perdendo força', estavel: null };
+const kmRedondo = (km) => `${Math.max(5, Math.round(km / 5) * 5)} km`;
+
+/**
+ * Leitura de um núcleo em linguagem simples, para o veredito, a lista e o detalhe.
+ * titulo: frase completa; onde: posição ("60 km a oeste"); rumo: o que ele faz em relação ao local, com a hora
+ * estimada quando o movimento foi medido; evolucao: se ganha ou perde força (ou null).
+ * @returns {{titulo:string, sub:string, nome:string, onde:string, rumo:string, evolucao:string|null}}
+ */
 function fraseNucleo(x, offset, ms) {
-  const nome = NOME_NUCLEO[x.classe], dir = direcaoNome(x.rumo), km = `${Math.max(5, Math.round(x.distanciaKm / 5) * 5)} km`;
-  if (x.tendencia === 'sobre') return { titulo: `${nome} sobre o local agora`, sub: 'pelo radar' };
-  if (x.chegaMin !== null) return { titulo: `${nome} chegando por volta das ${fmt.horaMin(ms + x.chegaMin * 60000, offset)}`, sub: `a ${km}${dir ? `, vinda do ${dir}` : ''}` };
-  const rumo = { afastando: 'se afastando', passando: 'passando ao lado' }[x.tendencia] || 'movimento não medido';
-  return { titulo: `${nome} a ${km}${dir ? ` a ${dir}` : ''}`, sub: rumo };
+  const nome = NOME_NUCLEO[x.classe], dir = direcaoNome(x.rumo), km = kmRedondo(x.distanciaKm);
+  const hora = (min) => fmt.horaMin(ms + min * 60000, offset);
+  const onde = x.tendencia === 'sobre' ? 'sobre o local' : `${km}${dir ? ` a ${dir}` : ''}`;
+  const evolucao = NOME_EVOLUCAO[x.evolucao] ?? null;
+  if (x.tendencia === 'sobre') return { nome, onde, evolucao, rumo: 'sobre o local agora', titulo: `${nome} sobre o local agora`, sub: 'pelo radar' };
+  if (x.chegaMin !== null) return { nome, onde, evolucao, rumo: `vindo para cá · chega por volta das ${hora(x.chegaMin)}`,
+    titulo: `${nome} vindo para cá: chega por volta das ${hora(x.chegaMin)}`, sub: `a ${km}${dir ? `, vinda do ${dir}` : ''}` };
+  if (x.tendencia === 'aproximando') return { nome, onde, evolucao, rumo: `se aproximando · passa a ${kmRedondo(x.passaKm)} por volta das ${hora(x.passaMin)}`,
+    titulo: `${nome} se aproximando`, sub: `a ${km}${dir ? ` a ${dir}` : ''}; deve passar a ${kmRedondo(x.passaKm)} daqui por volta das ${hora(x.passaMin)}` };
+  const rumo = { afastando: 'se afastando', passando: 'passando ao largo' }[x.tendencia] || 'movimento ainda não medido';
+  return { nome, onde, evolucao, rumo, titulo: `${nome} a ${km}${dir ? ` a ${dir}` : ''}`, sub: rumo };
 }
 
 /**
@@ -1352,112 +1365,158 @@ function riscoPrevisto(riscoHoje, dataHoje) {
   return { texto, nivel, dias };
 }
 
+/** Risco de temporal de hoje (o mesmo do cartão no alto da tela), para o radar de tempestade nos detalhes. */
+function riscoDeHoje() {
+  const chovendo = !!medicaoChuvaAgora()?.chovendo;
+  return avaliarRisco(analisarDia(datas()[0], 0, true), chovendo, !chovendo && !!chegandoAgora());
+}
+
 /**
- * Bloco "Radar de tempestade", sempre logo abaixo do resumo de hoje. Mostra, nesta ordem: o núcleo que mais
- * importa no radar (medido, até REGRAS.tempestade.raioKm) com a chegada estimada pelo movimento dos ecos, e o
- * risco de temporal previsto para hoje e amanhã (o mesmo dos cartões de risco). Ao lado, o radar desenhado.
- * Ao tocar: todos os núcleos, o movimento, os motivos da previsão, os avisos do INMET e os limites do método.
+ * Seção "Radar de tempestade", logo acima do mapa em Hoje (pedido do Gustavo). De cima para baixo:
+ * 1. o veredito: o núcleo que mais importa agora (sobre o local, vindo para cá, se aproximando ou o mais perto);
+ * 2. o radar desenhado (REGRAS.tempestade.raioKm em volta do local), com cada núcleo numerado e a trajetória
+ *    prevista para a próxima hora;
+ * 3. a lista dos núcleos, com a mesma numeração: onde está, para onde vai, se vem para cá e quando, e se ganha
+ *    ou perde força;
+ * 4. o movimento geral da chuva e o risco de temporal previsto para hoje e amanhã (o mesmo dos cartões de risco);
+ * 5. a legenda das cores. O botão abre todos os núcleos, os motivos da previsão, os avisos e os limites do método.
  */
-function blocoTempestade(riscoHoje, dataHoje) {
-  const p = estado.prev, t = tempestadeAgora(), prev = riscoPrevisto(riscoHoje, dataHoje);
+function secaoTempestade() {
+  const p = estado.prev, t = tempestadeAgora(), prev = riscoPrevisto(riscoDeHoje(), datas()[0]);
   const R = REGRAS.tempestade;
   const x = t?.principal;
   const f = x ? fraseNucleo(x, p.offset, t.ms) : null;
   const titulo = !t ? (estado.chegada === null && estado.chegadaEm ? 'Radar indisponível agora' : 'Radar sem leitura recente')
     : f ? f.titulo : `Nenhuma tempestade até ${R.raioKm} km`;
-  const outros = t ? t.nucleos.filter((n) => n !== x && n.classe !== 'forte').length : 0;
-  const sub = [f?.sub, outros ? `mais ${outros} ${outros > 1 ? 'tempestades' : 'tempestade'} no raio` : null].filter(Boolean).join(' · ');
-  // cor do bloco = nível do risco de hoje e amanhã (que já inclui o radar); tempestade no raio, longe, é no mínimo moderado
+  const sub = !t ? 'A previsão abaixo continua valendo.' : f ? f.sub : 'Nenhum núcleo de chuva forte no radar.';
+  // cor da seção = nível do risco de hoje e amanhã (que já inclui o radar); tempestade no raio, longe, é no mínimo moderado
   const nivel = prev.nivel === 'baixo' && x && x.classe !== 'forte' ? 'moderado' : prev.nivel;
-  const tela = el('canvas', { class: 'tp-radar', 'aria-hidden': 'true', width: 1, height: 1 });
-  // Legenda sempre à vista: o que é o desenho (local no centro, raio, seta) e o que cada cor significa.
-  const seta = t?.movimento && t.movimento.kmh >= 5;
-  const legenda = el('span', { class: 'tp-leg', 'aria-hidden': 'true' },
-    el('span', { class: 'tp-como', text: `Você no centro · ${R.raioKm} km em volta${seta ? ' · seta: para onde a chuva vai' : ''}` }),
-    el('span', { class: 'tp-cores' }, ...[['chuva', 'chuva'], ['forte', 'chuva forte'], ['tempestade', 'tempestade'], ['severa', 'tempestade forte']].map(([k, nome]) =>
-      el('span', { class: 'tp-cor' }, el('i', { class: `tp-c-${k}` }), nome))));
-  const bloco = el('button', { type: 'button', class: 'tempestade', 'data-nivel': nivel, 'aria-label': `Radar de tempestade. ${titulo}. ${sub}. ${prev.texto}. Toque para ver detalhes.`, onclick: () => detalheTempestade(t, prev) },
-    tela,
-    el('span', { class: 'tp-txt' },
-      el('small', { class: 'tp-rot' }, 'Radar de tempestade', t ? el('span', { class: 'tp-hora', text: ` · ${fmt.horaMin(t.ms, p.offset)}` }) : null),
-      el('strong', { text: titulo }),
-      sub ? el('span', { class: 'tp-sub', text: sub }) : null,
-      el('span', { class: 'tp-prev' + (prev.nivel !== 'baixo' ? ' com-risco' : ''), text: prev.texto }),
-      el('span', { class: 'tp-mais', text: 'Ver detalhes ›' })),
-    legenda);
-  // O desenho acompanha o tamanho do bloco (girar o celular, redimensionar a janela, trocar de layout).
-  if (typeof ResizeObserver === 'function') {
-    let larguraDesenhada = 0;
-    new ResizeObserver(() => { if (tela.isConnected && tela.clientWidth && tela.clientWidth !== larguraDesenhada) { larguraDesenhada = tela.clientWidth; desenharRadarTempestade(tela, t); } }).observe(tela);
-  }
-  requestAnimationFrame(() => desenharRadarTempestade(tela, t));
-  return bloco;
+  const visiveis = t ? t.nucleos.slice(0, MAX_NUCLEOS_LISTA) : [];
+  const tela = el('canvas', { class: 'rt-tela', role: 'img', 'aria-label': `Radar em volta do local, ${R.raioKm} km. ${titulo}.`, width: 1, height: 1 });
+  const lista = visiveis.length ? el('ol', { class: 'rt-lista' }, ...visiveis.map((n, k) => {
+    const fn = fraseNucleo(n, p.offset, t.ms);
+    return el('li', { 'data-classe': n.classe, 'data-tendencia': n.tendencia || 'sem' },
+      el('span', { class: 'rt-num', text: String(k + 1) }),
+      el('span', { class: 'rt-item' },
+        el('b', { text: `${fn.nome} · ${fn.onde}` }),
+        el('span', { class: 'rt-rumo', text: fn.rumo[0].toUpperCase() + fn.rumo.slice(1) }),
+        fn.evolucao ? el('small', { text: fn.evolucao[0].toUpperCase() + fn.evolucao.slice(1) }) : null));
+  })) : null;
+  const restantes = t ? t.nucleos.length - visiveis.length : 0;
+  const m = t?.movimento;
+  const movimento = !t ? null : m && m.kmh >= 5 ? `A chuva se move para ${direcaoNome(m.paraGraus) || 'direção incerta'} a ${fmt.n(m.kmh, 0)} km/h`
+    : visiveis.length ? 'Movimento da chuva ainda não medido: sem hora de chegada' : null;
+  const abrir = () => detalheTempestade(t, prev);
+  tela.addEventListener('click', abrir);
+  const sec = secao('Radar de tempestade', null,
+    el('p', { class: 'rt-veredito' }, el('strong', { text: titulo }), el('span', { text: sub })),
+    el('div', { class: 'rt-corpo' },
+      tela,
+      el('div', { class: 'rt-lado' },
+        lista,
+        restantes > 0 ? el('p', { class: 'rt-mais', text: `Mais ${restantes} no raio de ${R.raioKm} km` }) : null,
+        movimento ? el('p', { class: 'rt-mov', text: movimento }) : null,
+        el('p', { class: 'rt-prev' + (prev.nivel !== 'baixo' ? ' com-risco' : ''), text: prev.texto }))),
+    el('p', { class: 'rt-leg', 'aria-hidden': 'true' },
+      ...[['chuva', 'chuva'], ['forte', 'chuva forte'], ['tempestade', 'tempestade'], ['severa', 'tempestade forte']].map(([k, nome]) => el('span', { class: 'rt-cor' }, el('i', { class: `rt-c-${k}` }), nome)),
+      visiveis.some((n) => n.tendencia && n.tendencia !== 'sobre') ? el('span', { class: 'rt-cor' }, el('i', { class: 'rt-c-rota' }), 'caminho na próxima hora') : null),
+    el('div', { class: 'rt-rodape' },
+      el('button', { type: 'button', class: 'botao-link', onclick: abrir }, 'Detalhes e como funciona'),
+      el('span', { class: 'fonte', text: t ? `RainViewer · ${fmt.horaMin(t.ms, p.offset)}` : 'RainViewer' })));
+  sec.classList.add('radar-t', 'largura-total');
+  sec.dataset.nivel = nivel;
+  // O desenho acompanha o tamanho da seção (girar o celular, redimensionar a janela, trocar de layout).
+  let larguraDesenhada = 0;
+  const desenhar = () => { const w = tela.clientWidth; if (tela.isConnected && w && w !== larguraDesenhada) { larguraDesenhada = w; desenharRadarTempestade(tela, t, visiveis); } };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(desenhar).observe(tela);
+  else requestAnimationFrame(desenhar);
+  return sec;
 }
 
+// Quantos núcleos a lista e o desenho numeram; os outros ficam no detalhe.
+const MAX_NUCLEOS_LISTA = 4;
 // Cores do radar desenhado, pela refletividade (as mesmas faixas de REGRAS.tempestade.dbz).
 const COR_DBZ = [[55, [236, 92, 236]], [45, [226, 54, 44]], [40, [255, 150, 0]], [30, [240, 214, 60]], [20, [70, 150, 230]], [10, [90, 170, 220]]];
+const COR_NUCLEO = { severa: 'rgb(236, 92, 236)', tempestade: 'rgb(226, 54, 44)', forte: 'rgb(255, 150, 0)' };
 
 /**
- * Desenha o radar do bloco: ecos de pelo menos 10 dBZ num círculo de REGRAS.tempestade.raioKm em volta do local
- * (norte para cima), anéis de 50, 100 e 200 km (com a distância escrita quando há espaço), pontos cardeais, o local
- * no centro e a seta do movimento dos ecos quando medido. Redesenhado quando o bloco muda de tamanho.
+ * Desenha o radar da seção: ecos de pelo menos 10 dBZ num círculo de REGRAS.tempestade.raioKm em volta do local
+ * (norte para cima), anéis de 50, 100 e 200 km com a distância escrita, pontos cardeais e o local no centro.
+ * Cada núcleo de `nucleos` ganha o número da lista e, com movimento medido, a trajetória da próxima hora: linha
+ * cheia quando vem para o local ou se aproxima, tracejada quando passa ao largo ou se afasta. Sem núcleos, uma
+ * seta no centro mostra o movimento geral da chuva.
+ * @param {HTMLCanvasElement} tela
+ * @param {object|null} t leitura de tempestadeAgora()
+ * @param {object[]} nucleos núcleos numerados, na ordem da lista
  */
-function desenharRadarTempestade(tela, t) {
+function desenharRadarTempestade(tela, t, nucleos = []) {
   const css = tela.clientWidth || 96, dpr = Math.min(3, window.devicePixelRatio || 1), lado = Math.round(css * dpr);
   tela.width = lado; tela.height = lado;
-  const c = tela.getContext('2d'), meio = lado / 2, raioPx = meio - 1.5 * dpr;
-  const est = getComputedStyle(tela), linha = est.getPropertyValue('--linha').trim() || '#2C3136', texto = est.getPropertyValue('--fraco').trim() || '#9BA4AC';
+  const c = tela.getContext('2d'), meio = lado / 2, raioPx = meio - 1.5 * dpr, R = REGRAS.tempestade.raioKm, pxKm = raioPx / R;
+  const est = getComputedStyle(tela), linha = est.getPropertyValue('--linha').trim() || '#2C3136', fraco = est.getPropertyValue('--fraco').trim() || '#9BA4AC';
+  const texto = est.getPropertyValue('--texto').trim() || '#ECEEF0', fundo = est.getPropertyValue('--sup2').trim() || '#23272B';
+  const seta = (x0, y0, x1, y1, cor, largura, tracejada) => {
+    const a = Math.atan2(y1 - y0, x1 - x0), h = 6 * dpr;
+    c.strokeStyle = cor; c.fillStyle = cor; c.lineWidth = largura * dpr; c.setLineDash(tracejada ? [4 * dpr, 4 * dpr] : []);
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.setLineDash([]);
+    c.beginPath(); c.moveTo(x1, y1); c.lineTo(x1 - h * Math.cos(a - 0.45), y1 - h * Math.sin(a - 0.45)); c.lineTo(x1 - h * Math.cos(a + 0.45), y1 - h * Math.sin(a + 0.45)); c.closePath(); c.fill();
+  };
   c.save(); c.beginPath(); c.arc(meio, meio, raioPx, 0, 2 * Math.PI); c.clip();
-  c.fillStyle = est.getPropertyValue('--sup2').trim() || '#23272B'; c.fillRect(0, 0, lado, lado);
+  c.fillStyle = fundo; c.fillRect(0, 0, lado, lado);
   if (t?.mapa) {
-    const { dbz, n, px, py, kmCelula } = t.mapa, R = REGRAS.tempestade.raioKm, r = Math.ceil(R / kmCelula), w = 2 * r + 1;
+    const { dbz, n, px, py, kmCelula } = t.mapa, r = Math.ceil(R / kmCelula), w = 2 * r + 1;
     const img = new ImageData(w, w);
     for (let j = 0; j < w; j++) for (let i = 0; i < w; i++) {
       const x = Math.round(px) - r + i, y = Math.round(py) - r + j;
       if (x < 0 || y < 0 || x >= n || y >= n) continue;
       const v = dbz[y * n + x], cor = COR_DBZ.find(([lim]) => v >= lim);
       if (!cor) continue;
-      const k = (j * w + i) * 4;
-      img.data.set([...cor[1], v >= 40 ? 255 : 150], k);
+      img.data.set([...cor[1], v >= 40 ? 255 : 150], (j * w + i) * 4);
     }
     const tmp = Object.assign(document.createElement('canvas'), { width: w, height: w });
     tmp.getContext('2d').putImageData(img, 0, 0);
     c.imageSmoothingEnabled = true;
-    c.drawImage(tmp, meio - raioPx, meio - raioPx, 2 * raioPx, 2 * raioPx);
-    c.strokeStyle = linha; c.lineWidth = dpr;
-    for (const km of [50, 100, 200]) { c.beginPath(); c.arc(meio, meio, raioPx * km / R, 0, 2 * Math.PI); c.stroke(); }
-    const m = t.movimento;
-    if (m && m.kmh >= 5) {
-      const a = (m.paraGraus * Math.PI) / 180, comp = raioPx * 0.42, ex = meio + Math.sin(a) * comp, ey = meio - Math.cos(a) * comp;
-      c.strokeStyle = texto; c.fillStyle = texto; c.lineWidth = 1.6 * dpr;
-      c.beginPath(); c.moveTo(meio, meio); c.lineTo(ex, ey); c.stroke();
-      const h = 5 * dpr;
-      c.beginPath(); c.moveTo(ex, ey);
-      c.lineTo(ex - h * Math.sin(a - 0.5), ey + h * Math.cos(a - 0.5)); c.lineTo(ex - h * Math.sin(a + 0.5), ey + h * Math.cos(a + 0.5)); c.closePath(); c.fill();
-    }
+    const ladoKm = w * kmCelula * pxKm; // a imagem cobre w células centradas no local
+    c.drawImage(tmp, meio - ladoKm / 2, meio - ladoKm / 2, ladoKm, ladoKm);
   }
+  c.strokeStyle = linha; c.lineWidth = dpr;
+  for (const km of [50, 100, 200]) { c.beginPath(); c.arc(meio, meio, km * pxKm, 0, 2 * Math.PI); c.stroke(); }
+  const m = t?.movimento, mov = m && m.kmh >= 5 ? { lx: Math.sin((m.paraGraus * Math.PI) / 180) * m.kmh, sy: -Math.cos((m.paraGraus * Math.PI) / 180) * m.kmh } : null;
+  // trajetórias da próxima hora, por baixo dos marcadores
+  if (mov) for (const n of nucleos) {
+    if (n.tendencia === 'sobre') continue;
+    const x0 = meio + n.leste * pxKm, y0 = meio + n.sul * pxKm;
+    const perto = n.tendencia === 'chegando' || n.tendencia === 'aproximando';
+    seta(x0, y0, x0 + mov.lx * pxKm, y0 + mov.sy * pxKm, perto ? texto : fraco, perto ? 2 : 1.4, !perto);
+  }
+  if (mov && !nucleos.length) seta(meio, meio, meio + (mov.lx / m.kmh) * raioPx * 0.4, meio + (mov.sy / m.kmh) * raioPx * 0.4, fraco, 1.6, false);
   c.restore();
   c.strokeStyle = linha; c.lineWidth = dpr; c.beginPath(); c.arc(meio, meio, raioPx, 0, 2 * Math.PI); c.stroke();
-  c.fillStyle = est.getPropertyValue('--texto').trim() || '#ECEEF0';
-  c.beginPath(); c.arc(meio, meio, 2.6 * dpr, 0, 2 * Math.PI); c.fill();
-  // Pontos cardeais e, quando o desenho tem tamanho para isso, a distância dos anéis.
-  const fonte = (css >= 120 ? 10 : 9) * dpr;
-  c.font = `600 ${fonte}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = texto;
-  c.fillText('N', meio, fonte);
-  if (css >= 120) {
-    c.fillText('S', meio, lado - fonte); c.fillText('L', lado - fonte, meio); c.fillText('O', fonte, meio);
-    if (t?.mapa) {
-      c.font = `${8.5 * dpr}px system-ui, sans-serif`;
-      const R = REGRAS.tempestade.raioKm, d = Math.SQRT1_2;
-      for (const km of [100, 200]) { const r = raioPx * km / R; c.fillText(`${km} km`, meio + r * d + 2 * dpr, meio + r * d - 5 * dpr); }
-    }
-  }
+  // o local
+  c.fillStyle = texto; c.beginPath(); c.arc(meio, meio, 3.2 * dpr, 0, 2 * Math.PI); c.fill();
+  c.strokeStyle = fundo; c.lineWidth = 1.5 * dpr; c.stroke();
+  // pontos cardeais e distância dos anéis
+  const fonte = (css >= 200 ? 11 : 10) * dpr;
+  c.font = `600 ${fonte}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = fraco;
+  c.fillText('N', meio, fonte); c.fillText('S', meio, lado - fonte); c.fillText('L', lado - fonte, meio); c.fillText('O', fonte, meio);
+  c.font = `${(css >= 200 ? 10 : 8.5) * dpr}px system-ui, sans-serif`;
+  for (const km of css >= 200 ? [50, 100, 200] : [100, 200]) { const r = km * pxKm * Math.SQRT1_2; c.fillText(`${km} km`, meio + r + 3 * dpr, meio + r - 6 * dpr); }
+  // marcadores numerados dos núcleos, por cima de tudo
+  const raioM = (css >= 200 ? 9 : 7.5) * dpr;
+  c.font = `700 ${(css >= 200 ? 11 : 9.5) * dpr}px system-ui, sans-serif`;
+  nucleos.forEach((n, k) => {
+    const d = Math.hypot(n.leste, n.sul), lim = R - raioM / pxKm, f = d > lim ? lim / d : 1; // marcador sempre dentro do círculo
+    const x = meio + n.leste * f * pxKm, y = meio + n.sul * f * pxKm;
+    c.beginPath(); c.arc(x, y, raioM, 0, 2 * Math.PI);
+    c.fillStyle = fundo; c.fill(); c.strokeStyle = COR_NUCLEO[n.classe]; c.lineWidth = 2 * dpr; c.stroke();
+    c.fillStyle = texto; c.fillText(String(k + 1), x, y + 0.5 * dpr);
+  });
 }
 
 /** Detalhe do radar de tempestade: núcleos, movimento, previsão, avisos e limites do método. */
 function detalheTempestade(t, prev) {
   const p = estado.prev, D = REGRAS.tempestade.dbz;
-  const lista = t?.nucleos.slice(0, 6) || [];
+  const lista = t?.nucleos.slice(0, 8) || [];
   const motivos = prev.dias.filter((d) => d.risco?.motivos?.length).map((d) => el('li', {}, el('b', { text: `${d.nome[0].toUpperCase()}${d.nome.slice(1)}: risco ${d.risco.nivel}. ` }), `${d.risco.motivos.join('; ')}.`));
   const avisos = prev.dias.flatMap((d) => (d.risco?.avisosDia || []).filter((a) => /tempestade|granizo|vendaval/i.test(a.titulo || '')));
   const unicos = [...new Map(avisos.map((a) => [idAviso(a), a])).values()];
@@ -1466,7 +1525,7 @@ function detalheTempestade(t, prev) {
     !t ? el('p', { text: 'Sem leitura recente do radar. A previsão abaixo continua valendo.' })
       : lista.length ? el('ul', { class: 'tp-lista' }, ...lista.map((x) => {
         const f = fraseNucleo(x, p.offset, t.ms);
-        return el('li', {}, el('b', { text: f.titulo }), el('br'), `${f.sub} · ${Math.round(x.dbz)} dBZ · área de ${fmt.n(x.areaKm2, 0)} km²`);
+        return el('li', {}, el('b', { text: f.titulo }), el('br'), `${f.sub}${f.evolucao ? ` · ${f.evolucao}` : ''} · ${Math.round(x.dbz)} dBZ · área de ${fmt.n(x.areaKm2, 0)} km²`);
       })) : el('p', { text: `Nenhum núcleo de chuva forte ou tempestade até ${REGRAS.tempestade.raioKm} km.` }),
     t?.movimento ? el('p', { text: `Os ecos se movem para ${direcaoNome(t.movimento.paraGraus) || 'direção incerta'} a ${fmt.n(t.movimento.kmh, 0)} km/h (medido na última hora).` })
       : t ? el('p', { text: 'Movimento dos ecos não medido agora (pouca chuva no radar ou medidas que não concordam): sem horário de chegada.' }) : null,
@@ -1475,7 +1534,8 @@ function detalheTempestade(t, prev) {
     motivos.length ? el('ul', { class: 'tp-lista' }, ...motivos) : null,
     unicos.length ? el('ul', { class: 'lt-avisos' }, ...unicos.map((x) => el('li', {}, el('b', { text: `${x.titulo}${x.severidade ? ` (${x.severidade.toLowerCase()})` : ''}` }), el('br'), periodoAviso(x) || 'horário não informado'))) : null,
     el('details', {}, el('summary', { text: 'Como funciona' }),
-      el('p', { text: `O radar mede a refletividade da chuva em dBZ. A partir de ${D.forte} dBZ é chuva forte; de ${D.tempestade} dBZ, núcleo de tempestade, em geral com raios; de ${D.severa} dBZ, tempestade forte, com granizo possível. O desenho mostra ${REGRAS.tempestade.raioKm} km em volta do local, com o norte para cima e anéis de 50, 100 e 200 km; a seta é o movimento dos ecos.` }),
+      el('p', { text: `O radar mede a refletividade da chuva em dBZ. A partir de ${D.forte} dBZ é chuva forte; de ${D.tempestade} dBZ, núcleo de tempestade, em geral com raios; de ${D.severa} dBZ, tempestade forte, com granizo possível. O desenho mostra ${REGRAS.tempestade.raioKm} km em volta do local, com o norte para cima e anéis de 50, 100 e 200 km. Cada núcleo tem o número da lista e uma seta com o caminho previsto para a próxima hora: cheia quando vem para cá ou se aproxima, tracejada quando passa ao largo.` }),
+      el('p', { text: `"Vindo para cá" é quando o caminho do núcleo passa a até ${REGRAS.tempestade.localKm} km do local nas próximas ${REGRAS.tempestade.horizonteMin / 60} horas. "Se aproximando" é quando ele não chega a atingir o local, mas passa a até ${REGRAS.tempestade.pertoKm} km. "Ganhando força" e "perdendo força" comparam o núcleo com o que havia no mesmo lugar 30 minutos antes (diferença de ${REGRAS.tempestade.evolucaoDbz} dBZ ou mais).` }),
       el('p', { text: 'A chegada supõe que a tempestade mantém a direção e a velocidade da última hora. Tempestades nascem, crescem e somem em minutos, e o radar não vê raios nem confirma granizo: use como alerta antecipado, não como certeza.' }),
       el('p', { class: 'nota', text: 'Radar: RainViewer (composição de radares, quadros de 10 min). Previsão: mediana dos modelos (energia para tempestades, chuva por hora e rajadas) e avisos do INMET.' })),
     el('p', { text: 'Durante o temporal, fique longe de árvores, postes e áreas abertas. Emergência: Defesa Civil, 199.' }),
@@ -1641,7 +1701,8 @@ function renderHojeDetalhes() {
   const mapaReaproveitado = !!estado.mapa && estado.mapa.chave === chaveMapa && Date.now() - estado.mapa.em < 5 * 60000;
   const mapa = mapaReaproveitado ? estado.mapa.secao : secao('Mapa', null);
   mapa.classList.add('largura-total');
-  filhos.push(mapa);
+  filhos.push(secaoTempestade(), mapa); // o radar de tempestade fica colado logo acima do mapa
+
   filhos.push(instrumentos());
   const pm = secao('Previsto x medido', null);
   filhos.push(pm);
@@ -1682,7 +1743,7 @@ function proximasHoras() {
       el('div', { class: 'h', text: fmt.hora(p.horas[i], p.offset) }),
       el('div', { class: 'barra', 'aria-hidden': 'true' }, valido(mmHora) ? el('i', { style: { height: altura + 'px' } }) : ''),
       el('div', { class: 'p', text: valido(ch.p) ? `${Math.round(ch.p * 100)}%` : '–' }),
-      el('div', { class: 'mm', text: valido(mmHora) ? `${fmt.n(mmHora, 1)} mm` : 'sem dado' }),
+      el('div', { class: 'mm', text: valido(mmHora) ? fmt.mm(mmHora) : 'sem dado' }),
       el('div', { class: 'v', text: valido(vento[i]) ? `${Math.round(vento[i])}` : '–' }),
       el('div', { class: 'g', text: valido(raj[i]) ? `${Math.round(raj[i])}` : '–' })));
   }

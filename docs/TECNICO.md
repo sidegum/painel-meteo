@@ -425,7 +425,7 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
 
 ### 5.3 Primeira tela (`renderPrimeira`)
 
-Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mínima, a máxima, a chance e a rajada (`blocoRajada`, desde a 1.11.0 dentro do resumo: valor do consenso, direção e hora do pico), a resposta "Vai chover", o volume e a janela. Abaixo do resumo: em Hoje, o **radar de tempestade** (`blocoTempestade`, seção 5.3.1), sempre presente; nos outros dias, o cartão de risco de temporal (`cartaoTemporal`, só com risco moderado ou alto). Por fim, o gráfico horário com três modos. O modo inicial é Chuva quando há chance de chuva no dia (ou chuva agora ou chegando) e Temperatura quando não há, para a tela não abrir num gráfico vazio; a escolha da pessoa vale até fechar o app (`estado.modoGrafico`). A sensação máxima só aparece quando difere da máxima em 2 °C ou mais. No computador (1100 px ou mais), a primeira tela vira duas colunas: resumo e radar à esquerda, gráfico à direita.
+Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mínima, a máxima, a chance e a rajada (`blocoRajada`, desde a 1.11.0 dentro do resumo: valor do consenso, direção e hora do pico), a resposta "Vai chover", o volume e a janela. Abaixo do resumo, o cartão de risco de temporal (`cartaoTemporal`), só com risco moderado ou alto. O **radar de tempestade** (seção 5.3.1) fica nos detalhes de Hoje, logo acima do mapa. Por fim, o gráfico horário com três modos. O modo inicial é Chuva quando há chance de chuva no dia (ou chuva agora ou chegando) e Temperatura quando não há, para a tela não abrir num gráfico vazio; a escolha da pessoa vale até fechar o app (`estado.modoGrafico`). A sensação máxima só aparece quando difere da máxima em 2 °C ou mais. No computador (1100 px ou mais), a primeira tela vira duas colunas: resumo e cartão de risco à esquerda, gráfico à direita.
 
 - **Chuva** (`graficoChance`):
   - A chance por hora vem de `chanceHoraria(ms)`: a fração de **todos** os membros de cenários com 0,2 mm ou mais na hora, se houver 10 ou mais. Sem isso, a mediana de `precipitation_probability` dos modelos.
@@ -448,7 +448,7 @@ Mostra a data, a temperatura agora, o ícone do céu (`iconeCeu`, em SVG), a mí
 2. Para na primeira hora com menos de 0,1 mm, com janela máxima de 12 h.
 3. Abaixo de 0,2 mm no total, devolve `{ fraca: true }`.
 
-### 5.3.1 Radar de tempestade (`blocoTempestade`, 1.11.0)
+### 5.3.1 Radar de tempestade (`secaoTempestade`, 1.11.0; nos detalhes de Hoje desde a 1.13.0)
 
 Pedido do Gustavo: um bloco fixo logo abaixo do resumo de hoje que sempre mostre possíveis temporais se aproximando. Ele junta o que é **medido** (radar) e o que é **previsto** (modelos e INMET), sem contradizer o resto da tela.
 
@@ -465,9 +465,22 @@ Pedido do Gustavo: um bloco fixo logo abaixo do resumo de hoje que sempre mostre
 
 **Risco.** `riscoTemporal` ganhou `nucleoRadar`: um núcleo de tempestade sobre o local ou chegando em até 2 h leva o risco de hoje a pelo menos moderado (forte: alto). O aviso do INMET continua prevalecendo; o radar só pode subir o nível. Com isso o fundo do resumo, o cartão e o bloco ficam coerentes.
 
-**Tela.** O bloco mostra o radar desenhado (`desenharRadarTempestade`: 250 km em volta, norte para cima, anéis de 50, 100 e 200 km, seta do movimento), a frase do núcleo que mais importa (`fraseNucleo`), quantas outras tempestades há no raio e o risco previsto para hoje e amanhã (`riscoPrevisto`, o mesmo `avaliarRisco` do cartão, com a janela de horas em que CAPE, chuva por hora ou rajada passam dos limites, ou o período do aviso). Cor: neutra sem risco, âmbar com risco moderado, vermelha com risco alto. Ao tocar (`detalheTempestade`): todos os núcleos, o movimento, os motivos, os avisos e "Como funciona" com os limites do método. Radar com mais de 30 min ou fora do ar aparece como tal; a previsão continua.
+**Posição e tela (1.13.0).** Pedido do Gustavo em 25/11/2026: o radar fica colado logo acima do mapa, mais para baixo na tela (antes ficava abaixo do resumo), maior, e deve dizer quando a tempestade tende a vir para o local. Hoje é uma seção dos detalhes de Hoje (`secaoTempestade`, chamada em `renderHojeDetalhes` logo antes da seção do mapa). No alto da tela, Hoje voltou a mostrar o cartão de risco de temporal (`cartaoTemporal`) só com risco moderado ou alto, como nos outros dias; o radar continua entrando nesse risco (`nucleoRadarHoje`). A seção mostra, de cima para baixo:
 
-**Responsivo e autoexplicativo (1.11.1).** Pedido do Gustavo: radar responsivo, explicativo e acima do mapa. O bloco é uma grade (`.tempestade`): desenho à esquerda, leitura à direita e a legenda embaixo; abaixo de 360 px tudo empilha. O desenho cresce com a tela (112 a 148 px no celular, 168 px a partir de 1100 px, 208 px a partir de 1600 px) e é redesenhado por um `ResizeObserver` quando o bloco muda de tamanho. A partir de 120 px ele escreve N, S, L, O e a distância dos anéis de 100 e 200 km. A legenda (`.tp-leg`) fica sempre à vista: "Você no centro · 250 km em volta" (e o sentido da seta, quando há movimento medido) e as quatro cores (chuva, chuva forte, tempestade, tempestade forte; as classes `.tp-c-*` repetem `COR_DBZ`). O rótulo traz a hora do quadro do radar ("Fonte · Horário") e "Ver detalhes ›" indica o toque. Ordem em Hoje, nos dois layouts: resumo, radar de tempestade, gráfico, próximas horas, mapa.
+1. o veredito (`fraseNucleo` do núcleo principal de `tempestadeAgora`): "Tempestade vindo para cá: chega por volta das 19:32", "Tempestade se aproximando", "Tempestade a 110 km a sul" ou "Nenhuma tempestade até 250 km";
+2. o radar desenhado (`desenharRadarTempestade`): 250 km em volta, norte para cima, anéis de 50, 100 e 200 km com a distância escrita, pontos cardeais, cada núcleo com o número da lista e a seta do caminho previsto para a próxima hora (cheia quando vem para o local ou se aproxima; tracejada quando passa ao largo ou se afasta). Até 340 px de largura no celular e 400 px ao lado da lista a partir de 760 px; redesenhado por `ResizeObserver` quando muda de tamanho;
+3. a lista numerada dos núcleos (até `MAX_NUCLEOS_LISTA` = 4; o resto fica no detalhe): classe e posição, o que faz em relação ao local e a evolução;
+4. o movimento geral da chuva e o risco previsto para hoje e amanhã (`riscoPrevisto`, o mesmo `avaliarRisco` dos cartões);
+5. a legenda das cores (as classes `.rt-c-*` repetem `COR_DBZ`), o botão "Detalhes e como funciona" (`detalheTempestade`) e a nota "RainViewer · horário do quadro".
+
+**Tendência e evolução de cada núcleo (1.13.0, `celulasTempestade`).**
+- `chegando` ("vindo para cá"): o caminho de alguma célula passa a até `localKm` (10 km) do local em até `horizonteMin` (3 h); `chegaMin` dá a hora.
+- `aproximando` ("se aproximando"): não atinge o local, mas passa a até `pertoKm` (40 km) e mais perto do que está agora; `passaKm` e `passaMin` dão a menor distância e a hora ("passa a 30 km por volta das 20:39").
+- `passando` ("passando ao largo") e `afastando`: o resto, pelo cosseno entre o movimento e a direção ao local.
+- `evolucao`: compara a refletividade máxima do núcleo com a máxima em volta de onde ele estava no quadro de 30 minutos antes (posição recuada pelo movimento medido, com folga de `evolucaoBuscaKm`): `nova` ("formou-se há pouco", não havia 40 dBZ ali), `intensificando` ou `enfraquecendo` (diferença de `evolucaoDbz`, 5 dBZ, ou mais) ou `estavel`. O quadro de 30 minutos já era baixado para medir o movimento: nenhuma requisição a mais.
+- `leste` e `sul`: centro do núcleo em km a partir do local, para o marcador no desenho.
+
+**O que é medido e o que é estimativa.** Medido: a refletividade de cada quadro (composição de radares da RainViewer, quadros de 10 minutos, lida pela tabela oficial de cores) e o deslocamento dos ecos nos últimos 30 e 60 minutos. Estimativa: a hora de chegada e o caminho, que supõem que o núcleo mantém a direção e a velocidade da última hora (todos os núcleos usam o mesmo movimento médio dos ecos), e a classe "tempestade", que é uma leitura da refletividade. O radar não vê raios nem confirma granizo. Não há fonte aberta e gratuita de descargas elétricas em tempo real com cobertura do RS que o app possa ler direto; o GLM do GOES-19 (NOAA) é público, mas vem em arquivos NetCDF que precisam de processamento num servidor.
 
 ### 5.3.2 Pré-carregamento e navegação instantânea (1.12.1)
 
