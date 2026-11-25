@@ -24,5 +24,10 @@ jobs:
       - name: Procura segredos óbvios
         run: |
           ! grep -rInE "INMET_TOKEN\s*=\s*['\"][^'\"]+" --exclude-dir=.git --exclude-dir=node_modules .
+      - name: Teste de tela (todas as abas, celular e computador, com respostas reais gravadas)
+        run: |
+          npm install --no-save --no-package-lock playwright@1.49.1
+          npx playwright install --with-deps chromium
+          node test/e2e/telas.mjs
       - name: Site do Cloudflare Pages monta sem faltar arquivo do service worker
         run: scripts/montar-site.sh "$RUNNER_TEMP/site"

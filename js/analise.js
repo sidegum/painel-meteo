@@ -78,6 +78,9 @@ export const REGRAS = {
   },
   // Chuva chegando: extrapolação do movimento dos ecos de radar (nowcasting por correlação de blocos).
   radar: {
+    // Eco que conta como chuva: 12 dBZ, a refletividade de 0,2 mm/h (REGRAS.chuvaHoraMm) pela relação de
+    // Marshall-Palmer (Z = 200 R^1,6). Abaixo disso o radar vê garoa que evapora, poeira ou ruído (antes: qualquer eco).
+    dbzChuva: 12,
     intervaloMin: 60,          // intervalo entre os dois quadros comparados
     deslocMax: 12,             // busca de deslocamento: até 12 células em cada eixo no intervalo
     ecoMin: 0.3,               // fração de pixels com eco para a célula contar como chuva (chegada)
@@ -92,6 +95,17 @@ export const REGRAS = {
     probSeco: 0.1,             // radar seco no local e nada chegando: chance máxima nas horas cobertas pelo radar
     secoMinimoMin: 30,         // janela seca mínima para valer (abaixo disso, os modelos decidem)
     velMaxKmh: 100,            // sem movimento medido: a chuva mais próxima não chega mais rápido que isso
+  },
+  // Radar de tempestade (celulasTempestade): núcleos de refletividade alta no radar (RainViewer, dBZ exato pela
+  // tabela de cores). Limiares usuais de radar: 40 dBZ chuva forte; 45 dBZ núcleo de tempestade (convecção com
+  // raios provável); 55 dBZ tempestade forte, granizo possível. A refletividade sozinha não confirma raio nem granizo.
+  tempestade: {
+    dbz: { forte: 40, tempestade: 45, severa: 55 },
+    raioKm: 250,               // alcance do bloco (o mosaico de radar cobre pelo menos isso em volta do local)
+    localKm: 10,               // núcleo a até 10 km = sobre o local
+    horizonteMin: 180,         // chegada estimada só nas próximas 3 h (extrapolação perde valor depois disso)
+    areaMinKm2: 30,            // núcleo menor que isso é ignorado (ruído), salvo se passar de 50 dBZ
+    idadeMaxMin: 30,           // quadro de radar mais velho que isso não vale como "agora"
   },
   // Risco de temporal: só avaliado quando há chuva prevista, chegando ou ocorrendo, ou aviso do INMET.
   temporal: {
@@ -519,6 +533,25 @@ export function probLimites(resumos, membros) {
     chuva: L.chuva.map((l) => ({ limite: l, p: frac(chuvas, l) })),
     rajada: L.rajada.map((l) => ({ limite: l, p: frac(raj, l) })),
   };
+}
+
+/**
+ * Deixa a tabela de limites coerente com a chance principal do dia. A chance de passar de REGRAS.chuvaMinimaMm é a
+ * própria chance do dia (av.prob, já calibrada com o histórico e corrigida por radar e medição); os limites maiores
+ * mantêm a proporção dos cenários em relação a esse primeiro limite (distribuição condicional do ensemble).
+ * Assim, nenhuma tabela mostra "mais de 1 mm: 43%" ao lado de "chance de chuva 26%".
+ * @param {ReturnType<typeof probLimites>} limites
+ * @param {number|null} prob chance principal do dia
+ */
+export function limitesCoerentes(limites, prob) {
+  if (!valido(prob) || !limites?.chuva?.length) return limites;
+  const base = limites.chuva.find((c) => c.limite === REGRAS.chuvaMinimaMm)?.p;
+  const chuva = limites.chuva.map((c) => {
+    if (!valido(c.p)) return c;
+    if (c.limite <= REGRAS.chuvaMinimaMm) return { ...c, p: prob };
+    return { ...c, p: valido(base) && base > 0 ? Math.min(prob, prob * (c.p / base)) : Math.min(c.p, prob) };
+  });
+  return { ...limites, chuva };
 }
 
 // ---------- frase principal ----------
@@ -1365,6 +1398,83 @@ function percorrerRadar(grade, n, px, py, desl) {
   return { chega: null, secoAte };
 }
 
+// ---------- radar de tempestade ----------
+
+/**
+ * Classe de um núcleo pela refletividade máxima (limiares em REGRAS.tempestade.dbz).
+ * @returns {'severa'|'tempestade'|'forte'|null}
+ */
+export function classeNucleo(dbz) {
+  const D = REGRAS.tempestade.dbz;
+  return !valido(dbz) ? null : dbz >= D.severa ? 'severa' : dbz >= D.tempestade ? 'tempestade' : dbz >= D.forte ? 'forte' : null;
+}
+
+/**
+ * Núcleos de chuva forte e de tempestade no radar em volta do local, com distância, direção e chegada estimada.
+ * Agrupa as células com refletividade de pelo menos REGRAS.tempestade.dbz.forte em núcleos (vizinhança de 8),
+ * descarta os menores que areaMinKm2 (salvo acima de 50 dBZ) e os além de raioKm.
+ * Chegada: cada célula do núcleo segue a velocidade medida dos ecos (a mesma da "chuva chegando"); a chegada é o
+ * primeiro instante em que alguma delas passa a até localKm do local, dentro de horizonteMin. Sem velocidade
+ * medida, não há chegada nem tendência, só posição.
+ * @param {{dbz:ArrayLike<number>, n:number, px:number, py:number, kmCelula:number, vel?:{lesteKmh:number, sulKmh:number}|null}} g
+ *   dbz: refletividade máxima por célula (n x n, linha 0 ao norte; -128 sem eco); px/py: célula do local;
+ *   vel: movimento dos ecos em km/h (leste e sul positivos) ou null
+ * @returns {Array<{dbz:number, classe:string, distanciaKm:number, rumo:number, areaKm2:number, chegaMin:number|null,
+ *   tendencia:'chegando'|'afastando'|'passando'|'sobre'|null}>} do mais relevante (chegando antes; depois o mais perto)
+ */
+export function celulasTempestade({ dbz, n, px, py, kmCelula, vel = null }) {
+  const T = REGRAS.tempestade, min = T.dbz.forte;
+  const visto = new Uint8Array(n * n), saida = [];
+  const vKmh = vel ? Math.hypot(vel.lesteKmh, vel.sulKmh) : 0;
+  for (let k0 = 0; k0 < n * n; k0++) {
+    if (visto[k0] || !(dbz[k0] >= min)) continue;
+    const pilha = [k0], celulas = [];
+    visto[k0] = 1;
+    while (pilha.length) {
+      const k = pilha.pop(), x = k % n, y = (k - x) / n;
+      celulas.push(k);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy, kk = yy * n + xx;
+        if (xx < 0 || yy < 0 || xx >= n || yy >= n || visto[kk] || !(dbz[kk] >= min)) continue;
+        visto[kk] = 1; pilha.push(kk);
+      }
+    }
+    let maxDbz = -Infinity, dMin = Infinity, cx = 0, cy = 0, peso = 0, chega = null;
+    for (const k of celulas) {
+      const x = k % n, y = (k - x) / n, v = dbz[k];
+      maxDbz = Math.max(maxDbz, v);
+      // posição em km relativa ao local (leste e sul positivos)
+      const ex = (x - px) * kmCelula, sy = (y - py) * kmCelula;
+      dMin = Math.min(dMin, Math.hypot(ex, sy));
+      const w = 10 ** (v / 10); cx += ex * w; cy += sy * w; peso += w; // centro pela refletividade (Z linear)
+      if (vKmh > 1) {
+        // aproximação máxima da célula ao local seguindo vel: componente ao longo do movimento e distância lateral
+        const ux = vel.lesteKmh / vKmh, uy = vel.sulKmh / vKmh;
+        const ao = -(ex * ux + sy * uy), lado = Math.abs(ex * uy - sy * ux);
+        if (Math.hypot(ex, sy) <= T.localKm) chega = 0;
+        else if (ao > 0 && lado <= T.localKm) {
+          const t = ((ao - Math.sqrt(T.localKm ** 2 - lado ** 2)) / vKmh) * 60;
+          if (t <= T.horizonteMin && (chega === null || t < chega)) chega = t;
+        }
+      }
+    }
+    const areaKm2 = celulas.length * kmCelula ** 2;
+    if (dMin > T.raioKm || (areaKm2 < T.areaMinKm2 && maxDbz < 50)) continue;
+    cx /= peso; cy /= peso;
+    const rumo = (Math.atan2(cx, -cy) * 180 / Math.PI + 360) % 360; // de onde o local vê o núcleo (0 = norte)
+    let tendencia = null;
+    if (dMin <= T.localKm) tendencia = 'sobre';
+    else if (vKmh > 1) {
+      const aprox = -(cx * vel.lesteKmh + cy * vel.sulKmh) / (Math.hypot(cx, cy) * vKmh); // cosseno entre movimento e direção ao local
+      tendencia = chega !== null ? 'chegando' : aprox < -0.3 ? 'afastando' : 'passando';
+    }
+    saida.push({ dbz: maxDbz, classe: classeNucleo(maxDbz), distanciaKm: dMin, rumo, areaKm2,
+      chegaMin: chega === null ? null : Math.round(chega), tendencia });
+  }
+  const ordem = (c) => (c.tendencia === 'sobre' ? 0 : c.chegaMin !== null ? 1 : 2);
+  return saida.sort((a, b) => ordem(a) - ordem(b) || (a.chegaMin ?? 0) - (b.chegaMin ?? 0) || a.distanciaKm - b.distanciaKm);
+}
+
 // ---------- risco de temporal ----------
 
 /**
@@ -1373,13 +1483,17 @@ function percorrerRadar(grade, n, px, py, desl) {
  * principal tem chuva (possível ou provável), quando está chovendo ou chegando chuva, ou quando há
  * aviso de tempestade do INMET; fora disso devolve null, para não contradizer a previsão sem chuva.
  * @param {{prob?:number|null, chovendo?:boolean, chegando?:boolean, cape?:number|null, chuvaHora?:number|null,
- *   rajada?:number|null, d3Pressao?:number|null, aviso?:string|null}} e
+ *   rajada?:number|null, d3Pressao?:number|null, aviso?:string|null, nucleoRadar?:number|null}} e
+ *   nucleoRadar: dBZ do núcleo de tempestade do radar sobre o local ou chegando (celulasTempestade). Um núcleo de
+ *   tempestade leva o nível a pelo menos moderado; um de tempestade forte, a alto (o radar vê o que já existe).
  * @returns {{nivel:'baixo'|'moderado'|'alto', pontos:number, motivos:string[]}|null}
  */
-export function riscoTemporal({ prob = null, chovendo = false, chegando = false, cape = null, chuvaHora = null, rajada = null, d3Pressao = null, aviso = null } = {}) {
+export function riscoTemporal({ prob = null, chovendo = false, chegando = false, cape = null, chuvaHora = null, rajada = null, d3Pressao = null, aviso = null, nucleoRadar = null } = {}) {
   const T = REGRAS.temporal;
   const nivelAviso = aviso ? T.aviso[String(aviso).trim().toLowerCase()] ?? 'moderado' : null;
-  const chuva = chovendo || chegando || (valido(prob) && prob >= REGRAS.ocorrencia.possivel);
+  const classeRadar = classeNucleo(nucleoRadar);
+  const radar = classeRadar === 'severa' ? 'alto' : classeRadar === 'tempestade' ? 'moderado' : null;
+  const chuva = chovendo || chegando || !!radar || (valido(prob) && prob >= REGRAS.ocorrencia.possivel);
   if (!chuva && !nivelAviso) return null;
   let pontos = 0;
   const motivos = [];
@@ -1393,7 +1507,13 @@ export function riscoTemporal({ prob = null, chovendo = false, chegando = false,
   faixa(rajada, T.rajada, 'rajadas', 'km/h');
   if (valido(d3Pressao) && d3Pressao < -T.quedaPressao3h) { pontos += 1; motivos.push('pressão caindo rápido'); }
   let nivel = pontos >= T.niveis.alto ? 'alto' : pontos >= T.niveis.moderado ? 'moderado' : 'baixo';
-  if (nivelAviso) { nivel = nivelAviso; motivos.unshift(`aviso de tempestade do INMET em vigor (${String(aviso).toLowerCase()})`); }
+  const ordem = ['baixo', 'moderado', 'alto'];
+  if (radar) {
+    if (ordem.indexOf(radar) > ordem.indexOf(nivel)) nivel = radar;
+    motivos.unshift(`${classeRadar === 'severa' ? 'tempestade forte' : 'tempestade'} no radar sobre o local ou a caminho (${Math.round(nucleoRadar)} dBZ)`);
+  }
+  // o aviso oficial prevalece; o radar só pode subir o nível, nunca baixar o do aviso
+  if (nivelAviso) { if (!radar || ordem.indexOf(nivelAviso) >= ordem.indexOf(nivel)) nivel = nivelAviso; motivos.unshift(`aviso de tempestade do INMET em vigor (${String(aviso).toLowerCase()})`); }
   return { nivel, pontos, motivos };
 }
 
