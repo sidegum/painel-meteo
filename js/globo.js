@@ -23,6 +23,7 @@ import { texturaPlaneta, texturaBrilho, texturaReal } from './globo-texturas.js'
 import { criarEstrelas, ajustarEscalaEstrelas } from './globo-estrelas.js';
 import { valido, direcaoTexto, partesLocais } from './analise.js';
 import { montarEscalas, atualizarEscalas, idAtual, fecharLista, nomeDaEscala } from './globo-escalas.js';
+import { criarPos } from './globo-pos.js';
 import { criarCarga } from './globo-carga.js';
 import { montarCamadas, abrirCamadas, atualizarCamadas, fecharCamadas, camadasAbertas } from './globo-camadas.js';
 
@@ -36,6 +37,7 @@ const CELULAR = matchMedia('(pointer: coarse)').matches;
 
 /** Camadas visíveis no seletor. canal: canal do PNG (0 R, 1 G, 2 B, 3 = módulo de RG, para vento). */
 const CAMADAS = [
+  { id: 'limpo', nome: 'Terra' }, // padrão ao entrar: o globo sem nuvens nem dados por cima
   { id: 'nuvens', nome: 'Nuvens' },
   { id: 'vento', nome: 'Vento', arquivo: 'vento', canal: 3, faixaCor: [0, 120], unidade: 'km/h', fator: 3.6,
     cores: [[0, 90, 200, 190, 0], [15, 90, 200, 190, 0.25], [30, 90, 220, 140, 0.45], [50, 240, 210, 70, 0.6], [75, 240, 130, 50, 0.7], [100, 220, 50, 50, 0.78], [120, 140, 20, 110, 0.85]] },
@@ -53,12 +55,12 @@ const G = {
   renderer: null, cena: null, camera: null, terra: null, nuvens: null, atmosfera: null, estrelas: null, lua: null,
   marcadorUsuario: null, marcadorToque: null, ciclones: [],
   cam: { lat: -29.7, lon: -51.1, dist: DIST.inicial, vLat: 0, vLon: 0 }, animCam: null, autoGira: !MOVIMENTO_REDUZIDO, chegou: false,
-  camada: 'nuvens', hora: null, horaAgora: null, manifest: null, manifestAntigo: false, satelite: null,
-  texturas: {}, relogio: null, quadro: 0, ultimoQuadro: 0, tempos: [], nivelQualidade: 0, pixelRatio: 1,
+  camada: 'limpo', hora: null, horaAgora: null, manifest: null, manifestAntigo: false, satelite: null,
+  texturas: {}, relogio: null, quadro: 0, ultimoQuadro: 0, tempos: [], nivelQualidade: 0, janelasBoas: 0, pixelRatio: 1, pixelRatioInicial: 1,
   particulas: null, tocado: null, erroDados: null, anim: 0, tempoLinha: { tocando: false, timer: null },
   espaco: null, espacoAberto: false, sistema: false, livre: null,
   foco: null, focoAlvo: null, animFoco: null, focoDistMin: 0.3, // sistema solar: ponto em volta do qual a câmera gira
-  diaNoite: prefs.ler('globoDiaNoite', true), // false: a Terra toda iluminada, com a luz vindo de trás de quem olha
+  diaNoite: false, // false: a Terra toda iluminada, com a luz vindo de trás de quem olha. Sempre começa assim; quem liga é o usuário
 };
 
 const latLonVec = (lat, lon, r = RAIO, alvo = new THREE.Vector3()) => {
@@ -170,12 +172,29 @@ async function estacoesDoCeu() {
  * e universo (globo-galaxia.js). Cada parte avisa a barra de carregamento (G.carga) ao terminar; se uma falhar, as
  * etapas dela contam como encerradas e o aviso aparece quando o usuário for até lá.
  */
+/**
+ * Envia à placa de vídeo as texturas de uma cena e compila os shaders dela, inclusive dos objetos ainda escondidos
+ * (planetas, sondas): o primeiro quadro de cada vista não precisa mais esperar por isso. Uma textura por vez, para
+ * a barra de carregamento continuar andando.
+ */
+async function aquecerCena(cena, camera) {
+  const texturas = new Set();
+  cena.traverse((o) => { for (const m of [].concat(o.material || [])) { if (m.map?.isTexture) texturas.add(m.map); for (const u of Object.values(m.uniforms || {})) if (u?.value?.isTexture) texturas.add(u.value); } });
+  for (const t of texturas) {
+    if (!t.image) continue;
+    try { G.renderer.initTexture(t); } catch { /* fica para o primeiro uso */ }
+    await new Promise((ok) => setTimeout(ok, 0));
+  }
+  try { G.renderer.compile(cena, camera); } catch { /* compila no primeiro uso */ }
+}
+
 async function prepararEscalas() {
   const encerrar = (...ids) => ids.forEach((id) => G.carga.etapa(id));
   if (!G.espacoModulo) G.espacoModulo = import('./globo-espaco.js').catch(() => null);
   const espaco = await G.espacoModulo;
   if (espaco) { G.espaco = espaco; await espaco.prepararEspaco(G, THREE).catch((e) => console.warn('Globo: espaço indisponível', e)); }
   else G.espacoModulo = null;
+  await aquecerCena(G.cena, G.camera);
   encerrar('orbita', 'sistema');
   if (!G.galaxiaModulo) G.galaxiaModulo = import('./globo-galaxia.js').catch(() => null);
   const galaxia = await G.galaxiaModulo;
@@ -309,12 +328,12 @@ async function carregarNuvens(hora) {
   G.nuvens.material.uniforms.temNuvem.value = 1;
   G.nuvens.userData.satelite = !!sat;
   G.terra.material.uniforms.tNuvens.value = t;
-  G.terra.material.uniforms.temNuvens.value = 1;
+  G.terra.material.uniforms.temNuvens.value = G.camada === 'nuvens' ? 1 : 0;
   if (G.camada === 'nuvens') { montarLegenda(CAMADAS.find((c) => c.id === 'nuvens'), null); atualizarNotaFonte(); }
 }
 
-/** Opacidade das nuvens pela camada: cheia em Nuvens, discreta com dados por cima. */
-function opacidadeNuvens() { return CAMADAS.find((x) => x.id === G.camada)?.arquivo ? 0.3 : 1; }
+/** Opacidade das nuvens: só aparecem na camada Nuvens, escolhida pelo usuário. */
+function opacidadeNuvens() { return G.camada === 'nuvens' ? 1 : 0; }
 
 const suave = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
@@ -469,11 +488,12 @@ const FRAGMENT_ATMOSFERA = /* glsl */`
 function montarCena() {
   const canvas = G.dom.canvas;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !CELULAR, alpha: false, powerPreference: 'high-performance', stencil: false });
-  G.pixelRatio = Math.min(devicePixelRatio || 1, 2);
+  G.pixelRatio = G.pixelRatioInicial = Math.min(devicePixelRatio || 1, 2);
   renderer.setPixelRatio(G.pixelRatio);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.setClearColor(0x04060b, 1);
   G.renderer = renderer;
+  G.pos = criarPos(THREE, renderer); // halo e curva de tom da cena do universo
   G.cena = new THREE.Scene();
   G.camera = new THREE.PerspectiveCamera(42, 1, 0.01, 200);
   G.foco = new THREE.Vector3();
@@ -604,7 +624,6 @@ function iluminarDeFrente() {
 
 function alternarDiaNoite() {
   G.diaNoite = !G.diaNoite;
-  prefs.gravar('globoDiaNoite', G.diaNoite);
   G.dom.botoes.querySelector('.globo-btn-dianoite').setAttribute('aria-pressed', String(G.diaNoite));
   if (G.diaNoite) atualizarAstros();
   mostrarAviso(G.diaNoite ? 'Dia e noite em tempo real.' : 'Terra toda iluminada (sem a noite).', false);
@@ -835,6 +854,7 @@ function seguirAfastando(pedido, max, continuo) {
 /** A escala mudou (Terra, sistema solar ou Via Láctea): gestos em curso recomeçam e o botão de voltar acompanha. */
 function mudouEscala() {
   G.trocasDeEscala = (G.trocasDeEscala || 0) + 1;
+  if (G.renderer && G.estrelas) aplicarQualidade(); // cada cena desenha a parte que lhe cabe no nível atual
   atualizarEscalas(true);
 }
 
@@ -1077,9 +1097,7 @@ async function carregarCamada(id, hora) {
   const u = G.terra.material.uniforms;
   G.camada = id;
   for (const b of G.dom.chips.querySelectorAll('button')) b.setAttribute('aria-checked', String(b.dataset.camada === id));
-  prefs.gravar('globoCamada', id);
-  // o dia e a noite são sempre os reais; com dados por cima, as nuvens ficam discretas (opacidadeNuvens)
-  u.temNuvens.value = G.nuvens.material.uniforms.temNuvem.value ? 1 : 0;
+  u.temNuvens.value = G.nuvens.material.uniforms.temNuvem.value && id === 'nuvens' ? 1 : 0; // sombra das nuvens só com elas à vista
   if (!cam.arquivo) { u.temCamada.value = 0; pararParticulas(); montarLegenda(cam, null); atualizarNotaFonte(); return; }
   if (!G.manifest?.gfs) { montarLegenda(cam, null); return; }
   let campo;
@@ -1278,8 +1296,7 @@ function pararParticulas() {
 function montarDom(secao) {
   const canvas = el('canvas', { class: 'globo-canvas', tabindex: '0', 'aria-label': 'Globo 3D do tempo. Arraste para girar, pince para aproximar, toque num ponto para ver o tempo lá.' });
   const chips = el('div', { class: 'globo-chips', role: 'radiogroup', 'aria-label': 'Camada' });
-  const camadaSalva = prefs.ler('globoCamada', 'nuvens');
-  G.camada = CAMADAS.some((c) => c.id === camadaSalva) ? camadaSalva : 'nuvens';
+  G.camada = 'limpo'; // toda entrada no Globo começa limpa: nuvens, dados e dia e noite são ligados pelo usuário
   for (const c of CAMADAS) chips.append(el('button', { type: 'button', role: 'radio', 'aria-checked': String(c.id === G.camada), 'data-camada': c.id, text: c.nome, onclick: () => { carregarCamada(c.id, G.hora ?? 0); } }));
   const aviso = el('p', { class: 'globo-aviso', role: 'status', text: 'Carregando o globo…' });
   const legenda = el('div', { class: 'globo-legenda' });
@@ -1794,7 +1811,8 @@ function mostrarAjuda() {
   mostrarInfo('Globo',
     el('p', { text: 'Arraste para girar, pince ou use a roda para aproximar, toque duas vezes para chegar perto. Escalas (a régua à esquerda no computador, o nome do lugar no alto no celular) levam da Terra à borda do universo observável; Camadas escolhe o que aparece em cada uma. O botão “Agora” embaixo abre a linha do tempo da previsão. Toque num ponto da Terra para ver o tempo lá; toque no Sol, na Lua, num satélite, num planeta ou numa sonda para ver o que é, onde está e quando dá para ver daqui.' }),
     el('ul', {},
-      el('li', {}, 'Dia e noite (botão de meia-lua à direita): o lado iluminado e o escuro pela posição real do Sol agora; a Lua clareia a noite conforme a fase e as luzes das cidades (NASA Black Marble) acendem no escuro. Ao mudar a hora na linha do tempo, o Sol acompanha. Desligado, a Terra fica toda iluminada, com a luz vindo de trás de quem olha.'),
+      el('li', {}, 'O Globo abre com a Terra limpa e toda iluminada. Nuvens, vento, chuva, temperatura e pressão ficam nos botões do alto; o dia e a noite, no botão de meia-lua.'),
+      el('li', {}, 'Dia e noite (botão de meia-lua à direita): o lado iluminado e o escuro pela posição real do Sol agora; a Lua clareia a noite conforme a fase e as luzes das cidades (NASA Black Marble) acendem no escuro. Ao mudar a hora na linha do tempo, o Sol acompanha.'),
       el('li', {}, 'Nuvens: imagem infravermelha dos satélites GOES-Leste, GOES-Oeste e Himawari (NASA GIBS), onde há cobertura; no resto, nuvens previstas pelo GFS.'),
       el('li', {}, 'Vento (linhas mostram para onde ele sopra, a 10 m), chuva (mm/h), temperatura (a 2 m) e pressão ao nível do mar (isóbaras a cada 4 hPa ao aproximar): modelo GFS 0,5° da NOAA, a cada 3 h até 48 h.'),
       el('li', {}, 'Ponto tocado: ECMWF IFS pela Open-Meteo, com fuso horário local. Ciclones: NHC e GDACS.'),
@@ -1891,7 +1909,8 @@ function laco(agora) {
   G.anim = G.aberto && !G.contextoPerdido ? requestAnimationFrame(laco) : 0;
   if (!G.aberto || G.contextoPerdido || document.hidden) return;
   const dt = Math.min(100, agora - G.ultimoQuadro); G.ultimoQuadro = agora;
-  medirQualidade(dt);
+  if (G.desenhou && G.desenhouAntes) medirQualidade(dt); // só entre dois quadros desenhados de fato
+  G.desenhouAntes = G.desenhou;
   const c = G.cam;
   if (G.animCam) {
     const a = G.animCam, t = Math.min(1, (agora - a.t0) / a.ms), e = 1 - Math.pow(1 - t, 3);
@@ -1912,6 +1931,7 @@ function laco(agora) {
   if (G.quadro % 4 === 2 && !G.sistema) atualizarGrade();
   if (G.quadro % 6 === 3) atualizarLeitura();
   if (G.quadro % 30 === 0) atualizarRelogio();
+  if (G.quadro % 30 === 7) G.estrelas?.reduzir?.(nivelEstrelas());
   if (agora - (G.ultimaEscala || 0) > 200) { G.ultimaEscala = agora; atualizarEscalas(); } // por tempo, não por quadro: com a cena pesada, a régua não pode atrasar
   if (G.galaxia) G.galaxia.atualizarGalaxia(agora);
   else if (G.espaco && G.espacoAberto) G.espaco.atualizarEspaco(agora);
@@ -1925,6 +1945,7 @@ function laco(agora) {
     G.contornos.atualizar(c.dist, G.terra.material.uniforms.temRegiao.value);
     const base = opacidadeNuvens();
     G.nuvens.material.uniforms.opacNuvem.value = base * Math.max(0, Math.min(1, (c.dist - 1.03) / 0.15));
+    G.nuvens.visible = G.nuvens.material.uniforms.opacNuvem.value > 0; // invisível, nem é desenhada
   }
   if (G.galaxia) { /* a viagem da câmera na galáxia é do próprio módulo */ } else if (G.livre) moverLivre(agora); else if (G.sistema) moverFoco(agora);
   posicionarCamera();
@@ -1936,24 +1957,64 @@ function laco(agora) {
     for (const m of [G.marcadorUsuario, G.marcadorToque, ...G.ciclones]) { m.scale.setScalar(esc); const p = m.getObjectByName('pulso'); if (p) { p.scale.setScalar(1 + pulso * 1.6); p.material.opacity = 0.6 * (1 - pulso); } }
   }
   if (G.particulas) animarParticulas(dt);
-  if (G.galaxia) G.renderer.render(G.galaxia.estado().cena, G.galaxia.estado().camera);
-  else G.renderer.render(G.cena, G.camera);
+  // no universo, com a câmera parada e nada mudando, o quadro anterior continua valendo: não se desenha de novo
+  // na Terra e no sistema solar, com a câmera parada só resta o pulso dos marcadores: um quadro a cada três basta
+  const chaveCam = c.lat * 1e3 + c.lon * 7e3 + c.dist * 13e5 + G.foco.x + G.foco.y * 3 + G.foco.z * 7;
+  G.quadrosParado = chaveCam === G.chaveCam && !G.animCam && !G.animFoco && !G.livre && !G.particulas && !G.seguir ? (G.quadrosParado || 0) + 1 : 0;
+  G.chaveCam = chaveCam;
+  G.desenhou = G.galaxia ? G.galaxia.precisaDesenhar(agora) : G.sistema || G.espacoAberto || G.quadrosParado < 20 || G.quadro % 3 === 0; // em órbita e no sistema solar tudo se move
+  if (G.galaxia) { if (G.desenhou) G.pos.desenhar(G.galaxia.estado().cena, G.galaxia.estado().camera); }
+  else if (G.desenhou) G.renderer.render(G.cena, G.camera);
   G.quadro++;
 }
 
-/** Mede o tempo por quadro; se ficar lento (menos de 30 fps por ~3 s), baixa a resolução e as partículas, uma vez por nível. */
-function medirQualidade(dt) {
-  G.tempos.push(dt);
-  if (G.tempos.length < 120) return;
-  const media = G.tempos.reduce((s, v) => s + v, 0) / G.tempos.length;
-  G.tempos = [];
-  if (media > 36 && G.nivelQualidade < 3) {
-    G.nivelQualidade++;
-    G.pixelRatio = Math.max(1, G.pixelRatio - 0.4);
-    G.renderer.setPixelRatio(G.pixelRatio);
-    ajustarEscalaEstrelas(G.estrelas, G.pixelRatio);
-    if (G.particulas && G.nivelQualidade >= 2) iniciarParticulas(G.particulas.campo);
-    if (G.nivelQualidade >= 3) { G.atmosfera.visible = false; }
-    G.estrelas?.reduzir?.(G.nivelQualidade);
+/** Fração da resolução inicial em cada nível de qualidade (0 = cheia). */
+const RESOLUCAO_POR_NIVEL = [1, 0.85, 0.72, 0.6, 0.5];
+
+/**
+ * Quanto do catálogo profundo de estrelas é desenhado (ver `reduzir` em globo-estrelas.js). Olhando a Terra de perto, o
+ * fundo de estrelas até a magnitude 10,5 não acrescenta nada visível e custa 680 mil pontos por quadro: fica só o HYG.
+ */
+function nivelEstrelas() {
+  const naTerra = !G.espacoAberto && !G.sistema && !G.galaxia && !G.estrelas.modo3d;
+  if (naTerra) return 3;
+  if (CELULAR) return G.estrelas.modo3d ? 2 : 3; // no celular, o Gaia só entra (pela metade) na viagem entre as estrelas
+  return G.nivelQualidade >= 3 ? 3 : G.nivelQualidade >= 2 ? 2 : 0;
+}
+
+/** Aplica o nível de qualidade atual: resolução, partículas do vento, atmosfera, estrelas e nuvens de galáxias. */
+function aplicarQualidade() {
+  const piso = Math.min(G.pixelRatioInicial, CELULAR ? 1 : 0.6);
+  const pr = Math.max(piso, G.pixelRatioInicial * RESOLUCAO_POR_NIVEL[G.nivelQualidade]);
+  if (pr !== G.pixelRatio) {
+    G.pixelRatio = pr;
+    G.renderer.setPixelRatio(pr);
+    ajustarEscalaEstrelas(G.estrelas, pr);
   }
+  const metade = G.nivelQualidade >= 2;
+  if (G.particulas && metade !== G.particulasPelaMetade) { G.particulasPelaMetade = metade; iniciarParticulas(G.particulas.campo); }
+  G.atmosfera.visible = !G.sistema && G.nivelQualidade < 3; // no sistema solar a Terra desta cena fica escondida
+  G.estrelas?.reduzir?.(nivelEstrelas());
+  G.galaxia?.definirQualidade?.(G.nivelQualidade);
+}
+
+/**
+ * Qualidade adaptativa: mede a mediana do tempo por quadro em janelas de 50 quadros desenhados. Abaixo de ~43 quadros
+ * por segundo, desce um nível (menos resolução, menos pontos). Com folga por ~7 s seguidos, sobe um nível; se depois de
+ * subir precisar descer de novo, não sobe mais (para não ficar oscilando). Não mede durante o carregamento nem com a
+ * cena parada (quadros que não foram desenhados).
+ */
+function medirQualidade(dt) {
+  if (G.carga?.ativa?.()) { G.tempos.length = 0; return; }
+  G.tempos.push(dt);
+  if (G.tempos.length < 50) return;
+  const mediana = G.tempos.sort((a, b) => a - b)[25];
+  G.tempos = [];
+  if (mediana > 23 && G.nivelQualidade < RESOLUCAO_POR_NIVEL.length - 1) {
+    G.nivelQualidade++; G.janelasBoas = 0;
+    if (G.subiuQualidade) G.travaSubida = true;
+    aplicarQualidade();
+  } else if (mediana < 17.6 && G.nivelQualidade > 0 && !G.travaSubida) {
+    if (++G.janelasBoas >= 8) { G.nivelQualidade--; G.janelasBoas = 0; G.subiuQualidade = true; aplicarQualidade(); }
+  } else G.janelasBoas = 0;
 }

@@ -773,6 +773,7 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `globo-escalas.js` | régua de escalas (1.12.0): onde a câmera está, da Terra ao universo observável, e o atalho para cada escala |
 | `globo-camadas.js` | painel único de camadas (1.12.0): desenha as seções que cada módulo descreve e devolve as escolhas |
 | `globo-carga.js` | tela de carregamento com barra de progresso real (1.12.0) |
+| `globo-pos.js` | pós-processamento da cena do universo: alvo de alta faixa dinâmica, halo de luz e curva de tom (1.12.3) |
 | `cosmologia.js` | cálculo puro (testado em `test/cosmologia.test.mjs`): ΛCDM plano do Planck 2018, distância comóvel, tempo da luz, idade e horizonte |
 | `globo-universo.js` | escala do universo (1.12.0): Volume Local, teia cósmica, aglomerados, superaglomerados, vazios, quasares, radiação cósmica de fundo |
 | `globo-catalogos.js` | catálogos da Via Láctea (1.12.0): aglomerados estelares, pulsares e estrelas com planetas |
@@ -847,7 +848,7 @@ horizonte, faixa quente estreita no nascer e no pôr, luzes das cidades acesas a
 apagadas pelas nuvens, noite quase preta com luar pela fase, nuvens noturnas só como sombra escura e reflexo do Sol
 no mar discreto.
 
-Dia e noite desligável (1.9.9): botão de meia-lua (`alternarDiaNoite`, preferência `globoDiaNoite`, ligado por padrão).
+Dia e noite desligável (1.9.9): botão de meia-lua (`alternarDiaNoite`). Desde a 1.12.3 o Globo sempre abre com o dia e a noite desligados e sem nuvens (camada "Terra"); nada disso é guardado entre visitas, quem liga é o usuário.
 Desligado, `iluminarDeFrente()` põe o uniforme `sol` atrás e um pouco acima de quem olha a cada quadro, então o lado
 visível fica todo de dia; o Sol, a Lua e as estrelas continuam nas posições reais.
 
@@ -1030,3 +1031,53 @@ galáxia o lugar mostrado é o Volume Local, e não mais "Via Láctea".
 barra de carregamento até o fim, todas as escalas pela régua e pela lista, o painel de camadas, a pinça por CDP para
 fora e a volta pelo "‹ Terra". Não testado em iPhone real nem com placa de vídeo real: o tempo de carregamento e a
 fluidez com 458 mil galáxias no celular (onde metade delas é desenhada) são estimativas.
+
+### 12.y Fluidez e imagem do universo (1.12.3)
+
+**O que foi medido.** Perfil de CPU pelo protocolo do Chromium em cada escala: o JavaScript do laço ocupa menos de 1% do
+tempo; o custo está na placa de vídeo. Antes desta versão, a Terra desenhava 815 mil pontos por quadro (as 683 mil
+estrelas do Gaia, invisíveis atrás do globo) e a teia cósmica 1,6 milhão, dos quais 800 mil eram as estrelas reais da
+vizinhança do Sol com brilho zero. As texturas (imagem da Via Láctea, mapa do Planck, fotografias de galáxias) eram
+decodificadas e enviadas à placa de vídeo no primeiro quadro em que apareciam, o que engasgava a primeira visita a
+cada escala.
+
+**O que mudou.**
+
+- *Só se desenha o que aparece.* As estrelas reais da cena da galáxia somem quando a câmera se afasta do Sol
+  (`atualizarGalaxia`). Olhando a Terra, o catálogo profundo fica só com o HYG (`nivelEstrelas` em `globo.js`); no
+  celular o Gaia só entra, pela metade, na viagem entre as estrelas.
+- *Nada chega atrasado à placa de vídeo.* `aquecerCena` (Terra e sistema solar) e `aquecerTexturas` (universo) enviam
+  todas as texturas e compilam os shaders durante a barra de carregamento. As fotografias de galáxias são decodificadas
+  fora da linha principal (`createImageBitmap`, em `texturaDeBlob`); fica na memória uma prévia de 512 px de cada uma e
+  a imagem inteira (já baixada) só vira textura quando a galáxia passa de 300 px na tela, no máximo 4 ao mesmo tempo
+  (2 no celular). Antes eram 35 texturas de 2048 px permanentes, cerca de 750 MB de memória de vídeo.
+- *Cena parada não é redesenhada.* No universo, `precisaDesenhar` compara câmera, tamanho e revisão do conteúdo
+  (`GX.revisao`, que sobe quando uma camada muda ou uma textura chega); sem mudança, o quadro anterior continua na
+  tela (um quadro a cada 400 ms por segurança). Na Terra, parada, vai um quadro a cada três (o pulso do marcador).
+- *Qualidade adaptativa nos dois sentidos* (`medirQualidade`, `aplicarQualidade`): mediana do tempo por quadro em
+  janelas de 50 quadros desenhados; abaixo de ~43 quadros por segundo desce um nível (resolução 100%, 85%, 72%, 60%,
+  50% da inicial, com piso de 1 no celular e 0,6 no computador; fração dos pontos dos levantamentos 100%, 80%, 60%,
+  45%, 35%, em ordem embaralhada e com o brilho compensado); com folga por ~7 s sobe um nível, e trava a subida se
+  precisar descer de novo.
+- *Sem desfoque de fundo sobre o canvas.* `backdrop-filter` em botões por cima de um WebGL que muda a cada quadro custa
+  caro no iPhone; os controles do Globo têm fundo liso. Os nomes que acompanham a câmera têm camada própria
+  (`will-change: transform`).
+
+**Imagem do universo** (`globo-pos.js`). A cena do universo é desenhada num alvo meio-flutuante: milhares de galáxias
+somadas no mesmo pixel guardam o brilho real em vez de estourar no branco. Depois vêm o halo (pirâmide de reduções de
+13 amostras e ampliações em tenda, de 3 a 6 níveis conforme o lado menor da imagem), com força que cresce da Via Láctea
+(0,16) para a teia cósmica (até 0,71), e a curva de tom, que deixa intacto tudo até 0,55 (fotografias) e comprime o
+resto pelo canal mais forte, sem mudar a cor. Os materiais prontos do three.js da cena são adaptados (`adaptar`) para
+escrever na mesma convenção de cor. Sem alvo meio-flutuante, o desenho é direto, sem efeitos.
+
+- *Galáxias dos levantamentos*: núcleo nítido e halo fraco; as que estão mais perto da câmera que o foco ficam maiores
+  e mais claras (profundidade ao atravessar a teia). A cor vem da densidade local, medida no próprio catálogo
+  (`densidadeLocal`: vizinhos numa grade, em posto percentual): azul nos vazios e filamentos finos, dourado nos nós. É
+  uma medida derivada, não um dado do levantamento, e a nota de fontes diz isso.
+- *Radiação cósmica de fundo*: vista de fora, a metade da casca virada para a câmera fica transparente, só com o
+  contorno aceso, e a parede do fundo aparece cheia na borda e se apaga para o centro, onde ficam as galáxias.
+
+**Testado e não testado.** Testado no Chromium com renderização por software (1600×900 e perfil de iPhone 13): todas
+as escalas, a pinça por CDP, a volta à Terra, a contagem de quadros desenhados com a cena parada e as 35 fotografias.
+A renderização por software não mede fluidez: a taxa de quadros no iPhone e numa placa de vídeo real não foi medida
+aqui, só os fatores que a determinam (pontos por quadro, texturas enviadas antes, redesenhos).
