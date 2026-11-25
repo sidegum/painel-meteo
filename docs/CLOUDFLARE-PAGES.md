@@ -6,7 +6,11 @@ O nome do subdomínio fica num lugar só: a variável `PAINEL_DOMINIO` do reposi
 
 ## Situação
 
-Desde 05/11/2026, o app está só em `https://tempo-rs.pages.dev/` (projeto `tempo-rs`, padrão no código), e o repositório é privado. O GitHub Pages foi desligado. O antigo `sidegum.github.io/painel-meteo` levou ao novo endereço por algumas horas (versões 1.8.9 e 1.8.10), e esse código já foi removido.
+O app está em dois endereços, sempre com o mesmo conteúdo: `https://tempo-rs.pages.dev/` (projeto `tempo-rs`, padrão no código) e `https://sidegum.github.io/painel-meteo/` (GitHub Pages). O repositório é privado.
+
+Cada publicação monta o site uma vez (`scripts/montar-site.sh`: app da `main` + campos do Globo) e envia a mesma pasta aos dois: ao Cloudflare Pages pelo Wrangler e ao GitHub Pages pelo branch `site-github` (`scripts/publicar-github-pages.sh`, um commit só, sem histórico, com `.nojekyll`). O Worker aceita as duas origens (`ALLOWED_ORIGIN` em `worker/wrangler.toml`).
+
+Configuração do GitHub Pages (uma vez, em **Settings > Pages**): **Source** = **Deploy from a branch**, **Branch** = `site-github`, pasta `/ (root)`. Publicar direto da `main` não serve: a `main` não tem a pasta `globo-dados/`, e o Globo fica sem dados.
 
 Os passos abaixo servem para ligar um domínio próprio, se um for comprado (os passos 1 e 3 já estão feitos).
 
@@ -28,7 +32,7 @@ Os passos abaixo servem para ligar um domínio próprio, se um for comprado (os 
 
 ## Depois disso, nada é manual
 
-| O que muda | Quem publica no Pages |
+| O que muda | Quem publica nos dois endereços |
 |---|---|
 | Código na `main` (push ou PR mesclado) | `pages.yml` |
 | Campos do Globo (a cada 3 h) | `globo.yml`, no mesmo job |
