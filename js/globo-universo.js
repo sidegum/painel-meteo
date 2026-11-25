@@ -199,7 +199,7 @@ function montarAglomerados() {
   U.ctx.adicionar(U.pontosAglomerados);
   // nomes: só Abell e nomes populares (as siglas de levantamento em raios X ficam para o cartão), os mais massivos para a distância
   const ordem = [...U.aglomerados].filter((a) => /^Abell |\(Abell /.test(a.nome) || /^[A-Z][a-zà-ú]+ ?[A-Za-zà-ú ]*$/.test(a.nome)).sort((x, y) => (y.m || 0) / (y.dMpc ** 1.2) - (x.m || 0) / (x.dMpc ** 1.2));
-  for (const a of ordem.slice(0, CELULAR ? 60 : 140)) rotulo(a.nome, a.p, { prioridade: 22, de: a.dMpc * 120, ate: Math.min(a.dMpc * 9000, 2.5e6), classe: 'aglomerado', alvo: a });
+  for (const a of ordem.slice(0, CELULAR ? 24 : 60)) rotulo(a.nome, a.p, { prioridade: 22, de: a.dMpc * 120, ate: Math.min(a.dMpc * 9000, 2.5e6), classe: 'aglomerado', alvo: a });
 }
 
 function nomeAglomerado(a) {
@@ -369,7 +369,7 @@ export function atualizarUniverso(zoom, F, camera) {
   if (U.quasares) { const a = rampa(lz, 5.6, 6.5) * 0.9; U.quasares.material.uniforms.alfa.value = a; U.quasares.visible = F.quasares && a > 0.003; }
   if (U.pontosAglomerados) U.pontosAglomerados.visible = F.aglomerados && lz > 3.6;
   if (U.pontosSuper) U.pontosSuper.visible = F.superaglomerados && lz > 4.3;
-  if (U.pontosVazios) { const a = rampa(lz, 4.9, 5.5) * (1 - rampa(lz, 6.1, 6.5)) * 0.35; U.pontosVazios.material.uniforms.alfa.value = a; U.pontosVazios.visible = F.vazios && a > 0.003; }
+  if (U.pontosVazios) { const a = rampa(lz, 4.9, 5.5) * (1 - rampa(lz, 6.1, 6.5)) * 0.2; U.pontosVazios.material.uniforms.alfa.value = a; U.pontosVazios.visible = F.vazios && a > 0.003; }
   if (U.linhaCampo) U.linhaCampo.visible = F.notaveis && lz > 5.6;
   // radiação cósmica de fundo: some de perto (no céu real ela não se vê); acende quando o quadro passa de bilhões de anos-luz
   const aCmb = rampa(lz, 6.3, 7.1);
