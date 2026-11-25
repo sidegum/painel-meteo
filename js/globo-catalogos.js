@@ -56,12 +56,12 @@ export async function prepararCatalogos(ctx) {
 
   C.aglomerados = dados.aglomeradosEstelares.linhas.map(([nome, l, b, distPc, logIdade, r50, estrelas, movel]) => ({
     tipo: 'aglomerado-estelar', catalogo: nome, nome: NOMES_AGLOMERADOS[nome] || nome, popular: !!NOMES_AGLOMERADOS[nome], distKpc: distPc / 1000, logIdade, r50, estrelas, movel: !!movel,
-    p: lugar(l, b, distPc / 1000), cor: logIdade != null && logIdade < 7.7 ? '#a9c8ff' : '#ffe9c4', diam: 0.0006, minPx: 2 + Math.min(1.6, Math.log10(Math.max(10, estrelas)) - 1), k: 0.8 }));
+    p: lugar(l, b, distPc / 1000), cor: logIdade != null && logIdade < 7.7 ? '#a9c8ff' : '#ffe9c4', diam: Math.min(0.005, Math.max(0.002, (r50 || 2) * 2 / 1000)), minPx: 2.2, k: 0.85 }));
   C.pulsares = dados.pulsares.linhas.map(([nome, l, b, distKpc, periodo, dm, binario, idade, assoc]) => ({
     tipo: 'pulsar', catalogo: nome, nome: PULSARES_NOTAVEIS[nome]?.[0] || `PSR ${nome}`, historia: PULSARES_NOTAVEIS[nome]?.[1] || null, distKpc, periodo, dm, binario: !!binario, idade,
-    assoc: assoc ? assoc.replace(/^[A-Z]+:/, '') : null, p: lugar(l, b, distKpc), cor: '#9ff5e6', diam: 0.0005, minPx: periodo && periodo < 0.03 ? 1.7 : 2.0, k: 0.7 }));
+    assoc: assoc ? assoc.replace(/^[A-Z]+:/, '') : null, p: lugar(l, b, distKpc), cor: '#7ff0dc', diam: 0.0025, minPx: 2.2, k: 1 }));
   C.sistemas = dados.exoplanetas.sistemas.map((s) => ({
-    tipo: 'sistema-planetario', nome: s.n, distKpc: s.d / 1000, temp: s.t, vmag: s.v, planetas: s.p, p: lugar(s.l, s.b, s.d / 1000), cor: '#8dffae', diam: 0.0002, minPx: 1.6 + Math.min(1.2, s.p.length * 0.25), k: 0.7 }));
+    tipo: 'sistema-planetario', nome: s.n, distKpc: s.d / 1000, temp: s.t, vmag: s.v, planetas: s.p, p: lugar(s.l, s.b, s.d / 1000), cor: '#7dff9e', diam: 0.0012, minPx: 1.8 + Math.min(1.2, s.p.length * 0.2), k: 1 }));
 
   for (const [chave, lista] of [['aglomerados', C.aglomerados], ['pulsares', C.pulsares], ['sistemas', C.sistemas]]) {
     if (!lista.length) continue;

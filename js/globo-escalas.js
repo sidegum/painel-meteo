@@ -44,8 +44,10 @@ export function montarEscalas(G, ir) {
     el('span', { class: 'globo-onde-nome', text: 'Terra' }));
   const terra = el('button', { type: 'button', class: 'globo-voltar', hidden: true, text: '‹ Terra', 'aria-label': 'Voltar à Terra', onclick: () => escolher('terra') });
   const topo = el('div', { class: 'globo-onde-caixa' }, terra, atual);
-  regua.addEventListener('pointerdown', (e) => e.stopPropagation());
+  // tocar na régua ou nos botões não gira a cena; tocar fora fecha a lista do celular
+  for (const caixa of [regua, topo]) caixa.addEventListener('pointerdown', (e) => e.stopPropagation());
   G.dom.raiz.append(regua, topo);
+  G.dom.raiz.addEventListener('pointerdown', fecharLista);
   S.dom = { regua, lista, atual, nome: atual.firstChild, terra, topo };
   LARGO.addEventListener?.('change', () => atualizarEscalas(true));
   atualizarEscalas(true);
@@ -75,6 +77,7 @@ export function atualizarEscalas(forcar = false) {
   const id = idAtual();
   S.dom.regua.classList.toggle('larga', LARGO.matches);
   if (id === S.atual && !forcar) return;
+  if (S.atual && id !== S.atual) fecharLista(); // mudou de escala (pela lista, pela pinça ou pelo "‹ Terra"): a lista sai da frente
   S.atual = id;
   const e = TODAS.find((x) => x.id === id);
   S.dom.nome.textContent = e.nome;

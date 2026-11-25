@@ -128,6 +128,9 @@ export function prepararGalaxia(G, THREE) {
     montarCatalogos();
     montarInterface();
     aplicarCamadas();
+    carga('imagens', 0.4);
+    // as 800 mil estrelas com distância dependem do céu profundo, que carrega em partes: espera até 25 s e segue
+    await Promise.race([montarEstrelasReais(), new Promise((ok) => setTimeout(ok, 25000))]);
     carga('imagens');
     return GX;
   })();
