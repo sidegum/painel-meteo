@@ -113,7 +113,9 @@ export function prepararEspaco(G, THREE) {
     else E.notaSat = `Satélites indisponíveis agora (${sats.reason?.message || 'falha'}).`;
     E.sondas = sondas.status === 'fulfilled' ? sondas.value : null;
     E.corpos = corpos.status === 'fulfilled' ? corpos.value : null;
+    G.carga?.etapa('orbita');
     E.sistema = await montarSistema();
+    G.carga?.etapa('sistema');
     E.dom.nota.textContent = E.notaSat;
   })();
   return E.preparo;

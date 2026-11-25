@@ -83,15 +83,42 @@ export function textoCosmo(z) {
  */
 export async function prepararUniverso(ctx) {
   U.ctx = ctx;
-  const [dados, bin] = await Promise.all([ctx.baixar('universo.json').catch(() => null), ctx.baixar('universo.bin', 'bin').catch(() => null)]);
+  const [dados, bin, lev] = await Promise.all([ctx.baixar('universo.json').catch(() => null), ctx.baixar('universo.bin', 'bin').catch(() => null), ctx.baixar('levantamentos.bin', 'bin').catch(() => null)]);
   U.dados = dados;
-  montarCmb();
+  ctx.progresso?.(0.45);
+  const cmb = montarCmb();
   montarCascas();
   if (bin) montarNuvens(bin);
+  if (lev) montarLevantamentos(lev);
+  ctx.progresso?.(0.75);
   if (dados) { montarAglomerados(); montarSuperaglomerados(); montarVazios(); }
   montarNotaveis();
+  await cmb; // o mapa do Planck faz parte do carregamento: ao abrir a escala, já está na tela
   U.prontos = true;
   return U;
+}
+
+/**
+ * Levantamentos profundos (6dFGS, SDSS e BOSS): a teia cósmica além do 2MRS, até ~6 bilhões de anos-luz.
+ * As fatias e cones que aparecem são a área do céu que cada levantamento observou, não a forma do universo.
+ */
+function montarLevantamentos(bin) {
+  const { meta } = U.ctx;
+  const v = new DataView(bin);
+  if (String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3)) !== 'LEV1') return;
+  const total = v.getUint32(4, true), esc = v.getFloat32(8, true), passo = CELULAR ? 2 : 1, n = Math.floor(total / passo);
+  const q = new Int16Array(bin.slice(12, 12 + 6 * total)), fonte = new Uint8Array(bin, 12 + 6 * total, total);
+  const pos = new Float32Array(n * 3), cor = new Float32Array(n * 3), br = new Float32Array(n);
+  const CORES = [[1, 0.9, 0.72], [0.8, 0.88, 1], [1, 0.66, 0.5]]; // 6dFGS, SDSS, BOSS (galáxias vermelhas luminosas)
+  for (let i = 0; i < n; i++) {
+    const k = i * passo, x = q[k * 3] / 32767 * esc, y = q[k * 3 + 1] / 32767 * esc, z = q[k * 3 + 2] / 32767 * esc;
+    pos[i * 3] = y * KPC; pos[i * 3 + 1] = z * KPC + meta.zSol; pos[i * 3 + 2] = x * KPC - meta.R0;
+    cor.set(CORES[fonte[k]] || CORES[1], i * 3);
+    br[i] = fonte[k] === 2 ? 0.55 : 0.35;
+  }
+  U.levantamentos = nuvem(pos, cor, br, 1.5);
+  U.levantamentos.userData = { n: total };
+  U.ctx.adicionar(U.levantamentos);
 }
 
 /** Galáxias do Volume Local com distância medida; as que casam com o NGC/IC dão a distância ao objeto do NGC. */
@@ -166,7 +193,7 @@ function montarAglomerados() {
   U.ctx.adicionar(U.pontosAglomerados);
   // nomes: só Abell e nomes populares (as siglas de levantamento em raios X ficam para o cartão), os mais massivos para a distância
   const ordem = [...U.aglomerados].filter((a) => /^Abell |\(Abell /.test(a.nome) || /^[A-Z][a-zà-ú]+ ?[A-Za-zà-ú ]*$/.test(a.nome)).sort((x, y) => (y.m || 0) / (y.dMpc ** 1.2) - (x.m || 0) / (x.dMpc ** 1.2));
-  for (const a of ordem.slice(0, CELULAR ? 60 : 140)) rotulo(a.nome, a.p, { prioridade: 22, de: a.dMpc * 120, ate: a.dMpc * 9000, classe: 'aglomerado', alvo: a });
+  for (const a of ordem.slice(0, CELULAR ? 60 : 140)) rotulo(a.nome, a.p, { prioridade: 22, de: a.dMpc * 120, ate: Math.min(a.dMpc * 9000, 2.5e6), classe: 'aglomerado', alvo: a });
 }
 
 function nomeAglomerado(a) {
@@ -280,7 +307,7 @@ function montarCmb() {
   U.cmb.renderOrder = -2; U.cmb.frustumCulled = false; U.cmb.visible = false;
   U.ctx.adicionar(U.cmb);
   U.cmbItem = { tipo: 'cmb', nome: 'Radiação cósmica de fundo', p: new THREE.Vector3(0, R, 0).add(U.cmb.position) };
-  carregarImagem(CELULAR ? 'cmb-2048.jpg' : 'cmb-4096.jpg').then((img) => {
+  return carregarImagem(CELULAR ? 'cmb-2048.jpg' : 'cmb-4096.jpg').then((img) => {
     const t = new THREE.Texture(img); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping;
     t.anisotropy = Math.min(8, G.renderer.capabilities.getMaxAnisotropy()); t.needsUpdate = true;
     uni.mapa.value = t; uni.temMapa.value = 1; U.cmbMapa = true;
@@ -326,16 +353,17 @@ const _q = { v: null };
 export function atualizarUniverso(zoom, F, camera) {
   if (!U.prontos) return;
   const lz = Math.log10(zoom);
-  // galáxias do 2MRS: aparecem a partir de ~3 Mpc de zoom e somem quando o quadro passa de ~5 bilhões de anos-luz
-  if (U.galaxias) { const a = rampa(lz, 3.3, 4.1) * (1 - rampa(lz, 6.4, 7.0)); U.galaxias.material.uniforms.alfa.value = a; U.galaxias.visible = F.teia && a > 0.003; }
+  // galáxias do 2MRS: aparecem a partir de ~3 Mpc de zoom e somem quando o quadro passa de ~5 bilhões de anos-luz; de longe, milhares de pontos se somam no mesmo pixel, então o brilho de cada um cai
+  if (U.galaxias) { const a = rampa(lz, 3.3, 4.1) * (1 - rampa(lz, 6.4, 7.0)) * (1 - 0.72 * rampa(lz, 5.0, 6.3)); U.galaxias.material.uniforms.alfa.value = a; U.galaxias.visible = F.teia && a > 0.003; }
+  if (U.levantamentos) { const a = rampa(lz, 4.5, 5.3) * (1 - rampa(lz, 7.0, 7.5)) * (0.8 - 0.5 * rampa(lz, 5.7, 6.8)); U.levantamentos.material.uniforms.alfa.value = a; U.levantamentos.visible = F.levantamentos && a > 0.003; }
   if (U.quasares) { const a = rampa(lz, 5.6, 6.5) * 0.9; U.quasares.material.uniforms.alfa.value = a; U.quasares.visible = F.quasares && a > 0.003; }
   if (U.pontosAglomerados) U.pontosAglomerados.visible = F.aglomerados && lz > 3.6;
   if (U.pontosSuper) U.pontosSuper.visible = F.superaglomerados && lz > 4.3;
-  if (U.pontosVazios) { const a = rampa(lz, 4.9, 5.5) * (1 - rampa(lz, 6.3, 6.7)); U.pontosVazios.material.uniforms.alfa.value = a; U.pontosVazios.visible = F.vazios && a > 0.003; }
+  if (U.pontosVazios) { const a = rampa(lz, 4.9, 5.5) * (1 - rampa(lz, 6.1, 6.5)) * 0.35; U.pontosVazios.material.uniforms.alfa.value = a; U.pontosVazios.visible = F.vazios && a > 0.003; }
   if (U.linhaCampo) U.linhaCampo.visible = F.notaveis && lz > 5.6;
   // radiação cósmica de fundo: some de perto (no céu real ela não se vê); acende quando o quadro passa de bilhões de anos-luz
   const aCmb = rampa(lz, 6.3, 7.1);
-  U.cmb.material.uniforms.alfa.value = aCmb * (zoom > CO.DIST_CMB_MPC * KPC * 1.05 ? 1 : 0.32); // de dentro, fundo discreto
+  U.cmb.material.uniforms.alfa.value = aCmb * (zoom > CO.DIST_CMB_MPC * KPC * 1.05 ? 1 : 0.16); // de dentro, fundo discreto
   U.cmb.visible = F.cmb && aCmb > 0.003;
   // cascas: anéis no plano da tela, rótulo no topo de cada anel
   U.grupoCascas.visible = F.cascas && lz > 5.4;
@@ -389,13 +417,13 @@ export function cartao(it, G, ir) {
 
 /** Contagens para a ajuda e para o painel de camadas. */
 export function contagens() {
-  return { galaxias: U.galaxias?.userData.n || 0, quasares: U.quasares?.userData.n || 0, aglomerados: U.aglomerados?.length || 0, super: U.super?.length || 0, vazios: U.vazios?.length || 0, ungc: U.dados?.ungc?.length || 0 };
+  return { levantamentos: U.levantamentos?.userData.n || 0, galaxias: U.galaxias?.userData.n || 0, quasares: U.quasares?.userData.n || 0, aglomerados: U.aglomerados?.length || 0, super: U.super?.length || 0, vazios: U.vazios?.length || 0, ungc: U.dados?.ungc?.length || 0 };
 }
 
 export function notasFontes() {
   const f = U.dados?.fontes || {};
   return ['Teia cósmica: 2MRS (Huchra et al. 2012)', 'Volume Local: Karachentsev et al. 2013', 'Aglomerados: MCXC (Piffaretti et al. 2011)', 'Superaglomerados: MSCC (Chow-Martínez et al. 2014)',
-    f.vazios ? `Vazios: ${/douglass/.test(f.vazios) ? 'Douglass et al. 2023' : 'Pan et al. 2012'}` : null, 'Quasares: SDSS DR16Q (Lyke et al. 2020)', 'Radiação cósmica de fundo: Planck (ESA), SMICA', 'Distâncias: ΛCDM do Planck 2018'].filter(Boolean);
+    f.vazios ? `Vazios: ${/douglass/.test(f.vazios) ? 'Douglass et al. 2023' : 'Pan et al. 2012'}` : null, 'Quasares: SDSS DR16Q (Lyke et al. 2020)', 'Radiação cósmica de fundo: Planck (ESA), SMICA', f.boss ? 'Levantamentos profundos: 6dFGS (Jones et al. 2009), SDSS DR10 (Tempel et al. 2014), BOSS DR12 (Reid et al. 2016)' : null, 'Distâncias: ΛCDM do Planck 2018'].filter(Boolean);
 }
 
 export const estado = () => U;

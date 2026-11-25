@@ -23,6 +23,7 @@ import { texturaPlaneta, texturaBrilho, texturaReal } from './globo-texturas.js'
 import { criarEstrelas, ajustarEscalaEstrelas } from './globo-estrelas.js';
 import { valido, direcaoTexto, partesLocais } from './analise.js';
 import { montarEscalas, atualizarEscalas, idAtual, fecharLista, nomeDaEscala } from './globo-escalas.js';
+import { criarCarga } from './globo-carga.js';
 import { montarCamadas, abrirCamadas, atualizarCamadas, fecharCamadas, camadasAbertas } from './globo-camadas.js';
 
 // ------------------------------------------------------------------ 1. estado e constantes
@@ -84,6 +85,7 @@ export function abrirGlobo(secao, estadoApp) {
   G.aberto = true;
   if (!G.renderer) {
     try { montarCena(); } catch (e) { mostrarAviso('Este aparelho não conseguiu abrir o globo em 3D (WebGL indisponível).', true); return; }
+    G.carga = criarCarga(G.dom.raiz);
     carregarTudo();
   }
   atualizarMarcadorUsuario();
@@ -129,24 +131,26 @@ async function carregarTudo() {
   const u = G.terra.material.uniforms;
   try {
     u.tDia.value = await textura('vendor/texturas/terra-dia-1024.jpg', { cor: true });
-    G.pronto = true; esconderAviso();
+    G.pronto = true; esconderAviso(); G.carga.etapa('terra');
     // chegada: o globo inteiro aparece e a câmera desce suavemente até o local do usuário (Rio Grande do Sul por padrão)
     const l = G.estadoApp?.local;
     G.cam.dist = distanciaQueCabe(); G.cam.lat = (l?.lat ?? -29.7) * 0.6; G.cam.lon = (l?.lon ?? -51.1) + 35;
     irPara(l?.lat ?? -29.7, l?.lon ?? -51.1, l ? DIST.cidade : DIST.inicial, 2600); // com localização, chega já na cidade
     G.chegou = true;
-  } catch { mostrarAviso('Não foi possível carregar a imagem da Terra. Verifique a conexão e toque em atualizar.', true); return; }
+  } catch { G.carga.fim(); mostrarAviso('Não foi possível carregar a imagem da Terra. Verifique a conexão e toque em atualizar.', true); return; }
   textura('vendor/texturas/terra-dia-4096.jpg', { cor: true }).then((t) => { u.tDia.value = t; }).catch(() => {});
   textura('vendor/texturas/terra-normal-2048.jpg').then((t) => { u.tNormal.value = t; u.temNormal.value = 1; }).catch(() => {});
   textura('vendor/texturas/terra-noite-2048.jpg', { cor: true }).then((t) => { u.tNoite.value = t; u.temNoite.value = 1; return textura('vendor/texturas/terra-noite-4096.jpg', { cor: true }); })
     .then((t) => { u.tNoite.value = t; }).catch(() => {});
   textura('vendor/texturas/terra-mascaras-2048.png').then((t) => { u.tMascaras.value = t; u.temMascaras.value = 1; }).catch(() => {});
   await carregarDados(); // o painel de um ponto só abre com toque (não abre sozinho na chegada)
+  G.carga.etapa('tempo');
   // contornos e cidades do mundo (1,9 MB) depois dos dados de tempo, para não disputar a conexão com eles
   G.contornos.carregar().catch((e) => console.warn('Globo: contornos indisponíveis', e))
-    .then(() => carregarCidadesMundo()).catch((e) => console.warn('Globo: cidades do mundo indisponíveis', e));
+    .then(() => carregarCidadesMundo()).catch((e) => console.warn('Globo: cidades do mundo indisponíveis', e))
+    .then(() => G.carga.etapa('mapa'));
   G.marcarDadosProntos();
-  prepararEspacoAntes();
+  await prepararEscalas();
 }
 
 /** ISS e Tiangong para o bloco "Céu de hoje" (mesmos elementos do CelesTrak que o espaço usa). */
@@ -162,31 +166,30 @@ async function estacoesDoCeu() {
 }
 
 /**
- * Pré-carrega o espaço (módulo, satélites, sondas, texturas e a cena do sistema solar) logo depois que a Terra e os
- * dados aparecem, num momento ocioso: quando o usuário tocar em Espaço, tudo já está pronto.
+ * Baixa e monta todas as escalas além da Terra, em ordem: órbita e sistema solar (globo-espaco.js), depois Via Láctea
+ * e universo (globo-galaxia.js). Cada parte avisa a barra de carregamento (G.carga) ao terminar; se uma falhar, as
+ * etapas dela contam como encerradas e o aviso aparece quando o usuário for até lá.
  */
-function prepararEspacoAntes() {
-  const ir = () => {
-    if (!G.espacoModulo) G.espacoModulo = import('./globo-espaco.js').catch(() => null);
-    G.espacoModulo.then((m) => { if (m) { G.espaco = m; m.prepararEspaco(G, THREE).then?.(prepararGalaxiaAntes); } });
-  };
-  if (window.requestIdleCallback) requestIdleCallback(ir, { timeout: 2500 }); else setTimeout(ir, 600);
-}
-
-/** Escala de galáxias: módulo e dados (imagem do modelo, partículas, catálogos) preparados depois do sistema solar, sem pressa. */
-function prepararGalaxiaAntes() {
-  const ir = () => {
-    if (!G.galaxiaModulo) G.galaxiaModulo = import('./globo-galaxia.js').catch(() => null);
-    G.galaxiaModulo.then((m) => m?.prepararGalaxia(G, THREE).catch(() => { G.galaxiaModulo = null; }));
-  };
-  if (window.requestIdleCallback) requestIdleCallback(ir, { timeout: 4000 }); else setTimeout(ir, 1500);
+async function prepararEscalas() {
+  const encerrar = (...ids) => ids.forEach((id) => G.carga.etapa(id));
+  if (!G.espacoModulo) G.espacoModulo = import('./globo-espaco.js').catch(() => null);
+  const espaco = await G.espacoModulo;
+  if (espaco) { G.espaco = espaco; await espaco.prepararEspaco(G, THREE).catch((e) => console.warn('Globo: espaço indisponível', e)); }
+  else G.espacoModulo = null;
+  encerrar('orbita', 'sistema');
+  if (!G.galaxiaModulo) G.galaxiaModulo = import('./globo-galaxia.js').catch(() => null);
+  const galaxia = await G.galaxiaModulo;
+  if (galaxia) await galaxia.prepararGalaxia(G, THREE).catch((e) => { G.galaxiaModulo = null; console.warn('Globo: galáxia indisponível', e); });
+  else G.galaxiaModulo = null;
+  encerrar('via-lactea', 'universo', 'imagens');
 }
 
 /** Abre a Via Láctea vista de fora a partir do sistema solar (sai da navegação livre; a órbita da câmera passa a ser em kpc). */
 async function abrirGalaxia() {
   if (!G.galaxiaModulo) G.galaxiaModulo = import('./globo-galaxia.js').catch(() => null);
   const m = await G.galaxiaModulo;
-  if (!m || !G.sistema) return;
+  if (!m) { G.galaxiaModulo = null; mostrarAviso('Não foi possível carregar a Via Láctea. Verifique a conexão e tente de novo.', false); return; }
+  if (!G.sistema) return;
   mostrarAviso('Preparando a Via Láctea…', false);
   try { await m.prepararGalaxia(G, THREE); } catch (e) { G.galaxiaModulo = null; mostrarAviso(`Não foi possível carregar a Via Láctea (${e.message}).`, false); return; }
   esconderAviso();

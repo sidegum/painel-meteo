@@ -54,9 +54,13 @@ fi
 
 # ---- Via Láctea: o que há catalogado com distância ----
 # Aglomerados estelares pelo Gaia DR3 (Hunt & Reffert 2023, A&A 673, A114): 7.167 aglomerados com distância e idade.
-vizier aglomerados-estelares.tsv J/A+A/673/A114/clusters all
+reduzir() { # arquivo passo colunas...: fica só com as colunas usadas (o arquivo completo não vai para o repositório)
+  local arq=$1; shift
+  [ "$modo" = amostra ] || { python3 scripts/globo/reduzir-tsv.py "$pasta/$arq" "$pasta/$arq.tmp" "$@" && mv "$pasta/$arq.tmp" "$pasta/$arq"; }
+}
+vizier aglomerados-estelares.tsv J/A+A/673/A114/clusters all && reduzir aglomerados-estelares.tsv 1 Name Type N CST GLON GLAT r50pc dist50 logAge50 CMDCl50 AV50
 # Pulsares: catálogo ATNF (Manchester et al. 2005, AJ 129, 1993; VizieR B/psr).
-vizier pulsares.tsv B/psr/psr all
+vizier pulsares.tsv B/psr/psr all && reduzir pulsares.tsv 1 PSRJ Name GLON GLAT P0 DM Binary Dist Assoc Type Age Bsurf Edot
 # Exoplanetas confirmados: NASA Exoplanet Archive, tabela de parâmetros compostos (um registro por planeta).
 baixar exoplanetas.csv 'https://exoplanetarchive.ipac.caltech.edu/TAP/sync?query=select+pl_name,hostname,ra,dec,sy_dist,sy_pnum,pl_rade,pl_bmasse,pl_orbper,pl_orbsmax,pl_eqt,disc_year,discoverymethod,disc_facility,st_teff,st_spectype,sy_vmag+from+pscomppars&format=csv'
 

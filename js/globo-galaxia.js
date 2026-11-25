@@ -21,6 +21,7 @@ import { TIPOS_OBJETO, corBV } from './globo-estrelas.js';
 import { cartaoObjeto } from './globo-ceu.js';
 import * as CO from './cosmologia.js';
 import * as UNI from './globo-universo.js';
+import * as CAT from './globo-catalogos.js';
 
 const RAD = Math.PI / 180;
 const AL_POR_KPC = 3261.56;
@@ -51,8 +52,9 @@ const AGLOMERADOS = [
 
 /** Camadas da escala de galáxias e do universo, com o padrão de cada uma; gravadas em globo:camadasUniverso. */
 export const CAMADAS_UNIVERSO = [
-  { grupo: 'Nossa galáxia', itens: [['viaLactea', 'Via Láctea (modelo)'], ['estrelas', 'Estrelas perto do Sol (800 mil, distância medida)'], ['masers', 'Regiões de formação de estrelas (masers)'], ['globulares', 'Aglomerados globulares']] },
-  { grupo: 'Galáxias', itens: [['grupoLocal', 'Grupo Local'], ['galaxias', 'Galáxias próximas (NGC/IC e Volume Local)'], ['teia', 'Teia cósmica (2MASS Redshift Survey)']] },
+  { grupo: 'Nossa galáxia', itens: [['viaLactea', 'Via Láctea (modelo)'], ['estrelas', 'Estrelas perto do Sol (800 mil, distância medida)'], ['masers', 'Regiões de formação de estrelas (masers)'], ['globulares', 'Aglomerados globulares'],
+    ['aglomeradosEstelares', 'Aglomerados estelares'], ['pulsares', 'Pulsares'], ['exoplanetas', 'Estrelas com planetas']] },
+  { grupo: 'Galáxias', itens: [['grupoLocal', 'Grupo Local'], ['galaxias', 'Galáxias próximas (NGC/IC e Volume Local)'], ['teia', 'Teia cósmica (2MASS Redshift Survey)'], ['levantamentos', 'Levantamentos profundos (6dF, SDSS e BOSS)']] },
   { grupo: 'Grandes estruturas', itens: [['aglomerados', 'Aglomerados de galáxias (raios X)'], ['superaglomerados', 'Superaglomerados'], ['vazios', 'Vazios cósmicos'], ['notaveis', 'Lugares notáveis (quasares, recordes, muralhas)']] },
   { grupo: 'Universo profundo', itens: [['quasares', 'Quasares (SDSS)'], ['cascas', 'Tempo da luz (anéis de 1 a 13 bilhões de anos)'], ['cmb', 'Radiação cósmica de fundo (Planck)']] },
   { grupo: 'Tela', itens: [['nomes', 'Nomes']] },
@@ -103,23 +105,30 @@ export function prepararGalaxia(G, THREE) {
       baixar('via-lactea.json'), baixar('via-lactea.bin', 'bin'), baixar('galaxia.json').catch(() => null),
       carregarImagem(CELULAR ? 'via-lactea-2048.jpg' : `via-lactea-${4096}.jpg`),
     ]);
+    const carga = (id, f) => G.carga?.etapa(id, f);
+    carga('via-lactea', 0.4);
     GX.meta = meta; GX.dados = dados;
     GX.cena = new THREE.Scene();
     GX.camera = new THREE.PerspectiveCamera(G.camera.fov, G.camera.aspect, 0.0005, 2e6);
     GX.foco = new THREE.Vector3();
     montarDisco(imagem);
+    carga('via-lactea', 0.6);
     await pausa();
     montarParticulas(bin);
     await pausa();
     montarMarcos();
     montarGrupoLocal();
+    carga('via-lactea');
     await pausa();
-    await UNI.prepararUniverso({ G, THREE, cena, meta, uniformes: GX.uniformes, rotulo, pontosAlvo, baixar, carregarImagem, adicionar: (...o) => GX.cena.add(...o) });
+    await UNI.prepararUniverso({ G, THREE, cena, meta, uniformes: GX.uniformes, rotulo, pontosAlvo, baixar, carregarImagem, adicionar: (...o) => GX.cena.add(...o), progresso: (f) => carga('universo', f) });
+    carga('universo');
     await pausa();
+    await CAT.prepararCatalogos({ THREE, meta, rotulo, pontosAlvo, baixar, adicionar: (...o) => GX.cena.add(...o) });
     montarGalaxiasNgc();
     montarCatalogos();
     montarInterface();
     aplicarCamadas();
+    carga('imagens');
     return GX;
   })();
   return GX.preparo;
@@ -232,7 +241,7 @@ function pontosAlvo(lista) {
 }
 
 /** Camada de cada classe de rótulo: com a camada desligada, o nome some junto. */
-const CAMADA_DO_ROTULO = { faixa: 'viaLactea', aglomerado: 'aglomerados', super: 'superaglomerados', notavel: 'notaveis', casca: 'cascas', local: 'grupoLocal', ngc: 'galaxias', ungc: 'galaxias' };
+const CAMADA_DO_ROTULO = { faixa: 'viaLactea', estelar: 'aglomeradosEstelares', pulsar: 'pulsares', exo: 'exoplanetas', aglomerado: 'aglomerados', super: 'superaglomerados', notavel: 'notaveis', casca: 'cascas', local: 'grupoLocal', ngc: 'galaxias', ungc: 'galaxias' };
 function rotulo(texto, p, { prioridade = 10, de = 0, ate = Infinity, classe = '', alvo = null, perto = false } = {}) {
   const e = el('span', { class: `globo-rotulo globo-rotulo-planeta galaxia-rotulo ${classe}`, text: texto, hidden: true });
   GX.G.dom.raiz.append(e);
@@ -474,9 +483,11 @@ function montarInterface() {
 
 /** Seções do painel de camadas (js/globo-camadas.js) desta escala, com as contagens dos catálogos. */
 export function secoesCamadas() {
-  const n = UNI.contagens();
+  const n = UNI.contagens(), c = CAT.contagens();
   const detalhe = { teia: n.galaxias ? `${num(n.galaxias)} galáxias` : null, quasares: n.quasares ? `${num(n.quasares)} quasares` : null, aglomerados: n.aglomerados ? `${num(n.aglomerados)} aglomerados` : null,
-    superaglomerados: n.super ? `${num(n.super)} superaglomerados` : null, vazios: n.vazios ? `${num(n.vazios)} vazios do SDSS` : null, galaxias: `${num((GX.ngc?.length || 0) + (GX.volume?.length || 0))} galáxias` };
+    superaglomerados: n.super ? `${num(n.super)} superaglomerados` : null, vazios: n.vazios ? `${num(n.vazios)} vazios do SDSS` : null, galaxias: `${num((GX.ngc?.length || 0) + (GX.volume?.length || 0))} galáxias`,
+    levantamentos: n.levantamentos ? `${num(n.levantamentos)} galáxias` : null, aglomeradosEstelares: c.aglomerados ? `${num(c.aglomerados)} aglomerados` : null,
+    pulsares: c.pulsares ? `${num(c.pulsares)} pulsares` : null, exoplanetas: c.sistemas ? `${num(c.planetas)} planetas em ${num(c.sistemas)} estrelas` : null };
   return CAMADAS_UNIVERSO.map((g) => ({ titulo: g.grupo, itens: g.itens.map(([chave, texto]) => ({ tipo: 'caixa', texto, detalhe: detalhe[chave] || null, valor: FG[chave], mudar: (v) => definirCamada(chave, v) })) }));
 }
 
@@ -543,6 +554,7 @@ export function atualizarGalaxia(agora) {
   GX.esferaUniverso.visible = G.cam.dist > 2e6;
   GX.particulas.visible = GX.poeira.visible = FG.viaLactea && GX.uniformes.face.value < 0.97; // de frente, só a imagem (as partículas somariam ~0)
   UNI.atualizarUniverso(G.cam.dist, FG, GX.camera);
+  CAT.atualizarCatalogos(G.cam.dist, FG);
   // perto do Sol (até uns 3 kpc), as estrelas reais aparecem e o modelo se apaga um pouco
   const dSol = GX.camera.position.distanceTo(GX.sol);
   GX.uniformes.perto.value = Math.max(0, Math.min(1, (4 - dSol) / 3));
@@ -622,7 +634,7 @@ const kpcTexto = (kpc) => textoAnosLuz(kpc * AL_POR_KPC).replace(/^(\d)/, '$1');
 function candidatos() {
   const zoom = GX.G.cam.dist;
   return [...GX.marcos, ...(FG.grupoLocal ? GX.locais : []), ...(FG.masers ? GX.masers : []), ...(FG.globulares ? GX.globulares : []),
-    ...(FG.galaxias ? [...GX.ngc, ...GX.volume] : []), ...UNI.candidatos(FG, zoom)];
+    ...(FG.galaxias ? [...GX.ngc, ...GX.volume] : []), ...UNI.candidatos(FG, zoom), ...CAT.candidatos(FG, zoom)];
 }
 
 /** Objeto sob o dedo: o mais próximo na tela dentro de 24 px ou do tamanho desenhado. */
@@ -673,7 +685,7 @@ function irAte(it) {
 function mostrarCartao(it) {
   const G = GX.G;
   const ir = (texto = 'Ir até') => ({ texto, onclick: () => { irAte(it); G.fecharPainel(); } });
-  if (UNI.cartao(it, G, ir)) return;
+  if (UNI.cartao(it, G, ir) || CAT.cartao(it, G, ir, kpcTexto)) return;
   const dSol = it.p.distanceTo(GX.sol);
   const R0 = GX.meta.R0;
   if (it.tipo === 'sol') {
@@ -854,7 +866,7 @@ function desenharSobreposicao(ctx, pr) {
 }
 
 export function notasFontes() {
-  return ['Via Láctea: modelo (Reid et al. 2019, Wegg et al. 2015, Bland-Hawthorn & Gerhard 2016)', 'Masers: Reid et al. 2019', 'Grupo Local: McConnachie 2012', 'Aglomerados globulares: Baumgardt & Vasiliev 2021', 'Galáxias: OpenNGC', ...UNI.notasFontes()];
+  return ['Via Láctea: modelo (Reid et al. 2019, Wegg et al. 2015, Bland-Hawthorn & Gerhard 2016)', 'Masers: Reid et al. 2019', 'Grupo Local: McConnachie 2012', 'Aglomerados globulares: Baumgardt & Vasiliev 2021', 'Galáxias: OpenNGC', ...CAT.notasFontes(), ...UNI.notasFontes()];
 }
 
 export const estado = () => GX;

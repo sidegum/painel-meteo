@@ -581,7 +581,7 @@ dialog::backdrop { background: rgba(10, 20, 26, .6); }
 .globo-painel-topo b { color: #eceef0; font-weight: 640; }
 .globo-fechar { min-width: 36px; min-height: 36px; border: 0; background: none; color: #dfe4ea; font-size: 22px; line-height: 1; }
 .globo-frase { margin: 4px 0 2px; font-size: 19px; font-weight: 700; font-stretch: 108%; line-height: 1.2; }
-.globo-numeros { margin: 0; font-size: 15px; font-weight: 560; }
+.globo-numeros { margin: 0; font-size: 15px; font-weight: 560; white-space: pre-line; }
 .globo-quando { margin: 4px 0 6px; font-size: 12.5px; color: #b7c0c9; }
 .globo-detalhe { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: none; color: #eceef0; font-size: 13px; font-weight: 600; }
 .tabela-detalhe { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -816,6 +816,20 @@ button.globo-rotulo { cursor: pointer; }
   .globo-camadas { left: auto; right: 58px; top: 56px; bottom: auto; width: 320px; max-height: calc(100% - 140px); border-radius: 14px; border-bottom: 1px solid rgba(255,255,255,.14); padding-bottom: 0; }
 }
 
+/* ---------- Globo: tela de carregamento (barra de progresso real, da Terra à borda do universo) ---------- */
+.globo-carga { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at 50% 42%, #0d1424 0%, #04060b 62%); transition: opacity .6s ease; }
+.globo-carga.saindo { opacity: 0; pointer-events: none; }
+.carga-caixa { width: min(460px, 100%); text-align: center; }
+.carga-titulo { margin: 0 0 6px; font-size: 22px; font-weight: 720; font-stretch: 108%; color: #f3f5f8; }
+.carga-etapa { margin: 0 0 18px; min-height: 2.7em; font-size: 14px; line-height: 1.35; color: #aab6c6; }
+.carga-linha { display: flex; align-items: center; gap: 12px; }
+.carga-barra { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+.carga-cheio { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #7fa6e8, #ffd166); transition: width .35s ease; }
+.carga-numero { flex: none; width: 3.2em; text-align: right; font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; color: #dfe4ea; }
+.carga-entrar { margin-top: 22px; min-height: 40px; padding: 0 18px; border-radius: 20px; border: 1px solid rgba(255,255,255,.3); background: none; color: #eceef0; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.carga-entrar[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .globo-carga, .carga-cheio { transition: none; } }
+
 /* Escala de galáxias (Via Láctea vista de fora): esconde o sistema solar e mostra só os controles dela */
 .globo.com-galaxia .globo-sistema-controles, .globo.com-galaxia .globo-espaco, .globo.com-galaxia .globo-rotulo:not(.galaxia-rotulo) { display: none !important; }
 .globo-galaxia-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none; }
@@ -828,6 +842,9 @@ button.globo-rotulo { cursor: pointer; }
 .globo-escala { display: flex; flex-direction: column-reverse; gap: 4px; pointer-events: none; }
 .globo-escala-barra { display: block; height: 2px; min-width: 20px; background: rgba(230,236,244,.9); box-shadow: 0 1px 2px #000; }
 .globo-escala-texto { font-size: 12px; font-weight: 600; color: #e6ecf4; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
+.galaxia-rotulo.estelar { color: #cfe0ff; }
+.galaxia-rotulo.pulsar { color: #b6f5ea; }
+.galaxia-rotulo.exo { color: #b4f7c6; }
 .galaxia-rotulo.faixa { color: #b9c8dc; font-style: italic; }
 .galaxia-rotulo.galaxia-sol { color: #ffe9a8; border-color: rgba(255,209,102,.5); }
 

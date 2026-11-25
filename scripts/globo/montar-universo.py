@@ -97,7 +97,8 @@ def tabela(caminho):
     i = next(k for k, l in enumerate(linhas) if l and not l.startswith('#'))
     cab = [c.strip() for c in linhas[i].split('\t')]
     out = []
-    for l in linhas[i + 3:]:
+    inicio = i + 3 if len(linhas) > i + 2 and linhas[i + 2].startswith('-') else i + 1  # reduzido por reduzir-tsv.py: só o cabeçalho
+    for l in linhas[inicio:]:
         if not l.strip():
             continue
         if l.startswith('#'):
@@ -158,6 +159,102 @@ def montar_quasares(pasta):
         d = COSMO.dc(z)
         x, y, w = (c * d for c in galactica(ra, dec))
         out.append((x, y, w, z))
+    return out
+
+
+def lb(ra, dec):
+    """Longitude e latitude galácticas (graus) de uma direção equatorial J2000."""
+    x, y, z = galactica(ra, dec)
+    return math.degrees(math.atan2(y, x)) % 360, math.degrees(math.asin(max(-1, min(1, z))))
+
+
+def montar_levantamentos(pasta, g2):
+    """6dFGS, SDSS (amostra principal) e BOSS: pontos (x, y, z em Mpc, fonte), sem repetir as galáxias do 2MRS.
+
+    A distância é a comóvel do desvio para o vermelho no referencial da radiação cósmica de fundo (mesma conta do 2MRS).
+    fonte: 0 = 6dFGS, 1 = SDSS, 2 = BOSS.
+    """
+    # grade de direções do 2MRS (células de 0,05°) para não desenhar a mesma galáxia duas vezes
+    celula = lambda x, y, z, d: (round(math.degrees(math.atan2(y, x)) * 20), round(math.degrees(math.asin(max(-1, min(1, z)))) * 20), round(d / 6))
+    vistos = set()
+    for p in g2:
+        d = math.sqrt(p[0] ** 2 + p[1] ** 2 + p[2] ** 2)
+        vistos.add(celula(p[0] / d, p[1] / d, p[2] / d, d))
+    pontos, contagem = [], [0, 0, 0]
+
+    def juntar(ra, dec, z, fonte):
+        if not 0.002 < z < 1.2:
+            return
+        x, y, zg = galactica(ra, dec)
+        d = COSMO.dc(z)
+        if fonte < 2 and celula(x, y, zg, d) in vistos:
+            return
+        pontos.append((x * d, y * d, zg * d, fonte))
+        contagem[fonte] += 1
+
+    for g in tabela(pasta / '6dfgs.tsv'):
+        cz = numero(g.get('cz'))
+        if cz is None or g.get('q_cz', '').strip() not in ('3', '4'):
+            continue  # só desvios para o vermelho confiáveis (qualidade 3 ou 4)
+        ra, dec = sexagesimal(g['RAJ2000'], g['DEJ2000'])
+        juntar(ra, dec, v_cmb(ra, dec, cz) / C_KMS, 0)
+    for g in tabela(pasta / 'sdss.tsv'):
+        ra, dec, z = numero(g.get('RAJ2000')), numero(g.get('DEJ2000')), numero(g.get('zcmb'))
+        if None not in (ra, dec, z):
+            juntar(ra, dec, z, 1)
+    for g in tabela(pasta / 'boss.tsv'):
+        ra, dec, z = numero(g.get('RA')), numero(g.get('DEC')), numero(g.get('Z'))
+        if None not in (ra, dec, z):
+            juntar(ra, dec, v_cmb(ra, dec, z * C_KMS) / C_KMS, 2)
+    return pontos, contagem
+
+
+def montar_via_lactea(pasta):
+    """Objetos da Via Láctea com distância: aglomerados estelares, pulsares e estrelas com planetas."""
+    out = {}
+    # aglomerados estelares: só a amostra confiável do artigo (CST > 5σ e classe do diagrama cor-magnitude > 0,5)
+    ae = []
+    for c in tabela(pasta / 'aglomerados-estelares.tsv'):
+        cst, cmd, d = numero(c.get('CST')), numero(c.get('CMDCl50')), numero(c.get('dist50'))
+        if c.get('Type', '').strip() == 'g' or None in (cst, cmd, d) or cst <= 5 or cmd <= 0.5:
+            continue
+        ae.append([c['Name'].strip().replace('_', ' '), r(numero(c['GLON']), 3), r(numero(c['GLAT']), 3), round(d), r(numero(c.get('logAge50')), 2),
+                   r(numero(c.get('r50pc')), 1), int(numero(c.get('N')) or 0), 1 if c.get('Type', '').strip() == 'm' else 0])
+    out['aglomeradosEstelares'] = {'colunas': ['nome', 'l', 'b', 'distPc', 'logIdade', 'r50Pc', 'estrelas', 'grupoMovel'], 'linhas': ae}
+    # pulsares com distância estimada
+    ps = []
+    for p in tabela(pasta / 'pulsares.tsv'):
+        d, l, b = numero(p.get('Dist')), numero(p.get('GLON')), numero(p.get('GLAT'))
+        if None in (d, l, b) or d <= 0:
+            continue
+        assoc = p.get('Assoc', '').strip()
+        onde = next((a.split(':', 1)[1].split('[')[0].replace('_', ' ') for a in assoc.split(',') if a.startswith(('GC:', 'SNR:', 'EXGAL:'))), None)
+        ps.append([p['PSRJ'].strip(), r(l, 2), r(b, 2), r(d, 2), r(numero(p.get('P0')), 5), r(numero(p.get('DM')), 1),
+                   1 if p.get('Binary', '').strip() else 0, numero(p.get('Age')), onde])
+    out['pulsares'] = {'colunas': ['nome', 'l', 'b', 'distKpc', 'periodoS', 'dm', 'binario', 'idadeAnos', 'associacao'], 'linhas': ps}
+    # exoplanetas agrupados por estrela
+    import csv
+    sistemas = {}
+    with open(pasta / 'exoplanetas.csv', newline='', encoding='utf-8') as f:
+        for e in csv.DictReader(f):
+            d, ra, dec = numero(e.get('sy_dist')), numero(e.get('ra')), numero(e.get('dec'))
+            if None in (d, ra, dec) or d <= 0:
+                continue
+            l, b = lb(ra, dec)
+            s = sistemas.setdefault(e['hostname'], {'n': e['hostname'], 'l': round(l, 4), 'b': round(b, 4), 'd': round(d, 2), 't': numero(e.get('st_teff')),
+                                                    'v': r(numero(e.get('sy_vmag')), 1), 'p': []})
+            ano = numero(e.get('disc_year'))
+            s['p'].append([e['pl_name'], r(numero(e.get('pl_rade')), 2), r(numero(e.get('pl_bmasse')), 2), r(numero(e.get('pl_orbper')), 3),
+                           r(numero(e.get('pl_orbsmax')), 4), r(numero(e.get('pl_eqt')), 0), int(ano) if ano else None, e.get('discoverymethod') or None])
+    for s in sistemas.values():
+        s['p'].sort(key=lambda p: (p[4] is None, p[4] or 0, p[0]))
+    out['exoplanetas'] = {'colunasPlaneta': ['nome', 'raioTerras', 'massaTerras', 'periodoDias', 'semieixoUA', 'tempEquilibrioK', 'ano', 'metodo'],
+                          'sistemas': sorted(sistemas.values(), key=lambda s: s['d'])}
+    out['fontes'] = {
+        'aglomeradosEstelares': 'Hunt & Reffert 2023, A&A 673, A114 (Gaia DR3; VizieR J/A+A/673/A114), amostra confiável',
+        'pulsares': 'Manchester et al. 2005, AJ 129, 1993 (catálogo ATNF, edição do VizieR B/psr); distância pela medida de dispersão quando não há paralaxe',
+        'exoplanetas': 'NASA Exoplanet Archive, Planetary Systems Composite Parameters (consulta de 2026-11-25)',
+    }
     return out
 
 
@@ -239,6 +336,28 @@ def main():
                         'formato': "'UNV1', n2mrs, nQuasares (uint32), escala2mrs, escalaQuasares (float32, Mpc); 2MRS: x, y, z int16 "
                                    "(× escala/32767, galácticas a partir do Sol: x para o centro, y para l = 90°, z para o polo norte), "
                                    "M_K uint8 ((M+30)×10; 0 = sem), T int8; quasares: x, y, z int16, z ×1000 uint16"}
+    # levantamentos profundos: binário próprio (o app carrega junto com o universo)
+    if (fontes / 'sdss.tsv').exists():
+        lev, cont = montar_levantamentos(fontes, g2)
+        el_ = max(max(abs(c) for c in p[:3]) for p in lev) * 1.0001
+        corpo_l = bytearray(b'LEV1') + struct.pack('<If', len(lev), el_)
+        for p in lev:
+            corpo_l += struct.pack('<hhh', q16(p[0], el_), q16(p[1], el_), q16(p[2], el_))
+        corpo_l += bytes(p[3] for p in lev)
+        (saida / 'levantamentos.bin').write_bytes(bytes(corpo_l))
+        dados['levantamentos'] = {'n': len(lev), 'escala': el_, 'porFonte': {'6dfgs': cont[0], 'sdss': cont[1], 'boss': cont[2]},
+                                  'formato': "'LEV1', n (uint32), escala (float32, Mpc); x, y, z int16 (como no 2MRS); fonte uint8 (0 = 6dFGS, 1 = SDSS, 2 = BOSS)"}
+        dados['fontes'].update({
+            '6dfgs': 'Jones et al. 2009, MNRAS 399, 683 (6dF Galaxy Survey DR3; VizieR VII/259), qualidade 3 e 4',
+            'sdss': 'Tempel et al. 2014, A&A 566, A1 (SDSS DR10, amostra principal; VizieR J/A+A/566/A1), amostra de 1 em 3',
+            'boss': 'Reid et al. 2016, MNRAS 455, 1553 (BOSS DR12, CMASS + LOWZ), amostra de 1 em 8',
+        })
+        print('levantamentos', len(lev), cont, 'escala', round(el_), 'Mpc')
+    if (fontes / 'exoplanetas.csv').exists():
+        vl = montar_via_lactea(fontes)
+        (saida / 'catalogos.json').write_text(json.dumps(vl, ensure_ascii=False, separators=(',', ':')))
+        print('aglomerados estelares', len(vl['aglomeradosEstelares']['linhas']), 'pulsares', len(vl['pulsares']['linhas']),
+              'sistemas planetários', len(vl['exoplanetas']['sistemas']), 'planetas', sum(len(s['p']) for s in vl['exoplanetas']['sistemas']))
     (saida / 'universo.json').write_text(json.dumps(dados, ensure_ascii=False, separators=(',', ':')))
     print('2MRS', len(g2), 'quasares', len(qs), 'UNGC', len(ungc), 'MCXC', len(ag), 'MSCC', len(su),
           'com nome', sum(1 for s in su if s['n']), 'vazios', len(vz), 'bin', len(corpo))
