@@ -759,6 +759,12 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `globo-astro.js` | pontos subsolar e sublunar e posições para o sistema solar |
 | `globo-estrelas.js` | céu: 802.474 estrelas (HYG v4.1: 8.920 até magnitude 6,5 e 110.705 mais fracas; Gaia DR3: 682.849 até G 10,5 fora do Hipparcos, com distância de Bailer-Jones; as fracas carregadas depois em partes), Via Láctea, 12.162 galáxias, nebulosas e aglomerados (Messier, austrais famosos e OpenNGC) e linhas das 88 constelações; precessão e nutação para a data, giro pelo tempo sideral, tamanho e brilho pela magnitude e cor pelo B−V em shader próprio; no sistema solar, estrelas em 3D na distância real |
 | `globo-corpos.js` | cálculo puro (testado em `test/corpos.test.mjs`): luas, corpos menores, propagação kepleriana, polos e rotação da IAU (WGCCRE 2015), raios e planetas anões oficiais |
+| `globo-escalas.js` | régua de escalas (1.12.0): onde a câmera está, da Terra ao universo observável, e o atalho para cada escala |
+| `globo-camadas.js` | painel único de camadas (1.12.0): desenha as seções que cada módulo descreve e devolve as escolhas |
+| `globo-carga.js` | tela de carregamento com barra de progresso real (1.12.0) |
+| `cosmologia.js` | cálculo puro (testado em `test/cosmologia.test.mjs`): ΛCDM plano do Planck 2018, distância comóvel, tempo da luz, idade e horizonte |
+| `globo-universo.js` | escala do universo (1.12.0): Volume Local, teia cósmica, aglomerados, superaglomerados, vazios, quasares, radiação cósmica de fundo |
+| `globo-catalogos.js` | catálogos da Via Láctea (1.12.0): aglomerados estelares, pulsares e estrelas com planetas |
 | `globo-espaco.js` | Espaço: satélites, planetas e estrelas tocáveis em volta da Terra, filtros e o sistema solar navegável (planetas, luas, corpos menores, cinturões reais e sondas) |
 | `globo-sondas.js` | fichas das missões e interpolação de Hermite dos vetores do JPL Horizons |
 | `globo-texturas.js` | texturas procedurais dos astros |
@@ -931,3 +937,70 @@ TNO). `workflow_dispatch` com `so=sondas` ou `so=corpos` força a regeração.
 Pré-carregamento: assim que a Terra aparece, `prepararEspaco` monta em tempo ocioso os satélites, os planetas no céu e
 o sistema solar com as sondas, tudo escondido; abrir Espaço ou Sistema solar só torna visível.
 
+### 12.x Escalas, camadas, carregamento e universo (1.12.0)
+
+**Divisão da tela.** O Globo deixou de ter os botões "Espaço", "Sistema solar", "Filtros" e as fichas de grupos de
+satélites. No lugar há dois controles, iguais em toda escala:
+
+- **Escalas** (`globo-escalas.js`): Terra, Órbita da Terra, Sistema solar, Vizinhança do Sol, Via Láctea, Grupo Local,
+  Volume Local, Laniakea, Teia cósmica, Universo profundo e Universo observável. No computador (`min-width: 1100px` e
+  `pointer: fine`) é uma régua vertical à esquerda, sempre à vista, com a escala atual acesa. No celular, fora da Terra,
+  ficam no alto o botão "‹ Terra" (saída sempre visível, fora do grupo que se recolhe) e o nome da escala, que abre a
+  lista; na Terra, a lista abre pelo botão de escalas da coluna da direita. O zoom continua contínuo: a régua só dá nome
+  ao lugar (`idAtual`, lido algumas vezes por segundo no laço) e leva direto a ele (`irParaEscala` em `globo.js`, que
+  monta o que faltar no caminho e ignora pedidos antigos pelo contador `G.pedidoEscala`). A raiz ganha
+  `data-escala`, que o CSS usa para tirar de cena os controles do tempo fora da Terra.
+- **Camadas** (`globo-camadas.js`): um painel escuro (à direita no computador, de baixo para cima no celular, no máximo
+  70% da altura) com as seções da escala atual. Cada módulo descreve as próprias seções (`secoesCamadas` em `globo.js`,
+  `globo-espaco.js` e `globo-galaxia.js`) como itens `caixa` (liga/desliga) ou `opcoes` (uma entre várias); o efeito
+  aparece na hora. As escolhas ficam em `prefs`: `globo:satelites`, `globo:camadasUniverso`, `globoGrade`,
+  `globoSemCidades`.
+
+**Carregamento** (`globo-carga.js`). Ao abrir a aba, uma tela cobre o globo com uma barra de progresso até tudo estar
+baixado e montado: Terra, tempo, contornos e cidades, satélites e sondas, sistema solar, Via Láctea, universo, imagens
+e nomes (inclui as 800 mil estrelas com distância). Cada etapa tem um peso proporcional ao tempo medido e avança
+quando o trabalho dela termina (`G.carga.etapa(id, fracao)`), chamada por `carregarTudo` e `prepararEscalas` em
+`globo.js`, por `prepararEspaco` e por `prepararGalaxia`. Etapa que falha conta como encerrada, para a tela nunca ficar
+presa; depois de 9 s aparece "Entrar agora", que abre o Globo com o resto carregando ao fundo. Depois da barra, a troca
+de escala é imediata. Na segunda visita os arquivos vêm do cache do navegador.
+
+**Cosmologia** (`cosmologia.js`). ΛCDM plano com os parâmetros do Planck 2018 (H0 = 67,66 km/s/Mpc, Ωm = 0,3111, Ωr
+pela temperatura de 2,7255 K e Neff = 3,046). Distância comóvel, tempo da luz e idade vêm de uma tabela em ln(1+z)
+integrada por Simpson e lida com interpolação de Hermite (erro abaixo de 1e-4 contra a integração direta, conferido no
+teste). Resultados: idade de 13,79 bilhões de anos, horizonte de partículas a 46,2 bilhões de anos-luz, última
+dispersão (z = 1089,8) a 45,3 bilhões. Todo objeto que só tem desvio para o vermelho usa essa conta (antes a galáxia
+usava H0 = 70 e a lei de Hubble linear); o desvio é levado ao referencial da radiação cósmica de fundo pelo dipolo do
+Planck (369,82 km/s para l = 264,021°, b = 48,253°).
+
+**Universo** (`globo-universo.js`, mesma cena da Via Láctea, em kpc). Tudo é catálogo medido, montado por
+`scripts/globo/montar-universo.py` a partir dos arquivos de `scripts/globo/fontes/universo/`, que o workflow
+`universo-fontes.yml` baixa do VizieR (espelho do CfA), do NASA Exoplanet Archive, do SDSS e do IRSA, porque o ambiente
+de desenvolvimento não alcança esses servidores:
+
+| Camada | Fonte | Quantos |
+|---|---|---|
+| Galáxias próximas com distância direta | Karachentsev et al. 2013 | 869 |
+| Teia cósmica | 2MASS Redshift Survey, Huchra et al. 2012 | 43.418 |
+| Levantamentos profundos | 6dFGS DR3, SDSS DR10 (1 em 3), BOSS DR12 (1 em 8) | 458.278 |
+| Aglomerados em raios X | MCXC, Piffaretti et al. 2011 | 1.743 |
+| Superaglomerados | MSCC, Chow-Martínez et al. 2014 | 601 |
+| Vazios | VoidFinder no SDSS DR7, Douglass et al. 2023 | 1.163 |
+| Quasares | SDSS DR16Q, Lyke et al. 2020 (1 em 8) | 93.797 |
+| Radiação cósmica de fundo | Planck SMICA (release 2), por `montar-cmb.py` | mapa de 4096 px (2048 no celular) |
+
+Além deles, a lista `NOTAVEIS` traz objetos com coordenadas e desvio publicados (quasares históricos, as galáxias
+mais distantes confirmadas, campos profundos, muralhas e o Grande Atrator), e os anéis do tempo da luz marcam de onde
+a luz saiu há 1, 2, 4, 6, 8, 10, 12 e 13 bilhões de anos. O brilho de cada nuvem de pontos cai com o zoom, porque de
+longe milhares de pontos se somam no mesmo pixel. As fatias e os cones são a área do céu de cada levantamento, o que a
+Ajuda diz. Nomes na tela: só Abell e nomes populares; as siglas de levantamento ficam no cartão.
+
+**Via Láctea** (`globo-catalogos.js`, `vendor/ceu/catalogos.json`): 4.084 aglomerados estelares (Hunt & Reffert 2023,
+só a amostra confiável do artigo: CST > 5 e classe do diagrama cor-magnitude > 0,5), 2.480 pulsares com distância
+(catálogo ATNF na edição do VizieR, que é mais antiga que a do site do ATNF) e 6.445 exoplanetas agrupados em 4.837
+estrelas (NASA Exoplanet Archive). Cada um é um ponto tocável com cartão; a distância dos pulsares é estimada pela
+dispersão do sinal quando não há paralaxe, e o cartão diz isso.
+
+**Testado e não testado.** Testado no Chromium (renderização por software) em 1600×900 e no perfil do iPhone 13: a
+barra de carregamento até o fim, todas as escalas pela régua e pela lista, o painel de camadas, a pinça por CDP para
+fora e a volta pelo "‹ Terra". Não testado em iPhone real nem com placa de vídeo real: o tempo de carregamento e a
+fluidez com 458 mil galáxias no celular (onde metade delas é desenhada) são estimativas.

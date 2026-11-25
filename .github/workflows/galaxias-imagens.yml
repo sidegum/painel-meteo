@@ -1,0 +1,36 @@
+name: Imagens reais de galáxias
+
+# Baixa do Wikimedia Commons as fotografias das galáxias listadas em scripts/globo/imagens-galaxias.json, prepara as
+# texturas (scripts/globo/baixar-imagens-galaxias.py) e grava em vendor/galaxias no branch em que rodou. Só sob demanda.
+on:
+  workflow_dispatch:
+  push:
+    branches-ignore: [main, globo-dados, site-github]
+    paths:
+      - scripts/globo/imagens-galaxias.json
+      - scripts/globo/baixar-imagens-galaxias.py
+      - .github/workflows/galaxias-imagens.yml
+
+permissions:
+  contents: write
+
+jobs:
+  baixar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Baixar e preparar
+        run: |
+          pip install --quiet numpy pillow
+          python3 scripts/globo/baixar-imagens-galaxias.py scripts/globo/imagens-galaxias.json vendor/galaxias
+      - name: Gravar no branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vendor/galaxias
+          git commit -m "Imagens reais de galáxias (Wikimedia Commons)" || exit 0
+          for espera in 0 10 30; do sleep $espera; git pull --rebase --quiet && git push && break; done
