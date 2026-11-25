@@ -1,20 +1,13 @@
 name: Fontes da escala do universo
 
 # Baixa os catálogos da escala do universo (scripts/globo/baixar-fontes-universo.sh) e o mapa da radiação cósmica de
-# fundo do Planck (scripts/globo/montar-cmb.py), e grava no branch em que rodou. Só sob demanda: os catálogos são fixos.
+# fundo do Planck (scripts/globo/montar-cmb.py), e grava no branch em que rodou. Só sob demanda (workflow_dispatch no branch desejado): os catálogos são fixos e o gatilho de push gravava em branches de outros trabalhos.
 on:
   workflow_dispatch:
     inputs:
       modo:
         description: 'amostra (só confere colunas) ou completo'
         default: completo
-  push:
-    branches-ignore: [main, globo-dados]
-    paths:
-      - scripts/globo/baixar-fontes-universo.sh
-      - scripts/globo/montar-cmb.py
-      - scripts/globo/reduzir-*.py
-      - .github/workflows/universo-fontes.yml
 
 permissions:
   contents: write

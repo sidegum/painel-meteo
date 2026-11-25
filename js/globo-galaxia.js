@@ -110,6 +110,7 @@ export function prepararGalaxia(G, THREE) {
     GX.meta = meta; GX.dados = dados;
     GX.fotos = (fotos?.galaxias || []).map((f) => ({ ...f, usada: false }));
     GX.fotoDe = indiceDirecao(GX.fotos);
+    GX.irAte = irAte; // usado pelos testes de tela (window.__globo.galaxia.estado().irAte)
     GX.cena = new THREE.Scene();
     GX.camera = new THREE.PerspectiveCamera(G.camera.fov, G.camera.aspect, 0.0005, 2e6);
     GX.foco = new THREE.Vector3();
@@ -126,6 +127,8 @@ export function prepararGalaxia(G, THREE) {
     carga('universo');
     await pausa();
     await CAT.prepararCatalogos({ THREE, meta, rotulo, pontosAlvo, baixar, adicionar: (...o) => GX.cena.add(...o) });
+    // os objetos NGC/IC chegam com o catálogo profundo do céu: sem esperar, no celular as galáxias com nome ficavam de fora
+    await Promise.race([G.estrelas?.pronto?.then(() => G.estrelas.prontoProfundo).catch(() => null), new Promise((ok) => setTimeout(ok, 25000))]);
     montarGalaxiasNgc();
     montarCatalogos();
     montarInterface();
@@ -482,7 +485,8 @@ function montarGalaxiasNgc() {
     if (!/^(s|l|e|i|gg)$/.test(ob.tipo) || locais.has(ob.designacao)) continue;
     const u = daUngc(ob.ra, ob.dec, 0.08);
     if (u) usadas.add(u);
-    const dKpc = u ? u.d * 1000 : ob.distAnosLuz / AL_POR_KPC;
+    // sem distância no catálogo de objetos nem no UNGC: vale a do manifesto das fotografias, quando a galáxia tem uma
+    const dKpc = u ? u.d * 1000 : ob.distAnosLuz ? ob.distAnosLuz / AL_POR_KPC : (GX.fotoDe?.(ob.ra, ob.dec, 0.2)?.distMpc ?? NaN) * 1000;
     if (!(dKpc > 450)) continue;
     const tam = Math.max(...String(ob.dim || '0.5').split('x').map(Number).filter(Number.isFinite), 0.3); // minutos de arco
     const diam = u?.diam || Math.max(0.5, dKpc * tam / 60 * RAD);
@@ -495,6 +499,7 @@ function montarGalaxiasNgc() {
     const espiral = u.tt != null && u.tt >= 1 && u.tt <= 9;
     GX.volume.push({ tipo: 'ungc', u, nome: nomeUngc(u.n), p: cena(u.ra, u.dec, u.d * 1000, new THREE.Vector3()), cor: espiral ? '#cfdcf5' : u.tt != null && u.tt < 0 ? '#ffe3c0' : '#d9d4e6',
       diam: Math.max(0.3, u.diam || 1), minPx: (u.lk || 7) > 9.5 ? 2.6 : 1.8, k: Math.max(0.4, Math.min(1, ((u.lk || 7) - 6.5) / 3.5)) });
+    ligarFoto(GX.volume.at(-1), u.ra, u.dec, u.d * 1000);
   }
   GX.pontosNgc = pontosAlvo([...GX.ngc, ...GX.volume]);
   GX.cena.add(GX.pontosNgc);
@@ -584,9 +589,10 @@ export function fecharGalaxia() {
 }
 
 /** Viagem suave até um ponto: foco e distância em escala logarítmica, latitude da câmera junto. */
-function irPara(p, dist, lat = null, ms = 2200) {
+function irPara(p, dist, lat = null, ms = 2200, lon = null) {
   const { G } = GX;
-  GX.anim = { de: GX.foco.clone(), para: p, dist0: G.cam.dist, dist1: dist, lat0: G.cam.lat, lat1: lat ?? G.cam.lat, t0: performance.now(), ms };
+  const lon1 = lon == null ? G.cam.lon : G.cam.lon + ((lon - G.cam.lon + 540) % 360 - 180); // pelo caminho mais curto
+  GX.anim = { de: GX.foco.clone(), para: p, dist0: G.cam.dist, dist1: dist, lat0: G.cam.lat, lat1: lat ?? G.cam.lat, lon0: G.cam.lon, lon1, t0: performance.now(), ms };
   G.cam.vLat = G.cam.vLon = 0;
 }
 
@@ -617,6 +623,7 @@ export function atualizarGalaxia(agora) {
     GX.foco.lerpVectors(a.de, a.para, e);
     G.cam.dist = Math.exp(Math.log(a.dist0) + (Math.log(a.dist1) - Math.log(a.dist0)) * e);
     G.cam.lat = a.lat0 + (a.lat1 - a.lat0) * e;
+    G.cam.lon = a.lon0 + (a.lon1 - a.lon0) * e;
     if (t >= 1) GX.anim = null;
   }
   posicionar(G.cam);
@@ -754,6 +761,11 @@ function irAte(it) {
     : it.tipo === 'super' ? raio * 3.5 : it.tipo === 'notavel' ? Math.max(4000, raio * 4) : Math.max(0.05, raio * 3.2);
   // viagens longas (bilhões de anos-luz) demoram um pouco mais, para a escala ser percebida
   const ms = 2600 + Math.min(2400, Math.abs(Math.log10(Math.max(1, it.p.distanceTo(GX.foco)) / Math.max(1, GX.G.cam.dist))) * 500);
+  if (it.foto?.malha) { // galáxia com fotografia: a câmera chega pelo lado do Sol, para vê-la como a vemos da Terra
+    const v = GX.sol.clone().sub(it.p).normalize();
+    irPara(it.p, it.foto.tamanhoKpc * 1.5, Math.asin(v.y) / RAD, MOVIMENTO_REDUZIDO ? 1 : ms, Math.atan2(-v.z, v.x) / RAD);
+    return;
+  }
   irPara(it.p, dist, null, MOVIMENTO_REDUZIDO ? 1 : ms);
 }
 
@@ -811,7 +823,7 @@ function mostrarCartao(it) {
       `A ${kpcTexto(it.p.length())} do centro da Galáxia`, 'Baumgardt & Vasiliev 2021', [ir()]);
   } else if (it.tipo === 'ngc') {
     const c = cartaoObjeto(it.ob, G.estadoApp);
-    const como = it.u ? `, medida por ${METODOS[it.u.m] || 'métodos diretos'}` : it.ob.distFonte === 'z' ? ' (pelo desvio para o vermelho)' : '';
+    const como = it.u ? `, medida por ${METODOS[it.u.m] || 'métodos diretos'}` : it.ob.distFonte === 'z' ? ' (pelo desvio para o vermelho)' : !it.ob.distAnosLuz && it.foto?.fonteDist ? ` (${it.foto.fonteDist})` : '';
     G.mostrarPainel(c.titulo, `${TIPOS_OBJETO[it.ob.tipo]?.[0] || 'Galáxia'} a ${kpcTexto(dSol)}${como}.`,
       `Cerca de ${num(it.diam * AL_POR_KPC / 1000, 0)} mil anos-luz de diâmetro`, it.u ? `${c.fonte.split(' · ')[0]} · distância: Karachentsev et al. 2013` : c.fonte.split(' · ')[0], [ir(), { texto: 'Ver detalhes', onclick: c.detalhes }].filter((x) => x.onclick));
   }
@@ -849,10 +861,13 @@ export const ESCALAS = [
   { id: 'observavel', nome: 'Universo observável', texto: 'a radiação cósmica de fundo e a borda do que se pode ver', foco: () => GX.sol, dist: 4.2e7, lat: 20 },
 ];
 
-/** Escala mais próxima da vista atual (pela distância da câmera, em escala logarítmica). */
+/**
+ * Escala mais próxima da vista atual, em escala logarítmica. Conta a maior entre a distância da câmera ao foco e a do
+ * foco ao Sol: de perto de outra galáxia o lugar continua sendo, por exemplo, o Volume Local, e não a Via Láctea.
+ */
 export function escalaAtual() {
   if (!GX.aberto) return null;
-  const lz = Math.log10(GX.G.cam.dist);
+  const lz = Math.log10(Math.max(GX.G.cam.dist, GX.foco.distanceTo(GX.sol) * 3)); // ×3: a escala precisa conter o caminho até lá com folga
   return ESCALAS.reduce((m, e) => (Math.abs(Math.log10(e.dist) - lz) < Math.abs(Math.log10(m.dist) - lz) ? e : m), ESCALAS[0]);
 }
 

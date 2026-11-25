@@ -1011,6 +1011,21 @@ só a amostra confiável do artigo: CST > 5 e classe do diagrama cor-magnitude >
 estrelas (NASA Exoplanet Archive). Cada um é um ponto tocável com cartão; a distância dos pulsares é estimada pela
 dispersão do sinal quando não há paralaxe, e o cartão diz isso.
 
+**Fotografias de galáxias (1.12.2)** (`montarFotos` em `globo-galaxia.js`, `vendor/galaxias`). 35 galáxias próximas
+e famosas aparecem com a fotografia real no lugar do disco desenhado: Andrômeda, Triângulo, as Nuvens de Magalhães,
+M51, M81, M82, M101, Sombrero, M87, Centaurus A, M83, as Antenas e outras. A lista fica em
+`scripts/globo/imagens-galaxias.json`; o workflow `galaxias-imagens.yml` roda `baixar-imagens-galaxias.py`, que busca
+cada imagem no Wikimedia Commons (só licenças livres), recorta, apaga o fundo, mede o centro e o eixo maior da galáxia
+na própria imagem e grava duas versões (até 2048 px no computador, 1024 px no celular) e `galaxias.json`, com autor,
+licença e página de cada uma. Na cena, cada fotografia é um plano virado para o Sol, na posição do catálogo, com o
+tamanho físico pelo diâmetro D25 do HyperLEDA e o eixo maior girado para o ângulo de posição do mesmo catálogo: é a
+galáxia como a vemos da Terra, e por isso `irAte` chega nela pelo lado do Sol. De outros ângulos o plano é visto de
+viés, o que é um limite do método (não existe fotografia de outro ponto de vista). A fotografia só acende quando ocupa
+mais de 18 px na tela; o cartão do objeto mostra autor e licença. A imagem da Grande Nuvem de Magalhães é em
+infravermelho (Spitzer e Herschel) e a de M110 é do 2MASS, também em infravermelho; a de Centaurus A soma o visível
+às ondas submilimétricas e aos raios X. A régua de escalas passou a contar a distância do foco ao Sol: perto de outra
+galáxia o lugar mostrado é o Volume Local, e não mais "Via Láctea".
+
 **Testado e não testado.** Testado no Chromium (renderização por software) em 1600×900 e no perfil do iPhone 13: a
 barra de carregamento até o fim, todas as escalas pela régua e pela lista, o painel de camadas, a pinça por CDP para
 fora e a volta pelo "‹ Terra". Não testado em iPhone real nem com placa de vídeo real: o tempo de carregamento e a

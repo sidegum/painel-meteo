@@ -1,15 +1,9 @@
 name: Imagens reais de galáxias
 
 # Baixa do Wikimedia Commons as fotografias das galáxias listadas em scripts/globo/imagens-galaxias.json, prepara as
-# texturas (scripts/globo/baixar-imagens-galaxias.py) e grava em vendor/galaxias no branch em que rodou. Só sob demanda.
+# texturas (scripts/globo/baixar-imagens-galaxias.py) e grava em vendor/galaxias no branch em que rodou. Só sob demanda (workflow_dispatch no branch desejado): o gatilho de push gravava em branches de outros trabalhos.
 on:
   workflow_dispatch:
-  push:
-    branches-ignore: [main, globo-dados, site-github]
-    paths:
-      - scripts/globo/imagens-galaxias.json
-      - scripts/globo/baixar-imagens-galaxias.py
-      - .github/workflows/galaxias-imagens.yml
 
 permissions:
   contents: write
