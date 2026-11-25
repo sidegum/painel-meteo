@@ -8,9 +8,18 @@ on:
       modo:
         description: 'amostra (só confere colunas) ou completo'
         default: completo
+  push:
+    branches-ignore: [main, globo-dados]
+    paths:
+      - scripts/globo/baixar-fontes-universo.sh
+      - scripts/globo/montar-cmb.py
+      - .github/workflows/universo-fontes.yml
 
 permissions:
   contents: write
+
+env:
+  MODO: ${{ inputs.modo || 'amostra' }}  # no push: o modo escrito aqui
 
 jobs:
   baixar:
@@ -19,19 +28,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Baixar os catálogos
-        run: scripts/globo/baixar-fontes-universo.sh scripts/globo/fontes/universo "${{ inputs.modo }}"
+        run: scripts/globo/baixar-fontes-universo.sh scripts/globo/fontes/universo "$MODO"
       - uses: actions/setup-python@v5
-        if: inputs.modo == 'completo'
+        if: env.MODO == 'completo'
         with:
           python-version: '3.12'
       - name: Radiação cósmica de fundo (Planck)
-        if: inputs.modo == 'completo' && hashFiles('scripts/globo/montar-cmb.py') != ''
+        if: env.MODO == 'completo' && hashFiles('scripts/globo/montar-cmb.py') != ''
         continue-on-error: true
         run: |
           pip install --quiet numpy healpy pillow
           python3 scripts/globo/montar-cmb.py vendor/ceu
       - name: Gravar no branch
-        if: inputs.modo == 'completo'
+        if: env.MODO == 'completo'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
