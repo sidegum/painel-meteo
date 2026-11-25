@@ -35,7 +35,7 @@ const COR_CEU = { Mercury: '#c9c4bb', Venus: '#fff3cf', Mars: '#ff9a6a', Jupiter
 
 const E = {
   THREE: null, G: null, preparo: null, grupo: null, dom: null, modo: 'terra', aberto: false,
-  sats: {}, pontos: {}, ativos: new Set(['estacoes']), rotulos: [], notaSat: '', geradoSat: null, ultimo: 0,
+  sats: {}, pontos: {}, ativos: new Set(prefs.ler('globo:satelites', ['estacoes'])), rotulos: [], notaSat: '', geradoSat: null, ultimo: 0,
   selecao: null, ceu: [], estrelas: [], constelacoes: [], objetos: [], sistema: null, sondas: null, corpos: null,
 };
 
@@ -64,31 +64,34 @@ function aplicarFiltros() {
   if (E.sistema) aplicarFiltrosSistema();
 }
 
-/** Painel de filtros: o que vale para o modo aberto (céu em volta da Terra ou sistema solar). */
-function abrirFiltros() {
-  const caixa = (chave, texto) => {
-    const i = el('input', { type: 'checkbox' }); i.checked = !!F[chave];
-    i.addEventListener('change', () => { F[chave] = i.checked; gravarFiltros(); });
-    return el('label', { class: 'filtro' }, i, el('span', { text: texto }));
-  };
-  const mags = el('div', { class: 'filtro-opcoes', role: 'radiogroup', 'aria-label': 'Estrelas' }, ...MAGS.map(([m, texto]) => {
-    const b = el('button', { type: 'button', role: 'radio', 'aria-checked': String(F.magEstrelas === m), text: texto });
-    b.addEventListener('click', () => { F.magEstrelas = m; for (const x of b.parentElement.children) x.setAttribute('aria-checked', String(x === b)); gravarFiltros(); });
-    return b;
-  }));
+/**
+ * Seções do painel de camadas (js/globo-camadas.js) para a órbita da Terra e o sistema solar: satélites, céu e corpos.
+ * Cada escolha vale na hora e fica gravada.
+ */
+export function secoesCamadas() {
+  const caixa = (chave, texto) => ({ tipo: 'caixa', texto, valor: !!F[chave], mudar: (v) => { F[chave] = v; gravarFiltros(); } });
   const sistema = E.modo === 'sistema';
-  mostrarInfo('O que mostrar',
-    el('div', { class: 'filtros' },
-      el('h4', { text: 'Estrelas' }), mags,
-      caixa('nomesEstrelas', 'Nomes das estrelas mais brilhantes'),
-      caixa('viaLactea', 'Via Láctea'),
-      caixa('objetos', 'Galáxias, nebulosas e aglomerados'),
-      sistema ? null : caixa('linhas', 'Linhas das constelações'),
-      sistema ? null : caixa('nomesConst', 'Nomes das constelações'),
-      el('h4', { text: sistema ? 'Sistema solar' : 'Em volta da Terra' }),
-      ...(sistema
-        ? [caixa('orbitas', 'Órbitas'), caixa('escala', 'Escala de distâncias (UA e tempo da luz)'), caixa('luas', 'Luas'), caixa('pequenos', 'Planetas anões, asteroides e cometas'), caixa('cinturoes', 'Cinturões de asteroides e de Kuiper'), caixa('sondas', 'Sondas e telescópios'), caixa('rotasSondas', 'Rotas das sondas'), caixa('rotulos', 'Nomes')]
-        : [caixa('planetas', 'Planetas no céu'), caixa('trilhas', 'Órbita da ISS e da Tiangong')])));
+  const ceu = { titulo: 'Céu', itens: [
+    { tipo: 'opcoes', texto: 'Estrelas', valor: F.magEstrelas, opcoes: MAGS, mudar: (v) => { F.magEstrelas = v; gravarFiltros(); } },
+    caixa('nomesEstrelas', 'Nomes das estrelas mais brilhantes'), caixa('viaLactea', 'Via Láctea'), caixa('objetos', 'Galáxias, nebulosas e aglomerados'),
+    sistema ? null : caixa('linhas', 'Linhas das constelações'), sistema ? null : caixa('nomesConst', 'Nomes das constelações'),
+  ] };
+  if (sistema) {
+    return [{ titulo: 'Sistema solar', itens: [caixa('orbitas', 'Órbitas'), caixa('luas', 'Luas'), caixa('pequenos', 'Planetas anões, asteroides e cometas'), caixa('cinturoes', 'Cinturões de asteroides e de Kuiper'),
+      caixa('sondas', 'Sondas e telescópios'), caixa('rotasSondas', 'Rotas das sondas'), caixa('escala', 'Escala de distâncias (UA e tempo da luz)'), caixa('rotulos', 'Nomes')] }, ceu];
+  }
+  const grupo = (g) => ({ tipo: 'caixa', texto: g.nome, detalhe: g.detalhe, valor: E.ativos.has(g.id), mudar: (v) => ligarGrupo(g.id, v) });
+  return [{ titulo: 'Satélites', itens: [...GRUPOS.map(grupo), caixa('trilhas', 'Órbita da ISS e da Tiangong')] }, { titulo: 'No céu', itens: [caixa('planetas', 'Planetas')] }, ceu];
+}
+
+/** Liga ou desliga um grupo de satélites (Estações, Mais brilhantes, Meteorológicos, GPS) e grava a escolha. */
+function ligarGrupo(id, ligar) {
+  if (ligar) E.ativos.add(id); else E.ativos.delete(id);
+  prefs.gravar('globo:satelites', [...E.ativos]);
+  if (E.pontos[id]) E.pontos[id].visible = ligar;
+  if (!ligar && E.selecao?.s?.grupo === id) limparSelecao();
+  E.ultimo = 0;
+  aplicarFiltros();
 }
 
 // ------------------------------------------------------------------ preparo, abrir e fechar
@@ -110,7 +113,9 @@ export function prepararEspaco(G, THREE) {
     else E.notaSat = `Satélites indisponíveis agora (${sats.reason?.message || 'falha'}).`;
     E.sondas = sondas.status === 'fulfilled' ? sondas.value : null;
     E.corpos = corpos.status === 'fulfilled' ? corpos.value : null;
+    G.carga?.etapa('orbita');
     E.sistema = await montarSistema();
+    G.carga?.etapa('sistema');
     E.dom.nota.textContent = E.notaSat;
   })();
   return E.preparo;
@@ -149,24 +154,13 @@ export const terraDoSistema = () => (SIS.terra ? { malha: SIS.terra, raio: raioC
 /** Marca um corpo como o foco da câmera (continua visível de perto e o botão de visão geral aparece). */
 export function marcarFoco(malha) { SIS.focado = malha; if (SIS.dom) SIS.dom.geral.hidden = false; }
 
+/** Interface própria da órbita: só a nota de estado (os grupos de satélites e os filtros ficam no painel de camadas). */
 function montarInterface() {
   const G = E.G;
-  const chips = el('div', { class: 'globo-chips', role: 'group', 'aria-label': 'Satélites' });
-  chips.append(el('button', { type: 'button', class: 'globo-chip-sistema', text: 'Sistema solar', 'aria-pressed': 'false', onclick: () => alternarSistema(E.modo !== 'sistema') }));
-  chips.append(el('button', { type: 'button', class: 'globo-chip-filtros', text: 'Filtros', 'aria-haspopup': 'dialog', onclick: abrirFiltros }));
-  for (const g of GRUPOS) {
-    chips.append(el('button', { type: 'button', 'aria-pressed': String(E.ativos.has(g.id)), 'data-grupo': g.id, text: g.nome, onclick: (ev) => {
-      const b = ev.currentTarget; const on = b.getAttribute('aria-pressed') !== 'true';
-      b.setAttribute('aria-pressed', String(on)); if (on) E.ativos.add(g.id); else E.ativos.delete(g.id);
-      if (E.pontos[g.id]) E.pontos[g.id].visible = on;
-      if (!on && E.selecao?.s?.grupo === g.id) limparSelecao();
-      E.ultimo = 0;
-    } }));
-  }
   const nota = el('p', { class: 'globo-espaco-nota', text: '' });
-  const raiz = el('div', { class: 'globo-espaco globo-recolhivel', hidden: true }, chips, nota);
+  const raiz = el('div', { class: 'globo-espaco globo-recolhivel', hidden: true }, nota);
   G.dom.raiz.append(raiz);
-  E.dom = { raiz, chips, nota };
+  E.dom = { raiz, nota };
 }
 
 // ------------------------------------------------------------------ satélites
@@ -622,8 +616,6 @@ function alternarSistema(ligar) {
   if (ligar && !E.sistema) return; // ainda montando (o botão só aparece pronto, mas por segurança)
   E.modo = ligar ? 'sistema' : 'terra';
   limparSelecao();
-  E.dom.chips.querySelector('.globo-chip-sistema').setAttribute('aria-pressed', String(ligar));
-  for (const b of E.dom.chips.querySelectorAll('[data-grupo]')) b.hidden = ligar;
   E.sistema.visible = ligar;
   for (const g of GRUPOS) if (E.pontos[g.id]) E.pontos[g.id].visible = !ligar && E.ativos.has(g.id);
   for (const r of E.rotulos) { r.el.hidden = true; if (r.s.trilha) r.s.trilha.visible = !ligar; }
@@ -1066,10 +1058,9 @@ function montarControlesSistema() {
   const livre = el('button', { type: 'button', class: 'globo-livre', text: 'Navegação livre', 'aria-pressed': 'false', onclick: () => alternarLivre(!E.G.livre) });
   const dados = el('button', { type: 'button', class: 'globo-btn-tabela', text: 'Dados', 'aria-pressed': String(F.dados), title: 'Tabela dos planetas agora', onclick: () => { if (largo()) { F.dados = !F.dados; gravarFiltros(); } else SIS.pediuTabela = true; mostrarTabela(); } });
   const tabela = el('div', { class: 'globo-tabela-planetas', hidden: true });
-  const galaxia = el('button', { type: 'button', class: 'globo-ir-galaxia', text: 'Via Láctea', title: 'Sair do sistema solar e ver a Via Láctea de fora', onclick: () => E.G.abrirGalaxia() });
   const dica = el('p', { class: 'globo-dica', hidden: true, text: 'Arraste para olhar em volta · afaste os dedos para avançar · dois toques para ir até algo' });
   const data = el('p', { class: 'globo-data-sistema' });
-  const topo = el('div', { class: 'globo-sistema-topo' }, tempo, hoje, geral, galaxia, dados, livre);
+  const topo = el('div', { class: 'globo-sistema-topo' }, tempo, hoje, geral, dados, livre);
   // fontes e data dos dados ficam no "?" (ajuda), fora da cena
   const raiz = el('div', { class: 'globo-sistema-controles globo-recolhivel', hidden: true }, dica, data, topo);
   E.G.dom.raiz.append(raiz, tabela);

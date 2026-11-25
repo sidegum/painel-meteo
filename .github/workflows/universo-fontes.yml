@@ -1,0 +1,50 @@
+name: Fontes da escala do universo
+
+# Baixa os catálogos da escala do universo (scripts/globo/baixar-fontes-universo.sh) e o mapa da radiação cósmica de
+# fundo do Planck (scripts/globo/montar-cmb.py), e grava no branch em que rodou. Só sob demanda: os catálogos são fixos.
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'amostra (só confere colunas) ou completo'
+        default: completo
+  push:
+    branches-ignore: [main, globo-dados]
+    paths:
+      - scripts/globo/baixar-fontes-universo.sh
+      - scripts/globo/montar-cmb.py
+      - scripts/globo/reduzir-*.py
+      - .github/workflows/universo-fontes.yml
+
+permissions:
+  contents: write
+
+env:
+  MODO: ${{ inputs.modo || 'completo' }}  # no push: o modo escrito aqui
+
+jobs:
+  baixar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Baixar os catálogos
+        run: scripts/globo/baixar-fontes-universo.sh scripts/globo/fontes/universo "$MODO"
+      - name: Radiação cósmica de fundo (Planck)
+        if: env.MODO == 'completo' && hashFiles('scripts/globo/montar-cmb.py') != ''
+        continue-on-error: true
+        run: |
+          if [ -f vendor/ceu/cmb-4096.jpg ]; then echo 'mapa já montado (apague vendor/ceu/cmb-4096.jpg para refazer)'; exit 0; fi
+          pip install --quiet numpy healpy pillow
+          python3 scripts/globo/montar-cmb.py vendor/ceu
+      - name: Gravar no branch
+        if: env.MODO == 'completo'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/globo/fontes/universo vendor/ceu/cmb-* vendor/ceu/cmb.json 2>/dev/null || true
+          git commit -m "Catálogos da escala do universo e mapa do Planck" || exit 0
+          for espera in 0 10 30; do sleep $espera; git pull --rebase --quiet && git push && break; done
