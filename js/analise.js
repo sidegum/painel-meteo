@@ -52,6 +52,20 @@ export const REGRAS = {
     chuvaMm: 5, chuvaRazao: 0.6, rajadaKmh: 25,
   },
   limitesSemana: { chuva: [1, 10, 30], rajada: [40, 60, 80] },
+  // Aba El Niño. Para mudar quanto tempo à frente um aviso aparece, ajuste só janelaAvisoDias.
+  enso: {
+    limiar: 0.5,               // °C: a partir de +0,5 é El Niño; de −0,5 para baixo, La Niña (critério da NOAA)
+    forcas: [1, 1.5, 2],       // °C: abaixo de 1 fraco; até 1,5 moderado; até 2 forte; daí em diante muito forte
+    semanasAgora: 4,           // a força de agora é a média das últimas 4 semanas do índice oficial
+    semanaMaxDias: 21,         // semana mais velha que isso não vale como "agora": usa a média de 3 meses
+    janelaAvisoDias: 7,        // dia de risco e aviso do INMET só aparecem se começam em até 7 dias
+    chuvaForteMm: 30, rajadaForteKmh: 60, // "forte": os limites mais altos da aba Semana
+    epocasRs: [                // meses em que o El Niño costuma aumentar a chuva no RS (Fontana e Berlato, 1997)
+      { meses: [10, 11], ano: 0 }, // primavera do ano em que começa
+      { meses: [4, 5, 6], ano: 1 }, // fim do outono do ano seguinte
+    ],
+    epocaAntecedenciaDias: 30, // a próxima época só é citada quando falta até um mês
+  },
   ceu: {                       // cobertura média de nuvens (%) -> condição do céu
     limpo: 20, poucasNuvens: 45, parcial: 75,
   },
@@ -1588,4 +1602,120 @@ export function sinaisGranizo({ avisos = [], codigosUkmo = [], cape = null, cong
     return { fonte: 'ambiente', texto: `Energia para tempestades alta (${Math.round(cape)} J/kg) e nível de congelamento baixo (${(congelamento / 1000).toFixed(1).replace('.', ',')} km).` };
   }
   return null;
+}
+
+// ------------------------------------------------------------------ El Niño
+
+const CENTRO_TRIMESTRE = { DJF: 1, JFM: 2, FMA: 3, MAM: 4, AMJ: 5, MJJ: 6, JJA: 7, JAS: 8, ASO: 9, SON: 10, OND: 11, NDJ: 12 };
+const FORCAS_EL_NINO = ['fraco', 'moderado', 'forte', 'muito forte'];
+const CHAVES_FORCA = { elNino: ['fraco', 'moderado', 'forte', 'muitoForte'], laNina: ['fraca', 'moderada', 'forte', 'muitoForte'] };
+
+/** Mês central (1 a 12) de um trimestre da NOAA: OND → 11. */
+export const mesCentralTrimestre = (tri) => CENTRO_TRIMESTRE[tri] ?? null;
+
+/**
+ * Fase e força para um desvio de temperatura do mar (°C) no centro do Pacífico.
+ * @returns {{fase:'elNino'|'laNina'|'neutro', nivel:number, forca:string|null}|null} nivel 0 (neutro) a 4 (muito forte)
+ */
+export function forcaEnso(anom) {
+  if (!Number.isFinite(anom)) return null;
+  const x = Math.abs(anom), E = REGRAS.enso;
+  if (x < E.limiar) return { fase: 'neutro', nivel: 0, forca: null };
+  const nivel = 1 + E.forcas.filter((l) => x >= l).length;
+  return { fase: anom > 0 ? 'elNino' : 'laNina', nivel, forca: FORCAS_EL_NINO[nivel - 1] };
+}
+
+/**
+ * Situação do Pacífico em uma leitura só, usada por todos os blocos da aba El Niño (nenhum bloco classifica por conta).
+ * - Agora: média das últimas REGRAS.enso.semanasAgora semanas do Niño 3.4 relativo (NOAA). A média de 3 meses
+ *   (RONI) é o critério oficial, mas chega com dois meses de atraso; ela entra quando não há semana recente.
+ * - Evolução: para cada mês à frente, a fase mais provável do trimestre centrado nele e, sendo El Niño ou
+ *   La Niña, a força mais provável (tabelas oficiais da NOAA). Para na primeira quebra da sequência mensal.
+ * @param {object} partes partes de dados/enso.json (relativoSemanal, roni, oni, probCpc, forcaCpc)
+ * @param {number} agoraMs
+ * @returns {{fase, nivel, forca, anom, base:'semanas'|'trimestre', ate:number|null, trimestre:object|null,
+ *   evolucao:{mes:number, ano:number, fase:string, nivel:number, forca:string|null}[],
+ *   enfraquece:{mes:number, ano:number}|null, termina:{mes:number, ano:number}|null}|null}
+ */
+export function situacaoEnso(partes, agoraMs) {
+  const E = REGRAS.enso, P = partes || {};
+  const semanas = (P.relativoSemanal?.dados || []).filter((r) => Number.isFinite(r.n34)).slice(-E.semanasAgora);
+  const trimestres = P.roni?.dados?.length ? P.roni.dados : P.oni?.dados || [];
+  const tri = trimestres.at(-1) || null;
+  let anom = null, base = null, ate = null;
+  if (semanas.length === E.semanasAgora && agoraMs - semanas.at(-1).ms <= E.semanaMaxDias * 86400000) {
+    anom = semanas.reduce((s, r) => s + r.n34, 0) / semanas.length; base = 'semanas'; ate = semanas.at(-1).ms;
+  } else if (Number.isFinite(tri?.anom)) { anom = tri.anom; base = 'trimestre'; }
+  const agora = forcaEnso(anom);
+  if (!agora) return null;
+
+  const hoje = new Date(agoraMs).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const ano = Number(hoje.slice(0, 4)), mes = Number(hoje.slice(5, 7));
+  const probs = P.probCpc?.dados || [], forcas = P.forcaCpc?.dados || [];
+  const evolucao = [];
+  const i0 = probs.findIndex((x) => CENTRO_TRIMESTRE[x.tri] === mes);
+  for (let k = 0; i0 >= 0 && i0 + k < probs.length; k++) {
+    const pr = probs[i0 + k], m = ((mes - 1 + k) % 12) + 1, a = ano + Math.floor((mes - 1 + k) / 12);
+    if (CENTRO_TRIMESTRE[pr.tri] !== m) break; // tabela fora da sequência mensal: para aqui, sem adivinhar
+    const fase = pr.elNino >= pr.neutro && pr.elNino >= pr.laNina ? 'elNino' : pr.laNina > pr.neutro ? 'laNina' : 'neutro';
+    let nivel = 0;
+    if (fase !== 'neutro') {
+      const f = forcas.find((x) => x.tri === pr.tri)?.[fase];
+      const chances = CHAVES_FORCA[fase].map((c) => f?.[c] ?? 0);
+      nivel = f ? 1 + chances.indexOf(Math.max(...chances)) : null; // sem a tabela de força: fase sem força
+    }
+    evolucao.push({ mes: m, ano: a, fase, nivel, forca: nivel ? FORCAS_EL_NINO[nivel - 1] : null });
+  }
+  // Marcos do evento em curso: primeiro mês previsto mais fraco que agora e primeiro mês fora da fase atual.
+  let enfraquece = null, termina = null;
+  if (agora.fase !== 'neutro') {
+    const fim = evolucao.find((e) => e.fase !== agora.fase);
+    const menor = evolucao.find((e) => e.fase === agora.fase && e.nivel !== null && e.nivel < agora.nivel);
+    termina = fim ? { mes: fim.mes, ano: fim.ano } : null;
+    enfraquece = menor && (!fim || evolucao.indexOf(menor) < evolucao.indexOf(fim)) ? { mes: menor.mes, ano: menor.ano } : null;
+  }
+  return { ...agora, anom, base, ate, trimestre: tri, evolucao, enfraquece, termina };
+}
+
+/**
+ * Época em que o El Niño costuma aumentar a chuva no RS (REGRAS.enso.epocasRs), contada do ano em que começou.
+ * @param {number} anoInicio ano em que o El Niño atual começou
+ * @param {number} agoraMs
+ * @returns {{agora:boolean, proxima:{meses:number[], ano:number}|null}} proxima só quando falta até epocaAntecedenciaDias
+ */
+export function epocaChuvaRs(anoInicio, agoraMs) {
+  const E = REGRAS.enso;
+  const hoje = new Date(agoraMs).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const ano = Number(hoje.slice(0, 4)), mes = Number(hoje.slice(5, 7));
+  const epocas = E.epocasRs.map((e) => ({ meses: e.meses, ano: anoInicio + e.ano }));
+  const agora = epocas.some((e) => e.ano === ano && e.meses.includes(mes));
+  const proxima = agora ? null : epocas.find((e) => {
+    const falta = (Date.UTC(e.ano, e.meses[0] - 1, 1) - agoraMs) / 86400000;
+    return falta > 0 && falta <= E.epocaAntecedenciaDias;
+  }) || null;
+  return { agora, proxima };
+}
+
+const AVISO_DE_CHUVA = /chuva|tempestade|temporal|vendaval|granizo|alagamento|inunda|enxurrada|deslizamento|ciclone/i;
+/**
+ * Aviso do INMET que interessa à aba El Niño: de chuva, vento ou temporal, ainda válido e que começa em até
+ * REGRAS.enso.janelaAvisoDias dias. Datas "AAAA-MM-DD HH:MM" no horário de Brasília; sem data legível, não entra.
+ */
+export function avisoProximoDeChuva(aviso, agoraMs) {
+  const ms = (s) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(s || '')) ? Date.parse(`${s.slice(0, 10)}T${s.slice(11, 16)}:00-03:00`) : NaN);
+  const ini = ms(aviso?.inicio), fim = ms(aviso?.fim);
+  if (!Number.isFinite(ini) || !Number.isFinite(fim)) return false;
+  return AVISO_DE_CHUVA.test(aviso.titulo || '') && fim >= agoraMs && ini <= agoraMs + REGRAS.enso.janelaAvisoDias * 86400000;
+}
+
+/**
+ * Resposta única da aba El Niño: "devo me preocupar?". Parte só de dados já mostrados em outras telas
+ * (dias de risco da Semana e avisos do INMET), para nunca contradizê-las. O aviso oficial prevalece.
+ * @param {{p:number}[][]} riscosPorDia riscos de cada dia de risco dentro da janela
+ * @param {number} avisos quantidade de avisos do INMET de chuva próximos, válidos para o local
+ * @returns {'calmo'|'atento'|'alerta'}
+ */
+export function nivelPreocupacaoEnso(riscosPorDia, avisos) {
+  if (avisos > 0 || riscosPorDia.some((rs) => rs.some((r) => r.p >= REGRAS.ocorrencia.provavel))) return 'alerta';
+  return riscosPorDia.length ? 'atento' : 'calmo';
 }
