@@ -30,7 +30,7 @@ const icone = (nome, classe = 'ic') => svg('svg', { viewBox: '0 0 24 24', class:
  * @param {object} op
  * @param {() => ({origem:string, lat:number, lon:number, id?:number|null, nome:string}|null)} op.atual local em uso
  * @param {(cidade:object) => void} op.escolherCidade troca para a cidade (favorita, recente ou resultado da busca)
- * @param {() => void} op.usarGps volta para a posição atual do aparelho
+ * @param {(op: {pedir: boolean}) => void} op.usarGps volta para a posição do aparelho; pedir = consultar o GPS mesmo sem permissão guardada
  * @param {(favoritas:Array<object>, removida:object|null) => void} [op.aoMudarFavoritas]
  * @returns {{abrir:()=>void, renderAbas:()=>void, favoritas:()=>Array<object>, ehFavorita:(l:object)=>boolean}}
  */
@@ -77,7 +77,8 @@ export function criarLocais({ atual, escolherCidade, usarGps, aoMudarFavoritas }
     escolherCidade(c);
   }
 
-  function voltarGps() { if (dlg.open) dlg.close(); usarGps(); }
+  /** @param {boolean} pedir true na linha da janela (pedido explícito da posição); false na aba "Aqui" */
+  function voltarGps(pedir) { if (dlg.open) dlg.close(); usarGps({ pedir }); }
 
   // ---------------------------------------------------------------- abas de cidade (topo)
 
@@ -98,7 +99,7 @@ export function criarLocais({ atual, escolherCidade, usarGps, aoMudarFavoritas }
       type: 'button', class: 'aba-cidade', 'aria-current': ativo ? 'true' : null, title: titulo, onclick: ativo ? null : aoTocar,
     }, ...extra, el('span', { text: rotulo }));
     const itens = [
-      aba('Aqui', gpsAtivo(), voltarGps, 'Sua localização atual (GPS)', icone('gps')),
+      aba('Aqui', gpsAtivo(), () => voltarGps(false), 'Sua localização atual (GPS)', icone('gps')),
       ...favoritas.map((f) => aba(f.nome, ehAtual(f), () => escolher(f), [f.nome, f.regiao].filter(Boolean).join(', '))),
     ];
     if (avulsa) {
@@ -176,7 +177,7 @@ export function criarLocais({ atual, escolherCidade, usarGps, aoMudarFavoritas }
     const lado = tipo === 'gps' ? icone('gps') : fav ? icone('estrela', 'ic ic-fav') : tipo === 'recente' ? icone('relogio') : null;
     const escolhe = el('button', {
       type: 'button', class: 'local-escolher', 'aria-current': emUso ? 'true' : null,
-      onclick: () => (tipo === 'gps' ? voltarGps() : escolher(c)),
+      onclick: () => (tipo === 'gps' ? voltarGps(true) : escolher(c)),
     }, el('span', { class: 'local-marca' }, lado), el('span', { class: 'local-txt' }, el('b', {}, ...nome), c.regiao ? el('small', { text: c.regiao }) : null),
     emUso ? el('span', { class: 'local-uso' }, icone('certo'), el('span', { class: 'sr', text: 'em uso' })) : null);
     let acao = null;
