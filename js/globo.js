@@ -1984,7 +1984,8 @@ function nivelEstrelas() {
 
 /** Aplica o nível de qualidade atual: resolução, partículas do vento, atmosfera, estrelas e nuvens de galáxias. */
 function aplicarQualidade() {
-  const piso = Math.min(G.pixelRatioInicial, CELULAR ? 1 : 0.6);
+  // no sistema solar a cena é leve e os corpos são vistos de perto: o celular não desce de 1,5 (borda sem serrilhado)
+  const piso = Math.min(G.pixelRatioInicial, CELULAR ? (G.sistema ? 1.5 : 1) : 0.6);
   const pr = Math.max(piso, G.pixelRatioInicial * RESOLUCAO_POR_NIVEL[G.nivelQualidade]);
   if (pr !== G.pixelRatio) {
     G.pixelRatio = pr;

@@ -16,6 +16,8 @@ import * as C from './ceu.js';
 import { cartaoAstro, cartaoEstrela, cartaoObjeto, cartaoSatelite, cartaoSonda, cartaoLua, cartaoPequeno, fusoS } from './globo-ceu.js';
 import { DIST_ESCALA, DIST_EXP, posicaoObjeto } from './globo-estrelas.js';
 import { MISSOES, estadoSonda, interpolar, rotaCompleta } from './globo-sondas.js';
+import { geometriaNave, geometriaInstanciada, materialNaves, modeloDaSonda, modeloDoSatelite, fichaModelo } from './globo-naves.js';
+import { materialCorpo, materialAnel } from './globo-planetas.js';
 import { ANEL_SATURNO_KM, texturaPlaneta, texturaSol, texturaAnel, texturaPonto, texturaBrilho, texturaAnelSelecao, texturaReal, anelReal } from './globo-texturas.js';
 
 const num = (v, casas = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) : null);
@@ -35,7 +37,7 @@ const COR_CEU = { Mercury: '#c9c4bb', Venus: '#fff3cf', Mars: '#ff9a6a', Jupiter
 
 const E = {
   THREE: null, G: null, preparo: null, grupo: null, dom: null, modo: 'terra', aberto: false,
-  sats: {}, pontos: {}, ativos: new Set(prefs.ler('globo:satelites', ['estacoes'])), rotulos: [], notaSat: '', geradoSat: null, ultimo: 0,
+  sats: {}, naves: null, ativos: new Set(prefs.ler('globo:satelites', ['estacoes'])), rotulos: [], notaSat: '', geradoSat: null, ultimo: 0,
   selecao: null, ceu: [], estrelas: [], constelacoes: [], objetos: [], sistema: null, sondas: null, corpos: null,
 };
 
@@ -43,11 +45,26 @@ const E = {
 
 const MAGS = [[21, 'Todas (800 mil, inclusive as de telescópio)'], [6.5, 'As visíveis a olho nu'], [4.5, 'As de céu de cidade'], [2.5, 'Só as mais brilhantes'], [0, 'Nenhuma']];
 const FILTROS_PADRAO = { magEstrelas: 21, viaLactea: true, objetos: true, nomesEstrelas: true, linhas: true, nomesConst: false, planetas: true, trilhas: true,
-  orbitas: true, luas: true, pequenos: true, cinturoes: true, sondas: true, rotasSondas: true, rotulos: true, escala: true, dados: false };
-const F = { ...FILTROS_PADRAO, ...prefs.ler('globo:filtrosEspaco', {}) };
+  orbitas: true, luas: true, pequenos: true, cinturoes: true, sondas: true, rotasSondas: true, rotulos: true, escala: true, dados: false,
+  soNaves: false };
+/** Com "Só satélites e sondas" ligado, estes somem e as naves, com suas rotas, aparecem todas. */
+const SO_NAVES_DESLIGA = ['nomesEstrelas', 'objetos', 'linhas', 'nomesConst', 'planetas', 'orbitas', 'luas', 'pequenos', 'cinturoes', 'escala'];
+const SO_NAVES_LIGA = ['sondas', 'rotasSondas', 'trilhas', 'rotulos'];
+const ESCOLHAS = { ...FILTROS_PADRAO, ...prefs.ler('globo:filtrosEspaco', {}) };
+/** O que vale na tela: as escolhas gravadas, com o modo "Só satélites e sondas" por cima. */
+const F = {};
+function derivarFiltros() {
+  Object.assign(F, ESCOLHAS);
+  if (!ESCOLHAS.soNaves) return;
+  for (const k of SO_NAVES_DESLIGA) F[k] = false;
+  for (const k of SO_NAVES_LIGA) F[k] = true;
+}
+derivarFiltros();
+/** Grupo de satélites à mostra: os escolhidos, ou todos no modo "Só satélites e sondas". */
+const grupoLigado = (id) => F.soNaves || E.ativos.has(id);
 const MAG_ROTULO_ESTRELA = 1.6; // estrelas com nome que ganham rótulo (as ~25 mais brilhantes)
 
-function gravarFiltros() { prefs.gravar('globo:filtrosEspaco', F); aplicarFiltros(); }
+function gravarFiltros() { prefs.gravar('globo:filtrosEspaco', ESCOLHAS); derivarFiltros(); E.ultimo = 0; aplicarFiltros(); }
 
 /** Aplica os filtros à cena: estrelas por brilho, linhas das constelações, planetas no céu, trilhas e o sistema solar. */
 function aplicarFiltros() {
@@ -59,7 +76,7 @@ function aplicarFiltros() {
   for (const r of E.objetos) r.rotulo.hidden = true;
   if (ceu?.linhas) ceu.linhas.visible = E.aberto && E.modo !== 'sistema' && F.linhas;
   for (const c of E.ceu) c.sprite.visible = E.modo !== 'sistema' && F.planetas;
-  for (const r of E.rotulos) if (r.s.trilha) r.s.trilha.visible = E.modo !== 'sistema' && F.trilhas && E.ativos.has('estacoes');
+  for (const r of E.rotulos) if (r.s.trilha) r.s.trilha.visible = E.modo !== 'sistema' && F.trilhas && grupoLigado('estacoes');
   for (const r of [...E.estrelas, ...E.constelacoes]) if (r.rotulo) r.rotulo.hidden = true;
   if (E.sistema) aplicarFiltrosSistema();
 }
@@ -69,26 +86,26 @@ function aplicarFiltros() {
  * Cada escolha vale na hora e fica gravada.
  */
 export function secoesCamadas() {
-  const caixa = (chave, texto) => ({ tipo: 'caixa', texto, valor: !!F[chave], mudar: (v) => { F[chave] = v; gravarFiltros(); } });
+  const caixa = (chave, texto) => ({ tipo: 'caixa', texto, valor: !!ESCOLHAS[chave], mudar: (v) => { ESCOLHAS[chave] = v; gravarFiltros(); } });
   const sistema = E.modo === 'sistema';
   const ceu = { titulo: 'Céu', itens: [
-    { tipo: 'opcoes', texto: 'Estrelas', valor: F.magEstrelas, opcoes: MAGS, mudar: (v) => { F.magEstrelas = v; gravarFiltros(); } },
+    { tipo: 'opcoes', texto: 'Estrelas', valor: ESCOLHAS.magEstrelas, opcoes: MAGS, mudar: (v) => { ESCOLHAS.magEstrelas = v; gravarFiltros(); } },
     caixa('nomesEstrelas', 'Nomes das estrelas mais brilhantes'), caixa('viaLactea', 'Via Láctea'), caixa('objetos', 'Galáxias, nebulosas e aglomerados'),
     sistema ? null : caixa('linhas', 'Linhas das constelações'), sistema ? null : caixa('nomesConst', 'Nomes das constelações'),
   ] };
   if (sistema) {
-    return [{ titulo: 'Sistema solar', itens: [caixa('orbitas', 'Órbitas'), caixa('luas', 'Luas'), caixa('pequenos', 'Planetas anões, asteroides e cometas'), caixa('cinturoes', 'Cinturões de asteroides e de Kuiper'),
+    return [{ titulo: 'Naves', itens: [caixa('soNaves', 'Só sondas e telescópios, sem o resto')] },
+      { titulo: 'Sistema solar', itens: [caixa('orbitas', 'Órbitas'), caixa('luas', 'Luas'), caixa('pequenos', 'Planetas anões, asteroides e cometas'), caixa('cinturoes', 'Cinturões de asteroides e de Kuiper'),
       caixa('sondas', 'Sondas e telescópios'), caixa('rotasSondas', 'Rotas das sondas'), caixa('escala', 'Escala de distâncias (UA e tempo da luz)'), caixa('rotulos', 'Nomes')] }, ceu];
   }
   const grupo = (g) => ({ tipo: 'caixa', texto: g.nome, detalhe: g.detalhe, valor: E.ativos.has(g.id), mudar: (v) => ligarGrupo(g.id, v) });
-  return [{ titulo: 'Satélites', itens: [...GRUPOS.map(grupo), caixa('trilhas', 'Órbita da ISS e da Tiangong')] }, { titulo: 'No céu', itens: [caixa('planetas', 'Planetas')] }, ceu];
+  return [{ titulo: 'Satélites', itens: [caixa('soNaves', 'Só a Terra e os satélites (todos os grupos)'), ...GRUPOS.map(grupo), caixa('trilhas', 'Órbita da ISS e da Tiangong')] }, { titulo: 'No céu', itens: [caixa('planetas', 'Planetas')] }, ceu];
 }
 
 /** Liga ou desliga um grupo de satélites (Estações, Mais brilhantes, Meteorológicos, GPS) e grava a escolha. */
 function ligarGrupo(id, ligar) {
   if (ligar) E.ativos.add(id); else E.ativos.delete(id);
   prefs.gravar('globo:satelites', [...E.ativos]);
-  if (E.pontos[id]) E.pontos[id].visible = ligar;
   if (!ligar && E.selecao?.s?.grupo === id) limparSelecao();
   E.ultimo = 0;
   aplicarFiltros();
@@ -177,14 +194,7 @@ function montarSatelites(dados) {
     }).filter(Boolean);
     E.sats[g.id] = lista;
     if (!lista.length) continue;
-    lista.forEach((s, k) => { s.k = k; });
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lista.length * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    const mat = new THREE.PointsMaterial({ color: g.cor, size: g.tamanho * (devicePixelRatio > 1.5 ? 1.5 : 1), sizeAttenuation: false, map: texturaPonto(THREE), transparent: true, alphaTest: 0.3, opacity: 0.95, depthWrite: false });
-    const p = new THREE.Points(geo, mat);
-    p.visible = E.ativos.has(g.id); p.renderOrder = 8;
-    E.grupo.add(p);
-    E.pontos[g.id] = p;
+    for (const s of lista) s.modelo = modeloDoSatelite(s.nome, g.id, s.rec.no * 1440 / (2 * Math.PI));
   }
   // rótulos das estações e quem está acoplado a elas (mesma posição, a menos de 5 km)
   const agora = new Date();
@@ -201,6 +211,57 @@ function montarSatelites(dados) {
     if (s.destaque || !posicaoCena(s.rec, agora, v)) continue;
     for (const b of base) if (posicaoCena(b.rec, agora, w) && v.distanceTo(w) * RAIO_TERRA_KM < 5) s.acopladoA = b.destaque === 'ISS' ? 'ISS' : 'Tiangong';
   }
+  montarNaves();
+}
+
+const ESCALA_NAVE = 0.0012; // tamanho mínimo de um satélite na cena (raio da Terra = 1); na tela vale o raio em pixels
+const PX_NAVE = { estacao: 20, hubble: 12, comum: 7, escolhido: 58 };
+
+/**
+ * Um modelo 3D para cada satélite: uma malha instanciada por tipo de nave (ISS, Tiangong, Hubble, GPS, meteorológicos,
+ * estágios de foguete e o satélite comum), todas com o mesmo material. Quem está acoplado a uma estação já faz parte
+ * do modelo dela e não é desenhado à parte.
+ */
+function montarNaves() {
+  const { THREE } = E;
+  const material = materialNaves(THREE, { sombraTerra: true, achatar: 0.012 });
+  const porModelo = {};
+  for (const g of GRUPOS) for (const s of E.sats[g.id] || []) (porModelo[s.modelo] ||= []).push(s);
+  const malhas = [];
+  for (const [id, lista] of Object.entries(porModelo)) {
+    const malha = new THREE.InstancedMesh(geometriaInstanciada(THREE, id, lista.length), material, lista.length);
+    malha.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    malha.frustumCulled = false; malha.renderOrder = 8;
+    lista.forEach((s, i) => { s.malha = malha; s.i = i; });
+    E.grupo.add(malha);
+    malhas.push(malha);
+  }
+  E.naves = { material, malhas, m: new THREE.Matrix4(), x: new THREE.Vector3(), y: new THREE.Vector3(), z: new THREE.Vector3() };
+}
+
+/** Raio na tela (px) de um satélite agora: 0 esconde (grupo desligado, acoplado a uma estação ou sem posição). */
+function pxDaNave(s) {
+  if (!grupoLigado(s.grupo) || s.acopladoA) return 0;
+  if (E.selecao?.s === s) return PX_NAVE.escolhido;
+  return s.destaque ? PX_NAVE.estacao : s.modelo === 'hubble' ? PX_NAVE.hubble : PX_NAVE.comum;
+}
+
+/** Posiciona um satélite: +Z para a Terra, +Y na direção do movimento (pela posição anterior) e X cruzando a órbita. */
+function posicionarNave(s, v) {
+  const n = E.naves, px = s.malha.geometry.attributes.px;
+  const tamanho = v ? pxDaNave(s) : 0;
+  if (px.getX(s.i) !== tamanho) { px.setX(s.i, tamanho); px.needsUpdate = true; }
+  if (!v) return;
+  n.z.copy(v).normalize().negate();
+  if (s.antes && s.antes.distanceToSquared(v) > 1e-14) n.y.subVectors(v, s.antes); else if (!s.rumo) n.y.set(0, 1, 0).cross(n.z); else n.y.copy(s.rumo);
+  n.y.addScaledVector(n.z, -n.y.dot(n.z));
+  if (n.y.lengthSq() < 1e-16) n.y.set(1, 0, 0).addScaledVector(n.z, -n.z.x);
+  n.y.normalize();
+  (s.rumo ||= new E.THREE.Vector3()).copy(n.y);
+  (s.antes ||= new E.THREE.Vector3()).copy(v);
+  n.x.crossVectors(n.y, n.z);
+  s.malha.setMatrixAt(s.i, n.m.makeBasis(n.x, n.y, n.z).scale(n.y.setScalar(ESCALA_NAVE)).setPosition(v));
+  s.malha.instanceMatrix.needsUpdate = true;
 }
 
 function criarTrilha(cor, opacidade, n = 120) {
@@ -237,7 +298,7 @@ function selecionarSatelite(s) {
   const { G, THREE } = E;
   limparSelecao();
   const anel = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaAnelSelecao(THREE), color: 0xffffff, sizeAttenuation: false, depthTest: false, transparent: true }));
-  anel.scale.setScalar(0.05); anel.renderOrder = 12;
+  anel.scale.setScalar(0.05); anel.renderOrder = 12; anel.visible = !s.malha; // com modelo 3D, o escolhido cresce na tela e dispensa o anel
   E.grupo.add(anel);
   E.selecao = { s, anel, trilha: s.trilha ? null : criarTrilha(0xffffff, 0.55), ultimaTrilha: 0 };
   E.ultimo = 0;
@@ -251,7 +312,7 @@ function limparSelecao() {
   if (!sel) return;
   E.grupo.remove(sel.anel); sel.anel.material.dispose();
   if (sel.trilha) { E.grupo.remove(sel.trilha); sel.trilha.geometry.dispose(); sel.trilha.material.dispose(); }
-  E.selecao = null;
+  E.selecao = null; E.ultimo = 0;
   if (E.G) E.G.seguir = null;
 }
 
@@ -353,22 +414,19 @@ const latLonCena = (lat, lon, r, alvo) => alvo.set(r * Math.cos(lat * RAD) * Mat
 export function atualizarEspaco(agora) {
   const { THREE, G } = E;
   if (!E.grupo || !E.aberto) return;
+  const porPixel = 2 * Math.tan(G.camera.fov * RAD / 2) / (G.dom.canvas.clientHeight || 800);
+  if (SIS.materialNaves) SIS.materialNaves.uniforms.porPixel.value = porPixel;
+  if (E.naves) { const u = E.naves.material.uniforms, sol = G.terra.material.uniforms.sol.value; u.porPixel.value = porPixel; u.luz.value.set(sol.x, sol.y, sol.z, 0); }
   if (E.modo === 'sistema') { atualizarSistema(agora); return; }
   const data = new Date();
   const v = new THREE.Vector3();
   if (agora - E.ultimo > 400) {
     E.ultimo = agora;
-    for (const g of GRUPOS) {
-      const p = E.pontos[g.id]; if (!p || !p.visible) continue;
-      const pos = p.geometry.attributes.position.array;
-      for (const s of E.sats[g.id]) {
-        if (posicaoCena(s.rec, data, v)) v.toArray(pos, s.k * 3);
-        else { pos[s.k * 3] = 0; pos[s.k * 3 + 1] = -500; pos[s.k * 3 + 2] = 0; } // sem posição: longe da cena
-      }
-      p.geometry.attributes.position.needsUpdate = true;
-      p.geometry.computeBoundingSphere();
+    if (E.naves) for (const g of GRUPOS) {
+      const ligado = grupoLigado(g.id);
+      for (const s of E.sats[g.id] || []) posicionarNave(s, ligado && !s.acopladoA ? posicaoCena(s.rec, data, v) : null);
     }
-    for (const r of E.rotulos) if (r.s.trilha) { r.s.trilha.visible = E.ativos.has('estacoes'); if (agora - (r.s.trilhaEm || 0) > 5000) { atualizarTrilha(r.s.trilha, r.s.rec, data); r.s.trilhaEm = agora; } }
+    for (const r of E.rotulos) if (r.s.trilha) { r.s.trilha.visible = F.trilhas && grupoLigado('estacoes'); if (agora - (r.s.trilhaEm || 0) > 5000) { atualizarTrilha(r.s.trilha, r.s.rec, data); r.s.trilhaEm = agora; } }
     const sel = E.selecao;
     if (sel && sel.trilha && agora - sel.ultimaTrilha > 3000) { atualizarTrilha(sel.trilha, sel.s.rec, data); sel.ultimaTrilha = agora; }
     if (G.quadro % 120 === 0) atualizarCeu();
@@ -376,7 +434,7 @@ export function atualizarEspaco(agora) {
   const rect = G.dom.canvas.getBoundingClientRect();
   const topo = E.dom.raiz.getBoundingClientRect().bottom - rect.top + 8; // rótulos não passam por cima dos botões do espaço
   for (const r of E.rotulos) {
-    if (!E.ativos.has('estacoes') || !posicaoCena(r.s.rec, data, v)) { r.el.hidden = true; continue; }
+    if (!grupoLigado('estacoes') || !posicaoCena(r.s.rec, data, v)) { r.el.hidden = true; continue; }
     const tela = naTela(v, rect);
     r.el.hidden = !tela || tela.y < topo;
     if (tela) r.el.style.transform = `translate(${tela.x.toFixed(0)}px, ${tela.y.toFixed(0)}px)`;
@@ -473,8 +531,8 @@ export function tocarEspaco(cx, cy, modo = 'tocar') {
   } else {
     const v = new THREE.Vector3(), data = new Date();
     for (const g of GRUPOS) {
-      if (!E.pontos[g.id]?.visible) continue;
-      for (const s of E.sats[g.id]) if (posicaoCena(s.rec, data, v)) considerar(naTela(v, rect), 0, () => selecionarSatelite(s), s.destaque ? 6 : s.acopladoA ? -2 : 0);
+      if (!grupoLigado(g.id)) continue;
+      for (const s of E.sats[g.id]) if (!s.acopladoA && posicaoCena(s.rec, data, v)) considerar(naTela(v, rect), 0, () => selecionarSatelite(s), s.destaque ? 6 : s.acopladoA ? -2 : 0);
     }
     if (F.planetas) for (const c of E.ceu) considerar(naTela(c.sprite.position, rect), 0, () => mostrarAstro(c.corpo), -4);
     tocarEstrela(considerar, rect);
@@ -536,16 +594,35 @@ export function focarNoToque(cx, cy) { if (E.modo === 'sistema') tocarEspaco(cx,
 /** Raio de um corpo na cena (esfera) ou um raio pequeno para pontos (sondas) e marcas. */
 function raioCena(obj) {
   const r = obj.geometry?.parameters?.radius;
-  return r ? r * obj.scale.x : 0.004;
+  return r ? r * obj.scale.x : obj.userData.tipo === 'sonda' ? RAIO_SONDA : 0.004;
 }
 
 /** Leva a câmera até um objeto do sistema solar e o acompanha; mostra o botão de voltar à visão geral. */
 function focarObjeto(obj) {
   const r = raioCena(obj), v = new E.THREE.Vector3();
   const comLuas = SIS.planetas?.some((P) => P.malha === obj && P.listaLuas.length); // enquadra o sistema de luas
-  E.G.focarSistema(() => obj.getWorldPosition(v), Math.max(r * (comLuas ? 16 : 7), 0.06), Math.max(r * 1.4, 0.004));
+  const nave = obj.userData.tipo === 'sonda', estreita = E.G.camera.aspect < 1; // a nave inteira na tela, também em pé no celular
+  E.G.focarSistema(() => obj.getWorldPosition(v), nave ? r * (estreita ? 9 : 5) : Math.max(r * (comLuas ? 16 : 7), 0.06), Math.max(r * 1.4, 0.004));
+  // chega pelo lado iluminado: a câmera fica a 40° da direção do Sol e um pouco acima do plano das órbitas
+  if (obj !== SIS.sol && obj.getWorldPosition(v).lengthSq() > 1e-6) {
+    const u = obj.material.uniforms;
+    v.normalize().negate();                                             // direção do Sol visto do corpo
+    E.G.cam.lon = Math.atan2(-v.z, v.x) / RAD + 40; E.G.cam.lat = Math.asin(Math.max(-1, Math.min(1, v.y))) / RAD + 24;
+    if (u?.anel?.value.w) {                                              // com anéis: 30° acima do plano deles, do lado que o Sol ilumina
+      const eixo = u.eixo.value, lado = Math.sign(v.dot(eixo)) || 1;
+      v.addScaledVector(eixo, -v.dot(eixo)).normalize().applyAxisAngle(eixo, 40 * RAD).multiplyScalar(Math.cos(30 * RAD)).addScaledVector(eixo, lado * Math.sin(30 * RAD));
+      E.G.cam.lon = Math.atan2(-v.z, v.x) / RAD; E.G.cam.lat = Math.asin(Math.max(-1, Math.min(1, v.y))) / RAD;
+    }
+  }
   SIS.focado = obj;
   if (SIS.dom) SIS.dom.geral.hidden = false;
+}
+
+/** Leva a câmera até o corpo do sistema solar com este nome na tela (planeta, lua, sonda); devolve se achou. */
+export function focarPeloNome(nome) {
+  const obj = E.modo === 'sistema' ? SIS.comRotulo?.find((o) => o.userData.rotulo.el.textContent === nome) : null;
+  if (obj) { SIS.tocado = obj; focarObjeto(obj); }
+  return !!obj;
 }
 
 /** Liga ou desliga a navegação livre: a câmera solta no espaço, até as estrelas mais distantes do catálogo. */
@@ -605,6 +682,7 @@ function paraCena(x, y, z, alvo) {
   return alvo.set(x * d, z * d, -y * d);
 }
 
+const RAIO_SONDA = 0.004, PX_SONDA = 9; // tamanho de uma sonda na cena (ampliada, como os planetas) e o raio mínimo na tela
 /** Distância da câmera ao Sol (cena; uns 5.000 UA) a partir da qual o sistema solar vira um ponto. */
 const LONGE_DO_SOL = 60;
 const SIS = { desloc: 0, vel: 0, ultimo: 0, dom: null, rotulos: [] };
@@ -617,7 +695,7 @@ function alternarSistema(ligar) {
   E.modo = ligar ? 'sistema' : 'terra';
   limparSelecao();
   E.sistema.visible = ligar;
-  for (const g of GRUPOS) if (E.pontos[g.id]) E.pontos[g.id].visible = !ligar && E.ativos.has(g.id);
+  for (const m of E.naves?.malhas || []) m.visible = !ligar;
   for (const r of E.rotulos) { r.el.hidden = true; if (r.s.trilha) r.s.trilha.visible = !ligar; }
   for (const c of E.ceu) c.rotulo.hidden = true;
   for (const r of SIS.rotulos) r.el.hidden = true;
@@ -728,26 +806,27 @@ async function montarSistema() {
   for (const p of [...PLANETAS, { nome: 'Plutão', corpo: 'Pluto', cor: '#c8b8a6', raio: 0.187 }]) {
     const r = raioTela(p.raio);
     const sistemaPlaneta = new THREE.Group(); sistemaPlaneta.name = p.nome;
-    const mat = new THREE.MeshStandardMaterial({ map: texturaPlaneta(THREE, p.corpo === 'Pluto' ? 'Mercúrio' : p.nome), roughness: 0.9, metalness: 0 });
-    if (p.corpo === 'Pluto') mat.color.set('#e6d2bc');
+    const mat = materialCorpo(THREE, { mapa: texturaPlaneta(THREE, p.corpo === 'Pluto' ? 'Mercúrio' : p.nome), corpo: p.corpo, tinta: p.corpo === 'Pluto' ? '#e6d2bc' : '#ffffff' });
     const real = MAPA_REAL[p.corpo];
-    if (real) texturaReal(THREE, real, (t) => { mat.map = t; mat.needsUpdate = true; });
-    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 96, 64), mat);
+    if (real) texturaReal(THREE, real, (t) => { mat.uniforms.mapa.value = t; });
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 128, 96), mat);
     sistemaPlaneta.add(m);
     rotulo(m, p.nome, p.corpo === 'Earth' ? 90 : 80 - PLANETAS.indexOf(p), p.corpo === 'Pluto' ? 'anao' : '');
     tocaveis.push({ objeto: m, acao: () => (p.corpo === 'Earth' ? mostrarTerra() : mostrarAstro(p.corpo, instanteSistema())), prioridade: 3 });
     if (p.nome === 'Saturno') { // anéis no plano do equador, nos raios reais (mesma escala logarítmica das luas)
       const R = K.PLANETA_FISICO.Saturn.raioKm, [k0, k1] = ANEL_SATURNO_KM;
       const de = r * (1 + Math.log(k0 / R)), ate = r * (1 + Math.log(k1 / R));
-      const geoAnel = new THREE.RingGeometry(de, ate, 128, 4);
+      const geoAnel = new THREE.RingGeometry(de, ate, 256, 4);
       const uv = geoAnel.attributes.uv, posA = geoAnel.attributes.position, v3 = new THREE.Vector3();
       for (let k = 0; k < uv.count; k++) { v3.fromBufferAttribute(posA, k); uv.setXY(k, (R * Math.exp(v3.length() / r - 1) - k0) / (k1 - k0), 0.5); }
-      const anel = new THREE.Mesh(geoAnel, new THREE.MeshBasicMaterial({ map: texturaAnel(THREE), side: THREE.DoubleSide, transparent: true, depthWrite: false }));
-      anelReal(THREE, (t) => { anel.material.map = t; anel.material.needsUpdate = true; });
+      const anel = new THREE.Mesh(geoAnel, materialAnel(THREE, mat, { mapa: texturaAnel(THREE), de, ate, r, km: [R, k0, k1] }));
+      anel.renderOrder = 1; // depois do planeta, que também é desenhado com transparência (borda suavizada)
+      anelReal(THREE, (t) => { anel.material.uniforms.mapa.value = t; mat.uniforms.mapaAnel.value = t; });
       anel.rotation.x = -Math.PI / 2; m.add(anel);
     }
     if (p.corpo === 'Earth') {
-      new THREE.TextureLoader().load(`vendor/texturas/terra-dia-${matchMedia('(pointer: coarse)').matches ? 1024 : 4096}.jpg`, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; mat.map = t; mat.needsUpdate = true; });
+      new THREE.TextureLoader().load(`vendor/texturas/terra-dia-${matchMedia('(pointer: coarse)').matches ? 1024 : 4096}.jpg`, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; mat.uniforms.mapa.value = t; });
+      new THREE.TextureLoader().load('vendor/texturas/terra-noite-2048.jpg', (t) => { t.colorSpace = THREE.SRGBColorSpace; mat.uniforms.mapaNoite.value = t; mat.uniforms.temNoite.value = 1; });
       SIS.terra = m;
     }
     // luas
@@ -757,8 +836,8 @@ async function montarSistema() {
     for (const chave of luasPorPlaneta[p.corpo] || []) {
       const L = K.LUAS[chave], el0 = corpos?.luas?.[chave];
       const rl = Math.max(r * Math.sqrt(L.raioKm / raioKm) * 0.6, 0.0012);
-      const lm = new THREE.Mesh(new THREE.SphereGeometry(rl, chave === 'lua' ? 64 : 24, chave === 'lua' ? 48 : 16), new THREE.MeshStandardMaterial({ map: texturaPlaneta(THREE, 'Lua'), color: COR_LUA[chave] || '#d4cec6', roughness: 1 }));
-      if (chave === 'lua') texturaReal(THREE, 'lua', (t) => { lm.material.map = t; lm.material.color.set('#ffffff'); lm.material.needsUpdate = true; });
+      const lm = new THREE.Mesh(new THREE.SphereGeometry(rl, chave === 'lua' ? 96 : 48, chave === 'lua' ? 64 : 32), materialCorpo(THREE, { mapa: texturaPlaneta(THREE, 'Lua'), corpo: chave, tinta: COR_LUA[chave] || '#d4cec6' }));
+      if (chave === 'lua') texturaReal(THREE, 'lua', (t) => { lm.material.uniforms.mapa.value = t; lm.material.uniforms.tinta.value.set('#ffffff'); });
       lm.name = L.nome;
       luas.add(lm);
       rotulo(lm, L.nome, chave === 'lua' ? 60 : 50, 'lua');
@@ -875,6 +954,7 @@ async function montarSistema() {
   // aparece só o último meio ano da rota de cada sonda; a rota inteira desde o lançamento aparece ao tocar nela.
   // As que estão saindo do sistema solar (Voyager, Pioneer, New Horizons) mostram sempre a rota inteira.
   SIS.sondas = [];
+  SIS.materialNaves = materialNaves(THREE, { pxMin: PX_SONDA, ambiente: 0.26 });
   const RECENTE_MS = 180 * 86400000;
   const SAINDO = new Set(['voyager1', 'voyager2', 'newhorizons', 'pioneer10', 'pioneer11']);
   for (const [chave, dados] of Object.entries(E.sondas?.sondas || {})) {
@@ -901,11 +981,12 @@ async function montarSistema() {
       const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts(futuro)), new THREE.LineDashedMaterial({ color: cor, dashSize: 0.05, gapSize: 0.05, transparent: true, opacity: 0.35, depthWrite: false }));
       l.computeLineDistances(); l.userData.tipo = 'rota'; grupo.add(l);
     }
-    const marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: texturaPonto(THREE), color: cor, sizeAttenuation: false, transparent: true, depthWrite: false }));
-    marcador.scale.setScalar(0.014);
-    marcador.userData.tipo = 'sonda';
+    // a nave em 3D: nunca menor que PX_SONDA na tela (de longe é uma miniatura; de perto, o modelo inteiro)
+    const marcador = new THREE.Mesh(geometriaNave(THREE, modeloDaSonda(chave)), SIS.materialNaves);
+    marcador.scale.setScalar(RAIO_SONDA); marcador.frustumCulled = false;
+    marcador.userData.tipo = 'sonda'; marcador.userData.pxMin = PX_SONDA;
     grupo.add(marcador);
-    rotulo(marcador, m.curto, chave === 'jwst' || chave.startsWith('voyager') ? 40 : 30, 'sonda', -14);
+    rotulo(marcador, m.curto, chave === 'jwst' || chave.startsWith('voyager') ? 40 : 30, 'sonda');
     SIS.sondas.push({ chave, dados, marcador, rastro, rotaInteira });
     tocaveis.push({ objeto: marcador, acao: () => mostrarSonda(chave), prioridade: 1 });
     await pausa();
@@ -1041,12 +1122,21 @@ function mostrarPequeno(item) {
   destacar(true);
 }
 
+/** Mostra a rota inteira de uma sonda (ou de nenhuma): fica à mostra até outra sonda ser tocada. */
+function destacarRota(s) {
+  for (const o of SIS.sondas) {
+    if (!o.rotaInteira) continue;
+    const ligar = o === s;
+    o.rotaInteira.visible = ligar;
+    if (o.rastro) { o.rastro.userData.oculta = ligar; o.rastro.visible = !ligar && F.sondas && F.rotasSondas; }
+  }
+}
+
 function mostrarSonda(chave) {
   const s = SIS.sondas.find((x) => x.chave === chave);
   const c = cartaoSonda(chave, s.dados, E.sondas?.gerado, E.G.estadoApp, instanteSistema());
-  const destacar = (ligar) => { if (s.rotaInteira) { s.rotaInteira.visible = ligar; if (s.rastro) { s.rastro.userData.oculta = ligar; s.rastro.visible = !ligar && F.sondas && F.rotasSondas; } } };
-  E.G.mostrarPainel(c.titulo, c.frase, c.numeros, c.fonte, acoesSistema(c.detalhes ? [{ texto: 'Ver detalhes', onclick: c.detalhes }] : []), () => destacar(false));
-  destacar(true);
+  E.G.mostrarPainel(c.titulo, c.frase, c.numeros, c.fonte, acoesSistema(c.detalhes ? [{ texto: 'Ver detalhes', onclick: c.detalhes }] : []));
+  destacarRota(s);
 }
 
 function montarControlesSistema() {
@@ -1091,7 +1181,10 @@ function atualizarSistema(agora) {
   for (const P of SIS.planetas) {
     const pos = P.p.corpo === 'Pluto' ? C.helioEcliptica('Pluto', ms) : posicaoPlaneta(P.p, ms);
     paraCena(pos.x, pos.y, pos.z, P.grupo.position);
+    P.helio = pos;
     orientar(P.malha, P.p.corpo, ms);
+    const u = P.malha.material.uniforms;
+    u.centro.value.copy(P.grupo.position); u.eixo.value.set(0, 1, 0).applyQuaternion(P.malha.quaternion);
     // em órbita, um planeta que passa rente à câmera vira um disco enorme na frente de tudo: some enquanto não for o foco
     P.malha.visible = !!G.livre || SIS.focado === P.malha || cam.distanceTo(P.grupo.position) > P.r * 12;
     // luas: a nossa sempre; as dos outros planetas quando a câmera chega perto (ou o planeta está em foco)
@@ -1100,7 +1193,7 @@ function atualizarSistema(agora) {
     if (P.luas.visible) for (const L of P.listaLuas) {
       const q = K.posicaoLua(L.chave, ms, L.el);
       L.malha.visible = !!q;
-      if (q) escalaLua(P.r, P.raioKm, q, L.malha.position);
+      if (q) { escalaLua(P.r, P.raioKm, q, L.malha.position); L.malha.material.uniforms.centro.value.copy(L.malha.position).add(P.grupo.position); }
     }
   }
   for (const s of SIS.pequenos) {
@@ -1113,7 +1206,21 @@ function atualizarSistema(agora) {
   for (const s of SIS.sondas) {
     const e = F.sondas ? estadoSonda(s.dados, ms) : null;
     s.marcador.visible = !!e;
-    if (e) paraCena(e.x, e.y, e.z, s.marcador.position);
+    if (!e) continue;
+    paraCena(e.x, e.y, e.z, s.marcador.position);
+    // perto de um planeta, a nave entra em volta dele na escala das luas (logarítmica), que a afasta mais do centro
+    // do que a escala do sistema: senão ficaria dentro do planeta, que é desenhado ampliado. Vale a posição mais
+    // distante do centro, o que emenda as duas escalas sem salto. É o caso do James Webb, da Juno e dos sobrevoos.
+    const vn = SIS.vn || (SIS.vn = new E.THREE.Vector3());
+    for (const P of SIS.planetas) {
+      const h = P.helio; if (!h || s.marcador.position.distanceToSquared(P.grupo.position) > (P.r * 9) ** 2) continue;
+      const geo = s.chave === 'jwst' && P.p.corpo === 'Earth' ? interpolar(s.dados.geo, ms) : null; // vetor geocêntrico próprio, mais preciso
+      const dx = geo ? geo.x : e.x - h.x, dy = geo ? geo.y : e.y - h.y, dz = geo ? geo.z : e.z - h.z;
+      escalaLua(P.r, P.raioKm, { x: dx * C.UA, y: dy * C.UA, z: dz * C.UA }, vn).add(P.grupo.position);
+      if (vn.distanceToSquared(P.grupo.position) > s.marcador.position.distanceToSquared(P.grupo.position)) s.marcador.position.copy(vn);
+      break;
+    }
+    s.marcador.lookAt(0, 0, 0); // escudo, painéis ou antena voltados para o Sol
   }
   posicionarRotulos();
   if (SIS.dom && G.quadro % 10 === 0) {
@@ -1137,6 +1244,8 @@ function zonasDosControles(G, rect) {
   const out = [];
   const tab = SIS.dom?.tabela; // a tabela dos planetas fica à vista mesmo com os controles recolhidos
   if (tab && !tab.hidden) { const r = tab.getBoundingClientRect(); out.push({ x0: r.left - rect.left - 4, y0: r.top - rect.top - 4, x1: r.right - rect.left + 4, y1: r.bottom - rect.top + 4 }); }
+  for (const b of G.dom.raiz.querySelectorAll('.globo-onde-caixa button')) { const r = b.getBoundingClientRect(); if (r.width && r.height) out.push({ x0: r.left - rect.left - 4, y0: r.top - rect.top - 4, x1: r.right - rect.left + 4, y1: r.bottom - rect.top + 4 }); }
+  if (!G.dom.painel.hidden) { const r = G.dom.painel.getBoundingClientRect(); out.push({ x0: r.left - rect.left, y0: r.top - rect.top, x1: r.right - rect.left, y1: r.bottom - rect.top }); }
   if (G.dom.raiz.classList.contains('imersivo')) return out;
   for (const b of G.dom.raiz.querySelectorAll('.globo-recolhivel button, .globo-recolhivel .globo-data-sistema, .globo-recolhivel .globo-legenda, .globo-recolhivel .globo-linha')) {
     const r = b.getBoundingClientRect();
@@ -1153,9 +1262,9 @@ function posicionarRotulos() {
   const longe = G.camera.position.length() > LONGE_DO_SOL; // além de uns 5.000 UA, só o Sol continua com nome
   for (const o of SIS.comRotulo) {
     const r = o.userData.rotulo;
-    if (!F.rotulos || !visivelNoSistema(o) || (longe && o !== SIS.sol)) { r.el.hidden = true; continue; }
+    if (!F.rotulos || !visivelNoSistema(o) || (longe && o !== SIS.sol) || (F.soNaves && o.userData.tipo !== 'sonda')) { r.el.hidden = true; continue; }
     if (!projetar(o.getWorldPosition(v), v)) { r.el.hidden = true; continue; }
-    const desloc = o.userData.deslocY ?? -(raioNaTela(o, rect) + 12);
+    const desloc = o.userData.deslocY ?? -(Math.max(raioNaTela(o, rect), o.userData.pxMin || 0) + 12);
     itens.push({ r, x: (v.x + 1) / 2 * rect.width, y: (1 - v.y) / 2 * rect.height + desloc });
   }
   // estrelas com nome que estão brilhantes vistas daqui (no 3D, as vizinhas ganham nome ao chegar perto) e céu profundo
