@@ -25,6 +25,13 @@ const GALAXIA = [
   { id: 'observavel', nome: 'Universo observável', texto: 'a radiação cósmica de fundo e a borda do que se pode ver' },
 ];
 export const TODAS = [...BASE, ...GALAXIA];
+/**
+ * Ponte entre a cena do sistema solar (distâncias comprimidas) e a da galáxia (kpc reais), em kpc do Sol. Até `inicio`
+ * a câmera está na cena do sistema solar, entre as estrelas vizinhas; de `inicio` a `fim` as duas cenas são desenhadas
+ * juntas, a da galáxia aparecendo aos poucos; depois de `fim` fica só a da galáxia. `vizinhas` é de onde o lugar passa a
+ * se chamar "Vizinhança do Sol" (1 parsec).
+ */
+export const PONTE = { vizinhas: 0.001, inicio: 0.06, fim: 1.2 };
 const LARGO = matchMedia('(min-width: 1100px) and (pointer: fine)');
 
 const S = { G: null, dom: null, atual: null, ir: null };
@@ -67,7 +74,7 @@ export function fecharLista() { S.dom?.regua.classList.remove('aberta'); S.dom?.
 /** Escala em que a câmera está agora. */
 export function idAtual(G = S.G) {
   if (G.galaxia) return G.galaxia.escalaAtual()?.id || 'via-lactea';
-  if (G.sistema) return 'sistema';
+  if (G.sistema) return G.cam.dist > G.distVizinhas ? 'vizinhanca' : 'sistema';
   return G.espacoAberto ? 'orbita' : 'terra';
 }
 

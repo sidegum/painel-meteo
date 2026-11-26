@@ -20,9 +20,9 @@ import { pontoSubsolar, pontoSublunar } from './globo-astro.js';
 import { faseLua, registroSatelite } from './ceu.js';
 import { cartaoAstro, criarBlocoCeu } from './globo-ceu.js';
 import { texturaPlaneta, texturaBrilho, texturaReal } from './globo-texturas.js';
-import { criarEstrelas, ajustarEscalaEstrelas } from './globo-estrelas.js';
+import { criarEstrelas, ajustarEscalaEstrelas, DIST_ESCALA, DIST_EXP, UA_PC } from './globo-estrelas.js';
 import { valido, direcaoTexto, partesLocais } from './analise.js';
-import { montarEscalas, atualizarEscalas, idAtual, fecharLista, nomeDaEscala } from './globo-escalas.js';
+import { montarEscalas, atualizarEscalas, idAtual, fecharLista, nomeDaEscala, PONTE } from './globo-escalas.js';
 import { criarPos } from './globo-pos.js';
 import { criarCarga } from './globo-carga.js';
 import { montarCamadas, abrirCamadas, atualizarCamadas, fecharCamadas, camadasAbertas } from './globo-camadas.js';
@@ -203,8 +203,13 @@ async function prepararEscalas() {
   encerrar('via-lactea', 'universo', 'imagens');
 }
 
-/** Abre a Via Láctea vista de fora a partir do sistema solar (sai da navegação livre; a órbita da câmera passa a ser em kpc). */
-async function abrirGalaxia() {
+/**
+ * Passa da cena do sistema solar para a da galáxia (sai da navegação livre; a órbita da câmera passa a ser em kpc), sem
+ * mexer na direção da câmera e com a distância equivalente: a troca não se vê, porque na ponte as duas cenas são
+ * desenhadas juntas (ver PONTE em globo-escalas.js).
+ * @param {{ voar?: boolean }} [opcoes] `voar: false` no zoom contínuo (quem afasta é o usuário)
+ */
+async function abrirGalaxia({ voar = true } = {}) {
   if (!G.galaxiaModulo) G.galaxiaModulo = import('./globo-galaxia.js').catch(() => null);
   const m = await G.galaxiaModulo;
   if (!m) { G.galaxiaModulo = null; mostrarAviso('Não foi possível carregar a Via Láctea. Verifique a conexão e tente de novo.', false); return; }
@@ -216,15 +221,23 @@ async function abrirGalaxia() {
   fecharPainel();
   G.camAntesGalaxia = { ...G.cam, foco: G.foco.clone() };
   G.animFoco = null; G.animCam = null;
+  G.cam.dist = voar ? kpcDaCena(G.cam.dist) : PONTE.inicio * 1.02;
   G.galaxia = m; mudouEscala();
   G.dom.raiz.classList.add('com-galaxia');
-  m.abrirGalaxia();
+  m.abrirGalaxia({ voar });
 }
+
+/** Além dos planetas as distâncias crescem muito: o mesmo gesto de zoom rende mais entre as estrelas e as galáxias. */
+const forcaDoZoom = () => (G.galaxia ? 1.8 : G.sistema && G.cam.dist > 60 ? 1.5 : 1);
+
+/** Distância real (kpc) de uma distância da cena do sistema solar, que é comprimida, e o caminho de volta. */
+const kpcDaCena = (d) => Math.pow(d / DIST_ESCALA, 1 / DIST_EXP) / UA_PC / 1000;
+const cenaDoKpc = (kpc) => DIST_ESCALA * Math.pow(kpc * 1000 * UA_PC, DIST_EXP);
 
 function fecharGalaxia() {
   if (!G.galaxia) return;
   G.galaxia.fecharGalaxia();
-  G.galaxia = null; mudouEscala();
+  G.galaxia = null; G.ponte = 0; mudouEscala();
   G.dom.raiz.classList.remove('com-galaxia');
   fecharPainel();
   const a = G.camAntesGalaxia;
@@ -638,7 +651,18 @@ function instanteMostrado() {
 
 function posicionarCamera() {
   const c = G.cam;
-  if (G.galaxia) { G.galaxia.posicionar(c); return; } // escala de galáxias: cena e câmera próprias, em kpc
+  if (G.galaxia) { // escala de galáxias: cena e câmera próprias, em kpc
+    G.galaxia.posicionar(c);
+    G.ponte = G.galaxia.pesoDaPonte(c.dist);
+    if (G.ponte > 0) { // na ponte, a câmera do sistema solar acompanha, na distância comprimida equivalente
+      const d = cenaDoKpc(c.dist), far = Math.max(200, d * 3 + 100);
+      if (G.camera.far !== far || G.camera.near !== 0.05) { G.camera.far = far; G.camera.near = 0.05; G.camera.updateProjectionMatrix(); }
+      latLonVec(c.lat, c.lon, d, G.camera.position).add(G.foco);
+      G.camera.up.set(0, 1, 0);
+      G.camera.lookAt(G.foco);
+    }
+    return;
+  }
   if (G.livre) { // navegação livre: câmera solta no espaço, apontada por guinada e arfagem
     const L = G.livre;
     const near = Math.max(1e-6, Math.min(0.05, L.escala * 0.1)), far = Math.max(200, Math.min(1e5, L.pos.length() * 3));
@@ -647,7 +671,8 @@ function posicionarCamera() {
     G.camera.rotation.set(L.pitch, L.yaw, 0, 'YXZ');
     return;
   }
-  if (G.camera.far !== 200) { G.camera.far = 200; G.camera.updateProjectionMatrix(); }
+  const far = G.sistema ? Math.max(200, c.dist * 3 + 100) : 200; // entre as estrelas vizinhas, o fundo acompanha a distância
+  if (G.camera.far !== far) { G.camera.far = far; G.camera.updateProjectionMatrix(); }
   if (G.sistema) { // sistema solar: a câmera gira em volta do foco (o Sol ou o corpo escolhido)
     const near = Math.max(0.0002, Math.min(0.05, c.dist * 0.02));
     if (Math.abs(near - G.camera.near) > near * 0.25) { G.camera.near = near; G.camera.updateProjectionMatrix(); }
@@ -696,7 +721,7 @@ function configurarGestos() {
   // Âncora do gesto: ponto da Terra sob o centro dos dedos, a altura no início e a última posição (para quando a âncora cai fora da Terra).
   const ancorar = () => {
     const c = centro();
-    gesto = { n: ponteiros.size, ancora: pontoNaTela(c.x, c.y), d0: c.d, dist0: G.cam.dist, ultimo: c, escala: G.trocasDeEscala };
+    gesto = { n: ponteiros.size, ancora: pontoNaTela(c.x, c.y), d0: c.d, dist0: G.cam.dist, ultimo: c, escala: G.trocasDeEscala, forca: forcaDoZoom() };
   };
   const registrar = (agora) => {
     historico.push({ t: agora, lat: G.cam.lat, lon: G.cam.lon });
@@ -725,7 +750,7 @@ function configurarGestos() {
       return;
     }
     if (gesto.escala !== G.trocasDeEscala) ancorar(); // a escala mudou no meio da pinça: o gesto recomeça da distância nova
-    if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(G.sistema ? gesto.dist0 * (gesto.d0 / c.d) : 1 + (gesto.dist0 - 1) * (gesto.d0 / c.d), true); // a pinça escala a altura (no sistema, a distância ao foco)
+    if (gesto.n > 1 && gesto.d0 > 0 && c.d > 0) definirDist(G.sistema ? gesto.dist0 * Math.pow(gesto.d0 / c.d, gesto.forca) : 1 + (gesto.dist0 - 1) * (gesto.d0 / c.d), true); // a pinça escala a altura (no sistema, a distância ao foco)
     if (!gesto.ancora || !levarPontoA(gesto.ancora, c.x, c.y)) {
       // âncora fora da Terra (dedo no espaço) ou sistema solar: giro proporcional à altura
       const k = G.sistema ? 0.3 : 0.22 * Math.max(0.0015, (G.cam.dist - 1) / (DIST.inicial - 1));
@@ -755,7 +780,7 @@ function configurarGestos() {
     e.preventDefault(); G.autoGira = false; G.animCam = null; G.cam.vLat = G.cam.vLon = 0;
     if (G.livre) { avancarLivre(Math.exp(-e.deltaY * 0.0015)); return; }
     const ancora = pontoNaTela(e.clientX, e.clientY);
-    definirDist(G.sistema ? G.cam.dist * Math.exp(e.deltaY * 0.0012) : 1 + (G.cam.dist - 1) * Math.exp(e.deltaY * 0.0012));
+    definirDist(G.sistema ? G.cam.dist * Math.exp(e.deltaY * 0.0012 * forcaDoZoom()) : 1 + (G.cam.dist - 1) * Math.exp(e.deltaY * 0.0012));
     if (ancora) levarPontoA(ancora, e.clientX, e.clientY); // a roda aproxima em direção ao cursor
   }, { passive: false });
   cv.addEventListener('dblclick', (e) => e.preventDefault());
@@ -814,10 +839,12 @@ function distanciaQueCabe() {
 function definirDist(d, continuo = false) {
   if (G.galaxia) {
     const [min, max] = G.galaxia.limitesDistancia();
-    // zoom contínuo: aproximar do Sol além do limite da galáxia volta ao sistema solar, de longe
-    if (d < min * 0.8 && G.galaxia.focoNoSol() && !G.trocandoEscala) {
-      G.trocandoEscala = true; setTimeout(() => { G.trocandoEscala = false; }, 1200);
-      fecharGalaxia(); G.cam.dist = DIST_MAX_SISTEMA * 0.9; G.foco.set(0, 0, 0); G.focoAlvo = null; G.animFoco = null;
+    // zoom contínuo: aproximar do Sol até o começo da ponte devolve à cena do sistema solar, na mesma direção
+    if (d < PONTE.inicio && G.galaxia.focoNoSol() && !G.trocandoEscala) {
+      const { lat, lon } = G.cam;
+      G.trocandoEscala = true; setTimeout(() => { G.trocandoEscala = false; }, 250);
+      fecharGalaxia();
+      Object.assign(G.cam, { lat, lon, dist: DIST_MAX_SISTEMA * 0.985 }); G.foco.set(0, 0, 0); G.focoAlvo = null; G.focoTerra = null; G.animFoco = null;
       return;
     }
     G.cam.dist = Math.max(min, Math.min(max, d)); return;
@@ -831,17 +858,19 @@ function definirDist(d, continuo = false) {
 /**
  * Zoom contínuo entre as escalas. Afastar além do limite da Terra entra no sistema solar com a câmera na mesma direção,
  * a Terra do mesmo tamanho na tela e o mesmo céu de fundo, então a roda ou a pinça seguem sem salto; aproximar de volta
- * devolve à Terra. No limite do sistema solar, insistir em afastar abre a Via Láctea (cena própria, em kpc).
+ * devolve à Terra. No sistema solar o zoom segue para fora, entre as estrelas vizinhas (distâncias reais do catálogo,
+ * comprimidas), até o começo da ponte; dali em diante a cena é a da galáxia, em kpc, e o zoom continua sem parar.
  */
-const DIST_MAX_SISTEMA = 40;
+const DIST_MAX_SISTEMA = cenaDoKpc(PONTE.inicio);
+G.distVizinhas = cenaDoKpc(PONTE.vizinhas);
 function seguirAfastando(pedido, max, continuo) {
   if (G.livre || G.animCam) return;
   if (pedido <= max * 1.0001) { G.alemDoLimite = 0; return; }
   G.alemDoLimite = continuo ? Math.log(pedido / max) : (G.alemDoLimite || 0) + Math.log(pedido / max);
-  if (G.alemDoLimite < (G.sistema ? 0.35 : 0.08) || G.trocandoEscala) return; // na Terra basta passar do limite; para a galáxia, uns três toques da roda
+  if (G.trocandoEscala || (!G.sistema && G.alemDoLimite < 0.08)) return;
   G.alemDoLimite = 0; G.trocandoEscala = true;
-  setTimeout(() => { G.trocandoEscala = false; }, 1500);
-  if (G.sistema) { abrirGalaxia(); return; }
+  setTimeout(() => { G.trocandoEscala = false; }, G.sistema ? 250 : 1500);
+  if (G.sistema) { abrirGalaxia({ voar: false }); return; }
   (async () => { // da Terra para o sistema solar: abre o espaço (se preciso) e entra pela Terra quando ele ficar pronto
     if (!G.espacoAberto) await alternarEspaco();
     for (let i = 0; i < 40 && G.espacoAberto && !G.sistema; i++) {
@@ -1028,6 +1057,7 @@ function moverLivre(agora) {
 function moverFoco(agora) {
   const alvo = G.focoAlvo ? G.focoAlvo() : ORIGEM;
   if (G.focoTerra) alvo.multiplyScalar(1 - suave(Math.log(1.2), Math.log(7), Math.log(G.cam.dist))); // vindo da Terra: ao afastar, o centro passa aos poucos para o Sol
+  else if (G.focoAlvo && G.cam.dist > 40) alvo.multiplyScalar(1 - suave(Math.log(40), Math.log(300), Math.log(G.cam.dist))); // rumo às estrelas, idem
   const a = G.animFoco;
   if (!a) { G.foco.copy(alvo); return; }
   const t = Math.min(1, (agora - a.t0) / a.ms), e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -1934,7 +1964,7 @@ function laco(agora) {
   if (G.quadro % 30 === 7) G.estrelas?.reduzir?.(nivelEstrelas());
   if (agora - (G.ultimaEscala || 0) > 200) { G.ultimaEscala = agora; atualizarEscalas(); } // por tempo, não por quadro: com a cena pesada, a régua não pode atrasar
   if (G.galaxia) G.galaxia.atualizarGalaxia(agora);
-  else if (G.espaco && G.espacoAberto) G.espaco.atualizarEspaco(agora);
+  if (G.espaco && G.espacoAberto && (!G.galaxia || G.ponte > 0)) G.espaco.atualizarEspaco(agora);
   if (G.camada === 'pressao') G.terra.material.uniforms.isobaras.value = Math.max(0, Math.min(1, (2.6 - c.dist) / 0.8));
   if (!G.sistema) {
     const antes = G.regiao.estado.ativa;
@@ -1963,7 +1993,12 @@ function laco(agora) {
   G.quadrosParado = chaveCam === G.chaveCam && !G.animCam && !G.animFoco && !G.livre && !G.particulas && !G.seguir ? (G.quadrosParado || 0) + 1 : 0;
   G.chaveCam = chaveCam;
   G.desenhou = G.galaxia ? G.galaxia.precisaDesenhar(agora) : G.sistema || G.espacoAberto || G.quadrosParado < 20 || G.quadro % 3 === 0; // em órbita e no sistema solar tudo se move
-  if (G.galaxia) { if (G.desenhou) G.pos.desenhar(G.galaxia.estado().cena, G.galaxia.estado().camera); }
+  if (G.galaxia) {
+    if (G.desenhou) { // na ponte, a cena do sistema solar vai por baixo e a da galáxia entra por cima, aos poucos
+      if (G.ponte > 0 && (G.pos.ativo || G.ponte > 0.5)) G.renderer.render(G.cena, G.camera);
+      G.pos.desenhar(G.galaxia.estado().cena, G.galaxia.estado().camera, 1 - G.ponte);
+    }
+  }
   else if (G.desenhou) G.renderer.render(G.cena, G.camera);
   G.quadro++;
 }

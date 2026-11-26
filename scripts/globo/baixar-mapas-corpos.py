@@ -28,7 +28,7 @@ API = 'https://commons.wikimedia.org/w/api.php?format=json&'
 LIVRES = ('public domain', 'pd', 'cc0', 'cc by', 'cc-by', 'cc by-sa', 'cc-by-sa')
 BONS = ('map', 'mosaic', 'global', 'cylindrical', 'equirectangular', 'color', 'colour', 'usgs', 'pia', 'albedo', 'basemap', 'texture')
 RUINS = ('label', 'name', 'nomenclat', 'geolog', 'topograph', 'elevation', 'grid', 'annotat', 'legend', 'quadrangle', 'chart', 'diagram', 'gravity',
-         'thermal', 'temperature', 'infrared', 'false', 'stereo', 'polar', 'fictional', 'artist', 'coverage', 'resolution', 'footprint', 'landing', 'mineral')
+         'thermal', 'temperature', 'infrared', 'false', 'stereo', 'polar', 'fictional', 'artist', 'coverage', 'resolution', 'footprint', 'landing', 'mineral', 'hemispher', 'globes', 'mercator', 'gore', 'orthographic', 'comparison')
 
 
 def buscar(url, tentativas=4):
@@ -39,7 +39,7 @@ def buscar(url, tentativas=4):
                 return r.read()
         except Exception as e:  # noqa: BLE001 (rede: tenta de novo e registra)
             print('  falhou', url[:110], e)
-            time.sleep(60 * (i + 1) if '429' in str(e) else 5 * (i + 1))
+            time.sleep(90 * (i + 1) if '429' in str(e) else 5 * (i + 1))
     return None
 
 
@@ -54,7 +54,7 @@ def metadados(titulos):
     for i in range(0, len(titulos), 40):
         lote = titulos[i:i + 40]
         bruto = buscar(API + 'action=query&prop=imageinfo&iiprop=url|size|mime|extmetadata&iiurlwidth=4096&titles=' + urllib.parse.quote('|'.join('File:' + t for t in lote)))
-        time.sleep(4)
+        time.sleep(6)
         if not bruto:
             continue
         consulta = json.loads(bruto).get('query', {})
@@ -73,8 +73,8 @@ def metadados(titulos):
 
 def procurar(frase):
     """Títulos de arquivos (sem 'File:') que o Commons devolve para a frase."""
-    bruto = buscar(API + 'action=query&list=search&srnamespace=6&srlimit=30&srsearch=' + urllib.parse.quote(frase))
-    time.sleep(4)
+    bruto = buscar(API + 'action=query&list=search&srnamespace=6&srlimit=50&srsearch=' + urllib.parse.quote(frase))
+    time.sleep(6)
     if not bruto:
         return []
     return [r['title'][len('File:'):] for r in json.loads(bruto).get('query', {}).get('search', [])]
@@ -84,7 +84,7 @@ def serve(m):
     """Mapa cilíndrico do corpo inteiro, de licença livre e com resolução útil?"""
     if not m.get('largura') or not m.get('altura') or m.get('mime') not in ('image/jpeg', 'image/png', 'image/tiff'):
         return False
-    return m['largura'] >= 1000 and abs(m['largura'] / m['altura'] - 2) < 0.03 and any(k in m['licenca'].lower() for k in LIVRES)
+    return m['largura'] >= 1000 and abs(m['largura'] / m['altura'] - 2) < 0.06 and any(k in m['licenca'].lower() for k in LIVRES)
 
 
 def nota(m, nome):
@@ -108,12 +108,13 @@ def main():
             titulos = []
             for frase in c.get('buscas', []):
                 titulos += [t for t in procurar(frase) if t not in titulos]
-            cand = [m for m in metadados(titulos[:40]).values() if serve(m) and nota(m, c['nome']) >= 0]
+            todos = list(metadados(titulos[:100]).values())
+            cand = [m for m in todos if serve(m) and nota(m, c['nome']) >= 0]
             cand.sort(key=lambda m: -nota(m, c['nome']))
             vistos = [{'arquivo': m['arquivo'], 'largura': m['largura'], 'nota': round(nota(m, c['nome']), 1)} for m in cand[:8]]
             escolha = cand[0] if cand else None
         if not escolha:
-            print(c['id'], 'SEM MAPA', vistos)
+            print(c['id'], 'SEM MAPA', [(m['arquivo'], m['largura'], m['altura'], m['licenca']) for m in todos if nota(m, c['nome']) >= 0][:25])
             continue
         bruto = buscar(escolha['url'])
         time.sleep(4)
@@ -134,7 +135,7 @@ def main():
             tamanhos.append(lado)
         feitos[c['id']] = {**{k: escolha[k] for k in ('arquivo', 'pagina', 'autor', 'credito', 'licenca', 'largura', 'altura')}, 'tamanhos': tamanhos, 'candidatos': vistos}
         folha.append((c['id'], img.resize((512, 256), Image.LANCZOS)))
-        print(c['id'], 'ok', escolha['arquivo'], escolha['largura'], escolha['licenca'])
+        print(c['id'], 'ok', escolha['arquivo'], escolha['largura'], escolha['licenca'], vistos[1:5])
     (saida / 'mapas.json').write_text(json.dumps({'fonte': 'Wikimedia Commons (mapas da NASA, do JPL e do USGS, de licença livre)', 'corpos': feitos}, ensure_ascii=False, indent=1))
     if folha:
         colunas = 4

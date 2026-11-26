@@ -38,7 +38,7 @@ const FRAG_AMPLIAR = /* glsl */`
 
 // composição: cena + halo, curva de tom pelo canal mais forte (a cor não muda), vinheta leve e ruído de 1 nível contra faixas
 const FRAG_FINAL = /* glsl */`
-  uniform sampler2D cena, halo; uniform float forca, exposicao, vinheta; uniform vec3 tinta;
+  uniform sampler2D cena, halo; uniform float forca, exposicao, vinheta, peso; uniform vec3 tinta;
   varying vec2 vUv;
   float ruido(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   void main() {
@@ -53,7 +53,7 @@ const FRAG_FINAL = /* glsl */`
     vec2 q = vUv - 0.5;
     c *= 1.0 - vinheta * dot(q, q) * 1.6;
     c += (ruido(gl_FragCoord.xy) - 0.5) / 255.0;
-    gl_FragColor = vec4(c, 1.0);
+    gl_FragColor = vec4(c, peso);
   }`;
 
 const NIVEIS = 6;
@@ -63,13 +63,13 @@ const NIVEIS = 6;
  * @param {typeof import('../vendor/three/three.module.min.js')} THREE
  * @param {import('../vendor/three/three.module.min.js').WebGLRenderer} renderer
  * @returns {{ ativo: boolean, ajustes: { forca: number, exposicao: number, vinheta: number, tinta: [number, number, number] },
- *   desenhar: (cena: object, camera: object) => void, adaptar: (raiz: object) => void, descartar: () => void }}
+ *   desenhar: (cena: object, camera: object, peso?: number) => void, adaptar: (raiz: object) => void, descartar: () => void }}
  */
 export function criarPos(THREE, renderer) {
   const ajustes = { forca: 0.2, exposicao: 1, vinheta: 0.35, tinta: [1, 1, 1] };
   const gl = renderer.getContext();
   const suporta = renderer.capabilities.isWebGL2 !== false && (renderer.extensions.has('EXT_color_buffer_half_float') || renderer.extensions.has('EXT_color_buffer_float'));
-  if (!suporta || !gl) return { ativo: false, ajustes, desenhar: (cena, camera) => renderer.render(cena, camera), adaptar() {}, descartar() {} };
+  if (!suporta || !gl) return { ativo: false, ajustes, desenhar: (cena, camera, peso = 1) => { if (peso >= 0.5) renderer.render(cena, camera); }, adaptar() {}, descartar() {} };
 
   const alvo = (comProfundidade) => new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
     depthBuffer: comProfundidade, stencilBuffer: false, generateMipmaps: false });
@@ -78,7 +78,7 @@ export function criarPos(THREE, renderer) {
   renderer.setRenderTarget(principal);
   const completo = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
   renderer.setRenderTarget(null);
-  if (!completo) { principal.dispose(); return { ativo: false, ajustes, desenhar: (cena, camera) => renderer.render(cena, camera), adaptar() {}, descartar() {} }; }
+  if (!completo) { principal.dispose(); return { ativo: false, ajustes, desenhar: (cena, camera, peso = 1) => { if (peso >= 0.5) renderer.render(cena, camera); }, adaptar() {}, descartar() {} }; }
   const niveis = Array.from({ length: NIVEIS }, () => alvo(false));
   const tamanho = new THREE.Vector2(), ultimo = new THREE.Vector2(-1, -1);
 
@@ -89,7 +89,7 @@ export function criarPos(THREE, renderer) {
   const material = (frag, uniforms, extra = {}) => new THREE.ShaderMaterial({ vertexShader: VERTEX, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false, ...extra });
   const reduzir = material(FRAG_REDUZIR, { mapa: { value: null }, texel: { value: new THREE.Vector2() } });
   const ampliar = material(FRAG_AMPLIAR, { mapa: { value: null }, texel: { value: new THREE.Vector2() }, peso: { value: 1 } }, { blending: THREE.AdditiveBlending, transparent: true });
-  const final = material(FRAG_FINAL, { cena: { value: principal.texture }, halo: { value: niveis[0].texture }, forca: { value: 0 }, exposicao: { value: 1 }, vinheta: { value: 0 }, tinta: { value: new THREE.Vector3(1, 1, 1) } });
+  const final = material(FRAG_FINAL, { cena: { value: principal.texture }, halo: { value: niveis[0].texture }, forca: { value: 0 }, exposicao: { value: 1 }, vinheta: { value: 0 }, peso: { value: 1 }, tinta: { value: new THREE.Vector3(1, 1, 1) } }, { transparent: true });
 
   const passe = (mat, destino) => { quadro.material = mat; renderer.setRenderTarget(destino); renderer.render(palco, fixa); };
 
@@ -102,8 +102,11 @@ export function criarPos(THREE, renderer) {
     for (const n of niveis) { w = Math.max(2, w >> 1); h = Math.max(2, h >> 1); n.setSize(w, h); }
   }
 
-  /** Desenha a cena com halo e curva de tom, na tela (ou no alvo que já estiver ativo como saída final). */
-  function desenhar(cena, camera) {
+  /**
+   * Desenha a cena com halo e curva de tom, na tela. Com `peso` menor que 1, o resultado é misturado por cima do que já
+   * está na tela (a ponte entre a cena do sistema solar e a da galáxia), em vez de substituí-lo.
+   */
+  function desenhar(cena, camera, peso = 1) {
     ajustarTamanho();
     const limpar = renderer.autoClear;
     renderer.setRenderTarget(principal);
@@ -126,7 +129,8 @@ export function criarPos(THREE, renderer) {
     }
     final.uniforms.forca.value = ajustes.forca / usados; final.uniforms.exposicao.value = ajustes.exposicao; final.uniforms.vinheta.value = ajustes.vinheta;
     final.uniforms.tinta.value.fromArray(ajustes.tinta);
-    renderer.setRenderTarget(null); renderer.clear();
+    final.uniforms.peso.value = peso;
+    renderer.setRenderTarget(null); if (peso >= 1) renderer.clear();
     passe(final, null);
     renderer.autoClear = limpar;
   }

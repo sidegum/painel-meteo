@@ -1,28 +1,271 @@
 {
-  "nota": "Luas e corpos pequenos com mapa global real (projeção cilíndrica simples, 2:1) no sistema solar do Globo. 'arquivos' são nomes exatos no Wikimedia Commons, na ordem de preferência; quando nenhum existe, o script procura por 'buscas' e fica com o melhor mapa 2:1 de licença livre. O escolhido, com autor e licença, vai para mapas.json.",
-  "corpos": [
-    { "id": "io", "nome": "Io", "arquivos": [], "buscas": ["Io global map Galileo Voyager mosaic", "Io cylindrical map USGS"] },
-    { "id": "europa", "nome": "Europa", "arquivos": [], "buscas": ["Europa moon global map mosaic", "Europa cylindrical map USGS Galileo"] },
-    { "id": "ganimedes", "nome": "Ganymede", "arquivos": [], "buscas": ["Ganymede global map mosaic", "Ganymede cylindrical map USGS"] },
-    { "id": "calisto", "nome": "Callisto", "arquivos": [], "buscas": ["Callisto global map mosaic", "Callisto cylindrical map USGS"] },
-    { "id": "mimas", "nome": "Mimas", "arquivos": [], "buscas": ["Mimas global map Cassini", "Mimas color map PIA"] },
-    { "id": "encelado", "nome": "Enceladus", "arquivos": [], "buscas": ["Enceladus global map Cassini", "Enceladus color map PIA"] },
-    { "id": "tetis", "nome": "Tethys", "arquivos": [], "buscas": ["Tethys global map Cassini", "Tethys color map PIA"] },
-    { "id": "dione", "nome": "Dione", "arquivos": [], "buscas": ["Dione global map Cassini", "Dione color map PIA"] },
-    { "id": "reia", "nome": "Rhea", "arquivos": [], "buscas": ["Rhea global map Cassini", "Rhea color map PIA"] },
-    { "id": "tita", "nome": "Titan", "arquivos": [], "buscas": ["Titan global map Cassini ISS mosaic", "Titan surface map cylindrical"] },
-    { "id": "japeto", "nome": "Iapetus", "arquivos": [], "buscas": ["Iapetus global map Cassini", "Iapetus color map PIA"] },
-    { "id": "miranda", "nome": "Miranda", "arquivos": [], "buscas": ["Miranda moon map Voyager 2 mosaic", "Miranda cylindrical map"] },
-    { "id": "ariel", "nome": "Ariel", "arquivos": [], "buscas": ["Ariel moon map Voyager 2 mosaic", "Ariel cylindrical map"] },
-    { "id": "umbriel", "nome": "Umbriel", "arquivos": [], "buscas": ["Umbriel moon map Voyager 2", "Umbriel cylindrical map"] },
-    { "id": "titania", "nome": "Titania", "arquivos": [], "buscas": ["Titania moon map Voyager 2", "Titania cylindrical map"] },
-    { "id": "oberon", "nome": "Oberon", "arquivos": [], "buscas": ["Oberon moon map Voyager 2", "Oberon cylindrical map"] },
-    { "id": "tritao", "nome": "Triton", "arquivos": [], "buscas": ["Triton global map Voyager 2 mosaic", "Triton cylindrical map"] },
-    { "id": "caronte", "nome": "Charon", "arquivos": [], "buscas": ["Charon global map New Horizons mosaic", "Charon cylindrical map"] },
-    { "id": "plutao", "nome": "Pluto", "arquivos": [], "buscas": ["Pluto global map New Horizons mosaic", "Pluto cylindrical map color"] },
-    { "id": "fobos", "nome": "Phobos", "arquivos": [], "buscas": ["Phobos global map mosaic", "Phobos cylindrical map"] },
-    { "id": "deimos", "nome": "Deimos", "arquivos": [], "buscas": ["Deimos global map mosaic", "Deimos cylindrical map"] },
-    { "id": "ceres", "nome": "Ceres", "arquivos": [], "buscas": ["Ceres global map Dawn mosaic", "Ceres cylindrical map color"] },
-    { "id": "vesta", "nome": "Vesta", "arquivos": [], "buscas": ["Vesta global map Dawn mosaic", "Vesta cylindrical map"] }
-  ]
+ "nota": "Luas e corpos pequenos com mapa global real (projeção cilíndrica simples, 2:1) no sistema solar do Globo. 'arquivos' são nomes exatos no Wikimedia Commons, na ordem de preferência; quando nenhum existe, o script procura por 'buscas' e fica com o melhor mapa 2:1 de licença livre. O escolhido, com autor e licença, vai para mapas.json.",
+ "corpos": [
+  {
+   "id": "io",
+   "nome": "Io",
+   "arquivos": [],
+   "buscas": [
+    "Io global map Galileo Voyager mosaic",
+    "Io cylindrical map USGS",
+    "Io map",
+    "Io mosaic Galileo",
+    "Io surface texture",
+    "Io USGS color mosaic"
+   ]
+  },
+  {
+   "id": "europa",
+   "nome": "Europa",
+   "arquivos": [],
+   "buscas": [
+    "Europa moon global map mosaic",
+    "Europa cylindrical map USGS Galileo",
+    "Europa map Galileo",
+    "Europa mosaic moon surface",
+    "Europa texture map",
+    "PIA19048 Europa"
+   ]
+  },
+  {
+   "id": "ganimedes",
+   "nome": "Ganymede",
+   "arquivos": [],
+   "buscas": [
+    "Ganymede global map mosaic",
+    "Ganymede cylindrical map USGS",
+    "Ganymede map",
+    "Ganymede mosaic Voyager Galileo",
+    "Ganymede texture"
+   ]
+  },
+  {
+   "id": "calisto",
+   "nome": "Callisto",
+   "arquivos": [],
+   "buscas": [
+    "Callisto global map mosaic",
+    "Callisto cylindrical map USGS",
+    "Callisto map",
+    "Callisto mosaic Voyager Galileo",
+    "Callisto texture"
+   ]
+  },
+  {
+   "id": "mimas",
+   "nome": "Mimas",
+   "arquivos": [
+    "Map of Mimas colorized 2014-04 PIA18437.jpg"
+   ],
+   "buscas": [
+    "Mimas global map Cassini",
+    "Mimas color map PIA"
+   ]
+  },
+  {
+   "id": "encelado",
+   "nome": "Enceladus",
+   "arquivos": [
+    "Color map of Enceladus PIA18435 (modified).jpg"
+   ],
+   "buscas": [
+    "Enceladus global map Cassini",
+    "Enceladus color map PIA"
+   ]
+  },
+  {
+   "id": "tetis",
+   "nome": "Tethys",
+   "arquivos": [
+    "Tethys Color Map.jpg"
+   ],
+   "buscas": [
+    "Tethys global map Cassini",
+    "Tethys color map PIA"
+   ]
+  },
+  {
+   "id": "dione",
+   "nome": "Dione",
+   "arquivos": [
+    "Dione Color Map.jpg"
+   ],
+   "buscas": [
+    "Dione global map Cassini",
+    "Dione color map PIA"
+   ]
+  },
+  {
+   "id": "reia",
+   "nome": "Rhea",
+   "arquivos": [
+    "Rhea Color Map.jpg"
+   ],
+   "buscas": [
+    "Rhea global map Cassini",
+    "Rhea color map PIA"
+   ]
+  },
+  {
+   "id": "tita",
+   "nome": "Titan",
+   "arquivos": [],
+   "buscas": [
+    "Titan global map Cassini ISS mosaic",
+    "Titan surface map cylindrical",
+    "Titan map Cassini",
+    "Titan mosaic ISS PIA",
+    "Titan surface texture",
+    "Titan VIMS ISS global mosaic"
+   ]
+  },
+  {
+   "id": "japeto",
+   "nome": "Iapetus",
+   "arquivos": [
+    "Iapetus Color Map.jpg"
+   ],
+   "buscas": [
+    "Iapetus global map Cassini",
+    "Iapetus color map PIA"
+   ]
+  },
+  {
+   "id": "miranda",
+   "nome": "Miranda",
+   "arquivos": [],
+   "buscas": [
+    "Miranda moon map Voyager 2 mosaic",
+    "Miranda cylindrical map",
+    "Miranda map",
+    "Miranda map JPL USGS"
+   ]
+  },
+  {
+   "id": "ariel",
+   "nome": "Ariel",
+   "arquivos": [],
+   "buscas": [
+    "Ariel moon map Voyager 2 mosaic",
+    "Ariel cylindrical map",
+    "Ariel map JPL USGS",
+    "Ariel moon map"
+   ]
+  },
+  {
+   "id": "umbriel",
+   "nome": "Umbriel",
+   "arquivos": [
+    "Umbriel map JPL USGS.jpg"
+   ],
+   "buscas": [
+    "Umbriel moon map Voyager 2",
+    "Umbriel cylindrical map"
+   ]
+  },
+  {
+   "id": "titania",
+   "nome": "Titania",
+   "arquivos": [
+    "Titania map JPL USGS.jpg"
+   ],
+   "buscas": [
+    "Titania moon map Voyager 2",
+    "Titania cylindrical map"
+   ]
+  },
+  {
+   "id": "oberon",
+   "nome": "Oberon",
+   "arquivos": [
+    "Oberon map JPL USGS.jpg"
+   ],
+   "buscas": [
+    "Oberon moon map Voyager 2",
+    "Oberon cylindrical map"
+   ]
+  },
+  {
+   "id": "tritao",
+   "nome": "Triton",
+   "arquivos": [],
+   "buscas": [
+    "Triton global map Voyager 2 mosaic",
+    "Triton cylindrical map",
+    "Triton map",
+    "Triton color map PIA18668",
+    "Triton mosaic Voyager"
+   ]
+  },
+  {
+   "id": "caronte",
+   "nome": "Charon",
+   "arquivos": [
+    "Charon Topographic Map NASA PIA19866.jpg"
+   ],
+   "buscas": [
+    "Charon global map New Horizons mosaic",
+    "Charon cylindrical map"
+   ]
+  },
+  {
+   "id": "plutao",
+   "nome": "Pluto",
+   "arquivos": [
+    "Pluto color mapmosaic.jpg"
+   ],
+   "buscas": [
+    "Pluto global map New Horizons mosaic",
+    "Pluto cylindrical map color"
+   ]
+  },
+  {
+   "id": "fobos",
+   "nome": "Phobos",
+   "arquivos": [],
+   "buscas": [
+    "Phobos global map mosaic",
+    "Phobos cylindrical map",
+    "Phobos map",
+    "Phobos mosaic Viking map",
+    "Phobos texture"
+   ]
+  },
+  {
+   "id": "deimos",
+   "nome": "Deimos",
+   "arquivos": [],
+   "buscas": [
+    "Deimos global map mosaic",
+    "Deimos cylindrical map",
+    "Deimos map",
+    "Deimos texture"
+   ]
+  },
+  {
+   "id": "ceres",
+   "nome": "Ceres",
+   "arquivos": [],
+   "buscas": [
+    "Ceres global map Dawn mosaic",
+    "Ceres cylindrical map color",
+    "Ceres map Dawn",
+    "Ceres global mosaic PIA",
+    "Ceres equirectangular",
+    "Ceres LAMO global"
+   ]
+  },
+  {
+   "id": "vesta",
+   "nome": "Vesta",
+   "arquivos": [],
+   "buscas": [
+    "Vesta global map Dawn mosaic",
+    "Vesta cylindrical map",
+    "Vesta map Dawn",
+    "Vesta global mosaic PIA",
+    "Vesta equirectangular"
+   ]
+  }
+ ]
 }

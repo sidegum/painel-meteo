@@ -21,7 +21,7 @@ import * as A from '../vendor/astronomy/astronomy.min.js';
 import { temperaturaCor } from './ceu.js';
 
 const RAD = Math.PI / 180;
-const UA_PC = 206264.806;
+export const UA_PC = 206264.806;
 export const RAIO_ESTRELAS = 60;
 /** Compressão das distâncias da cena (a mesma do sistema solar): DIST_ESCALA·UA^DIST_EXP. */
 export const DIST_ESCALA = 1.25, DIST_EXP = 0.45;
