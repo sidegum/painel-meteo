@@ -10,7 +10,7 @@
 // - INMET_TOKEN nunca aparece em respostas, erros ou logs.
 // - Nenhuma localização ou IP é gravado no KV ou em logs.
 
-const VERSAO = '1.2.1';
+const VERSAO = '1.2.2';
 
 export const DESTINOS = new Set([
   'apitempo.inmet.gov.br',
@@ -90,6 +90,19 @@ export async function buscarExterno(url, { timeoutMs = 8000, maxBytes = 3_000_00
   return corpo;
 }
 
+/**
+ * Bytes de uma resposta em texto. INMET e CPC às vezes usam latin1; o resto é UTF-8.
+ * Até a 1.2.1, qualquer "�" no texto fazia a resposta inteira ser relida como latin1. Bastava um título do
+ * Google Notícias com um caractere quebrado para todos os acentos saírem trocados ("El NiÃ±o").
+ * Agora: UTF-8 válido fica como está. Com bytes inválidos, só é latin1 quando não há nenhum acento UTF-8
+ * válido no texto (uma página latin1 lida como UTF-8 não tem nenhum); senão é UTF-8 com um defeito pontual.
+ */
+export function decodificarTexto(buf) {
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { /* bytes inválidos: decide abaixo */ }
+  const utf = new TextDecoder('utf-8').decode(buf);
+  return /[\u0080-\uFFFC]/.test(utf) ? utf : new TextDecoder('latin1').decode(buf);
+}
+
 async function lerLimitado(r, maxBytes) {
   const len = Number(r.headers.get('content-length'));
   if (len && len > maxBytes) throw new Error('resposta grande demais');
@@ -105,9 +118,7 @@ async function lerLimitado(r, maxBytes) {
   }
   const buf = new Uint8Array(total); let o = 0;
   for (const p of partes) { buf.set(p, o); o += p.byteLength; }
-  // INMET e CPC às vezes usam latin1; tenta utf-8 e cai para latin1 se houver caracteres inválidos.
-  const utf = new TextDecoder('utf-8', { fatal: false }).decode(buf);
-  return utf.includes('�') ? new TextDecoder('latin1').decode(buf) : utf;
+  return decodificarTexto(buf);
 }
 
 // ------------------------------------------------- limite por cliente (memória)

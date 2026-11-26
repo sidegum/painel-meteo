@@ -8,21 +8,24 @@ A referência são as cartas sinóticas: um mar de fundo, linhas de pressão, fr
 
 ## Paleta
 
+Desde a 1.14.1 a paleta é a do bloco "Cores do painel", no começo do `app.css`, que é a referência (a tabela original deste plano, com o "mar" `#17303B` e cores mais fortes, foi substituída). A regra: a cor indica a informação e é discreta, nos dois temas.
+
 | Papel | Escuro (padrão) | Claro | Significado |
 |---|---|---|---|
-| Fundo | `#17303B` mar | `#DCE5E6` névoa | |
-| Superfície | `#1F3D4A` | `#EEF3F3` | blocos de dados, sem sombra |
-| Linha | `#2E5161` | `#B9C8CB` | divisões de 1 px |
-| Texto | `#DCE5E6` névoa | `#17303B` mar | |
-| Texto fraco | `#A9BEC3` | `#40606B` | contraste mínimo 4,5:1 nos dois temas |
-| Chuva | `#3DB5AE` | `#1E8F8A` (texto `#136B67`) | só chuva |
-| Rajada | `#E3B23C` | `#D9A21B` (texto `#7A5A00`) | só rajada e vento |
-| Frente fria | `#6F9BE0` | `#2457A6` | temperatura mínima, tendência de queda |
-| Frente quente | `#E0676A` | `#C8373A` | temperatura máxima, alertas |
+| Fundo | `#111315` | `#F4F5F6` | |
+| Superfície | `#1A1D20` e `#23272B` | `#FFFFFF` e `#ECEEF0` | blocos de dados, sem sombra |
+| Linha | `#2C3136` | `#DDE1E4` | divisões de 1 px |
+| Texto | `#ECEEF0` | `#15181B` | |
+| Texto fraco | `#9BA4AC` | `#5D666E` | contraste mínimo 4,5:1 nos dois temas |
+| Chuva | `#6C97B3` (texto `#8FB0C6`) | `#5E89A7` (texto `#3D6784`) | só chuva |
+| Rajada | `#B39C66` (texto `#C7B588`) | `#9A8348` (texto `#75612D`) | só rajada e vento |
+| Frio | `#93A8C7` | `#4C6892` | temperatura mínima, tendência de queda |
+| Calor e alerta | `#D19C89` | `#A25743` | temperatura máxima, alertas |
+| Radar de tempestade | `#6C97B3`, `#C2B67C`, `#C9955F`, `#C06F63`, `#A878B1` | `#5E89A7`, `#B3A052`, `#BC8247`, `#B3564A`, `#93589D` | chuva fraca, moderada, forte, tempestade e tempestade forte |
 | Medido | traço contínuo e ponto cheio | | |
 | Previsto | traço contínuo sem ponto, faixa de cenários translúcida | | |
 
-As cores base pedidas (`#2457A6`, `#C8373A`, `#1E8F8A`, `#D9A21B`) são usadas como estão no tema claro. No tema escuro elas foram clareadas para manter contraste de 4,5:1 sobre o mar `#17303B`.
+O tema é escolhido em "Ver mais" (Automático, Claro ou Escuro). `test/cores.test.mjs` confere contraste e saturação.
 
 ## Tipografia
 

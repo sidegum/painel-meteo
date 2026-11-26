@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import w, {
   parseOni, parseSemanal, parseMensal, parseDiscussao, parseProbabilidades, parseIri, normalizarMetar, coberturaMetar,
-  normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, parseNoticias, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia, calibracao, probDiariaCenarios,
+  normalizarAvisos, listaPython, itensRss, xmlSeguro, textoPuro, buscarExterno, parseNoticias, lerCoord, normalizarInmet, acumulados, resumirAcerto, prevDoDia, obsDoDia, calibracao, probDiariaCenarios, decodificarTexto,
 } from '../src/index.js';
 
 const fx = (n) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url), 'utf8');
@@ -291,4 +291,14 @@ test('parseNoticias: título sem veículo, só links do Google Notícias, recent
   const r = parseNoticias(xml, agora);
   assert.deepEqual(r.map((n) => [n.titulo, n.veiculo]), [['Chuva & cheia no Guaíba', 'MetSul'], ['Tornado no RS e El Niño', 'GZH']]);
   assert.throws(() => parseNoticias('<!DOCTYPE x><rss></rss>'));
+});
+
+test('decodificarTexto: UTF-8 com um caractere quebrado não vira latin1 (acentos das notícias)', () => {
+  const utf8 = (t) => new TextEncoder().encode(t);
+  assert.equal(decodificarTexto(utf8('El Niño e a destruição')), 'El Niño e a destruição');
+  assert.equal(decodificarTexto(utf8('El Niño \uFFFD região')), 'El Niño \uFFFD região'); // "�" já escrito na fonte
+  const comByteRuim = new Uint8Array([...utf8('El Niño '), 0xE3, ...utf8(' região')]); // um byte solto no meio
+  assert.match(decodificarTexto(comByteRuim), /^El Niño .+ região$/);
+  assert.equal(decodificarTexto(Uint8Array.from(Buffer.from('previsão de chuva', 'latin1'))), 'previsão de chuva'); // página latin1
+  assert.equal(decodificarTexto(utf8('sem acento')), 'sem acento');
 });
