@@ -6,6 +6,7 @@ import { consensoHorario, MODELOS, valido } from './analise.js';
 import { CIDADES } from './globo-cidades.js';
 import * as C from './ceu.js';
 import { MISSOES, estadoSonda, interpolar } from './globo-sondas.js';
+import { fichaModelo, modeloDaSonda } from './globo-naves.js';
 import * as CORPOS_EXTRA from './globo-corpos.js';
 import * as A from '../vendor/astronomy/astronomy.min.js';
 import { TIPOS_OBJETO } from './globo-estrelas.js';
@@ -340,7 +341,7 @@ export function cartaoSatelite(s, estadoApp, geradoMs, t = Date.now()) {
   const ano = /^(\d{4})-/.exec(String(s.omm.OBJECT_ID || ''))?.[1];
   const nomeTipo = { geoestacionaria: 'geoestacionária (36 mil km, gira junto com a Terra)', media: 'média (navegação)', alta: 'alta', baixa: 'baixa' }[tipo];
   const detalhes = () => mostrarInfo(f.nome, el('table', { class: 'tabela-detalhe' }, el('tbody', {},
-    linha('Nome no catálogo', f.original), linha('Operador', f.operador), linha('Função', f.funcao || 'não informada pela fonte'),
+    linha('Nome no catálogo', f.original), s.modelo ? linha(fichaModelo(s.modelo).doTipo ? 'Desenho na tela' : 'A nave', fichaModelo(s.modelo).medidas) : null, linha('Operador', f.operador), linha('Função', f.funcao || 'não informada pela fonte'),
     linha('Número NORAD', String(s.omm.NORAD_CAT_ID ?? '–')), linha('Designação internacional', `${s.omm.OBJECT_ID || '–'}${ano ? ` (lançado em ${ano})` : ''}`),
     linha('Órbita', nomeTipo), linha('Altura agora', `${num(e.alturaKm, 0)} km (perigeu ${num(perigeu, 0)} km, apogeu ${num(apogeu, 0)} km)`),
     linha('Velocidade', `${num(e.velKmh, 0)} km/h (${num(e.velKmh / 3600, 2)} km/s)`), linha('Uma volta na Terra', periodoMin > 120 ? `${num(periodoMin / 60, 1)} h` : `${num(periodoMin, 1)} min`),
@@ -528,13 +529,14 @@ export function cartaoSonda(chave, dados, gerado, estadoApp, t = Date.now()) {
   const detalhes = () => mostrarInfo(m.nome, el('table', { class: 'tabela-detalhe' }, el('tbody', {},
     linha('Agência', m.agencia), linha('Lançamento', `${m.lancamento.split('-').reverse().join('/')} (${num(anos, 1)} anos de viagem)`),
     linha('Situação', m.inativa ? 'sem contato (posição calculada)' : 'ativa'),
+    linha('A nave', fichaModelo(modeloDaSonda(chave)).medidas),
     linha('Distância do Sol', `${km(rSol)} (${num(rSol / C.UA, rSol / C.UA > 10 ? 1 : 3)} UA)`), linha('Distância da Terra', `${km(rTerra)} (${num(rTerra / C.UA, rTerra / C.UA > 10 ? 1 : 4)} UA)`),
     linha('Velocidade em relação ao Sol', `${num(velKms, 1)} km/s (${num(velKms * 3600, 0)} km/h)`),
     linha('Sinal ou luz até a Terra', tempoLuz(rTerra)),
     linha('Posição (eclíptica J2000)', `x ${num(s.x, 3)} · y ${num(s.y, 3)} · z ${num(s.z, 3)} UA`),
     linha('Alvo no JPL Horizons', dados.alvo))),
   el('p', { class: 'ceu-frase', text: m.resumo }),
-  el('p', { class: 'nota', text: `Vetores de estado do JPL Horizons (NASA/JPL), gerados ${quando ? fmt.idade(quando) : 'recentemente'}; entre dois pontos, interpolação de Hermite. No mapa, a distância ao Sol está fora de escala (comprimida) para caber na tela; a direção é a real.` }));
+  el('p', { class: 'nota', text: `Vetores de estado do JPL Horizons (NASA/JPL), gerados ${quando ? fmt.idade(quando) : 'recentemente'}; entre dois pontos, interpolação de Hermite. No mapa, a distância ao Sol está fora de escala (comprimida) para caber na tela; a direção é a real. A nave na tela é uma maquete em 3D feita a partir das dimensões públicas, ampliada para ser vista, com o lado certo voltado para o Sol.` }));
   return { titulo: m.nome, frase: m.resumo, numeros, fonte: `JPL Horizons · ${quando ? `${fmt.dataCurta(quando, off)} ${hora(quando, off)}` : '–'}`, detalhes };
 }
 

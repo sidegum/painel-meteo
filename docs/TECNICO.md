@@ -799,6 +799,8 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `globo-escalas.js` | régua de escalas (1.12.0): onde a câmera está, da Terra ao universo observável, e o atalho para cada escala |
 | `globo-camadas.js` | painel único de camadas (1.12.0): desenha as seções que cada módulo descreve e devolve as escolhas |
 | `globo-carga.js` | tela de carregamento com barra de progresso real (1.12.0) |
+| `globo-naves.js` | modelos 3D de sondas, telescópios e satélites (1.14.0): peças em metros, uma malha por nave, material único |
+| `globo-planetas.js` | material dos planetas, das luas e dos anéis de Saturno (1.14.0): achatamento, terminador, sombras e borda suavizada |
 | `globo-pos.js` | pós-processamento da cena do universo: alvo de alta faixa dinâmica, halo de luz e curva de tom (1.12.3) |
 | `cosmologia.js` | cálculo puro (testado em `test/cosmologia.test.mjs`): ΛCDM plano do Planck 2018, distância comóvel, tempo da luz, idade e horizonte |
 | `globo-universo.js` | escala do universo (1.12.0): Volume Local, teia cósmica, aglomerados, superaglomerados, vazios, quasares, radiação cósmica de fundo |
@@ -1107,3 +1109,44 @@ escrever na mesma convenção de cor. Sem alvo meio-flutuante, o desenho é dire
 as escalas, a pinça por CDP, a volta à Terra, a contagem de quadros desenhados com a cena parada e as 35 fotografias.
 A renderização por software não mede fluidez: a taxa de quadros no iPhone e numa placa de vídeo real não foi medida
 aqui, só os fatores que a determinam (pontos por quadro, texturas enviadas antes, redesenhos).
+
+### 12.z Naves em 3D e novo desenho dos planetas (1.14.0)
+
+Pedido do Gustavo em 26/11/2026: satélites e sondas modelados de verdade, filtro para ver só eles, e planetas em alta
+qualidade (o Saturno aparecia com a sombra em cunha, a borda serrilhada e os anéis sem divisões).
+
+**Naves** (`globo-naves.js`). Cada nave é montada peça por peça (`montador`: caixa, cilindro, prato, painel, haste,
+placa, asa), em metros, a partir das dimensões públicas, e vira uma malha só, com cor e acabamento por vértice (liso,
+painel solar com células, manta térmica, espelho). São maquetes feitas à mão, não os arquivos de engenharia das
+agências: 14 modelos de sondas e telescópios (James Webb, Voyager, Pioneer, New Horizons, Parker, Juno, Europa Clipper,
+JUICE, Psyche, Lucy, BepiColombo, Solar Orbiter, OSIRIS-APEX e Hera), três de naves da Terra com modelo próprio (ISS,
+Tiangong e Hubble) e cinco de tipo (GPS, meteorológico geoestacionário, meteorológico polar, estágio de foguete e
+satélite comum; `modeloDoSatelite` escolhe pelo nome do catálogo e pela órbita). O cartão diz quando o desenho é do
+tipo e não daquela nave.
+
+- *Tamanho.* A nave real não apareceria ao lado de um planeta: o shader garante um raio mínimo em pixels (`pxMin`, ou
+  o atributo `px` por instância). De longe é uma miniatura; em "Ir até", a câmera chega e a nave ocupa a tela.
+- *Sistema solar.* Cada sonda é uma malha no lugar do antigo ponto, com +Z voltado para o Sol (`lookAt`). Perto de um
+  planeta, a posição passa para a escala logarítmica das luas em volta dele sempre que ela afasta a nave mais do
+  centro do que a escala do sistema (as duas se emendam sem salto); sem isso o James Webb, a Juno e as naves em
+  sobrevoo ficariam dentro do planeta, que é desenhado ampliado.
+- *Órbita da Terra.* Uma malha instanciada por tipo (`montarNaves`), no lugar dos pontos: +Z para a Terra, +Y na
+  direção do movimento. Estações com 20 px de raio, o satélite tocado com 58 px, os demais com 7 px. Quem está
+  acoplado a uma estação faz parte do modelo dela. Na sombra da Terra a nave escurece. Como o modelo ampliado pode ser
+  maior que a altura da órbita, a profundidade dele é achatada em volta do centro (`achatar`), e a Terra não o corta.
+- *Filtro.* "Só a Terra e os satélites" (órbita) e "Só sondas e telescópios" (sistema solar): `derivarFiltros` aplica
+  o modo por cima das escolhas gravadas, sem apagá-las.
+- *Rota.* A rota inteira da sonda tocada continua à mostra depois de fechar o cartão, até outra sonda ser tocada
+  (`destacarRota`). Os nomes não aparecem mais por baixo do cartão aberto nem dos botões de escala.
+
+**Planetas, luas e anéis** (`globo-planetas.js`). Material próprio no lugar do `MeshStandardMaterial`: achatamento
+polar da IAU (Saturno 9,8%, Júpiter 6,5%), terminador suave, escurecimento de borda nos gigantes gasosos, brilho da
+atmosfera no limbo, luzes das cidades na noite da Terra e borda suavizada no próprio shader (não depende da resolução).
+Os anéis de Saturno recebem a sombra do planeta e projetam a deles sobre ele (raio pelo plano do equador, na mesma
+escala logarítmica do desenho); vistos pelo lado sem Sol mostram só a luz que atravessa, e um ruído radial acrescenta
+a estrutura fina dentro das faixas da textura. "Ir até" chega sempre pelo lado iluminado (40° da direção do Sol; em Saturno, 30° acima do plano dos anéis).
+No celular, a resolução no sistema solar não desce de 1,5.
+
+**Testado e não testado.** Testado no Chromium (renderização por software), em 1600×900 e no perfil do iPhone 13: os
+14 modelos de sondas em "Ir até", ISS e Tiangong tocadas, o filtro de satélites, Saturno de vários ângulos. Não
+testado em iPhone real: a fluidez com os modelos e com a resolução mínima de 1,5.
