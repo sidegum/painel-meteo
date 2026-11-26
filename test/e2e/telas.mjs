@@ -79,6 +79,41 @@ for (const tela of TELAS) {
       if (larg > 1) problemas.push(`${tela.nome}/${aba}: rolagem horizontal de ${larg} px`);
       if (capturas) await pag.screenshot({ path: join(capturas, `${tela.nome}-${tema}-${aba}.png`), fullPage: true });
     }
+    // El Niño: a tela aberta dá uma resposta só, separa Pacífico, RS e local, e não mostra porcentagem (a chance
+    // de "estar em El Niño" lida como chance de chuva era a contradição). Nada além da janela de dias aparece.
+    const enso = await pag.evaluate(async () => {
+      const { REGRAS } = await import('./js/analise.js');
+      const c = document.querySelector('#elnino-conteudo'), fechados = [...c.querySelectorAll('details')];
+      const aberto = [...c.children].filter((x) => x.tagName !== 'DETAILS').map((x) => { const k = x.cloneNode(true); k.querySelectorAll('details').forEach((d) => d.remove()); return k.textContent; }).join(' ');
+      return { veredito: c.querySelector('.enso-veredito h2')?.textContent || '', cartoes: [...c.querySelectorAll('.enso-cartao h3')].map((h) => h.textContent),
+        aberto, fechados: fechados.every((d) => !d.open), dias: REGRAS.enso.janelaAvisoDias, riscos: c.querySelectorAll('.enso-cartao .alerta-dias li').length };
+    });
+    if (!enso.veredito) problemas.push(`${tela.nome}/elnino: falta a resposta no alto da aba`);
+    if (enso.cartoes.length !== 3 || !/pacífico/i.test(enso.cartoes[0]) || !/rio grande do sul/i.test(enso.cartoes[1])) problemas.push(`${tela.nome}/elnino: faltam as três leituras (Pacífico, RS, local): ${enso.cartoes.join(', ')}`);
+    if (/\d\s?%/.test(enso.aberto)) problemas.push(`${tela.nome}/elnino: porcentagem na tela aberta`);
+    if (!enso.fechados) problemas.push(`${tela.nome}/elnino: histórico ou dados técnicos abertos sem toque`);
+    if (/sem motivo/i.test(enso.veredito) !== (enso.riscos === 0)) problemas.push(`${tela.nome}/elnino: a resposta ("${enso.veredito}") contradiz a lista de dias de risco (${enso.riscos})`);
+    // Aviso do INMET de chuva para o local: o de amanhã vira a resposta da aba; o que só começa depois da janela não aparece.
+    const ensoAviso = await pag.evaluate(async () => {
+      const { REGRAS } = await import('./js/analise.js');
+      const est = window.__painel.estado, antes = est.alertas, emAntes = est.alertasEm;
+      const dia = (n) => new Date(Date.now() + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const aviso = (titulo, n) => ({ id: `teste-${n}`, titulo, severidade: 'Perigo', inicio: `${dia(n)} 00:00`, fim: `${dia(n)} 23:59`, municipioPadrao: true, estados: 'Rio Grande do Sul' });
+      est.alertas = { avisos: [aviso('Chuvas Intensas', 1), aviso('Tempestade', REGRAS.enso.janelaAvisoDias + 3)] }; est.alertasEm = Date.now();
+      window.__painel.renderTudo(); window.__painel.irPara('elnino');
+      await new Promise((r) => setTimeout(r, 600));
+      const c = document.querySelector('#elnino-conteudo');
+      const r = { nivel: c.querySelector('.enso-veredito')?.dataset.nivel, titulo: c.querySelector('.enso-veredito h2')?.textContent, local: c.querySelectorAll('.enso-cartao')[2]?.innerText || '' };
+      est.alertas = antes; est.alertasEm = emAntes;
+      return r;
+    });
+    if (ensoAviso.nivel !== 'alerta' || !/INMET/.test(ensoAviso.titulo)) problemas.push(`${tela.nome}/elnino: aviso do INMET de amanhã não virou a resposta da aba (${ensoAviso.titulo})`);
+    if (!/Chuvas Intensas/.test(ensoAviso.local)) problemas.push(`${tela.nome}/elnino: aviso do INMET de amanhã ausente no cartão do local`);
+    if (/sem chuva forte/i.test(ensoAviso.local)) problemas.push(`${tela.nome}/elnino: o cartão do local diz "sem chuva forte" ao lado de um aviso de chuva`);
+    if (/Tempestade/.test(ensoAviso.local)) problemas.push(`${tela.nome}/elnino: aviso do INMET fora da janela apareceu`);
+    if (capturas) await pag.screenshot({ path: join(capturas, `${tela.nome}-${tema}-elnino-aviso.png`), fullPage: true });
+    await pag.evaluate(() => { window.__painel.renderTudo(); window.__painel.irPara('elnino'); });
+    await pag.waitForTimeout(600);
     // Gráfico inicial de cada dia: Chuva a partir do limite de chance, senão Temperatura (mesma chance do resumo).
     // A escolha à mão vale só para o dia e o local em que foi feita.
     const modos = await pag.evaluate(async () => {
@@ -135,6 +170,17 @@ for (const tela of TELAS) {
       await pag.waitForTimeout(400);
       await pag.locator('#hoje-detalhes .radar-t').screenshot({ path: join(capturas, `${tela.nome}-${tema}-radar.png`) });
     }
+    // Tema: escolhido em "Ver mais", vale na hora, fica salvo e volta a seguir o aparelho em "Automático".
+    await pag.evaluate(() => document.querySelector('#dlg-mais').showModal());
+    const outro = tema === 'dark' ? 'claro' : 'escuro', doAparelho = tema === 'dark' ? 'escuro' : 'claro';
+    await pag.click(`#troca-tema [data-tema="${outro}"]`);
+    await pag.waitForTimeout(600);
+    const trocado = await pag.evaluate(() => ({ tema: document.documentElement.getAttribute('data-tema'), salvo: localStorage.getItem('pref:tema'),
+      fundo: getComputedStyle(document.body).backgroundColor, barra: document.querySelector('meta[name="theme-color"]').content }));
+    if (trocado.tema !== outro || trocado.salvo !== JSON.stringify(outro)) problemas.push(`${tela.nome}: o tema ${outro} não foi aplicado ou salvo`);
+    if (capturas) await pag.screenshot({ path: join(capturas, `${tela.nome}-${tema}-ver-mais-${outro}.png`) });
+    await pag.click('#troca-tema [data-tema="auto"]');
+    if (await pag.evaluate(() => document.documentElement.getAttribute('data-tema')) !== doAparelho) problemas.push(`${tela.nome}: "Automático" não voltou ao tema do aparelho`);
     await ctx.close();
   }
 }

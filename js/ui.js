@@ -130,7 +130,11 @@ export const prefs = {
   gravar(k, v) { try { localStorage.setItem('pref:' + k, JSON.stringify(v)); } catch {} },
 };
 
+/** Valor de uma cor do tema em uso (variável definida no começo do app.css), para desenhar em canvas. */
 export const cor = (nome) => getComputedStyle(document.documentElement).getPropertyValue(nome).trim() || '#888';
+
+/** A mesma cor em [r, g, b], para montar imagens ponto a ponto. A variável precisa estar em #RRGGBB. */
+export const corRgb = (nome) => { const h = cor(nome); return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) || 0); };
 
 /**
  * Seletor compacto: um único botão com a opção atual que abre a lista nativa do sistema

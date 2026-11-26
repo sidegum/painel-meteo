@@ -6,6 +6,7 @@ import {
   horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, graficoInicial, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
   calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
+  situacaoEnso, epocaChuvaRs, avisoProximoDeChuva, nivelPreocupacaoEnso, mesCentralTrimestre,
 } from './analise.js';
 import {
   buscarPrevisao, buscarEnsemble, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
@@ -13,12 +14,12 @@ import {
 } from './dados.js';
 import { chaveLocal } from './cidades.js';
 import { criarLocais } from './locais.js';
-import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor } from './ui.js';
+import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor, cor, corRgb } from './ui.js';
 import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.14.0';
+const VERSAO = '1.15.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -47,6 +48,7 @@ async function iniciar() {
   $('#versao').textContent = `Versão ${VERSAO}`;
   configurarNavegacao();
   configurarLocal();
+  configurarTema();
   configurarRodape();
   configurarPuxar();
   configurarCabecalho();
@@ -1443,9 +1445,9 @@ function secaoTempestade() {
 
 // Quantos núcleos a lista e o desenho numeram; os outros ficam no detalhe.
 const MAX_NUCLEOS_LISTA = 4;
-// Cores do radar desenhado, pela refletividade (as mesmas faixas de REGRAS.tempestade.dbz).
-const COR_DBZ = [[55, [236, 92, 236]], [45, [226, 54, 44]], [40, [255, 150, 0]], [30, [240, 214, 60]], [20, [70, 150, 230]], [10, [90, 170, 220]]];
-const COR_NUCLEO = { severa: 'rgb(236, 92, 236)', tempestade: 'rgb(226, 54, 44)', forte: 'rgb(255, 150, 0)' };
+// Faixas do radar desenhado, pela refletividade mínima em dBZ (as mesmas de REGRAS.tempestade.dbz), cada uma com a
+// variável de cor do tema (app.css). Os núcleos numerados usam a cor da própria classe: --radar-forte, etc.
+const FAIXAS_DBZ = [[55, '--radar-severa'], [45, '--radar-tempestade'], [40, '--radar-forte'], [30, '--radar-moderada'], [10, '--radar-fraca']];
 
 /**
  * Desenha o radar da seção: ecos de pelo menos 10 dBZ num círculo de REGRAS.tempestade.raioKm em volta do local
@@ -1461,8 +1463,8 @@ function desenharRadarTempestade(tela, t, nucleos = []) {
   const css = tela.clientWidth || 96, dpr = Math.min(3, window.devicePixelRatio || 1), lado = Math.round(css * dpr);
   tela.width = lado; tela.height = lado;
   const c = tela.getContext('2d'), meio = lado / 2, raioPx = meio - 1.5 * dpr, R = REGRAS.tempestade.raioKm, pxKm = raioPx / R;
-  const est = getComputedStyle(tela), linha = est.getPropertyValue('--linha').trim() || '#2C3136', fraco = est.getPropertyValue('--fraco').trim() || '#9BA4AC';
-  const texto = est.getPropertyValue('--texto').trim() || '#ECEEF0', fundo = est.getPropertyValue('--sup2').trim() || '#23272B';
+  const linha = cor('--linha'), fraco = cor('--fraco'), texto = cor('--texto'), fundo = cor('--sup2');
+  const faixas = FAIXAS_DBZ.map(([lim, nome]) => [lim, corRgb(nome)]);
   const seta = (x0, y0, x1, y1, cor, largura, tracejada) => {
     const a = Math.atan2(y1 - y0, x1 - x0), h = 6 * dpr;
     c.strokeStyle = cor; c.fillStyle = cor; c.lineWidth = largura * dpr; c.setLineDash(tracejada ? [4 * dpr, 4 * dpr] : []);
@@ -1477,9 +1479,9 @@ function desenharRadarTempestade(tela, t, nucleos = []) {
     for (let j = 0; j < w; j++) for (let i = 0; i < w; i++) {
       const x = Math.round(px) - r + i, y = Math.round(py) - r + j;
       if (x < 0 || y < 0 || x >= n || y >= n) continue;
-      const v = dbz[y * n + x], cor = COR_DBZ.find(([lim]) => v >= lim);
-      if (!cor) continue;
-      img.data.set([...cor[1], v >= 40 ? 255 : 150], (j * w + i) * 4);
+      const v = dbz[y * n + x], faixa = faixas.find(([lim]) => v >= lim);
+      if (!faixa) continue;
+      img.data.set([...faixa[1], v >= 40 ? 255 : 170], (j * w + i) * 4);
     }
     const tmp = Object.assign(document.createElement('canvas'), { width: w, height: w });
     tmp.getContext('2d').putImageData(img, 0, 0);
@@ -1516,7 +1518,7 @@ function desenharRadarTempestade(tela, t, nucleos = []) {
     const d = Math.hypot(n.leste, n.sul), lim = R - raioM / pxKm, f = d > lim ? lim / d : 1; // marcador sempre dentro do círculo
     const x = meio + n.leste * f * pxKm, y = meio + n.sul * f * pxKm;
     c.beginPath(); c.arc(x, y, raioM, 0, 2 * Math.PI);
-    c.fillStyle = fundo; c.fill(); c.strokeStyle = COR_NUCLEO[n.classe]; c.lineWidth = 2 * dpr; c.stroke();
+    c.fillStyle = fundo; c.fill(); c.strokeStyle = cor(`--radar-${n.classe}`); c.lineWidth = 2 * dpr; c.stroke();
     c.fillStyle = texto; c.fillText(String(k + 1), x, y + 0.5 * dpr);
   });
 }
@@ -1629,7 +1631,7 @@ function renderAvisos({ semAlertaEnso = false } = {}) {
   const cartaoEnso = al?.ativo && al.dias.length ? el('article', { class: 'aviso-card painel-aviso' },
     el('h2', { text: 'Atenção: chuva ou vento forte previstos' }),
     linhasRiscoDias(al),
-    el('p', { class: 'nota', text: `Previsão do painel, não é aviso oficial. Com o El Niño ativo, fique de olho. Chuva forte: mais de ${LIMITE_CHUVA_FORTE} mm no dia; rajada forte: mais de ${LIMITE_RAJADA_FORTE} km/h.` })) : null;
+    el('p', { class: 'nota', text: `Previsão do painel, não é aviso oficial. Com o El Niño ativo, fique de olho. Chuva forte: mais de ${REGRAS.enso.chuvaForteMm} mm no dia; rajada forte: mais de ${REGRAS.enso.rajadaForteKmh} km/h.` })) : null;
   const fonte = estado.alertasEm ? el('p', { class: 'nota', text: `INMET · ${fmt.horaMin(estado.alertasEm, estado.prev?.offset ?? -10800)}` }) : null;
   const oficial = el('p', { class: 'oficial', text: 'Este painel não é fonte oficial. Em situação de risco, siga a Defesa Civil (199) e o INMET.' });
   const links = el('p', {}, linkExterno('https://alertas2.inmet.gov.br/', 'Avisos no site do INMET'), ' · ', linkExterno('https://www.defesacivil.rs.gov.br/', 'Defesa Civil RS'));
@@ -2080,7 +2082,7 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
       if (!disponivel('cloud_cover_low')) area.append(el('p', { class: 'nota', text: 'Nuvens por camada: nenhum modelo forneceu este dado.' }));
       else criarGrafico(area, { ...base, titulo: 'Cobertura de nuvens por camada', fonte, altura: 150,
         series: [
-          { rotulo: 'altas', valores: C('cloud_cover_high').med, cor: '#9DB3B8', largura: 1.5, formato: (v) => `${Math.round(v)}%` },
+          { rotulo: 'altas', valores: C('cloud_cover_high').med, corCss: '--nuvens-altas', largura: 1.5, formato: (v) => `${Math.round(v)}%` },
           { rotulo: 'médias', valores: C('cloud_cover_mid').med, corCss: '--fria', largura: 1.5, formato: (v) => `${Math.round(v)}%` },
           { rotulo: 'baixas', valores: C('cloud_cover_low').med, corCss: '--texto', largura: 2.5, formato: (v) => `${Math.round(v)}%` },
         ], escalas: { y: { range: [0, 100] } }, eixos: [{ formato: (v) => `${v}%` }] });
@@ -2438,9 +2440,9 @@ function renderModelos() {
       const series = [];
       const bandas = [];
       if (l) {
-        series.push({ rotulo: 'p10', valores: l.p10, cor: '#7f9aa1', faixa: true, semLegenda: true }, { rotulo: 'p90', valores: l.p90, cor: '#7f9aa1', faixa: true, semLegenda: true },
-          { rotulo: `mediana de ${l.n} cenários`, valores: l.p50, cor: '#7f9aa1', largura: 2, dash: [2, 3], formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
-        bandas.push({ de: 1, ate: 0, cor: '#7f9aa1' });
+        series.push({ rotulo: 'p10', valores: l.p10, corCss: '--cenarios', faixa: true, semLegenda: true }, { rotulo: 'p90', valores: l.p90, corCss: '--cenarios', faixa: true, semLegenda: true },
+          { rotulo: `mediana de ${l.n} cenários`, valores: l.p50, corCss: '--cenarios', largura: 2, dash: [2, 3], formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
+        bandas.push({ de: 1, ate: 0, corCss: '--cenarios' });
       }
       for (const m of mods) if (p.modelos[m].vars[v]) series.push({ rotulo: MODELOS[m].curto, valores: serieModelo(m, v, acumular), corCss: MODELOS[m].cor.slice(4, -1), largura: 2, formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
       if (!l) caixa.append(el('p', { class: 'nota', text: 'Leque de cenários indisponível: a Ensemble API não respondeu. Mostrando só os modelos.' }));
@@ -2535,6 +2537,23 @@ function tabelaAcerto() {
 }
 
 // ------------------------------------------------------------------ El Niño
+// A aba responde a uma pergunta: "devo me preocupar?". Três leituras separadas, para ninguém confundir o
+// fenômeno com o tempo de cada dia: o Pacífico (o El Niño em si), o RS (a tendência da estação) e o local
+// (os próximos dias, com as mesmas chances da Semana e os avisos do INMET). Regras em REGRAS.enso (analise.js).
+
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const MESES_LONGOS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const NOME_FASE = { elNino: 'El Niño', laNina: 'La Niña', neutro: 'Normal' };
+// Trimestres da NOAA (siglas em inglês) em meses em português: OND → out–dez.
+function trimestrePt(tri) {
+  const c = mesCentralTrimestre(tri);
+  return c ? `${MESES_CURTOS[(c + 10) % 12]}–${MESES_CURTOS[c % 12]}` : tri;
+}
+/** "muito forte" para o El Niño; no feminino para a La Niña ("fraca", "moderada"). */
+const forcaNoGenero = (s) => (s.fase === 'laNina' ? String(s.forca).replace(/o$/, 'a') : s.forca);
+const nomeSituacao = (s) => (s.fase === 'neutro' ? 'Sem El Niño nem La Niña' : `${NOME_FASE[s.fase]} ${forcaNoGenero(s)}`);
+const mesAno = (x, anoAtual) => (x.ano === anoAtual ? MESES_LONGOS[x.mes - 1] : `${MESES_LONGOS[x.mes - 1]} de ${x.ano}`);
+const situacaoAtual = () => (estado.enso?.partes ? situacaoEnso(estado.enso.partes, Date.now()) : null);
 
 let ensoCarregando = false;
 async function renderElNino() {
@@ -2547,120 +2566,321 @@ async function renderElNino() {
     catch (e) { const c = await lerCache('enso'); if (c) { estado.enso = c.dados; estado.ensoEm = c.salvoEm; } else { alvo.replaceChildren(el('p', { text: `Dados do El Niño indisponíveis (${e.message}).` })); ensoCarregando = false; return; } }
     ensoCarregando = false;
   }
-  // redesenha quando os dados do El Niño ou a previsão (aviso local) mudam; renderTudo também força o redesenho
-  const chave = `${estado.ensoEm}|${estado.prevEm}`;
+  // redesenha quando os dados do El Niño, a previsão ou os avisos do INMET mudam; renderTudo também força o redesenho
+  const chave = `${estado.ensoEm}|${estado.prevEm}|${estado.alertasEm}`;
   if (alvo.dataset.desenhadoEm === chave && alvo.childElementCount) return; // nada mudou: só mostra
   alvo.dataset.desenhadoEm = chave;
   renderAvisos(); // o aviso antecipado do El Niño também aparece na aba Avisos
   const E = estado.enso, P = E.partes || {};
   limparGraficos(alvo);
-  const filhos = [];
-  const disc = P.discussao?.dados;
-  const roniUlt = P.roni?.dados?.at(-1);
-  // Tela aberta: só o que o usuário lê (resumo, notícias, efeitos no RS, episódios). O detalhe técnico fica recolhido.
-  filhos.push(painelResumo(P, disc, roniUlt, alertaEnsoLocal()));
-  if (P.noticias) filhos.push(noticiasRs(P.noticias));
-  filhos.push(efeitosNoRs(P.roni?.dados?.length ? P.roni.dados : P.oni?.dados, E));
-  filhos.push(secao('El Niños marcantes e o que houve no RS', null, comparacaoHistorica(P.roni?.dados?.length ? P.roni.dados : P.oni?.dados)));
-  const tecnico = [painelEnso(P, disc, roniUlt)];
-  const avisoParte = (k) => (P[k]?.desatualizado ? el('p', { class: 'faixa-aviso erro', text: `A fonte mudou ou falhou (${P[k].erro}). Mostrando a última versão válida, de ${new Date(P[k].em).toLocaleDateString('pt-BR')}.` }) : null);
+  const sit = situacaoAtual(), al = alertaEnsoLocal();
+  const indice = P.roni?.dados?.length ? P.roni.dados : P.oni?.dados;
+  // Tela aberta: a resposta, as três leituras, a evolução e as notícias. Histórico e dados técnicos ficam a um toque.
+  const filhos = [painelResumo(sit, al, E)];
+  if (sit?.evolucao.length > 1 && (sit.fase !== 'neutro' || sit.evolucao.some((e) => e.fase !== 'neutro'))) filhos.push(evolucaoEnso(sit, P));
+  if (P.noticias && sit?.fase === 'elNino') filhos.push(noticiasRs(P.noticias));
+  filhos.push(el('details', { class: 'enso-recolhido largura-total' }, el('summary', { text: 'Outros El Niños fortes e o que houve no RS' }), comparacaoHistorica(indice, sit)));
   const gInd = secao('Temperatura do mar nos últimos 2 anos', null);
   const gHist = secao('El Niño e La Niña desde 1950', null);
   gInd.classList.add('largura-total'); gHist.classList.add('largura-total');
-  tecnico.push(gInd, gHist);
-  tecnico.push(secao('O que as linhas mostram', null, el('ul', {},
-    el('li', { text: 'Índice oficial: quanto o mar no centro do Pacífico está acima ou abaixo do normal, descontado o aquecimento de todos os oceanos tropicais. É o que a NOAA, agência dos Estados Unidos, usa desde 2026 para declarar El Niño e La Niña.' }),
-    el('li', { text: 'Medida bruta (ou índice antigo): a mesma conta sem esse desconto. Fica mais alta porque inclui o aquecimento global.' }),
-    el('li', { text: 'Acima de +0,5 °C é El Niño; abaixo de −0,5 °C, La Niña. O gráfico de 2 anos usa a média de cada semana; o de 1950 em diante, a média de 3 meses.' }))));
-  tecnico.push(secao('Probabilidades oficiais da NOAA por trimestre', null, avisoParte('probCpc'), barrasProb(P.probCpc?.dados), el('p', {}, linkExterno(E.fontes?.cpcProb, 'Tabela oficial'))));
-  const iri = P.iri?.dados;
-  tecnico.push(secao('Previsão baseada em modelos do IRI', null, avisoParte('iri'),
-    iri ? el('p', { class: 'nota', text: `Publicada em ${iri.publicado}.` }) : el('p', { text: 'Resumo do IRI indisponível.' }),
-    el('p', { class: 'nota', text: 'Os números por modelo do IRI só são publicados como imagens, então o painel mostra o resumo em texto e o link.' }),
-    el('p', {}, linkExterno(E.fontes?.iri, 'Ver a previsão do IRI'))));
-  tecnico.push(secao('Status oficial da NOAA CPC', null, avisoParte('discussao'),
-    disc ? el('p', { text: traduzStatus(disc.status).replace(/\s*\(NOAA:.*\)$/, '') }) : el('p', { text: 'Não foi possível ler a discussão.' }),
-    disc ? el('p', { class: 'nota', text: `Publicado em ${disc.emitido || 'data não encontrada'}. Próxima atualização: ${disc.proxima || 'data não encontrada na fonte'}.` }) : null,
-    el('p', {}, linkExterno(E.fontes?.cpc, 'Ler a discussão completa (em inglês)'))));
-  filhos.push(el('details', { class: 'enso-tecnico largura-total' }, el('summary', { text: 'Dados técnicos (NOAA e IRI)' }), ...tecnico,
+  filhos.push(el('details', { class: 'enso-recolhido enso-tecnico largura-total' }, el('summary', { text: 'Dados técnicos (NOAA e IRI)' }),
+    ...dadosTecnicos(E, sit, gInd, gHist),
     el('p', { class: 'nota', text: `Dados verificados ${fmt.idade(E.verificadoEm)} (${E.origem || 'Worker'}; o app confere de novo a cada 6 horas).` })));
-  filhos.push(el('p', { class: 'explica' }, 'El Niño indica tendências sazonais e não garante impactos específicos. Este painel não faz previsão própria de El Niño e não usa esses dados para alterar a previsão diária.'));
   alvo.replaceChildren(...filhos);
-  // Os dois gráficos entram numa etapa própria da fila.
-  depois(() => {
-    const fmtMes = (u, vals) => vals.map((v) => { const d = new Date(v * 1000); return `${d.getUTCMonth() + 1}/${String(d.getUTCFullYear()).slice(2)}`; });
-    const rel = P.relativoSemanal?.dados || [], conv = P.convencionalSemanal?.dados || [];
-    if (rel.length || conv.length) {
-      const tempos = [...new Set([...rel, ...conv].map((r) => r.ms))].sort((a, b) => a - b).slice(-104);
-      const mapa = (lista) => { const m = new Map(lista.map((r) => [r.ms, r.n34])); return tempos.map((t) => m.get(t) ?? null); };
-      criarGrafico(gInd, { x: tempos, agora: false, emitirHora: false, sync: 'enso', formatoX: fmtMes, altura: 180, 
-        fonte: `NOAA · semana de ${fmt.dataCurta(tempos[tempos.length - 1], 0)}`,
-        series: [
-          { rotulo: 'índice oficial', valores: mapa(rel), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
-          { rotulo: 'medida bruta', valores: mapa(conv), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
-        ], eixos: [{ formato: (v) => `${v}` }] });
-    } else gInd.append(el('p', { text: 'Índices semanais indisponíveis.' }), avisoParte('relativoSemanal'));
-    const oni = P.oni?.dados || [], roni = P.roni?.dados || [];
-    if (oni.length || roni.length) {
-      const centro = { DJF: 0, JFM: 1, FMA: 2, MAM: 3, AMJ: 4, MJJ: 5, JJA: 6, JAS: 7, ASO: 8, SON: 9, OND: 10, NDJ: 11 };
-      const ms = (r) => Date.UTC(r.ano, centro[r.seas], 15);
-      const tempos = [...new Set([...oni, ...roni].map(ms))].sort((a, b) => a - b);
-      const mapa = (lista) => { const m = new Map(lista.map((r) => [ms(r), r.anom])); return tempos.map((t) => m.get(t) ?? null); };
-      criarGrafico(gHist, { x: tempos, agora: false, emitirHora: false, sync: 'enso2', formatoX: (u, v) => v.map((s) => String(new Date(s * 1000).getUTCFullYear())), altura: 180,
-        fonte: `NOAA · ${[...oni, ...roni].sort((a, b) => ms(a) - ms(b)).map((r) => `${trimestrePt(r.seas)} de ${r.ano}`).pop()}`, horasVisiveis: 24 * 365 * 25, rolarFim: true,
-        series: [
-          { rotulo: 'índice antigo', valores: mapa(oni), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
-          { rotulo: 'índice oficial', valores: mapa(roni), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
-        ], eixos: [{ formato: (v) => `${v}` }] });
-    } else gHist.append(el('p', { text: 'Índice indisponível.' }));
-    // o gráfico desde 1950 nasce dentro de "Dados técnicos" fechado: ao abrir, mostra os anos mais recentes
-    alvo.querySelector('.enso-tecnico')?.addEventListener('toggle', (e) => {
-      if (e.target.open) requestAnimationFrame(() => { const r = gHist.querySelector('.rolar'); if (r) r.scrollLeft = r.scrollWidth; });
-    });
+  depois(() => graficosEnso(alvo, P, gInd, gHist)); // os dois gráficos entram numa etapa própria da fila
+}
+
+/**
+ * Aviso antecipado do El Niño para o local. Vale só com El Niño em curso (situacaoEnso).
+ * - dias: dias de risco que começam em até REGRAS.enso.janelaAvisoDias dias, com chance "possível" ou maior
+ *   (REGRAS.ocorrencia) de passar o limite de chuva forte ou de rajada forte. Mesmas chances e mesma
+ *   confiança da aba Semana (analisarDia).
+ * - inmet: avisos do INMET de chuva, vento ou temporal válidos para o local dentro da mesma janela; null quando
+ *   os avisos não puderam ser consultados (ausência de consulta não é ausência de aviso).
+ * - epoca: se estamos, ou estaremos em até um mês, na época em que o El Niño costuma aumentar a chuva no RS.
+ * @returns {{ativo:boolean, dias?:object[], inmet?:object[]|null, epoca?:object, nivel?:string}|null}
+ */
+function alertaEnsoLocal() {
+  const sit = situacaoAtual();
+  if (!sit) return null;
+  if (sit.fase !== 'elNino') return { ativo: false };
+  const R = REGRAS.enso, agora = Date.now();
+  const dias = [];
+  (estado.prev ? datas() : []).slice(0, R.janelaAvisoDias).forEach((d, k) => {
+    const a = analisarDia(d, k, k === 0);
+    const pc = a.limites?.chuva.find((l) => l.limite === R.chuvaForteMm)?.p;
+    const pr = a.limites?.rajada.find((l) => l.limite === R.rajadaForteKmh)?.p;
+    const riscos = [];
+    if (valido(pc) && pc >= REGRAS.ocorrencia.possivel) riscos.push({ tipo: 'chuva', p: pc });
+    if (valido(pr) && pr >= REGRAS.ocorrencia.possivel) riscos.push({ tipo: 'rajada', p: pr });
+    if (riscos.length) dias.push({ a, riscos });
+  });
+  const inmet = estado.alertas && !estado.alertas.indisponivel ? avisosOrdenados().filter((a) => avisoProximoDeChuva(a, agora)) : null;
+  const indice = estado.enso.partes.roni?.dados?.length ? estado.enso.partes.roni.dados : estado.enso.partes.oni?.dados || [];
+  const ev = eventosEnso(indice).at(-1);
+  const inicio = ev?.emCurso ? ev.ini.ano : Number(new Date(agora).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).slice(0, 4));
+  return { ativo: true, dias, inmet, epoca: epocaChuvaRs(inicio, agora), nivel: nivelPreocupacaoEnso(dias.map((d) => d.riscos), inmet?.length || 0) };
+}
+
+const quandoDia = (a) => {
+  const p = estado.prev, ms = p.horas[a.idxTodo[0]];
+  return a.diaIndice === 0 ? 'Hoje' : a.diaIndice === 1 ? 'Amanhã' : `${fmt.diaSemana(ms, p.offset)} ${fmt.dataCurta(ms, p.offset)}`;
+};
+// Uma linha por dia de risco: tocar abre o painel completo do dia.
+function linhasRiscoDias(al) {
+  const plural = { 'possível': 'possíveis', 'provável': 'prováveis' };
+  return el('ul', { class: 'alerta-dias' }, ...al.dias.slice(0, 5).map(({ a, riscos }) => {
+    const oque = riscos.map((r) => (r.tipo === 'chuva' ? `chuva forte ${palavraOcorrencia(r.p)}` : `rajadas fortes ${plural[palavraOcorrencia(r.p)]}`)).join(' e ');
+    return el('li', {}, el('button', { type: 'button', onclick: () => abrirDia(a.data) },
+      el('b', { text: quandoDia(a) }), el('span', { text: oque }), el('span', { class: 'cf', text: `confiança ${a.av.confianca.geral}` })));
+  }));
+}
+
+/**
+ * Resposta da aba em uma frase: junta o que acontece no Pacífico com o que está previsto para o local, para
+ * as duas coisas nunca parecerem contraditórias ("El Niño muito forte" e "sem chuva forte prevista").
+ */
+function vereditoEnso(sit, al) {
+  if (!sit) return { nivel: 'calmo', titulo: 'Situação do Pacífico indisponível agora', frase: 'Não foi possível ler o índice oficial da NOAA. Tente de novo mais tarde.' };
+  if (sit.fase === 'neutro') return { nivel: 'calmo', titulo: 'Sem El Niño no momento', frase: 'O Pacífico está na condição normal. Não há efeito do El Niño nem da La Niña para acompanhar agora.' };
+  if (sit.fase === 'laNina') return { nivel: 'calmo', titulo: `${nomeSituacao(sit)} no Pacífico`, frase: 'Com La Niña costuma chover menos que o normal no RS. Não é época de El Niño.' };
+  const onde = localNaFrase(), dias = REGRAS.enso.janelaAvisoDias, forca = `O El Niño está ${sit.forca}`;
+  if (!estado.prev) return { nivel: 'calmo', titulo: `${nomeSituacao(sit)} no Pacífico`, frase: `${forca}. A previsão para ${onde} ainda não carregou.` };
+  if (al.nivel === 'alerta') {
+    return { nivel: 'alerta', titulo: al.inmet?.length ? `Atenção: aviso do INMET para ${onde}` : `Atenção: chuva ou vento forte previstos`,
+      frase: `${forca} e há tempo severo previsto para ${onde} nos próximos ${dias} dias. Veja abaixo quando.` };
+  }
+  if (al.nivel === 'atento') return { nivel: 'atento', titulo: 'Fique atento nos próximos dias', frase: `${forca} e há chance de chuva ou vento forte em ${onde} nos próximos ${dias} dias. Veja abaixo quando.` };
+  return { nivel: 'calmo', titulo: 'Sem motivo para preocupação agora',
+    frase: `${forca} e deixa a estação mais chuvosa no RS, mas isso não quer dizer chuva forte todo dia: não há chuva forte nem vento forte previstos para ${onde} nos próximos ${dias} dias.` };
+}
+
+// Cartão "No Pacífico": o que é, com que força, quanto o mar aqueceu e até quando deve durar.
+function cartaoPacifico(sit) {
+  if (!sit) return null;
+  const anoAtual = Number(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).slice(0, 4));
+  const desvio = `O mar no centro do Pacífico está ${fmt.n(Math.abs(sit.anom), 1)} °C ${sit.anom >= 0 ? 'mais quente' : 'mais frio'} que o normal.`;
+  const quando = sit.fase === 'neutro' ? null
+    : [sit.enfraquece ? `Deve começar a enfraquecer em ${mesAno(sit.enfraquece, sit.termina?.ano ?? anoAtual)}` : null,
+      sit.termina ? `${sit.enfraquece ? 'e acabar' : 'Deve acabar'} por volta de ${mesAno(sit.termina, anoAtual)}` : null].filter(Boolean).join(' ');
+  const fonte = sit.base === 'semanas' ? `NOAA · 4 semanas até ${fmt.dataCurta(sit.ate, 0)}` : `NOAA · ${trimestrePt(sit.trimestre.seas)} de ${sit.trimestre.ano}`;
+  return el('div', { class: 'enso-cartao' },
+    el('h3', { text: 'No Pacífico' }),
+    el('p', { class: 'enso-destaque', text: sit.fase === 'neutro' ? 'Condição normal' : `${nomeSituacao(sit)}, acontecendo agora` }),
+    sit.fase === 'neutro' ? null : el('div', { class: 'enso-escala', role: 'img', 'aria-label': `Força: ${forcaNoGenero(sit)}, nível ${sit.nivel} de 4` },
+      ...[1, 2, 3, 4].map((n) => el('i', { class: n <= sit.nivel ? 'on' : null }))),
+    el('p', { text: desvio }),
+    quando ? el('p', { text: `${quando}.` }) : null,
+    el('p', { class: 'nota', text: fonte }));
+}
+
+// Padrão no RS: Fontana e Berlato (1997), séries de chuva de localidades do RS; resumo de impactos do CPTEC/INPE.
+const ENSO_RS_FONTES = [
+  ['https://enos.cptec.inpe.br/', 'CPTEC/INPE: El Niño e La Niña'],
+  ['https://www.scielo.br/j/ea/a/LyHVHKHzm67CwpvcWPKPwTm/', 'Estudo sobre as chuvas de abril e maio de 2024 no RS'],
+];
+// Cartão "No Rio Grande do Sul": a tendência da estação, dita como tendência. Só com El Niño em curso.
+function cartaoRs(al, E) {
+  if (!al?.ativo) return null;
+  const epoca = al.epoca.agora ? 'Estamos nessa época.' : al.epoca.proxima ? `A próxima época começa em ${MESES_LONGOS[al.epoca.proxima.meses[0] - 1]}.` : null;
+  return el('div', { class: 'enso-cartao' },
+    el('h3', { text: 'No Rio Grande do Sul' }),
+    el('p', { class: 'enso-destaque', text: 'Estação mais chuvosa que o normal' }),
+    el('p', { text: `Com El Niño costuma chover mais, principalmente em outubro e novembro e, no ano seguinte, de abril a junho.${epoca ? ` ${epoca}` : ''}` }),
+    el('p', { text: 'É uma tendência para a estação inteira. O dia a dia continua valendo pela previsão.' }),
+    el('details', { class: 'detalhe-toque' }, el('summary', { text: 'De onde vem isso' }),
+      el('p', { text: 'Padrão medido em décadas de dados de chuva no RS (Fontana e Berlato, 1997) e resumido pelo CPTEC/INPE. Nessas épocas aumenta o risco de cheias e de temporais. Cada El Niño é diferente: alguns trazem pouco efeito, e outros fatores também influenciam.' }),
+      el('ul', {}, ...ENSO_RS_FONTES.map(([u, t]) => el('li', {}, linkExterno(u, t)))),
+      E?.fontes?.inmet ? el('p', {}, linkExterno(E.fontes.inmet, 'Prognóstico do INMET')) : null));
+}
+
+// Cartão do local: os dias de risco e os avisos do INMET dentro da janela. Nada além da janela aparece.
+function cartaoLocal(al) {
+  if (!al?.ativo || !estado.prev) return null;
+  const R = REGRAS.enso, off = estado.prev.offset;
+  const filhos = [el('h3', { text: estado.local?.origem === 'gps' || !estado.local?.nome ? 'No seu local' : `Em ${estado.local.nome}` })];
+  // Com aviso oficial, ele abre o cartão e prevalece: o cartão nunca diz "sem chuva forte" ao lado de um aviso de chuva.
+  const avisos = al.inmet?.length ? el('ul', { class: 'alerta-dias' }, ...al.inmet.slice(0, 3).map((a) => el('li', {}, el('button', { type: 'button', onclick: () => irPara('avisos') },
+    el('b', { text: 'INMET' }), el('span', { text: `${a.titulo}${severidadeDe(a) ? ` (${severidadeDe(a)})` : ''}` }), el('span', { class: 'cf', text: periodoAviso(a) }))))) : null;
+  if (avisos) {
+    filhos.push(el('p', { class: 'enso-destaque', text: al.inmet.length > 1 ? 'Há avisos oficiais de tempo severo' : 'Há aviso oficial de tempo severo' }), avisos);
+    filhos.push(al.dias.length ? linhasRiscoDias(al) : el('p', { text: 'A previsão do painel não aponta chuva forte, mas vale o aviso oficial.' }));
+  } else {
+    filhos.push(al.dias.length ? el('p', { class: 'enso-destaque', text: 'Chuva ou vento forte na previsão' }) : el('p', { class: 'enso-destaque', text: `Sem chuva forte nem vento forte nos próximos ${R.janelaAvisoDias} dias` }));
+    if (al.dias.length) filhos.push(linhasRiscoDias(al));
+    filhos.push(el('p', { text: al.inmet === null ? 'Avisos do INMET indisponíveis agora.' : 'Nenhum aviso do INMET de chuva ou temporal para o local.' }));
+  }
+  filhos.push(el('p', { class: 'nota', text: `Previsão do painel · ${fmt.horaMin(estado.prevEm, off)}${estado.alertasEm && al.inmet ? ` · INMET · ${fmt.horaMin(estado.alertasEm, off)}` : ''}` }),
+    el('details', { class: 'detalhe-toque' }, el('summary', { text: 'O que conta como forte' }),
+      el('p', { text: `Chuva forte: mais de ${R.chuvaForteMm} mm no dia. Vento forte: rajadas acima de ${R.rajadaForteKmh} km/h. Um dia entra na lista quando a chance de passar disso é de ${fmt.pct(REGRAS.ocorrencia.possivel)} ou mais, a mesma conta da aba Semana.` }),
+      el('p', { text: `Só aparecem dias e avisos que começam em até ${R.janelaAvisoDias} dias: além disso a previsão muda demais para servir de aviso.` })));
+  return el('div', { class: 'enso-cartao' }, ...filhos);
+}
+
+/** Bloco principal: a resposta em destaque e as três leituras (Pacífico, RS e local), lado a lado no computador. */
+function painelResumo(sit, al, E) {
+  const v = vereditoEnso(sit, al);
+  const cartoes = [cartaoPacifico(sit), cartaoRs(al, E), cartaoLocal(al)].filter(Boolean);
+  return el('section', { class: 'enso-resumo largura-total' },
+    el('div', { class: 'enso-veredito', 'data-nivel': v.nivel }, el('h2', { text: v.titulo }), el('p', { text: v.frase })),
+    cartoes.length ? el('div', { class: 'enso-cartoes' }, ...cartoes) : null);
+}
+
+/**
+ * "Como deve evoluir": uma coluna por mês, com a altura pela força mais provável (previsão oficial da NOAA).
+ * Sem porcentagens: a chance de "estar em El Niño" não é chance de chuva e confundia a leitura.
+ */
+function evolucaoEnso(sit, P) {
+  const meses = sit.evolucao.slice(0, 7);
+  const descricao = meses.map((e) => `${MESES_LONGOS[e.mes - 1]}: ${e.fase === 'neutro' ? 'normal' : `${NOME_FASE[e.fase]} ${forcaNoGenero(e) ?? ''}`.trim()}`).join('; ');
+  const emitido = P.discussao?.dados?.emitido ? new Date(`${P.discussao.dados.emitido} UTC`) : null;
+  const rotulos = sit.fase === 'laNina' || meses.some((e) => e.fase === 'laNina') ? null : ['muito forte', 'forte', 'moderado', 'fraco'];
+  return secao('Como deve evoluir', null,
+    el('div', { class: 'enso-evolucao', role: 'img', 'aria-label': descricao },
+      rotulos ? el('div', { class: 'niveis', 'aria-hidden': 'true' }, ...rotulos.map((t) => el('span', { text: t }))) : null,
+      el('div', { class: 'colunas', 'aria-hidden': 'true' }, ...meses.map((e) => el('div', { class: `col ${e.fase}` },
+        el('i', { style: { height: `${(e.nivel ?? 1) * 25}%` } }), el('span', { text: MESES_CURTOS[e.mes - 1] }))))),
+    meses.some((e) => e.fase === 'neutro') ? el('p', { text: 'Mês sem barra: Pacífico de volta ao normal.' }) : null,
+    el('p', { class: 'nota', text: `NOAA · ${emitido && valido(emitido.getTime()) ? fmt.dataCurta(emitido.getTime(), 0) : 'previsão mensal'}` }));
+}
+
+// Notícias recentes do RS que citam o El Niño (Google Notícias, via Worker ou GitHub Actions): conteúdo de terceiros.
+function noticiasRs(parte) {
+  const lista = (parte.dados || []).filter((n) => Date.now() - n.ms < 45 * 86400000).slice(0, 4);
+  const itens = lista.length
+    ? el('ul', { class: 'noticias' }, ...lista.map((n) => el('li', {},
+      linkExterno(n.link, n.titulo),
+      el('span', { class: 'nota', text: `${n.veiculo || 'veículo não informado'} · ${new Date(n.ms).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}` }))))
+    : el('p', { class: 'nota', text: parte.ok ? 'Nenhuma notícia do RS citando o El Niño nos últimos 45 dias.' : 'Notícias indisponíveis agora.' });
+  return secao('Nas notícias do RS', null, itens,
+    el('p', { class: 'nota', text: 'Notícias de terceiros. O painel não confere o conteúdo.' }));
+}
+
+// ------------------------------------------------------------------ El Niño: histórico
+// Conteúdo fixo e verificável (estudos e registros oficiais), não notícias. Revisar a cada novo episódio forte.
+// Episódios: ano de início do El Niño e o que foi registrado no RS. Só fatos com registro oficial ou estudo publicado.
+const ENSO_RS_EPISODIOS = [
+  { ano: 1982, texto: 'Enchentes em sequência no Sul entre maio e julho de 1983, inclusive no rio Uruguai (Itaqui, São Borja, Uruguaiana).' },
+  { ano: 1997, texto: 'Um dos El Niños mais fortes do século XX, associado a enchentes no Sul do Brasil.' },
+  { ano: 2015, texto: 'Primavera muito chuvosa: o Guaíba chegou a 2,94 m em Porto Alegre em outubro de 2015.' },
+  { ano: 2023, texto: 'Setembro de 2023: enchente histórica no Vale do Taquari após um ciclone. Maio de 2024: maior desastre climático do RS, com o Guaíba em 5,35 m, acima do recorde de 1941. O El Niño foi um dos fatores, não o único.' },
+];
+
+/** Eventos de El Niño na série (ONI ou RONI): sequências com 0,5 °C ou mais; pico é o maior valor. */
+function eventosEnso(oni) {
+  const eventos = []; let atual = null;
+  for (const r of oni || []) {
+    if (r.anom >= REGRAS.enso.limiar) { if (!atual) atual = { ini: r, pico: r }; if (r.anom > atual.pico.anom) atual.pico = r; atual.fim = r; }
+    else if (atual) { eventos.push(atual); atual = null; }
+  }
+  if (atual) eventos.push({ ...atual, emCurso: true });
+  return eventos;
+}
+
+// Episódios fortes pela força do aquecimento (pico do índice) e o que houve no RS nos que têm registro.
+// O episódio em curso mostra o mesmo valor de "agora" do bloco principal (situacaoEnso), não o do último trimestre fechado.
+function comparacaoHistorica(oni, sit) {
+  if (!oni?.length) return el('p', { text: 'Índice indisponível.' });
+  const eventos = eventosEnso(oni);
+  // o episódio de um ano é o mais forte entre os que passam por ele (2015 cai no forte 2015–16, não no fraco 2014–15)
+  const doAno = (ano) => eventos.filter((e) => e.ini.ano <= ano && e.fim.ano >= ano).sort((a, b) => b.pico.anom - a.pico.anom)[0];
+  const linhas = new Map();
+  for (const e of eventos.filter((x) => x.pico.anom >= REGRAS.enso.forcas[1] || x.emCurso)) linhas.set(e, null);
+  for (const ep of ENSO_RS_EPISODIOS) { const e = doAno(ep.ano); if (e) linhas.set(e, ep.texto); }
+  const lista = [...linhas.entries()].sort((a, b) => b[0].ini.ano - a[0].ini.ano);
+  const agora = sit?.fase === 'elNino' ? sit.anom : null;
+  return el('div', {},
+    el('ul', { class: 'episodios' }, ...lista.map(([e, texto]) => el('li', { class: e.emCurso ? 'em-curso' : null },
+      el('div', { class: 'ep-cab' }, el('b', { text: e.emCurso ? `${e.ini.ano} (agora)` : `${e.ini.ano}–${e.fim.ano}` }),
+        el('span', { class: 'ep-pico', text: e.emCurso ? `agora +${fmt.n(agora ?? e.pico.anom, 1)} °C` : `pico +${fmt.n(e.pico.anom, 1)} °C` })),
+      texto ? el('p', { text: texto }) : null))),
+    el('p', { class: 'nota', text: 'Graus acima do normal no centro do Pacífico. Força parecida não garante impactos parecidos.' }));
+}
+
+// ------------------------------------------------------------------ El Niño: dados técnicos (recolhidos)
+
+/** Conteúdo de "Dados técnicos": painel de números, gráficos, glossário, probabilidades da NOAA, IRI e status oficial. */
+function dadosTecnicos(E, sit, gInd, gHist) {
+  const P = E.partes || {}, disc = P.discussao?.dados;
+  const avisoParte = (k) => (P[k]?.desatualizado ? el('p', { class: 'faixa-aviso erro', text: `A fonte mudou ou falhou (${P[k].erro}). Mostrando a última versão válida, de ${new Date(P[k].em).toLocaleDateString('pt-BR')}.` }) : null);
+  const iri = P.iri?.dados;
+  return [
+    painelEnso(P, disc, P.roni?.dados?.at(-1)), gInd, gHist,
+    secao('Como ler', null, el('ul', {},
+      el('li', { text: 'Índice oficial: quanto o mar no centro do Pacífico está acima ou abaixo do normal, descontado o aquecimento de todos os oceanos tropicais. É o que a NOAA, agência dos Estados Unidos, usa desde 2026 para declarar El Niño e La Niña.' }),
+      el('li', { text: 'Medida bruta (ou índice antigo): a mesma conta sem esse desconto. Fica mais alta porque inclui o aquecimento global.' }),
+      el('li', { text: 'Acima de +0,5 °C é El Niño; abaixo de −0,5 °C, La Niña. Força: fraco até 1 °C, moderado até 1,5, forte até 2, muito forte daí em diante.' }),
+      el('li', { text: `A força de "agora" no alto da tela é a média das últimas ${REGRAS.enso.semanasAgora} semanas do índice oficial${sit?.base === 'trimestre' ? ' (sem semana recente, vale a média de 3 meses)' : ''}. A média de 3 meses é o critério formal da NOAA, mas sai com dois meses de atraso.` }),
+      el('li', { text: 'A chance de El Niño da NOAA é a chance de o mar continuar aquecido naquele trimestre. Não é chance de chuva.' }))),
+    secao('Probabilidades oficiais da NOAA por trimestre', null, avisoParte('probCpc'), barrasProb(P.probCpc?.dados), el('p', {}, linkExterno(E.fontes?.cpcProb, 'Tabela oficial'))),
+    secao('Previsão baseada em modelos do IRI', null, avisoParte('iri'),
+      iri ? el('p', { class: 'nota', text: `Publicada em ${iri.publicado}.` }) : el('p', { text: 'Resumo do IRI indisponível.' }),
+      el('p', { class: 'nota', text: 'Os números por modelo do IRI só são publicados como imagens, então o painel mostra o link.' }),
+      el('p', {}, linkExterno(E.fontes?.iri, 'Ver a previsão do IRI'))),
+    secao('Status oficial da NOAA CPC', null, avisoParte('discussao'),
+      disc ? el('p', { text: traduzStatus(disc.status).replace(/\s*\(NOAA:.*\)$/, '') }) : el('p', { text: 'Não foi possível ler a discussão.' }),
+      disc ? el('p', { class: 'nota', text: `Publicado em ${disc.emitido || 'data não encontrada'}. Próxima atualização: ${disc.proxima || 'data não encontrada na fonte'}.` }) : null,
+      el('p', {}, linkExterno(E.fontes?.cpc, 'Ler a discussão completa (em inglês)'))),
+  ];
+}
+
+/** Gráficos de "Dados técnicos": índice semanal dos últimos 2 anos e índice trimestral desde 1950. */
+function graficosEnso(alvo, P, gInd, gHist) {
+  const fmtMes = (u, vals) => vals.map((v) => { const d = new Date(v * 1000); return `${d.getUTCMonth() + 1}/${String(d.getUTCFullYear()).slice(2)}`; });
+  const rel = P.relativoSemanal?.dados || [], conv = P.convencionalSemanal?.dados || [];
+  if (rel.length || conv.length) {
+    const tempos = [...new Set([...rel, ...conv].map((r) => r.ms))].sort((a, b) => a - b).slice(-104);
+    const mapa = (lista) => { const m = new Map(lista.map((r) => [r.ms, r.n34])); return tempos.map((t) => m.get(t) ?? null); };
+    criarGrafico(gInd, { x: tempos, agora: false, emitirHora: false, sync: 'enso', formatoX: fmtMes, altura: 180,
+      fonte: `NOAA · semana de ${fmt.dataCurta(tempos[tempos.length - 1], 0)}`,
+      series: [
+        { rotulo: 'índice oficial', valores: mapa(rel), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
+        { rotulo: 'medida bruta', valores: mapa(conv), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
+      ], eixos: [{ formato: (v) => `${v}` }] });
+  } else gInd.append(el('p', { text: 'Índices semanais indisponíveis.' }));
+  const oni = P.oni?.dados || [], roni = P.roni?.dados || [];
+  if (oni.length || roni.length) {
+    const ms = (r) => Date.UTC(r.ano, mesCentralTrimestre(r.seas) - 1, 15);
+    const tempos = [...new Set([...oni, ...roni].map(ms))].sort((a, b) => a - b);
+    const mapa = (lista) => { const m = new Map(lista.map((r) => [ms(r), r.anom])); return tempos.map((t) => m.get(t) ?? null); };
+    criarGrafico(gHist, { x: tempos, agora: false, emitirHora: false, sync: 'enso2', formatoX: (u, v) => v.map((s) => String(new Date(s * 1000).getUTCFullYear())), altura: 180,
+      fonte: `NOAA · ${[...oni, ...roni].sort((a, b) => ms(a) - ms(b)).map((r) => `${trimestrePt(r.seas)} de ${r.ano}`).pop()}`, horasVisiveis: 24 * 365 * 25, rolarFim: true,
+      series: [
+        { rotulo: 'índice antigo', valores: mapa(oni), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
+        { rotulo: 'índice oficial', valores: mapa(roni), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
+      ], eixos: [{ formato: (v) => `${v}` }] });
+  } else gHist.append(el('p', { text: 'Índice indisponível.' }));
+  // o gráfico desde 1950 nasce dentro de "Dados técnicos" fechado: ao abrir, mostra os anos mais recentes
+  alvo.querySelector('.enso-tecnico')?.addEventListener('toggle', (e) => {
+    if (e.target.open) requestAnimationFrame(() => { const r = gHist.querySelector('.rolar'); if (r) r.scrollLeft = r.scrollWidth; });
   });
 }
 
-// Painel de controle: o estado atual em números, cada um com a data e o tipo do dado.
-function intensidade(a) {
-  if (!valido(a)) return null;
-  const x = Math.abs(a), lado = a > 0 ? 'El Niño' : 'La Niña';
-  if (x < 0.5) return 'neutro';
-  if (x < 1) return `${lado} fraco`;
-  if (x < 1.5) return `${lado} moderado`;
-  if (x < 2) return `${lado} forte`;
-  return `${lado} muito forte`;
-}
+// Painel de números: cada um com a data e o tipo do dado. Não classifica a força: isso é de situacaoEnso.
 function painelEnso(P, disc, roniUlt) {
   const sinal = (v) => (valido(v) ? `${v > 0 ? '+' : ''}${fmt.n(v, 1)} °C` : '–');
   const dataSem = (ms) => new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'UTC', day: 'numeric', month: 'short' });
   const rel = P.relativoSemanal?.dados?.at(-1), conv = P.convencionalSemanal?.dados?.at(-1);
   const dia = P.diario?.dados?.at(-1);
-  // trimestre atual (centrado no mês corrente) e os próximos, da NOAA CPC
-  const CENTRO = { DJF: 1, JFM: 2, FMA: 3, MAM: 4, AMJ: 5, MJJ: 6, JJA: 7, JAS: 8, ASO: 9, SON: 10, OND: 11, NDJ: 12 };
+  // trimestre atual (centrado no mês corrente), da NOAA CPC
   const mesAgora = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', month: 'numeric' }));
   const probs = P.probCpc?.dados || [], forcas = P.forcaCpc?.dados || [];
-  const iAgora = Math.max(0, probs.findIndex((x) => CENTRO[x.tri] === mesAgora));
-  const prob = probs[iAgora];
+  const prob = probs[Math.max(0, probs.findIndex((x) => mesCentralTrimestre(x.tri) === mesAgora))];
   const NOME_F = { fraco: 'fraco', moderado: 'moderado', forte: 'forte', muitoForte: 'muito forte' };
-  const forcaDe = (tri) => {
-    const f = forcas.find((x) => x.tri === tri)?.elNino;
-    if (!f) return null;
-    const [k, v] = Object.entries(f).sort((a, b) => b[1] - a[1])[0];
-    return v > 0 ? { nome: NOME_F[k], p: v, forteOuMais: f.forte + f.muitoForte } : null;
-  };
-  const fAgora = prob ? forcaDe(prob.tri) : null;
+  const f = prob ? forcas.find((x) => x.tri === prob.tri)?.elNino : null;
+  const [kF, vF] = f ? Object.entries(f).sort((a, b) => b[1] - a[1])[0] : [];
+  const fAgora = vF > 0 ? { nome: NOME_F[kF], p: vF, forteOuMais: f.forte + f.muitoForte } : null;
   const bloco = (rot, val, sub, marca, destaque) => el('div', { class: 'enso-bloco' + (destaque ? ' destaque' : '') },
     el('small', { text: rot }), el('b', { text: val }), el('span', { class: 'sub', text: sub }), marca ? el('span', { class: 'marca ' + marca[0], text: marca[1] }) : null);
   const filhos = [
     el('p', { class: 'enso-status', text: disc ? traduzStatus(disc.status) : 'Status oficial indisponível' }),
-    roniUlt ? el('p', { class: 'enso-intensidade', text: `Intensidade pelo RONI: ${intensidade(roniUlt.anom)}` }) : null,
     el('div', { class: 'enso-grade' },
       bloco('RONI, índice oficial', valido(roniUlt?.anom) ? `${roniUlt.anom > 0 ? '+' : ''}${fmt.n(roniUlt.anom, 2)} °C` : '–', roniUlt ? `trimestre ${roniUlt.seas} ${roniUlt.ano}` : 'indisponível', ['oficial', 'oficial'], true),
       bloco('Niño 3.4 da semana', sinal(rel?.n34), rel ? `relativo, semana de ${dataSem(rel.ms)}` : 'indisponível', ['medido', 'medido']),
       bloco('Chance de El Niño', prob ? `${prob.elNino}%` : '–', prob ? `trimestre ${prob.tri} (atual), NOAA` : 'indisponível', ['oficial', 'oficial'], true),
       bloco('Força mais provável', fAgora ? fAgora.nome : '–', fAgora ? `${fAgora.p}% de chance; forte ou mais: ${fAgora.forteOuMais}%` : 'indisponível', ['oficial', 'oficial'], true),
       dia ? bloco('Niño 3.4 de ontem', sinal(dia.anom), `${fmt.n(dia.sst, 1)} °C no mar, ${new Date(dia.data + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`, ['previsao', 'estimativa']) : null),
-    probs.length ? el('p', { class: 'nota', text: 'Chance e força: previsão oficial da NOAA, revista na 2ª quinta-feira de cada mês. Força pelo índice oficial: fraco 0,5 a 1 °C, moderado 1 a 1,5, forte 1,5 a 2, muito forte 2 ou mais.' }) : null,
+    probs.length ? el('p', { class: 'nota', text: 'Chance e força: previsão oficial da NOAA para a média de 3 meses, revista na 2ª quinta-feira de cada mês.' }) : null,
     conv && (valido(conv.n12) || valido(conv.n4)) ? el('div', { class: 'enso-regioes' },
       ...[['Niño 1+2', conv.n12, 'costa do Peru'], ['Niño 3', conv.n3, 'leste'], ['Niño 3.4', conv.n34, 'centro'], ['Niño 4', conv.n4, 'oeste']]
         .map(([n, v, onde]) => el('div', {}, el('small', { text: n }), el('b', { text: sinal(v) }), el('span', { text: onde })))) : null,
@@ -2670,144 +2890,9 @@ function painelEnso(P, disc, roniUlt) {
     const d = P.diario.dados.slice(-30);
     filhos.push(el('div', { class: 'enso-diario', role: 'img', 'aria-label': 'Niño 3.4 diário estimado, últimos 30 dias' },
       ...d.map((x) => el('i', { title: `${x.data}: ${sinal(x.anom)}`, style: { height: `${Math.max(2, Math.min(100, (Math.abs(x.anom) / 4) * 100))}%` }, class: x.anom >= 0 ? 'q' : 'f' }))));
-    filhos.push(el('p', { class: 'nota', text: 'Últimos 30 dias, estimativa diária: média da temperatura do mar da Open-Meteo Marine em 18 pontos da região Niño 3.4, menos a média 1991-2020 da NOAA. Serve para acompanhar a tendência entre os boletins semanais; os números oficiais são os da NOAA acima.' }));
+    filhos.push(el('p', { class: 'nota', text: 'Últimos 30 dias, estimativa diária: média da temperatura do mar da Open-Meteo Marine em 18 pontos da região Niño 3.4, menos a média 1991-2020 da NOAA. É a medida bruta, por isso fica acima do índice oficial; serve para acompanhar a tendência entre os boletins semanais.' }));
   } else if (P.diario && !P.diario.ok) filhos.push(el('p', { class: 'nota', text: 'Estimativa diária indisponível nesta atualização.' }));
   return el('section', { class: 'enso-painel largura-total' }, ...filhos);
-}
-
-// Trimestres da NOAA (siglas em inglês) em meses em português: OND → out–dez.
-const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const CENTRO_TRI = { DJF: 1, JFM: 2, FMA: 3, MAM: 4, AMJ: 5, MJJ: 6, JJA: 7, JAS: 8, ASO: 9, SON: 10, OND: 11, NDJ: 12 };
-function trimestrePt(tri) {
-  const c = CENTRO_TRI[tri];
-  return c ? `${MESES_CURTOS[(c + 10) % 12]}–${MESES_CURTOS[c % 12]}` : tri;
-}
-
-/**
- * Resumo do El Niño em linguagem simples: situação, quanto o Pacífico está acima do normal e o que a NOAA
- * prevê para os próximos meses (chance e força), com os meses por extenso. Os números são os oficiais da NOAA.
- */
-const MESES_LONGOS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-const LIMITE_CHUVA_FORTE = 30, LIMITE_RAJADA_FORTE = 60; // mm no dia e km/h: os limites mais altos da aba Semana
-
-/**
- * Aviso antecipado do El Niño para o local. Vale só com El Niño em curso (índice oficial de +0,5 °C ou mais) ou
- * provável (chance da NOAA de 50% ou mais no trimestre atual).
- * - Próximos dias: os dias em que a chance de passar 30 mm de chuva ou 60 km/h de rajada é "possível" ou mais
- *   (REGRAS.ocorrencia), com as mesmas chances e a mesma confiança da aba Semana (analisarDia).
- * - Próximos meses: as épocas em que o El Niño costuma trazer mais chuva ao RS (ENSO_RS_EFEITOS: outubro e novembro
- *   do ano em que começa; abril a junho do ano seguinte), enquanto a chance oficial de El Niño for de 50% ou mais.
- * @returns {{ativo:boolean, dias?:object[], periodos?:object[], ultimoDia?:string}|null}
- */
-function alertaEnsoLocal() {
-  const P = estado.enso?.partes;
-  if (!P) return null;
-  const probs = P.probCpc?.dados || [];
-  const indice = P.roni?.dados?.length ? P.roni.dados : P.oni?.dados || [];
-  const anom = indice.at(-1)?.anom;
-  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-  const ano = Number(hoje.slice(0, 4)), mes = Number(hoje.slice(5, 7));
-  const iAgora = probs.findIndex((x) => CENTRO_TRI[x.tri] === mes);
-  const ativo = (valido(anom) && anom >= 0.5) || (iAgora >= 0 && probs[iAgora].elNino >= 50);
-  if (!ativo) return { ativo: false };
-  const ev = eventosEnso(indice).at(-1);
-  const inicio = ev?.emCurso ? ev.ini.ano : ano; // ano em que o El Niño atual começou (ou começa)
-  const periodos = [];
-  for (let k = 0; iAgora >= 0 && k < 12 && iAgora + k < probs.length; k++) {
-    const m = ((mes - 1 + k) % 12) + 1, a = ano + Math.floor((mes - 1 + k) / 12);
-    const pr = probs[iAgora + k];
-    if (CENTRO_TRI[pr.tri] !== m) break; // tabela fora da sequência mensal: para aqui, sem adivinhar
-    const epoca = ((m === 10 || m === 11) && a === inicio) || (m >= 4 && m <= 6 && a === inicio + 1);
-    if (!epoca || pr.elNino < 50) continue;
-    const ult = periodos.at(-1);
-    if (ult && ult.k === k - 1) { ult.fim = { m, a }; ult.k = k; ult.chances.push(pr.elNino); }
-    else periodos.push({ ini: { m, a }, fim: { m, a }, k, chances: [pr.elNino], atual: k === 0 });
-  }
-  const dias = [];
-  const ds = estado.prev ? datas() : [];
-  ds.forEach((d, k) => {
-    const a = analisarDia(d, k, k === 0);
-    const pc = a.limites?.chuva.find((l) => l.limite === LIMITE_CHUVA_FORTE)?.p;
-    const pr = a.limites?.rajada.find((l) => l.limite === LIMITE_RAJADA_FORTE)?.p;
-    const riscos = [];
-    if (valido(pc) && pc >= REGRAS.ocorrencia.possivel) riscos.push({ tipo: 'chuva', p: pc });
-    if (valido(pr) && pr >= REGRAS.ocorrencia.possivel) riscos.push({ tipo: 'rajada', p: pr });
-    if (riscos.length) dias.push({ a, riscos });
-  });
-  return { ativo: true, dias, periodos, ultimoDia: ds.at(-1) };
-}
-
-// Uma linha por dia de risco: tocar abre o painel completo do dia.
-function linhasRiscoDias(al) {
-  const p = estado.prev;
-  const plural = { 'possível': 'possíveis', 'provável': 'prováveis' };
-  return el('ul', { class: 'alerta-dias' }, ...al.dias.slice(0, 5).map(({ a, riscos }) => {
-    const ms = p.horas[a.idxTodo[0]];
-    const quando = a.diaIndice === 0 ? 'Hoje' : a.diaIndice === 1 ? 'Amanhã' : `${fmt.diaSemana(ms, p.offset)} ${fmt.dataCurta(ms, p.offset)}`;
-    const oque = riscos.map((r) => (r.tipo === 'chuva' ? `chuva forte ${palavraOcorrencia(r.p)}` : `rajadas fortes ${plural[palavraOcorrencia(r.p)]}`)).join(' e ');
-    return el('li', {}, el('button', { type: 'button', onclick: () => abrirDia(a.data) },
-      el('b', { text: quando }), el('span', { text: oque }), el('span', { class: 'cf', text: `confiança ${a.av.confianca.geral}` })));
-  }));
-}
-
-function nomePeriodo(x) {
-  const i = MESES_LONGOS[x.ini.m - 1], f = MESES_LONGOS[x.fim.m - 1];
-  if (x.atual) return x.ini.m === x.fim.m ? `Até o fim de ${f}` : `De agora até ${f}`;
-  if (x.ini.m === x.fim.m) return `${i[0].toUpperCase()}${i.slice(1)} de ${x.ini.a}`;
-  return x.ini.a === x.fim.a ? `De ${i} a ${f} de ${x.fim.a}` : `De ${i} de ${x.ini.a} a ${f} de ${x.fim.a}`;
-}
-
-// Bloco "Em <local>" do resumo do El Niño: próximos dias, épocas de atenção e avisos do INMET ativos.
-function blocoAlertaLocal(al) {
-  if (!al?.ativo) return null;
-  const filhos = [el('h3', { text: estado.local?.origem === 'gps' || !estado.local?.nome ? 'No seu local' : `Em ${estado.local.nome}` })];
-  if (estado.prev) {
-    const ate = al.ultimoDia ? `${al.ultimoDia.slice(8, 10)}/${al.ultimoDia.slice(5, 7)}` : '';
-    filhos.push(al.dias.length
-      ? el('div', {}, el('p', { class: 'alerta-titulo', text: 'Atenção nos próximos dias' }), linhasRiscoDias(al))
-      : el('p', { text: `Sem chuva forte nem rajadas fortes previstas até ${ate}.` }));
-  }
-  if (al.periodos.length) {
-    filhos.push(el('p', { class: 'alerta-titulo', text: 'Épocas em que costuma chover mais' }),
-      el('ul', { class: 'alerta-epocas' }, ...al.periodos.map((x) => {
-        const lo = Math.min(...x.chances), hi = Math.max(...x.chances);
-        return el('li', {}, el('b', { text: nomePeriodo(x) }), el('span', { text: `chance de El Niño: ${lo === hi ? `${lo}%` : `${lo}% a ${hi}%`}` }));
-      })));
-  }
-  const inmet = estado.alertas && !estado.alertas.indisponivel ? avisosOrdenados().length : 0;
-  if (inmet) filhos.push(el('p', {}, el('button', { type: 'button', class: 'link-aviso', onclick: () => irPara('avisos') }, `${inmet} ${inmet > 1 ? 'avisos' : 'aviso'} do INMET agora`)));
-  filhos.push(el('p', { class: 'nota', text: `Chuva forte: mais de ${LIMITE_CHUVA_FORTE} mm no dia. Rajada forte: mais de ${LIMITE_RAJADA_FORTE} km/h.` }));
-  return el('div', { class: 'alerta-local' }, ...filhos);
-}
-
-function painelResumo(P, disc, roniUlt, alerta) {
-  const probs = P.probCpc?.dados || [], forcas = P.forcaCpc?.dados || [];
-  const mesAgora = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', month: 'numeric' }));
-  const iAgora = Math.max(0, probs.findIndex((x) => CENTRO_TRI[x.tri] === mesAgora));
-  const NOME_F = { fraco: 'fraco', moderado: 'moderado', forte: 'forte', muitoForte: 'muito forte' };
-  const forcaDe = (tri) => {
-    const f = forcas.find((x) => x.tri === tri)?.elNino;
-    if (!f) return null;
-    const [k, v] = Object.entries(f).sort((a, b) => b[1] - a[1])[0];
-    return v > 0 ? NOME_F[k] : null;
-  };
-  const status = disc ? traduzStatus(disc.status).replace(/\s*\(NOAA:.*\)$/, '') : null;
-  const anom = roniUlt?.anom;
-  const titulo = valido(anom) && anom >= 0.5 ? `El Niño ${intensidade(anom).replace(/^El Niño\s*/, '')} em curso`
-    : valido(anom) && anom <= -0.5 ? `La Niña ${intensidade(anom).replace(/^La Niña\s*/, '')} em curso` : status || 'Pacífico em condição neutra';
-  const frase = valido(anom)
-    ? `O mar no centro do Pacífico está ${fmt.n(Math.abs(anom), 1)} °C ${anom >= 0 ? 'acima' : 'abaixo'} do normal (média de ${trimestrePt(roniUlt.seas)} de ${roniUlt.ano}, índice oficial da NOAA).`
-    : 'Índice oficial indisponível agora.';
-  const proximos = probs.slice(iAgora, iAgora + 6);
-  return el('section', { class: 'enso-painel largura-total' },
-    el('p', { class: 'enso-status', text: titulo }),
-    el('p', { text: frase }),
-    blocoAlertaLocal(alerta),
-    proximos.length ? el('table', { class: 'enso-tri' },
-      el('thead', {}, el('tr', {}, el('th', { text: 'Meses' }), el('th', { class: 'n', text: 'Chance de El Niño' }), el('th', { text: 'Força mais provável' }))),
-      el('tbody', {}, ...proximos.map((x) => el('tr', {}, el('td', { text: trimestrePt(x.tri) }), el('td', { class: 'n', text: `${x.elNino}%` }),
-        el('td', { text: forcaDe(x.tri) || (x.neutro >= x.elNino ? 'neutro' : '–') }))))) : null,
-    proximos.length ? el('p', { class: 'nota', text: 'Previsão oficial da NOAA, revista todo mês.' }) : null);
 }
 
 function traduzStatus(s) {
@@ -2832,85 +2917,6 @@ function barrasProb(linhas) {
         el('i', { class: 'ne', style: { width: l.neutro + '%' }, text: l.neutro >= 12 ? `${l.neutro}` : '' }),
         el('i', { class: 'en', style: { width: l.elNino + '%' }, text: l.elNino >= 12 ? `${l.elNino}` : '' })))),
     el('p', { class: 'nota', text: 'Números em %.' }));
-}
-
-// ------------------------------------------------------------------ El Niño no RS
-// Conteúdo fixo e verificável (estudos e registros oficiais), não notícias. Revisar a cada novo episódio forte.
-// Padrão no RS: Fontana e Berlato (1997), séries de chuva de localidades do RS; resumo de impactos do CPTEC/INPE.
-const ENSO_RS_EFEITOS = [
-  'Chove mais que o normal, principalmente na primavera (outubro e novembro) do ano em que o El Niño começa.',
-  'Volta a chover acima do normal no fim do outono do ano seguinte, de abril a junho.',
-  'Nessas épocas, aumenta o risco de cheias nos rios e de temporais.',
-  'A temperatura média tende a ficar um pouco mais alta.',
-];
-// Episódios: ano de início do El Niño e o que foi registrado no RS. Só fatos com registro oficial ou estudo publicado.
-const ENSO_RS_EPISODIOS = [
-  { ano: 1982, texto: 'Enchentes em sequência no Sul entre maio e julho de 1983, inclusive no rio Uruguai (Itaqui, São Borja, Uruguaiana).' },
-  { ano: 1997, texto: 'Um dos El Niños mais fortes do século XX, associado a enchentes no Sul do Brasil.' },
-  { ano: 2015, texto: 'Primavera muito chuvosa: o Guaíba chegou a 2,94 m em Porto Alegre em outubro de 2015.' },
-  { ano: 2023, texto: 'Setembro de 2023: enchente histórica no Vale do Taquari após um ciclone. Maio de 2024: maior desastre climático do RS, com o Guaíba em 5,35 m, acima do recorde de 1941. O El Niño foi um dos fatores, não o único.' },
-];
-const ENSO_RS_FONTES = [
-  ['https://enos.cptec.inpe.br/', 'CPTEC/INPE: El Niño e La Niña'],
-  ['https://www.scielo.br/j/ea/a/LyHVHKHzm67CwpvcWPKPwTm/', 'Estudo sobre as chuvas de abril e maio de 2024 no RS'],
-];
-
-/** Eventos de El Niño na série (ONI ou RONI): sequências com 0,5 °C ou mais; pico é o maior valor. */
-function eventosEnso(oni) {
-  const eventos = []; let atual = null;
-  for (const r of oni || []) {
-    if (r.anom >= 0.5) { if (!atual) atual = { ini: r, pico: r }; if (r.anom > atual.pico.anom) atual.pico = r; atual.fim = r; }
-    else if (atual) { eventos.push(atual); atual = null; }
-  }
-  if (atual) eventos.push({ ...atual, emCurso: true });
-  return eventos;
-}
-
-// O que o El Niño costuma causar no RS e, havendo episódio em curso, o que isso indica para os próximos meses.
-function efeitosNoRs(oni, E) {
-  const eventos = eventosEnso(oni);
-  const atual = eventos.at(-1)?.emCurso ? eventos.at(-1) : null;
-  const filhos = [el('ul', {}, ...ENSO_RS_EFEITOS.map((t) => el('li', { text: t })))];
-  if (atual) {
-    // Primavera do ano de início e outono do ano seguinte; se o episódio começou no começo do ano, a primavera é a do mesmo ano.
-    const a0 = atual.ini.ano;
-    filhos.unshift(el('p', { class: 'destaque-rs' }, el('b', { text: 'Agora: ' }),
-      `com o El Niño em curso, a tendência é de primavera de ${a0} mais chuvosa no RS e nova fase de chuva acima do normal entre abril e junho de ${a0 + 1}. É tendência, não previsão de um evento.`));
-  }
-  filhos.push(el('details', { class: 'detalhe-toque' }, el('summary', { text: 'De onde vem isso' }),
-    el('p', { text: 'Padrão medido em décadas de dados de chuva no RS (Fontana e Berlato, 1997) e resumido pelo CPTEC/INPE. Cada El Niño é diferente: alguns trazem pouco efeito, e outros fatores também influenciam.' }),
-    el('ul', {}, ...ENSO_RS_FONTES.map(([u, t]) => el('li', {}, linkExterno(u, t)))),
-    E?.fontes?.inmet ? el('p', {}, linkExterno(E.fontes.inmet, 'Prognóstico do INMET')) : null));
-  return secao('O que o El Niño costuma causar no RS', null, ...filhos);
-}
-
-// Notícias recentes do RS que citam o El Niño (Google Notícias, via Worker ou GitHub Actions): conteúdo de terceiros.
-function noticiasRs(parte) {
-  const lista = (parte.dados || []).filter((n) => Date.now() - n.ms < 45 * 86400000).slice(0, 5);
-  const itens = lista.length
-    ? el('ul', { class: 'noticias' }, ...lista.map((n) => el('li', {},
-      linkExterno(n.link, n.titulo),
-      el('span', { class: 'nota', text: `${n.veiculo || 'veículo não informado'} · ${new Date(n.ms).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}` }))))
-    : el('p', { class: 'nota', text: parte.ok ? 'Nenhuma notícia do RS citando o El Niño nos últimos 45 dias.' : 'Notícias indisponíveis agora.' });
-  return secao('Nas notícias do RS', null, itens,
-    el('p', { class: 'nota', text: 'Notícias de terceiros que citam o El Niño. O painel não confere o conteúdo nem afirma a relação.' }));
-}
-
-// Episódios fortes pela força do aquecimento (pico do índice) e o que houve no RS nos que têm registro.
-function comparacaoHistorica(oni) {
-  if (!oni?.length) return el('p', { text: 'Índice indisponível.' });
-  const eventos = eventosEnso(oni);
-  // o episódio de um ano é o mais forte entre os que passam por ele (2015 cai no forte 2015–16, não no fraco 2014–15)
-  const doAno = (ano) => eventos.filter((e) => e.ini.ano <= ano && e.fim.ano >= ano).sort((a, b) => b.pico.anom - a.pico.anom)[0];
-  const linhas = new Map();
-  for (const e of eventos.filter((x) => x.pico.anom >= 1.5)) linhas.set(e, null);
-  for (const ep of ENSO_RS_EPISODIOS) { const e = doAno(ep.ano); if (e) linhas.set(e, ep.texto); }
-  const lista = [...linhas.entries()].sort((a, b) => b[0].ini.ano - a[0].ini.ano);
-  return el('div', {},
-    el('ul', { class: 'episodios' }, ...lista.map(([e, texto]) => el('li', { class: e.emCurso ? 'em-curso' : null },
-      el('div', { class: 'ep-cab' }, el('b', { text: e.emCurso ? `${e.ini.ano} (agora)` : `${e.ini.ano}–${e.fim.ano}` }), el('span', { class: 'ep-pico', text: `${e.emCurso ? 'até agora' : 'pico'} +${fmt.n(e.pico.anom, 1)} °C` })),
-      texto ? el('p', { text: texto }) : null))),
-    el('p', { class: 'nota', text: 'Força parecida não garante impactos parecidos.' }));
 }
 
 // ------------------------------------------------------------------ navegação e gestos
@@ -3074,21 +3080,25 @@ function configurarPuxar() {
 
 // ------------------------------------------------------------------ tema, rodapé, apagar dados
 
+/**
+ * Aplica o tema salvo (js/tema.js grava data-tema no <html>), acerta a cor da barra do navegador e marca a opção
+ * em uso no seletor de "Ver mais". As cores de cada tema ficam no começo do app.css.
+ */
 function aplicarTema() {
-  const t = prefs.ler('tema', 'auto');
-  if (t === 'auto') document.documentElement.removeAttribute('data-tema'); else document.documentElement.setAttribute('data-tema', t);
-  const fundo = getComputedStyle(document.documentElement).getPropertyValue('--fundo').trim();
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', fundo || '#17303B');
-  const b = $('#btn-tema'); if (b) b.textContent = `Tema: ${{ auto: 'automático', claro: 'claro', escuro: 'escuro' }[t]}`;
+  window.temaDoApp.aplicar();
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', cor('--fundo'));
+  const pref = window.temaDoApp.preferencia();
+  for (const b of document.querySelectorAll('#troca-tema button')) b.setAttribute('aria-pressed', String(b.dataset.tema === pref));
+}
+
+/** Seletor de tema em "Ver mais": Automático (segue o aparelho), Claro ou Escuro. Tudo o que é desenhado é refeito. */
+function configurarTema() {
+  const trocar = () => { aplicarTema(); renderTudo(); };
+  for (const b of document.querySelectorAll('#troca-tema button')) b.addEventListener('click', () => { prefs.gravar('tema', b.dataset.tema); trocar(); });
+  window.temaDoApp.aoMudarNoAparelho(trocar);
 }
 
 function configurarRodape() {
-  $('#btn-tema').addEventListener('click', () => {
-    const ordem = ['auto', 'claro', 'escuro'];
-    prefs.gravar('tema', ordem[(ordem.indexOf(prefs.ler('tema', 'auto')) + 1) % 3]);
-    aplicarTema(); renderTudo();
-  });
-  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { aplicarTema(); renderTudo(); });
   $('#btn-apagar').addEventListener('click', async () => {
     if (!confirm('Apagar localização, preferências e dados salvos deste aparelho? O app vai recarregar.')) return;
     estado.apagado = true; // para atualizações e gravações

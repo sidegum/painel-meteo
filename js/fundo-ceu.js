@@ -9,11 +9,12 @@ const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const limitar = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const suave = (a, b, x) => { const t = limitar((x - a) / (b - a)); return t * t * (3 - 2 * t); };
 
-// Paletas do céu: [topo, base] limpo e encoberto, por fase do dia.
+// Paletas do céu: [topo, base] limpo e encoberto, por fase do dia. Tons contidos, como o resto do app: o céu
+// continua reconhecível (azul de dia, alaranjado com o sol baixo, escuro à noite) sem cor forte atrás do texto.
 const CEUS = {
-  dia: { limpo: ['#2C6CBF', '#8FBDEB'], encoberto: ['#6E7C8B', '#A7B2BD'] },
-  baixo: { limpo: ['#36598F', '#EBA66E'], encoberto: ['#59607A', '#B4917F'] },
-  noite: { limpo: ['#060C21', '#1C2A52'], encoberto: ['#141925', '#2C3341'] },
+  dia: { limpo: ['#44709F', '#93B2CF'], encoberto: ['#6E7C8B', '#A7B2BD'] },
+  baixo: { limpo: ['#3F587F', '#CFA283'], encoberto: ['#59607A', '#B4917F'] },
+  noite: { limpo: ['#0A1024', '#1F2A49'], encoberto: ['#141925', '#2C3341'] },
 };
 const CHUVA = ['#4C5865', '#6F7A87'], TEMPORAL = ['#232733', '#454A5B'];
 
