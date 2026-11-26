@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, limitesCoerentes, horasProvaveisDeChuva, fraseDoDia,
-  horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, periodoDoDia, classeRajada,
+  horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, graficoInicial, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
   calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
 } from './analise.js';
@@ -18,7 +18,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.13.0';
+const VERSAO = '1.13.1';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -1002,10 +1002,12 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const ini = p.horas[(desdeAgora && a.idxAgora.length ? a.idxAgora : a.idxTodo)[0]];
   const fim = p.horas[a.idxTodo[a.idxTodo.length - 1]] + 3600000;
   const caixa = el('div', { class: 'grafico-primeira' });
-  // Gráfico inicial: chuva quando há chance de chuva no dia (ou chuva agora/chegando); sem chuva, a temperatura,
-  // para não abrir num gráfico vazio. A escolha da pessoa vale até fechar o app (estado.modoGrafico).
+  // Gráfico inicial pela regra graficoInicial (Chuva a partir de REGRAS.ocorrencia.poucoProvavel, senão Temperatura).
+  // A escolha feita à mão vale até fechar o app, só para este dia e este local (chave local|data): ao trocar de
+  // cidade ou virar o dia, o gráfico volta ao padrão da regra.
   estado.modoGrafico ||= {};
-  let modo = estado.modoGrafico[diaIndice] || (temChuva || chovendo || chegando ? 'chance' : 'temp');
+  const chaveModo = `${estado.local ? chaveLocal(estado.local) : ''}|${data}`;
+  let modo = estado.modoGrafico[chaveModo] || graficoInicial(av.prob, chovendo || !!chegando);
   const botoes = el('div', { class: 'troca', role: 'group', 'aria-label': 'Gráfico' });
   const iniDia = p.horas[a.idxTodo[0]];
   const desenharModo = () => {
@@ -1013,7 +1015,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     const todas = desdeAgora && prefs.ler('horasTodas', false);
     const iniUsado = todas ? iniDia : ini;
     botoes.replaceChildren(el('span', { class: 'troca-modo' }, ...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
-      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; estado.modoGrafico[diaIndice] = k; desenharModo(); } }, nome))),
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; estado.modoGrafico[chaveModo] = k; desenharModo(); } }, nome))),
     desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
       el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : '');
     caixa.replaceChildren();

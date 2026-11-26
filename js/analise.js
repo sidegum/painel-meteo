@@ -367,6 +367,19 @@ export function palavraOcorrencia(p) {
   return 'improvável';
 }
 
+/**
+ * Gráfico que abre por padrão abaixo do resumo do dia. Chuva quando a chance de chuva do dia chega ao limite
+ * REGRAS.ocorrencia.poucoProvavel (o mesmo que tira o resumo do "Não deve chover", para o gráfico e o resumo
+ * nunca se contradizerem) ou quando chove agora ou há chuva chegando pelo radar; senão Temperatura, para a
+ * tela não abrir num gráfico vazio.
+ * @param {number|null} prob chance de chuva do dia (0 a 1), a mesma do resumo (analisarDia(...).av.prob)
+ * @param {boolean} chuvaAgora chovendo agora ou chuva chegando (só em Hoje)
+ * @returns {'chance'|'temp'}
+ */
+export function graficoInicial(prob, chuvaAgora = false) {
+  return chuvaAgora || (valido(prob) && prob >= REGRAS.ocorrencia.poucoProvavel) ? 'chance' : 'temp';
+}
+
 export function classeRajada(kmh) {
   if (!valido(kmh)) return null;
   return REGRAS.rajadaClasses.find((c) => kmh >= c.min)?.nome || null;
