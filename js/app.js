@@ -13,12 +13,12 @@ import {
 } from './dados.js';
 import { chaveLocal } from './cidades.js';
 import { criarLocais } from './locais.js';
-import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor } from './ui.js';
+import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor, cor, corRgb } from './ui.js';
 import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.13.1';
+const VERSAO = '1.14.0';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -47,6 +47,7 @@ async function iniciar() {
   $('#versao').textContent = `Versão ${VERSAO}`;
   configurarNavegacao();
   configurarLocal();
+  configurarTema();
   configurarRodape();
   configurarPuxar();
   configurarCabecalho();
@@ -1437,9 +1438,9 @@ function secaoTempestade() {
 
 // Quantos núcleos a lista e o desenho numeram; os outros ficam no detalhe.
 const MAX_NUCLEOS_LISTA = 4;
-// Cores do radar desenhado, pela refletividade (as mesmas faixas de REGRAS.tempestade.dbz).
-const COR_DBZ = [[55, [236, 92, 236]], [45, [226, 54, 44]], [40, [255, 150, 0]], [30, [240, 214, 60]], [20, [70, 150, 230]], [10, [90, 170, 220]]];
-const COR_NUCLEO = { severa: 'rgb(236, 92, 236)', tempestade: 'rgb(226, 54, 44)', forte: 'rgb(255, 150, 0)' };
+// Faixas do radar desenhado, pela refletividade mínima em dBZ (as mesmas de REGRAS.tempestade.dbz), cada uma com a
+// variável de cor do tema (app.css). Os núcleos numerados usam a cor da própria classe: --radar-forte, etc.
+const FAIXAS_DBZ = [[55, '--radar-severa'], [45, '--radar-tempestade'], [40, '--radar-forte'], [30, '--radar-moderada'], [10, '--radar-fraca']];
 
 /**
  * Desenha o radar da seção: ecos de pelo menos 10 dBZ num círculo de REGRAS.tempestade.raioKm em volta do local
@@ -1455,8 +1456,8 @@ function desenharRadarTempestade(tela, t, nucleos = []) {
   const css = tela.clientWidth || 96, dpr = Math.min(3, window.devicePixelRatio || 1), lado = Math.round(css * dpr);
   tela.width = lado; tela.height = lado;
   const c = tela.getContext('2d'), meio = lado / 2, raioPx = meio - 1.5 * dpr, R = REGRAS.tempestade.raioKm, pxKm = raioPx / R;
-  const est = getComputedStyle(tela), linha = est.getPropertyValue('--linha').trim() || '#2C3136', fraco = est.getPropertyValue('--fraco').trim() || '#9BA4AC';
-  const texto = est.getPropertyValue('--texto').trim() || '#ECEEF0', fundo = est.getPropertyValue('--sup2').trim() || '#23272B';
+  const linha = cor('--linha'), fraco = cor('--fraco'), texto = cor('--texto'), fundo = cor('--sup2');
+  const faixas = FAIXAS_DBZ.map(([lim, nome]) => [lim, corRgb(nome)]);
   const seta = (x0, y0, x1, y1, cor, largura, tracejada) => {
     const a = Math.atan2(y1 - y0, x1 - x0), h = 6 * dpr;
     c.strokeStyle = cor; c.fillStyle = cor; c.lineWidth = largura * dpr; c.setLineDash(tracejada ? [4 * dpr, 4 * dpr] : []);
@@ -1471,9 +1472,9 @@ function desenharRadarTempestade(tela, t, nucleos = []) {
     for (let j = 0; j < w; j++) for (let i = 0; i < w; i++) {
       const x = Math.round(px) - r + i, y = Math.round(py) - r + j;
       if (x < 0 || y < 0 || x >= n || y >= n) continue;
-      const v = dbz[y * n + x], cor = COR_DBZ.find(([lim]) => v >= lim);
-      if (!cor) continue;
-      img.data.set([...cor[1], v >= 40 ? 255 : 150], (j * w + i) * 4);
+      const v = dbz[y * n + x], faixa = faixas.find(([lim]) => v >= lim);
+      if (!faixa) continue;
+      img.data.set([...faixa[1], v >= 40 ? 255 : 170], (j * w + i) * 4);
     }
     const tmp = Object.assign(document.createElement('canvas'), { width: w, height: w });
     tmp.getContext('2d').putImageData(img, 0, 0);
@@ -1510,7 +1511,7 @@ function desenharRadarTempestade(tela, t, nucleos = []) {
     const d = Math.hypot(n.leste, n.sul), lim = R - raioM / pxKm, f = d > lim ? lim / d : 1; // marcador sempre dentro do círculo
     const x = meio + n.leste * f * pxKm, y = meio + n.sul * f * pxKm;
     c.beginPath(); c.arc(x, y, raioM, 0, 2 * Math.PI);
-    c.fillStyle = fundo; c.fill(); c.strokeStyle = COR_NUCLEO[n.classe]; c.lineWidth = 2 * dpr; c.stroke();
+    c.fillStyle = fundo; c.fill(); c.strokeStyle = cor(`--radar-${n.classe}`); c.lineWidth = 2 * dpr; c.stroke();
     c.fillStyle = texto; c.fillText(String(k + 1), x, y + 0.5 * dpr);
   });
 }
@@ -2074,7 +2075,7 @@ function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
       if (!disponivel('cloud_cover_low')) area.append(el('p', { class: 'nota', text: 'Nuvens por camada: nenhum modelo forneceu este dado.' }));
       else criarGrafico(area, { ...base, titulo: 'Cobertura de nuvens por camada', fonte, altura: 150,
         series: [
-          { rotulo: 'altas', valores: C('cloud_cover_high').med, cor: '#9DB3B8', largura: 1.5, formato: (v) => `${Math.round(v)}%` },
+          { rotulo: 'altas', valores: C('cloud_cover_high').med, corCss: '--nuvens-altas', largura: 1.5, formato: (v) => `${Math.round(v)}%` },
           { rotulo: 'médias', valores: C('cloud_cover_mid').med, corCss: '--fria', largura: 1.5, formato: (v) => `${Math.round(v)}%` },
           { rotulo: 'baixas', valores: C('cloud_cover_low').med, corCss: '--texto', largura: 2.5, formato: (v) => `${Math.round(v)}%` },
         ], escalas: { y: { range: [0, 100] } }, eixos: [{ formato: (v) => `${v}%` }] });
@@ -2432,9 +2433,9 @@ function renderModelos() {
       const series = [];
       const bandas = [];
       if (l) {
-        series.push({ rotulo: 'p10', valores: l.p10, cor: '#7f9aa1', faixa: true, semLegenda: true }, { rotulo: 'p90', valores: l.p90, cor: '#7f9aa1', faixa: true, semLegenda: true },
-          { rotulo: `mediana de ${l.n} cenários`, valores: l.p50, cor: '#7f9aa1', largura: 2, dash: [2, 3], formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
-        bandas.push({ de: 1, ate: 0, cor: '#7f9aa1' });
+        series.push({ rotulo: 'p10', valores: l.p10, corCss: '--cenarios', faixa: true, semLegenda: true }, { rotulo: 'p90', valores: l.p90, corCss: '--cenarios', faixa: true, semLegenda: true },
+          { rotulo: `mediana de ${l.n} cenários`, valores: l.p50, corCss: '--cenarios', largura: 2, dash: [2, 3], formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
+        bandas.push({ de: 1, ate: 0, corCss: '--cenarios' });
       }
       for (const m of mods) if (p.modelos[m].vars[v]) series.push({ rotulo: MODELOS[m].curto, valores: serieModelo(m, v, acumular), corCss: MODELOS[m].cor.slice(4, -1), largura: 2, formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
       if (!l) caixa.append(el('p', { class: 'nota', text: 'Leque de cenários indisponível: a Ensemble API não respondeu. Mostrando só os modelos.' }));
@@ -3068,21 +3069,25 @@ function configurarPuxar() {
 
 // ------------------------------------------------------------------ tema, rodapé, apagar dados
 
+/**
+ * Aplica o tema salvo (js/tema.js grava data-tema no <html>), acerta a cor da barra do navegador e marca a opção
+ * em uso no seletor de "Ver mais". As cores de cada tema ficam no começo do app.css.
+ */
 function aplicarTema() {
-  const t = prefs.ler('tema', 'auto');
-  if (t === 'auto') document.documentElement.removeAttribute('data-tema'); else document.documentElement.setAttribute('data-tema', t);
-  const fundo = getComputedStyle(document.documentElement).getPropertyValue('--fundo').trim();
-  document.querySelector('meta[name="theme-color"]').setAttribute('content', fundo || '#17303B');
-  const b = $('#btn-tema'); if (b) b.textContent = `Tema: ${{ auto: 'automático', claro: 'claro', escuro: 'escuro' }[t]}`;
+  window.temaDoApp.aplicar();
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', cor('--fundo'));
+  const pref = window.temaDoApp.preferencia();
+  for (const b of document.querySelectorAll('#troca-tema button')) b.setAttribute('aria-pressed', String(b.dataset.tema === pref));
+}
+
+/** Seletor de tema em "Ver mais": Automático (segue o aparelho), Claro ou Escuro. Tudo o que é desenhado é refeito. */
+function configurarTema() {
+  const trocar = () => { aplicarTema(); renderTudo(); };
+  for (const b of document.querySelectorAll('#troca-tema button')) b.addEventListener('click', () => { prefs.gravar('tema', b.dataset.tema); trocar(); });
+  window.temaDoApp.aoMudarNoAparelho(trocar);
 }
 
 function configurarRodape() {
-  $('#btn-tema').addEventListener('click', () => {
-    const ordem = ['auto', 'claro', 'escuro'];
-    prefs.gravar('tema', ordem[(ordem.indexOf(prefs.ler('tema', 'auto')) + 1) % 3]);
-    aplicarTema(); renderTudo();
-  });
-  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { aplicarTema(); renderTudo(); });
   $('#btn-apagar').addEventListener('click', async () => {
     if (!confirm('Apagar localização, preferências e dados salvos deste aparelho? O app vai recarregar.')) return;
     estado.apagado = true; // para atualizações e gravações

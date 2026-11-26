@@ -13,40 +13,50 @@
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/* ---------- Cores do painel (único lugar onde elas são definidas) ----------
+   Regra: a cor indica a informação (chuva, rajada, frio, calor ou alerta, intensidade do radar, modelo) e é sempre
+   discreta, com pouca saturação, nos dois temas. Texto colorido mantém contraste de pelo menos 4,5:1 sobre as três
+   superfícies. O tema escuro é o padrão; o claro entra por data-tema="claro", atributo posto por js/tema.js antes
+   da primeira pintura (escolha salva ou, no automático, o tema do aparelho).
+   As cores lidas pelo JavaScript (gráficos, radar e mapa, com cor() e corRgb() de js/ui.js) ficam em hexadecimal
+   de seis dígitos. O Globo tem cores próprias e não usa este bloco. */
 :root {
-  --mar: #17303B; --nevoa: #DCE5E6;
-  --fundo: #17303B; --sup: #1F3D4A; --sup2: #264856; --linha: #2E5161;
-  --texto: #DCE5E6; --fraco: #A9BEC3;
-  --chuva: #3DB5AE; --chuva-txt: #5CC9C2; --rajada: #E3B23C; --rajada-txt: #EBC15A;
-  --fria: #6F9BE0; --quente: #E0676A; --alerta-fundo: #5A1E22;
-  --noite: rgba(0, 0, 0, .28); --nuvem: 220, 229, 230;
-  --m-ecmwf: #6F9BE0; --m-aifs: #B7A3E8; --m-gfs: #E0676A; --m-icon: #E3B23C; --m-ukmo: #8FD18A;
-  --foco: #F2D16B;
+  /* superfícies e texto */
+  --fundo: #111315; --sup: #1A1D20; --sup2: #23272B; --linha: #2C3136;
+  --texto: #ECEEF0; --fraco: #9BA4AC; --foco: #ECEEF0; --ponto: #ECEEF0;
+  --noite: rgba(0, 0, 0, .3); --nuvem: 225, 229, 233; --veu: rgba(8, 10, 12, .6);
+  /* informação: marca (barras, linhas e ícones) e texto (-txt, mais claro para ler) */
+  --chuva: #6C97B3; --chuva-txt: #8FB0C6;
+  --rajada: #B39C66; --rajada-txt: #C7B588;
+  --fria: #93A8C7; --quente: #D19C89; --alerta-fundo: #2B2422;
+  --cenarios: #7E8F96; --nuvens-altas: #7E8F96;
+  /* modelos, lado a lado na aba Modelos */
+  --m-ecmwf: #93A8C7; --m-aifs: #ADA1C6; --m-ukmo: #9DB79B; --m-gfs: #D19C89; --m-icon: #C7B588;
+  /* radar de tempestade, da chuva fraca à tempestade forte */
+  --radar-fraca: #6C97B3; --radar-moderada: #C2B67C; --radar-forte: #C9955F; --radar-tempestade: #C06F63; --radar-severa: #A878B1;
+  /* avisos do INMET no mapa: perigo potencial, perigo e grande perigo */
+  --aviso-potencial: #C2B67C; --aviso-perigo: #C9955F; --aviso-grande: #C06F63;
+  /* pontos do mapa: o local, estação do INMET e aeroporto */
+  --mapa-local: #ECEEF0; --mapa-inmet: #6C97B3; --mapa-aeroporto: #B39C66;
+  /* quanto da cor original fica nas camadas coloridas do mapa (radar e campos previstos) e no mapa de ruas */
+  --mapa-saturacao: .6;
   --nav-h: 64px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
   color-scheme: dark;
 }
-@media (prefers-color-scheme: light) {
-  :root:not([data-tema="escuro"]) {
-    --fundo: #DCE5E6; --sup: #EEF3F3; --sup2: #E3EBEC; --linha: #B9C8CB;
-    --texto: #17303B; --fraco: #40606B;
-    --chuva: #1E8F8A; --chuva-txt: #136B67; --rajada: #D9A21B; --rajada-txt: #7A5A00;
-    --fria: #2457A6; --quente: #C8373A; --alerta-fundo: #F6D9DA;
-    --noite: rgba(23, 48, 59, .10); --nuvem: 64, 96, 107;
-    --m-ecmwf: #2457A6; --m-aifs: #6A4FB3; --m-gfs: #C8373A; --m-icon: #9A7100; --m-ukmo: #2E7D32;
-    --foco: #2457A6;
-    color-scheme: light;
-  }
-}
 :root[data-tema="claro"] {
-  --fundo: #DCE5E6; --sup: #EEF3F3; --sup2: #E3EBEC; --linha: #B9C8CB;
-  --texto: #17303B; --fraco: #40606B;
-  --chuva: #1E8F8A; --chuva-txt: #136B67; --rajada: #D9A21B; --rajada-txt: #7A5A00;
-  --fria: #2457A6; --quente: #C8373A; --alerta-fundo: #F6D9DA;
-  --noite: rgba(23, 48, 59, .10); --nuvem: 64, 96, 107;
-  --m-ecmwf: #2457A6; --m-aifs: #6A4FB3; --m-gfs: #C8373A; --m-icon: #9A7100; --m-ukmo: #2E7D32;
-  --foco: #2457A6;
+  --fundo: #F4F5F6; --sup: #FFFFFF; --sup2: #ECEEF0; --linha: #DDE1E4;
+  --texto: #15181B; --fraco: #5D666E; --foco: #15181B; --ponto: #15181B;
+  --noite: rgba(20, 24, 28, .06); --nuvem: 70, 78, 86; --veu: rgba(20, 24, 28, .4);
+  --chuva: #5E89A7; --chuva-txt: #3D6784;
+  --rajada: #9A8348; --rajada-txt: #75612D;
+  --fria: #4C6892; --quente: #A25743; --alerta-fundo: #F6ECE8;
+  --cenarios: #7C8B92; --nuvens-altas: #7C8B92;
+  --m-ecmwf: #4C6892; --m-aifs: #705F95; --m-ukmo: #4E734C; --m-gfs: #A25743; --m-icon: #75612D;
+  --radar-fraca: #5E89A7; --radar-moderada: #B3A052; --radar-forte: #BC8247; --radar-tempestade: #B3564A; --radar-severa: #93589D;
+  --aviso-potencial: #B3A052; --aviso-perigo: #BC8247; --aviso-grande: #B3564A;
+  --mapa-local: #15181B; --mapa-inmet: #5E89A7; --mapa-aeroporto: #9A8348;
   color-scheme: light;
 }
 
@@ -213,11 +223,6 @@ button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-c
 :root[data-visual="a"] .bloco-t.max b { color: var(--quente); }
 
 
-/* ========== Visual Grafite (escolhido em 2026-11-03) ========== */
-:root[data-visual="a"] { --fundo: #111315; --sup: #1A1D20; --sup2: #23272B; --linha: #2C3136; --texto: #ECEEF0; --fraco: #9BA4AC; --chuva: #4DA8DA; --chuva-txt: #6BB8E3; --rajada: #D9B45A; --rajada-txt: #E2C474; --fria: #7FA8E8; --quente: #EE8A6A; --alerta-fundo: #3A2420; --noite: rgba(0,0,0,.3); --nuvem: 225, 229, 233; --foco: #ECEEF0; --ponto: #ECEEF0; color-scheme: dark; }
-@media (prefers-color-scheme: light) { :root[data-visual="a"]:not([data-tema="escuro"]) { --fundo: #F4F5F6; --sup: #FFFFFF; --sup2: #ECEEF0; --linha: #DDE1E4; --texto: #15181B; --fraco: #5D666E; --chuva: #1F7FC0; --chuva-txt: #155F91; --rajada: #B98A1C; --rajada-txt: #7A5A00; --fria: #2B5FB3; --quente: #C4492B; --alerta-fundo: #FBE3DC; --noite: rgba(20,24,28,.06); --nuvem: 70, 78, 86; --foco: #15181B; --ponto: #15181B; color-scheme: light; } }
-:root[data-visual="a"][data-tema="claro"] { --fundo: #F4F5F6; --sup: #FFFFFF; --sup2: #ECEEF0; --linha: #DDE1E4; --texto: #15181B; --fraco: #5D666E; --chuva: #1F7FC0; --chuva-txt: #155F91; --rajada: #B98A1C; --rajada-txt: #7A5A00; --fria: #2B5FB3; --quente: #C4492B; --alerta-fundo: #FBE3DC; --noite: rgba(20,24,28,.06); --nuvem: 70, 78, 86; --foco: #15181B; --ponto: #15181B; color-scheme: light; }
-
 /* ---------- Faixa do Céu ---------- */
 .ceu { margin: 4px -16px 0; position: relative; }
 .ceu canvas { display: block; width: 100%; height: 120px; touch-action: pan-y; }
@@ -323,10 +328,10 @@ td.n, th.n { text-align: right; }
 /* barras de probabilidade (El Niño e semana) */
 .pbar { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
 .pbar .trilho { display: flex; height: 26px; background: var(--sup); }
-.pbar .trilho i { display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 13px; font-weight: 650; overflow: hidden; color: #fff; }
-.pbar .ln { background: #2457A6; }
-.pbar .ne { background: #5C7A84; }
-.pbar .en { background: #C8373A; }
+.pbar .trilho i { display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 13px; font-weight: 650; overflow: hidden; color: var(--sup); }
+.pbar .ln { background: var(--fria); }
+.pbar .ne { background: var(--fraco); }
+.pbar .en { background: var(--quente); }
 .mini-tab { width: 100%; }
 .mini-tab td.p { color: var(--chuva-txt); font-weight: 600; text-align: right; }
 .mini-tab td.g { color: var(--rajada-txt); font-weight: 600; text-align: right; }
@@ -347,6 +352,8 @@ td.n, th.n { text-align: right; }
   display: inline-flex; align-items: center; text-decoration: none; font-weight: 600;
 }
 .leaflet-container { font-family: 'Archivo', sans-serif; background: var(--sup); }
+.leaflet-container a { color: var(--chuva-txt); }
+.leaflet-container .leaflet-control-attribution { background: var(--sup); color: var(--fraco); }
 
 /* rodapé */
 .rodape { padding: 18px 16px 24px; margin-top: 18px; border-top: 6px solid var(--sup); font-size: 14px; color: var(--fraco); }
@@ -368,7 +375,7 @@ td.n, th.n { text-align: right; }
 
 /* diálogos */
 dialog { border: 0; padding: 0; background: var(--fundo); color: var(--texto); width: min(520px, 100vw); max-width: 100vw; max-height: 92vh; margin: auto auto 0; }
-dialog::backdrop { background: rgba(10, 20, 26, .6); }
+dialog::backdrop { background: var(--veu); }
 .dlg { padding: 16px 16px calc(16px + var(--safe-b)); display: flex; flex-direction: column; gap: 10px; }
 .dlg h2 { margin: 0; font-stretch: 108%; }
 .dlg input { min-height: 48px; padding: 0 12px; border: 1.5px solid var(--linha); background: var(--sup); border-radius: 6px; width: 100%; }
@@ -540,7 +547,10 @@ main[aria-busy="true"] .aba { opacity: .35; pointer-events: none; transition: op
 @media (min-width: 720px) {
   .detalhes .horas, .detalhes .rolar, .detalhes .tabela-rolar { margin: 0; padding: 0 0 6px; }
 }
-.mapa-escuro { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.6); }
+.mapa-escuro { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.5); }
+.mapa-claro { filter: saturate(var(--mapa-saturacao)); }
+/* Camadas coloridas do mapa (radar e campos previstos) e a barra da legenda, com a mesma redução de cor. */
+.mapa-dado, .mapa-barra { filter: saturate(var(--mapa-saturacao)); }
 /* alertas discretos: só um ponto e o texto na cor do alerta, sem faixa preenchida */
 :root[data-visual] .alerta {
   background: none; border: 0; border-radius: 0; padding: 0; min-height: 40px; gap: 8px;
@@ -775,6 +785,11 @@ button.globo-rotulo { cursor: pointer; }
 .mais-item span { font-size: 13px; color: var(--fraco); }
 .mais-item[aria-current="page"] { border-color: var(--texto); }
 .mais-item.com-aviso span { color: var(--quente); font-weight: 600; }
+/* Tema do app, no fim de "Ver mais": Automático segue o aparelho. */
+.mais-tema { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 2px; font-size: 15px; font-weight: 600; }
+.mais-tema .troca-modo { background: var(--sup); }
+.mais-tema button { border: 0; border-radius: 8px; min-height: 36px; padding: 0 12px; background: none; color: var(--fraco); font-size: 14px; font-weight: 560; }
+.mais-tema button[aria-pressed="true"] { color: var(--texto); background: var(--sup2); font-weight: 650; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
 
 /* aba Avisos */
 #avisos-conteudo { padding: 0 16px 8px; }
@@ -958,9 +973,9 @@ button.globo-rotulo { cursor: pointer; }
    redefinidas só dentro dele. Temperatura grande e fina; o resto como antes. */
 .resumo[data-fundo] {
   --texto: #FFFFFF; --fraco: rgba(255, 255, 255, .8); --linha: rgba(255, 255, 255, .28);
-  --fria: #D3E6FF; --quente: #FFD9C7; --chuva-txt: #DDF0FF; --chuva: #CFE8FF; --rajada-txt: #FFE6A6; --fundo: rgba(255, 255, 255, .0);
+  --fria: #D9E6F7; --quente: #F7DDD0; --chuva-txt: #E0EDF7; --chuva: #D5E6F5; --rajada-txt: #F3E3B8; --fundo: rgba(255, 255, 255, .0);
   position: relative; isolation: isolate; overflow: hidden; margin: 6px 0 4px; padding: 14px 16px 14px; border-radius: 18px;
-  background: #4F7DB3; color: var(--texto); text-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+  background: #5578A0; color: var(--texto); text-shadow: 0 1px 2px rgba(0, 0, 0, .18);
 }
 .resumo[data-fundo] > .ceu-fundo { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
 .resumo[data-fundo] .resumo-agora b { font-size: 64px; font-weight: 300; letter-spacing: -.04em; }
@@ -1025,9 +1040,9 @@ button.globo-rotulo { cursor: pointer; }
 .rt-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .rt-lista li { display: flex; gap: 10px; align-items: flex-start; }
 .rt-num { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--fraco); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
-.rt-lista li[data-classe="forte"] .rt-num { border-color: rgb(255, 150, 0); }
-.rt-lista li[data-classe="tempestade"] .rt-num { border-color: rgb(226, 54, 44); }
-.rt-lista li[data-classe="severa"] .rt-num { border-color: rgb(236, 92, 236); }
+.rt-lista li[data-classe="forte"] .rt-num { border-color: var(--radar-forte); }
+.rt-lista li[data-classe="tempestade"] .rt-num { border-color: var(--radar-tempestade); }
+.rt-lista li[data-classe="severa"] .rt-num { border-color: var(--radar-severa); }
 .rt-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .rt-item b { font-size: 15px; font-weight: 650; line-height: 1.25; }
 .rt-rumo { font-size: 14px; color: var(--fraco); }
@@ -1038,14 +1053,14 @@ button.globo-rotulo { cursor: pointer; }
 .rt-prev { margin: 2px 0 0; padding-top: 8px; border-top: 1px solid var(--linha); font-size: 14px; color: var(--fraco); }
 .rt-prev.com-risco { color: var(--rajada-txt); font-weight: 600; }
 .radar-t[data-nivel="alto"] .rt-prev.com-risco { color: var(--quente); }
-/* Legenda do desenho (as classes .rt-c-* repetem COR_DBZ, em js/app.js). */
+/* Legenda do desenho: as mesmas variáveis --radar-* que o desenho lê (FAIXAS_DBZ, em js/app.js). */
 .rt-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--linha); font-size: 12.5px; color: var(--fraco); }
 .rt-cor { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .rt-cor i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-.rt-c-chuva { background: linear-gradient(90deg, rgb(70, 150, 230), rgb(240, 214, 60)); }
-.rt-c-forte { background: rgb(255, 150, 0); }
-.rt-c-tempestade { background: rgb(226, 54, 44); }
-.rt-c-severa { background: rgb(236, 92, 236); }
+.rt-c-chuva { background: linear-gradient(90deg, var(--radar-fraca), var(--radar-moderada)); }
+.rt-c-forte { background: var(--radar-forte); }
+.rt-c-tempestade { background: var(--radar-tempestade); }
+.rt-c-severa { background: var(--radar-severa); }
 .rt-c-rota { width: 16px !important; height: 2px !important; border-radius: 1px !important; background: var(--texto); }
 .rt-rodape { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-top: 10px; }
 .rt-rodape .fonte { margin: 0; }

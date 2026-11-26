@@ -609,7 +609,14 @@ A ordem é:
 
 ## 5.8 Tema e dados locais
 
-- `aplicarTema()` alterna entre automático, claro e escuro (`data-tema` em `<html>`) e atualiza `theme-color`.
+- **Cores (1.14.0)**: todas as cores do painel ficam num bloco só, no começo do `app.css`: `:root` (tema escuro, o padrão) e `:root[data-tema="claro"]`. A regra é a cor indicar a informação e ser discreta: saturação de até 50% e texto colorido com contraste de pelo menos 4,5:1 sobre `--fundo`, `--sup` e `--sup2`. `test/cores.test.mjs` confere as duas coisas e que os dois temas definem as mesmas variáveis.
+  - Grupos de variáveis: superfícies e texto (`--fundo`, `--sup`, `--sup2`, `--linha`, `--texto`, `--fraco`); informação (`--chuva`, `--rajada`, `--fria`, `--quente`, cada uma com a versão `-txt` quando o texto precisa de outro tom); gráficos (`--cenarios`, `--nuvens-altas`, `--m-*` por modelo); radar de tempestade (`--radar-fraca` a `--radar-severa`); avisos do INMET no mapa (`--aviso-*`); pontos do mapa (`--mapa-*`).
+  - Nenhum arquivo do painel escreve cor fora desse bloco. O JavaScript lê as variáveis com `cor(nome)` e `corRgb(nome)` (`js/ui.js`); por isso elas ficam em `#RRGGBB`. As séries dos gráficos indicam a variável em `corCss`. Exceções: o céu desenhado do bloco principal (`CEUS`, em `js/fundo-ceu.js`, uma imagem do céu, igual nos dois temas e em tons contidos) e as escalas dos campos do mapa (`ESCALA_*`, em `js/mapa.js`).
+  - No mapa, o radar da RainViewer e os campos previstos chegam com cores fortes (imagens prontas ou escalas próprias). A classe `mapa-dado` e a barra da legenda recebem `filter: saturate(var(--mapa-saturacao))`, que mantém a ordem das cores e reduz a força. O mapa de ruas usa `mapa-claro` ou `mapa-escuro`.
+  - O Globo tem cores próprias e não usa esse bloco.
+- **Tema**: `js/tema.js` é um script clássico carregado no `<head>` antes do `app.css` valer. Ele lê a preferência (`pref:tema` no `localStorage`: `auto`, `claro` ou `escuro`), resolve `auto` pelo tema do aparelho (`prefers-color-scheme`) e grava `data-tema="claro|escuro"` no `<html>` antes da primeira pintura, para a tela não piscar. Expõe `window.temaDoApp` (`preferencia`, `aplicar`, `aoMudarNoAparelho`).
+  - `aplicarTema()` (`js/app.js`) chama `temaDoApp.aplicar()`, atualiza `theme-color` e marca a opção em uso. `configurarTema()` liga o seletor "Tema" de "Ver mais" (Automático, Claro, Escuro) e a mudança de tema do aparelho; a troca redesenha tudo (`renderTudo`), porque gráficos, radar e mapa leem as cores ao desenhar.
+  - Antes da 1.14.0 o tema claro já existia, mas só aparecia com o aparelho em modo claro ou por um botão no fim do rodapé.
 - `configurarRodape()`: o botão "Apagar dados" remove os service workers, o Cache Storage, o `localStorage` e o `sessionStorage`.
 
 ### 5.9 Busca de cidades, favoritas e abas (`js/cidades.js` e `js/locais.js`)

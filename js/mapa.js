@@ -3,7 +3,7 @@
 //   radar RainViewer (chuva agora, passado, zoom nativo máximo 7);
 //   grade Open-Meteo de 11 x 11 pontos (chuva prevista, nuvens, temperatura, calor, frio, vento);
 //   polígonos dos avisos do INMET (todos, ou só os de calor ou de frio nas camadas correspondentes).
-import { el, fmt, linkExterno, prefs, seletor } from './ui.js';
+import { el, fmt, linkExterno, prefs, seletor, cor } from './ui.js';
 import { buscarRadar, buscarGradeMapa } from './dados.js';
 import { CONFIG } from './config.js';
 
@@ -229,16 +229,15 @@ export function secaoMapa(container, estado) {
     mapa.setView([lat, lon], 8);
     // Mapa base do OpenStreetMap. A política dos servidores dele exige saber de qual site vem o pedido,
     // então só os quadros do mapa enviam a origem (o endereço do site, sem o caminho da página).
-    const tema = document.documentElement.getAttribute('data-tema');
-    const escuro = tema ? tema === 'escuro' : !matchMedia('(prefers-color-scheme: light)').matches;
+    const escuro = document.documentElement.getAttribute('data-tema') !== 'claro';
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 12, referrerPolicy: 'origin', className: escuro ? 'mapa-escuro' : '',
+      maxZoom: 12, referrerPolicy: 'origin', className: escuro ? 'mapa-escuro' : 'mapa-claro',
       attribution: '© <a href="https://www.openstreetmap.org/copyright" rel="noopener noreferrer" target="_blank">colaboradores do OpenStreetMap</a>',
     }).addTo(mapa);
     const fixos = L.layerGroup().addTo(mapa);
-    L.circleMarker([lat, lon], { radius: 8, color: '#fff', weight: 3, fillColor: '#2457A6', fillOpacity: 1 }).addTo(fixos).bindTooltip('Você');
+    L.circleMarker([lat, lon], { radius: 7, color: cor('--fundo'), weight: 3, fillColor: cor('--mapa-local'), fillOpacity: 1 }).addTo(fixos).bindTooltip('Você');
     for (const f of estado.obs?.fontes || []) {
-      L.circleMarker([f.lat, f.lon], { radius: 5, color: '#17303B', weight: 2, fillColor: f.tipo === 'inmet' ? '#1E8F8A' : '#D9A21B', fillOpacity: 1 })
+      L.circleMarker([f.lat, f.lon], { radius: 5, color: cor('--fundo'), weight: 2, fillColor: cor(f.tipo === 'inmet' ? '--mapa-inmet' : '--mapa-aeroporto'), fillOpacity: 1 })
         .addTo(fixos).bindTooltip(`${f.tipo === 'inmet' ? 'INMET' : 'METAR'} ${f.nome}`.slice(0, 90));
     }
 
@@ -270,7 +269,7 @@ export function secaoMapa(container, estado) {
         // Limite da RainViewer: 100 requisições por IP por minuto. Primeiro o quadro mais recente;
         // os anteriores entram aos poucos, um a cada 2 s, e o navegador guarda os tiles em cache.
         const nova = (q) => L.tileLayer(`${radar.host}${q.path}/256/{z}/{x}/{y}/2/1_1.png`, {
-          opacity: 0, maxNativeZoom: 7, maxZoom: 12, attribution: 'Weather data by <a href="https://www.rainviewer.com/" rel="noopener noreferrer" target="_blank">RainViewer</a>' });
+          opacity: 0, maxNativeZoom: 7, maxZoom: 12, className: 'mapa-dado', attribution: 'Weather data by <a href="https://www.rainviewer.com/" rel="noopener noreferrer" target="_blank">RainViewer</a>' });
         quadros = radar.quadros.map(() => null);
         iq = quadros.length - 1;
         quadros[iq] = nova(radar.quadros[iq]); carregados = 1;
@@ -291,10 +290,10 @@ export function secaoMapa(container, estado) {
       const lista = (estado.alertas?.avisos || []).filter((a) => a.poligonos && filtro.test(a.titulo || '') && perto(a, lat, lon));
       const grupo = L.layerGroup();
       for (const a of lista) {
-        const cor = /grande/i.test(a.severidade) ? '#C8372D' : /^perigo$/i.test(String(a.severidade).trim()) ? '#F96602' : '#E3C51B';
+        const tom = cor(/grande/i.test(a.severidade) ? '--aviso-grande' : /^perigo$/i.test(String(a.severidade).trim()) ? '--aviso-perigo' : '--aviso-potencial');
         for (const anel of a.poligonos) {
           const t = el('div', {}, el('strong', { text: a.titulo }), el('br'), document.createTextNode(`${a.severidade || ''}${a.inicio ? `, de ${a.inicio.slice(8, 10)}/${a.inicio.slice(5, 7)} ${a.inicio.slice(11, 16)}` : ''}${a.fim ? ` a ${a.fim.slice(8, 10)}/${a.fim.slice(5, 7)} ${a.fim.slice(11, 16)}` : ''}`));
-          L.polygon(anel, { color: cor, weight: 2, fillColor: cor, fillOpacity: 0.12, interactive: true }).bindPopup(t).addTo(grupo);
+          L.polygon(anel, { color: tom, weight: 2, fillColor: tom, fillOpacity: 0.12, interactive: true }).bindPopup(t).addTo(grupo);
         }
       }
       return { grupo, n: lista.length };
@@ -348,7 +347,7 @@ export function secaoMapa(container, estado) {
           const meio = (g.n - 1) / 2, la0 = g.pontos[0][0], lo0 = g.pontos[0][1];
           const sul = la0 - (g.n - 1) * g.passo, leste = lo0 + (g.n - 1) * g.passo;
           const escala = c.id === 'nuvens' && !escuro ? ESCALA_NUVEM_CLARO : c.escala;
-          camadaAtiva = L.imageOverlay(imagemGrade(g, g[c.campo], escala), [[sul, lo0], [la0, leste]], { opacity: 1, interactive: false }).addTo(mapa);
+          camadaAtiva = L.imageOverlay(imagemGrade(g, g[c.campo], escala), [[sul, lo0], [la0, leste]], { opacity: 1, interactive: false, className: 'mapa-dado' }).addTo(mapa);
           camadaAtiva.bringToBack(); fixos.eachLayer((l) => l.bringToFront?.());
           const aqui = g[c.campo][meio * g.n + meio];
           const hora = c.campo === 'tmax5' || c.campo === 'tmin5' || c.campo === 'chuva24' ? '' : (g.hora ? ` às ${g.hora.slice(11, 16)}` : '');
