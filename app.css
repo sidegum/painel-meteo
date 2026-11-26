@@ -494,7 +494,6 @@ main[aria-busy="true"] .aba { opacity: .35; pointer-events: none; transition: op
 /* ---------- painel do El Niño ---------- */
 .enso-painel { padding: 4px 0 10px; }
 .enso-status { font-size: 20px; font-weight: 700; font-stretch: 104%; margin: 4px 0 2px; line-height: 1.2; }
-.enso-intensidade { margin: 0 0 10px; color: var(--quente); font-weight: 600; }
 .enso-grade { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--linha); }
 .enso-bloco { padding: 10px 8px 10px 0; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; gap: 1px; }
 .enso-bloco:nth-child(even) { padding-left: 12px; border-left: 1px solid var(--linha); }
@@ -511,8 +510,6 @@ main[aria-busy="true"] .aba { opacity: .35; pointer-events: none; transition: op
 .enso-diario i.q { background: var(--quente); }
 .enso-diario i.f { background: var(--fria); }
 
-.enso-tri { margin-top: 12px; }
-.enso-tri td:first-child { font-weight: 650; }
 
 .troca-horas { margin-left: auto; display: inline-flex; border: 1px solid var(--linha); border-radius: 18px; overflow: hidden; }
 .troca-horas button { border: 0; border-radius: 0; padding: 0 10px; }
@@ -823,7 +820,6 @@ button.globo-rotulo { cursor: pointer; }
 .dia > .cab:active { background: var(--sup); }
 
 /* El Niño no RS */
-.destaque-rs { background: var(--sup); border-radius: 10px; padding: 10px 12px; }
 .episodios { list-style: none; margin: 0; padding: 0; }
 .episodios li { border-bottom: 1px solid var(--linha); padding: 10px 0; }
 .episodios li p { margin: 4px 0 0; }
@@ -833,20 +829,41 @@ button.globo-rotulo { cursor: pointer; }
 .noticias { list-style: none; margin: 0; padding: 0; }
 .noticias li { padding: 10px 0; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; gap: 2px; }
 .noticias a { font-weight: 600; text-decoration: none; }
-.enso-tecnico { margin-top: 16px; border-top: 6px solid var(--sup); padding-top: 6px; }
-.enso-tecnico > summary { min-height: 44px; display: flex; align-items: center; font-weight: 650; cursor: pointer; }
+/* El Niño: resposta ("devo me preocupar?"), três leituras e evolução. A cor só marca o nível, numa borda fina. */
+.enso-resumo { padding: 4px 0 2px; }
+.enso-veredito { border-left: 3px solid var(--linha); padding: 2px 0 2px 14px; margin: 6px 0 14px; }
+.enso-veredito[data-nivel="atento"] { border-left-color: var(--rajada); }
+.enso-veredito[data-nivel="alerta"] { border-left-color: var(--quente); }
+.enso-veredito h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; font-stretch: 104%; line-height: 1.15; }
+.enso-veredito p { margin: 0; font-size: 16px; line-height: 1.4; }
+.enso-cartoes { display: grid; gap: 12px; }
+.enso-cartao { background: var(--sup); border-radius: 16px; padding: 14px 16px 12px; min-width: 0; }
+.enso-cartao h3 { margin: 0 0 8px; font-size: 13px; font-weight: 620; letter-spacing: .03em; text-transform: uppercase; color: var(--fraco); }
+.enso-cartao p { margin: 6px 0; }
+.enso-cartao .enso-destaque { font-size: 18px; font-weight: 680; line-height: 1.25; margin: 0 0 8px; }
+.enso-cartao .nota { margin-top: 10px; }
+.enso-escala { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 0 0 10px; }
+.enso-escala i { height: 6px; border-radius: 3px; background: var(--sup2); }
+.enso-escala i.on { background: var(--quente); opacity: .75; }
+.enso-evolucao { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin: 6px 0 4px; }
+.enso-evolucao .niveis { display: grid; grid-template-rows: repeat(4, 1fr); height: 112px; font-size: 12px; color: var(--fraco); }
+.enso-evolucao .niveis span { border-top: 1px solid var(--linha); padding-top: 2px; }
+.enso-evolucao .colunas { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; grid-column: -2 / -1; }
+.enso-evolucao .col { display: grid; grid-template-rows: 112px auto; text-align: center; font-size: 13px; color: var(--fraco); }
+.enso-evolucao .col i { align-self: end; border-radius: 4px 4px 0 0; background: var(--quente); opacity: .6; }
+.enso-evolucao .col.laNina i { background: var(--fria); }
+.enso-evolucao .col.neutro i { visibility: hidden; }
+.enso-evolucao .col span { border-top: 1px solid var(--linha); padding-top: 4px; }
+.enso-recolhido { margin-top: 12px; background: var(--sup); border-radius: 16px; padding: 0 16px; }
+.enso-recolhido[open] { padding-bottom: 12px; }
+.enso-recolhido > summary { min-height: 48px; display: flex; align-items: center; font-weight: 650; cursor: pointer; }
 
 /* Aviso antecipado do El Niño (resumo do El Niño e aba Avisos) */
-.alerta-local { margin: 14px 0 4px; padding: 12px 14px; background: var(--sup); border-radius: 8px; }
-.alerta-local h3 { margin: 0 0 6px; font-size: 17px; }
 .alerta-titulo { margin: 10px 0 4px; font-weight: 650; }
-.alerta-dias, .alerta-epocas { list-style: none; margin: 0; padding: 0; }
+.alerta-dias { list-style: none; margin: 0; padding: 0; }
 .alerta-dias button { all: unset; box-sizing: border-box; width: 100%; min-height: 44px; display: grid; grid-template-columns: 5.5em 1fr; column-gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--linha); cursor: pointer; }
 .alerta-dias button:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
 .alerta-dias .cf { grid-column: 2; font-size: 14px; color: var(--fraco); }
-.alerta-epocas li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid var(--linha); }
-.alerta-epocas span { color: var(--fraco); font-size: 15px; }
-.link-aviso { all: unset; cursor: pointer; color: var(--quente); font-weight: 650; min-height: 44px; display: inline-flex; align-items: center; }
 .aviso-card.painel-aviso { border-left-color: var(--chuva); }
 
 /* ---------- Globo: escalas (onde a câmera está) e camadas (o que aparece) ----------
@@ -956,10 +973,12 @@ button.globo-rotulo { cursor: pointer; }
   .detalhes > .largura-total, #semana-conteudo > .largura-total, #modelos-conteudo > .largura-total, #elnino-conteudo > .largura-total,
   .detalhes > :not(.secao), #semana-conteudo > :not(.secao), #modelos-conteudo > :not(.secao), #elnino-conteudo > :not(.secao) { grid-column: 1 / -1; }
   .nav { max-width: 720px; }
-  /* resumo do El Niño: o aviso para o local fica ao lado do estado e da tabela */
+  /* El Niño: as três leituras (Pacífico, RS e local) lado a lado */
+  .enso-cartoes { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .enso-veredito h2 { font-size: 30px; }
+  .enso-veredito p { font-size: 18px; max-width: 70ch; }
   .enso-painel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; align-items: start; }
-  .enso-painel > * { grid-column: 1; }
-  .enso-painel > .alerta-local { grid-column: 2; grid-row: 1 / span 6; margin-top: 0; }
+  .enso-painel > * { grid-column: 1 / -1; }
   .mapa { height: 520px; }
   body[data-aba="globo"] main { max-width: none; }
 }

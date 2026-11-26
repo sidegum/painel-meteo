@@ -291,3 +291,57 @@ test('graficoInicial: Temperatura sem chuva prevista, Chuva a partir do limite o
   assert.equal(graficoInicial(null), 'temp'); // sem dado de chance: não abre num gráfico vazio
   assert.equal(graficoInicial(0, true), 'chance'); // chovendo agora ou chuva chegando pelo radar
 });
+
+test('El Niño: situação única a partir dos dados reais de dados/enso.json (26/11/2026)', async () => {
+  const { situacaoEnso, forcaEnso } = await import('../js/analise.js');
+  const { readFileSync } = await import('node:fs');
+  const { partes } = JSON.parse(readFileSync(new URL('../dados/enso.json', import.meta.url)));
+  const agora = Date.parse('2026-11-26T15:00:00Z');
+  // recorte fixo do arquivo, para o teste não mudar quando o robô atualizar os dados
+  const P = {
+    relativoSemanal: { dados: [2.5, 2.3, 2.2, 2.4].map((n34, k) => ({ ms: Date.UTC(2026, 9, 28 + 7 * k), n34 })) },
+    roni: { dados: [{ seas: 'ASO', ano: 2026, anom: 1.97 }] },
+    probCpc: { dados: [['OND', 0, 0, 100], ['NDJ', 0, 0, 100], ['DJF', 0, 0, 100], ['JFM', 0, 0, 100], ['FMA', 0, 2, 98], ['MAM', 0, 20, 80], ['AMJ', 1, 61, 38], ['MJJ', 13, 75, 12]]
+      .map(([tri, laNina, neutro, elNino]) => ({ tri, laNina, neutro, elNino })) },
+    forcaCpc: { dados: [['OND', 0, 0, 0, 100], ['NDJ', 0, 0, 4, 96], ['DJF', 0, 2, 19, 79], ['JFM', 3, 18, 44, 35], ['FMA', 21, 49, 25, 3], ['MAM', 53, 25, 2, 0]]
+      .map(([tri, fraco, moderado, forte, muitoForte]) => ({ tri, elNino: { fraco, moderado, forte, muitoForte } })) },
+  };
+  const s = situacaoEnso(P, agora);
+  assert.equal(s.fase, 'elNino'); assert.equal(s.forca, 'muito forte'); assert.equal(s.base, 'semanas');
+  assert.ok(Math.abs(s.anom - 2.35) < 1e-9);
+  assert.deepEqual(s.evolucao.map((e) => `${e.mes}:${e.forca ?? e.fase}`), ['11:muito forte', '12:muito forte', '1:muito forte', '2:forte', '3:moderado', '4:fraco', '5:neutro', '6:neutro']);
+  assert.deepEqual(s.enfraquece, { mes: 2, ano: 2027 }); assert.deepEqual(s.termina, { mes: 5, ano: 2027 });
+  // sem semana recente, vale a média de 3 meses (critério formal), e a força cai para a dela
+  const velho = situacaoEnso({ ...P, relativoSemanal: { dados: P.relativoSemanal.dados.map((r) => ({ ...r, ms: r.ms - 60 * 86400000 })) } }, agora);
+  assert.equal(velho.base, 'trimestre'); assert.equal(velho.forca, 'forte');
+  assert.equal(situacaoEnso({}, agora), null);
+  assert.equal(forcaEnso(0.3).fase, 'neutro'); assert.equal(forcaEnso(-1.2).fase, 'laNina'); assert.equal(forcaEnso(-1.2).forca, 'moderado');
+  // o arquivo publicado tem de continuar legível pela mesma função
+  assert.ok(situacaoEnso(partes, Date.now()) !== undefined);
+});
+
+test('El Niño: aviso do INMET só entra se for de chuva e começar dentro da janela', async () => {
+  const { avisoProximoDeChuva, REGRAS } = await import('../js/analise.js');
+  const agora = Date.parse('2026-11-26T12:00:00-03:00'), J = REGRAS.enso.janelaAvisoDias;
+  const dia = (n, h = '00:00') => `${new Date(agora + n * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })} ${h}`;
+  assert.equal(avisoProximoDeChuva({ titulo: 'Chuvas Intensas', inicio: dia(0), fim: dia(0, '23:59') }, agora), true);
+  assert.equal(avisoProximoDeChuva({ titulo: 'Tempestade', inicio: dia(J - 1), fim: dia(J) }, agora), true);
+  assert.equal(avisoProximoDeChuva({ titulo: 'Acumulado de Chuva', inicio: dia(J + 1), fim: dia(J + 2) }, agora), false); // longe demais
+  assert.equal(avisoProximoDeChuva({ titulo: 'Tempestade', inicio: dia(-2), fim: dia(-1) }, agora), false); // já acabou
+  assert.equal(avisoProximoDeChuva({ titulo: 'Baixa Umidade', inicio: dia(0), fim: dia(1) }, agora), false); // não é de chuva
+  assert.equal(avisoProximoDeChuva({ titulo: 'Tempestade', inicio: null, fim: null }, agora), false);
+});
+
+test('El Niño: a resposta não contradiz os dias de risco nem o aviso oficial', async () => {
+  const { nivelPreocupacaoEnso, epocaChuvaRs, REGRAS } = await import('../js/analise.js');
+  const { possivel, provavel } = REGRAS.ocorrencia;
+  assert.equal(nivelPreocupacaoEnso([], 0), 'calmo');
+  assert.equal(nivelPreocupacaoEnso([[{ p: possivel }]], 0), 'atento');
+  assert.equal(nivelPreocupacaoEnso([[{ p: possivel }], [{ p: provavel }]], 0), 'alerta');
+  assert.equal(nivelPreocupacaoEnso([], 1), 'alerta'); // aviso oficial prevalece
+  const t = (s) => Date.parse(`${s}T12:00:00-03:00`);
+  assert.deepEqual(epocaChuvaRs(2026, t('2026-11-26')), { agora: true, proxima: null });
+  assert.deepEqual(epocaChuvaRs(2026, t('2026-12-15')), { agora: false, proxima: null }); // abril está longe: não cita
+  assert.equal(epocaChuvaRs(2026, t('2027-03-15')).proxima.meses[0], 4);
+  assert.equal(epocaChuvaRs(2026, t('2027-05-10')).agora, true);
+});
