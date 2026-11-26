@@ -8,7 +8,7 @@ A referência são as cartas sinóticas: um mar de fundo, linhas de pressão, fr
 
 ## Paleta
 
-Desde a 1.14.0 a paleta é a do bloco "Cores do painel", no começo do `app.css`, que é a referência (a tabela original deste plano, com o "mar" `#17303B` e cores mais fortes, foi substituída). A regra: a cor indica a informação e é discreta, nos dois temas.
+Desde a 1.14.1 a paleta é a do bloco "Cores do painel", no começo do `app.css`, que é a referência (a tabela original deste plano, com o "mar" `#17303B` e cores mais fortes, foi substituída). A regra: a cor indica a informação e é discreta, nos dois temas.
 
 | Papel | Escuro (padrão) | Claro | Significado |
 |---|---|---|---|
