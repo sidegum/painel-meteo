@@ -1,0 +1,41 @@
+name: Mapas reais de luas e corpos pequenos
+
+# Baixa do Wikimedia Commons os mapas globais das luas e dos corpos pequenos listados em scripts/globo/mapas-corpos.json
+# (scripts/globo/baixar-mapas-corpos.py) e grava em vendor/texturas/corpos no branch em que rodou. Sob demanda, ou ao
+# mudar a lista ou o script no branch do Globo (nunca em branches de outros trabalhos).
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/project-thread-n94x6z]
+    paths:
+      - scripts/globo/mapas-corpos.json
+      - scripts/globo/baixar-mapas-corpos.py
+      - .github/workflows/mapas-corpos.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mapas-corpos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baixar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Baixar e preparar
+        run: |
+          pip install --quiet pillow
+          python3 scripts/globo/baixar-mapas-corpos.py scripts/globo/mapas-corpos.json vendor/texturas/corpos
+      - name: Gravar no branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vendor/texturas/corpos
+          git commit -m "Mapas reais de luas e corpos pequenos (Wikimedia Commons)" || exit 0
+          for espera in 0 10 30; do sleep $espera; git pull --rebase --quiet && git push && break; done
