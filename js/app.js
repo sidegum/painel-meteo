@@ -18,7 +18,7 @@ import { criarFaixa } from './faixa.js';
 import { desenharCeu } from './fundo-ceu.js';
 import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
 
-const VERSAO = '1.13.1';
+const VERSAO = '1.13.2';
 const $ = (s) => document.querySelector(s);
 
 const estado = {
@@ -147,7 +147,7 @@ async function permissaoGps() {
 /**
  * GPS automático (abrir o app, voltar a ele, rodada de 10 min): só roda quando a permissão já está concedida.
  * Sem ela, cada chamada abre o pedido de novo (no iPhone, com o app na tela inicial, a cada abertura); então vale
- * o último local salvo, e a posição atual fica para o botão "Usar minha localização atual".
+ * o último local salvo, e a posição atual fica para a linha "Sua localização atual" da janela de locais.
  * Na primeiríssima abertura, sem nenhum local salvo, o pedido aparece uma vez.
  */
 async function localizarSozinho() {
@@ -210,8 +210,14 @@ async function trocarLocal(l) {
   atualizar({ forcar: true });
 }
 
-/** Aba "Aqui": mostra na hora o último ponto do GPS e confirma a posição; se ela mudou, troca os dados de novo. */
-async function usarLocalizacaoAtual() {
+/**
+ * Volta para a posição do aparelho: mostra na hora o último ponto do GPS e confirma a posição; se ela mudou, troca
+ * os dados de novo. A aba "Aqui" (pedir = false) reaproveita o ponto já obtido e só consulta o GPS com a permissão
+ * concedida, para o pedido do sistema não reaparecer a cada troca de aba; a linha "Sua localização atual" da janela de
+ * locais (pedir = true) consulta o GPS sempre.
+ * @param {{pedir?: boolean}} [op]
+ */
+async function usarLocalizacaoAtual({ pedir = false } = {}) {
   marcarEscolha(false);
   const ultimo = prefs.ler('ultimoGps', null);
   if (ultimo && Number.isFinite(ultimo.lat) && Number.isFinite(ultimo.lon)) {
@@ -220,7 +226,7 @@ async function usarLocalizacaoAtual() {
   }
   const antes = estado.local ? chaveLocal(estado.local) : null;
   const pedido = ultimo ? atualizar({ forcar: true }) : Promise.resolve();
-  await localizarGps(false);
+  await (pedir || !ultimo ? localizarGps(false) : localizarSozinho());
   await pedido;
   if (chaveLocal(estado.local) !== antes || !ultimo) { await carregarInstantaneo(); await atualizar({ forcar: true }); }
 }
