@@ -1,0 +1,310 @@
+{
+ "fonte": "Wikimedia Commons (mapas da NASA, do JPL e do USGS, de licença livre)",
+ "corpos": {
+  "calisto": {
+   "arquivo": "Callisto Hemispherical Globes PIA03876.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Callisto_Hemispherical_Globes_PIA03876.jpg",
+   "autor": "NASA/JPL/USGS",
+   "credito": "This image or video was catalogued by Jet Propulsion Laboratory of the United States National Aeronautics and Space Administration (NASA) under Photo ID: PIA03876.",
+   "licenca": "Public domain",
+   "largura": 8860,
+   "altura": 4490,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Callisto Hemispherical Globes PIA03876.jpg",
+     "largura": 8860,
+     "nota": 6.0
+    }
+   ]
+  },
+  "mimas": {
+   "arquivo": "Map of Mimas colorized 2014-04 PIA18437.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Map_of_Mimas_colorized_2014-04_PIA18437.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18437.jpg",
+   "licenca": "Public domain",
+   "largura": 6356,
+   "altura": 3178,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Map of Mimas colorized 2014-04 PIA18437.jpg",
+     "largura": 6356,
+     "nota": 9.1
+    }
+   ]
+  },
+  "encelado": {
+   "arquivo": "Color map of Enceladus PIA18435 (modified).jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Color_map_of_Enceladus_PIA18435_(modified).jpg",
+   "autor": "NASA",
+   "credito": "http://photojournal.jpl.nasa.gov/catalog/PIA18435 (other link)",
+   "licenca": "Public domain",
+   "largura": 5320,
+   "altura": 2660,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Color map of Enceladus PIA18435 (modified).jpg",
+     "largura": 5320,
+     "nota": 8.6
+    },
+    {
+     "arquivo": "Enceladus Color Map.jpg",
+     "largura": 15960,
+     "nota": 8.0
+    },
+    {
+     "arquivo": "Enceladus June 2008 PIA08417 moon only.jpg",
+     "largura": 3600,
+     "nota": 3.8
+    },
+    {
+     "arquivo": "Enceladus in the Infrared (Map View) - PIA24027.tif",
+     "largura": 8192,
+     "nota": 2.0
+    }
+   ]
+  },
+  "tetis": {
+   "arquivo": "Tethys Color Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Tethys_Color_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18439.jpg",
+   "licenca": "Public domain",
+   "largura": 13467,
+   "altura": 6734,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Tethys Color Map.jpg",
+     "largura": 13467,
+     "nota": 8.0
+    },
+    {
+     "arquivo": "Tethys map June 2008 PIA08416 moon only.jpg",
+     "largura": 11520,
+     "nota": 8.0
+    }
+   ]
+  },
+  "dione": {
+   "arquivo": "Dione Color Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Dione_Color_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18434.jpg",
+   "licenca": "Public domain",
+   "largura": 14134,
+   "altura": 7067,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Dione Color Map.jpg",
+     "largura": 14134,
+     "nota": 8.0
+    },
+    {
+     "arquivo": "Dione PIA08413 moon only.JPG",
+     "largura": 5760,
+     "nota": 4.8
+    }
+   ]
+  },
+  "reia": {
+   "arquivo": "Rhea Color Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Rhea_Color_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18438.jpg",
+   "licenca": "Public domain",
+   "largura": 12015,
+   "altura": 6008,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Rhea Color Map.jpg",
+     "largura": 12015,
+     "nota": 8.0
+    },
+    {
+     "arquivo": "PIA12561 Rhea Map.jpg",
+     "largura": 2880,
+     "nota": 5.4
+    }
+   ]
+  },
+  "japeto": {
+   "arquivo": "Iapetus Color Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Iapetus_Color_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18436.jpg",
+   "licenca": "Public domain",
+   "largura": 11741,
+   "altura": 5871,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Iapetus Color Map.jpg",
+     "largura": 11741,
+     "nota": 8.0
+    },
+    {
+     "arquivo": "Iapetus May 2008 PIA11116 moon only.jpg",
+     "largura": 5760,
+     "nota": 4.8
+    }
+   ]
+  },
+  "umbriel": {
+   "arquivo": "Umbriel map JPL USGS.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Umbriel_map_JPL_USGS.jpg",
+   "autor": "Caltech/JPL/USGS",
+   "credito": "https://maps.jpl.nasa.gov/tmaps/uranus.html, https://nasa3d.arc.nasa.gov/detail/ura2vuu2",
+   "licenca": "Public domain",
+   "largura": 1440,
+   "altura": 720,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Umbriel map JPL USGS.jpg",
+     "largura": 1440,
+     "nota": 4.7
+    }
+   ]
+  },
+  "titania": {
+   "arquivo": "Titania map JPL USGS.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Titania_map_JPL_USGS.jpg",
+   "autor": "Caltech/JPL/USGS",
+   "credito": "https://maps.jpl.nasa.gov/tmaps/uranus.html, https://nasa3d.arc.nasa.gov/detail/ura3vuu2",
+   "licenca": "Public domain",
+   "largura": 1440,
+   "altura": 720,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Titania map JPL USGS.jpg",
+     "largura": 1440,
+     "nota": 4.7
+    }
+   ]
+  },
+  "oberon": {
+   "arquivo": "Oberon map JPL USGS.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Oberon_map_JPL_USGS.jpg",
+   "autor": "Caltech/JPL/USGS",
+   "credito": "https://maps.jpl.nasa.gov/tmaps/uranus.html, https://nasa3d.arc.nasa.gov/detail/ura4vuu2",
+   "licenca": "Public domain",
+   "largura": 1440,
+   "altura": 720,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Oberon map JPL USGS.jpg",
+     "largura": 1440,
+     "nota": 4.7
+    }
+   ]
+  },
+  "caronte": {
+   "arquivo": "Charon Topographic Map NASA PIA19866.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Charon_Topographic_Map_NASA_PIA19866.jpg",
+   "autor": "JPL/NASA",
+   "credito": "https://photojournal.jpl.nasa.gov/jpeg/PIA19866.jpg",
+   "licenca": "Public domain",
+   "largura": 9520,
+   "altura": 4760,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Charon Topographic Map NASA PIA19866.jpg",
+     "largura": 9520,
+     "nota": 2.0
+    }
+   ]
+  },
+  "plutao": {
+   "arquivo": "Pluto color mapmosaic.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Pluto_color_mapmosaic.jpg",
+   "autor": "NASA / Johns Hopkins University Applied Physics Laboratory / Southwest Research Institute",
+   "credito": "https://www.nasa.gov/image-feature/pluto-global-color-map",
+   "licenca": "Public domain",
+   "largura": 5926,
+   "altura": 2963,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Pluto color mapmosaic.jpg",
+     "largura": 5926,
+     "nota": 8.9
+    }
+   ]
+  },
+  "ceres": {
+   "arquivo": "PIA20354-Ceres-DwarfPlanet-MercatorMap-HAMO-20160322-0DegreeLongitude.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:PIA20354-Ceres-DwarfPlanet-MercatorMap-HAMO-20160322-0DegreeLongitude.jpg",
+   "autor": "NASA/JPL-Caltech/UCLA/MPS/DLR/IDA",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA20354.jpg",
+   "licenca": "Public domain",
+   "largura": 4000,
+   "altura": 2000,
+   "tamanhos": [
+    4096,
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "PIA20354-Ceres-DwarfPlanet-MercatorMap-HAMO-20160322-0DegreeLongitude.jpg",
+     "largura": 4000,
+     "nota": 6.0
+    }
+   ]
+  }
+ }
+}
