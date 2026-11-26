@@ -398,7 +398,7 @@ Em `app.js`, `painelPressao(pr)` monta o destaque no topo do bloco "Medições a
 - `definirLocal(l)` grava em `localStorage` só a coordenada arredondada (e o `id` do GeoNames, quando houver) e devolve se o local mudou. Com origem `gps`, `lembrarGps` guarda o último ponto em `pref:ultimoGps` e apaga os dados salvos do ponto anterior.
 - `configurarLocal()` cria as abas de cidade e a janela "Escolher local" (`criarLocais`, seção 5.9) e liga os retornos:
   - `escolherCidade(c)` marca a escolha da sessão e chama `trocarLocal`.
-  - `usarLocalizacaoAtual()` (aba "Aqui"): mostra na hora o último ponto do GPS com os dados salvos dele, confirma a posição com `localizarGps` e, se a coordenada arredondada mudou, troca os dados de novo.
+  - `usarLocalizacaoAtual()` (aba "Aqui"): mostra na hora o último ponto do GPS com os dados salvos dele, confirma a posição e, se a coordenada arredondada mudou, troca os dados de novo. Pela aba (`pedir: false`) a confirmação passa por `localizarSozinho`, então sem permissão guardada o ponto já obtido é reaproveitado e o pedido do sistema não reaparece a cada troca de aba; pela linha "Sua localização atual" da janela de locais (`pedir: true`) chama `localizarGps` sempre.
 - `trocarLocal(l)`: `definirLocal`, `carregarInstantaneo` e `atualizar({ forcar: true })`.
 
 #### Dados salvos por local (instantâneos)
