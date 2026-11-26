@@ -13,6 +13,8 @@
 <link rel="icon" href="icones/icone.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icones/icone-180.png">
 <link rel="preload" href="vendor/fontes/archivo-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin>
+<!-- Tema (claro ou escuro) decidido antes da primeira pintura; as cores ficam no começo do app.css. -->
+<script src="js/tema.js"></script>
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="vendor/uplot/uPlot.min.css">
 <!-- Módulos do app pedidos todos de uma vez (sem isso o navegador descobre um por um, em cascata). -->
@@ -99,7 +101,6 @@
     <p class="oficial">Este painel é pessoal e não é fonte oficial. Em situação de risco, siga a <a href="https://www.defesacivil.rs.gov.br/" target="_blank" rel="noopener noreferrer">Defesa Civil RS</a> (telefone 199) e os avisos do <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener noreferrer">INMET</a>.</p>
     <p class="atribuicao">Previsões: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>, licença <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, com dados de ECMWF, NOAA NCEP e DWD. Busca de cidades com dados de GeoNames. Radar: RainViewer. Mapa: © colaboradores do OpenStreetMap. Medições: INMET e METAR via AviationWeather (NOAA). El Niño: NOAA CPC e IRI. Globo: texturas NASA Visible Earth, campos GFS (NOAA NCEP), satélites NASA GIBS, ciclones NHC e GDACS, órbitas CelesTrak.</p>
     <div class="acoes-rodape">
-      <button type="button" id="btn-tema">Tema: automático</button>
       <a href="privacidade.html">Privacidade e dados</a>
       <button type="button" id="btn-apagar" class="perigo">Apagar dados deste aparelho</button>
     </div>
@@ -133,6 +134,14 @@
       <button type="button" class="mais-item" data-ir="globo"><b>Globo</b><span>O tempo no mundo inteiro, em 3D</span></button>
       <button type="button" class="mais-item" data-ir="elnino"><b>El Niño</b><span>Situação do Pacífico e o que ela indica para o RS</span></button>
       <button type="button" class="mais-item" data-ir="modelos"><b>Modelos</b><span>Cada modelo lado a lado e como a confiança é calculada</span></button>
+    </div>
+    <div class="mais-tema">
+      <span id="mais-tema-t">Tema</span>
+      <div class="troca-modo" id="troca-tema" role="group" aria-labelledby="mais-tema-t">
+        <button type="button" data-tema="auto" aria-pressed="true">Automático</button>
+        <button type="button" data-tema="claro" aria-pressed="false">Claro</button>
+        <button type="button" data-tema="escuro" aria-pressed="false">Escuro</button>
+      </div>
     </div>
     <button value="fechar" class="largo secundario">Fechar</button>
   </form>

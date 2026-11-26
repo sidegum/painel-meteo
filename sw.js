@@ -4,7 +4,7 @@
 const VERSAO = 'painel-app-v1.14.0';
 const ARQUIVOS = [
   './', './index.html', './app.css', './manifest.json', './privacidade.html',
-  './js/app.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js', './js/fundo-ceu.js', './js/cidades.js', './js/locais.js',
+  './js/tema.js', './js/app.js', './js/analise.js', './js/dados.js', './js/config.js', './js/ui.js', './js/faixa.js', './js/graficos.js', './js/mapa.js', './js/fundo-ceu.js', './js/cidades.js', './js/locais.js',
   './vendor/uplot/uPlot.iife.min.js', './vendor/uplot/uPlot.min.css',
   './vendor/leaflet/leaflet.js', './vendor/leaflet/leaflet.css',
   './vendor/fontes/archivo-latin-standard-normal.woff2', './vendor/fontes/archivo-latin-ext-standard-normal.woff2',

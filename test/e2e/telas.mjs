@@ -135,6 +135,17 @@ for (const tela of TELAS) {
       await pag.waitForTimeout(400);
       await pag.locator('#hoje-detalhes .radar-t').screenshot({ path: join(capturas, `${tela.nome}-${tema}-radar.png`) });
     }
+    // Tema: escolhido em "Ver mais", vale na hora, fica salvo e volta a seguir o aparelho em "Automático".
+    await pag.evaluate(() => document.querySelector('#dlg-mais').showModal());
+    const outro = tema === 'dark' ? 'claro' : 'escuro', doAparelho = tema === 'dark' ? 'escuro' : 'claro';
+    await pag.click(`#troca-tema [data-tema="${outro}"]`);
+    await pag.waitForTimeout(600);
+    const trocado = await pag.evaluate(() => ({ tema: document.documentElement.getAttribute('data-tema'), salvo: localStorage.getItem('pref:tema'),
+      fundo: getComputedStyle(document.body).backgroundColor, barra: document.querySelector('meta[name="theme-color"]').content }));
+    if (trocado.tema !== outro || trocado.salvo !== JSON.stringify(outro)) problemas.push(`${tela.nome}: o tema ${outro} não foi aplicado ou salvo`);
+    if (capturas) await pag.screenshot({ path: join(capturas, `${tela.nome}-${tema}-ver-mais-${outro}.png`) });
+    await pag.click('#troca-tema [data-tema="auto"]');
+    if (await pag.evaluate(() => document.documentElement.getAttribute('data-tema')) !== doAparelho) problemas.push(`${tela.nome}: "Automático" não voltou ao tema do aparelho`);
     await ctx.close();
   }
 }
