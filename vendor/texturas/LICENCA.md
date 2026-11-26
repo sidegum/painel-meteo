@@ -12,3 +12,10 @@ three-globe (github.com/vasturiano/three-globe) em 2026-11-05 e reprocessadas aq
 | terra-mascaras-2048.png | máscara de água (R) e altura (G) | R: máscara de oceanos; G: relevo |
 
 Atribuição mostrada no app: "Texturas: NASA Visible Earth".
+
+# Mapas das luas e de Plutão (`corpos/`)
+
+Mapas cilíndricos das missões Voyager, Galileo, Cassini e New Horizons (NASA, JPL, USGS, SSI, LPI, JHUAPL, SwRI),
+de domínio público ou licença livre, obtidos do Wikimedia Commons pelo workflow `mapas-corpos.yml` e reduzidos para
+2048 e 1024 px. O arquivo de origem, o autor e a licença de cada um estão em `corpos/mapas.json`.
+

@@ -22,6 +22,7 @@ import { cartaoObjeto } from './globo-ceu.js';
 import * as CO from './cosmologia.js';
 import * as UNI from './globo-universo.js';
 import * as CAT from './globo-catalogos.js';
+import { PONTE } from './globo-escalas.js';
 
 const RAD = Math.PI / 180;
 const AL_POR_KPC = 3261.56;
@@ -74,7 +75,8 @@ function aplicarCamadas() {
   for (const o of GX.objGalaxias || []) o.visible = FG.galaxias;
 }
 
-const GX = { G: null, THREE: null, preparo: null, aberto: false, rotulos: [], foco: null, anim: null, meta: null, dados: null, revisao: 0, chaveQuadro: '', ultimoDesenho: 0 };
+const GX = { G: null, THREE: null, preparo: null, aberto: false, rotulos: [], foco: null, anim: null, meta: null, dados: null, revisao: 0, chaveQuadro: '', ultimoDesenho: 0, focoAuto: false, giro: 1 };
+const suave = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 const baixar = (arquivo, tipo = 'json') => fetch(new URL(`../vendor/ceu/${arquivo}`, import.meta.url)).then((r) => {
   if (!r.ok) throw new Error(`${arquivo}: HTTP ${r.status}`);
@@ -91,6 +93,23 @@ function cena(ra, dec, dKpc, alvo) {
   const g = EQ_GAL.map((l) => l[0] * e[0] + l[1] * e[1] + l[2] * e[2]);
   const { R0, zSol } = GX.meta;
   return alvo.set(g[1] * dKpc, g[2] * dKpc + zSol, g[0] * dKpc - R0);
+}
+
+const OBLIQUIDADE_J2000 = 23.4392911; // graus (IAU 2006), a mesma da cena do sistema solar
+/**
+ * Rotação da cena do sistema solar (eclíptica J2000: x para o ponto vernal, y para o polo norte da eclíptica) para esta
+ * cena (galáctica). Com ela a câmera sai do sistema solar olhando na mesma direção e com o mesmo "para cima".
+ * @returns {import('../vendor/three/three.module.min.js').Quaternion}
+ */
+function giroDaEcliptica() {
+  const { THREE } = GX, e = OBLIQUIDADE_J2000 * RAD, c = Math.cos(e), s = Math.sin(e);
+  const imagem = ([x, y, z]) => {
+    const cat = [x, y * c - z * s, y * s + z * c];        // desfaz o giro do céu no sistema solar (−ε em x)
+    const eq = [cat[0], -cat[2], cat[1]];                  // cena das estrelas → equatorial J2000
+    const g = EQ_GAL.map((l) => l[0] * eq[0] + l[1] * eq[1] + l[2] * eq[2]);
+    return new THREE.Vector3(g[1], g[2], g[0]);
+  };
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(imagem([1, 0, 0]), imagem([0, 1, 0]), imagem([0, 0, 1])));
 }
 
 
@@ -114,6 +133,7 @@ export function prepararGalaxia(G, THREE) {
     GX.cena = new THREE.Scene();
     GX.camera = new THREE.PerspectiveCamera(G.camera.fov, G.camera.aspect, 0.0005, 2e6);
     GX.foco = new THREE.Vector3();
+    GX.giroEcliptica = giroDaEcliptica(); GX.semGiro = new THREE.Quaternion(); GX.quadro = new THREE.Quaternion(); GX.cima = new THREE.Vector3();
     montarDisco(imagem);
     carga('via-lactea', 0.6);
     await pausa();
@@ -627,16 +647,21 @@ export function secoesCamadas() {
   return CAMADAS_UNIVERSO.map((g) => ({ titulo: g.grupo, itens: g.itens.map(([chave, texto]) => ({ tipo: 'caixa', texto, detalhe: detalhe[chave] || null, valor: FG[chave], mudar: (v) => definirCamada(chave, v) })) }));
 }
 
-/** Abre a escala de galáxias saindo do Sol: a câmera começa colada nele e se afasta até ver a Galáxia inteira. */
-export async function abrirGalaxia() {
+/**
+ * Abre a escala de galáxias a partir do Sol, com a câmera na mesma direção em que estava no sistema solar (o globo já
+ * converteu a distância para kpc). Pelo zoom, nada mais acontece: quem afasta é o usuário. Pela régua de escalas
+ * (`voar`), a câmera segue sozinha até ver a Galáxia inteira.
+ * @param {{ voar?: boolean }} [opcoes]
+ */
+export async function abrirGalaxia({ voar = true } = {}) {
   await GX.preparo;
   const { G } = GX;
   GX.aberto = true;
   G.pos.adaptar(GX.cena);
   GX.dom.raiz.hidden = false;
-  GX.foco.copy(GX.sol);
-  G.cam.dist = 0.004; G.cam.lat = 20; G.cam.lon = 180; G.cam.vLat = G.cam.vLon = 0;
-  irPara(GX.centro, DIST.inicial, 55, MOVIMENTO_REDUZIDO ? 1 : 4200);
+  GX.foco.copy(GX.sol); GX.focoAuto = true; GX.giro = 0; GX.anim = null;
+  G.cam.vLat = G.cam.vLon = 0;
+  if (voar) irPara(GX.centro, DIST.inicial, 55, MOVIMENTO_REDUZIDO ? 1 : 4200);
   montarEstrelasReais();
 }
 
@@ -651,7 +676,24 @@ function irPara(p, dist, lat = null, ms = 2200, lon = null) {
   const { G } = GX;
   const lon1 = lon == null ? G.cam.lon : G.cam.lon + ((lon - G.cam.lon + 540) % 360 - 180); // pelo caminho mais curto
   GX.anim = { de: GX.foco.clone(), para: p, dist0: G.cam.dist, dist1: dist, lat0: G.cam.lat, lat1: lat ?? G.cam.lat, lon0: G.cam.lon, lon1, t0: performance.now(), ms };
+  GX.focoAuto = false;
   G.cam.vLat = G.cam.vLon = 0;
+}
+
+/**
+ * Foco que acompanha o zoom: perto, o Sol; ao afastar de ~2 para ~40 kpc, desliza até o centro da Galáxia, para ela
+ * aparecer inteira e centrada sem nenhuma viagem automática. Aproximar faz o caminho de volta até o Sol.
+ */
+const focoDoZoom = (dist, alvo) => alvo.lerpVectors(GX.sol, GX.centro, suave(Math.log10(2), Math.log10(40), Math.log10(dist)));
+
+/**
+ * Quanto da cena do sistema solar ainda aparece (1 = só ela, 0 = só a galáxia), pela distância ao Sol.
+ * @param {number} dist distância da câmera ao foco, em kpc
+ */
+export function pesoDaPonte(dist) {
+  if (!GX.aberto) return 0;
+  const d = Math.max(dist, GX.foco.distanceTo(GX.sol) * 3);
+  return 1 - suave(Math.log(PONTE.inicio), Math.log(PONTE.fim), Math.log(d));
 }
 
 /** Foco da câmera no Sol (para o zoom contínuo de volta ao sistema solar). */
@@ -659,12 +701,16 @@ export const focoNoSol = () => !!GX.foco && GX.foco.distanceTo(GX.sol) < 0.05;
 
 export const limitesDistancia = () => [GX.focoMin ?? DIST.min, DIST.max];
 
+export const camera = () => GX.camera;
+
 /** Posiciona a câmera da galáxia a partir do estado de órbita do globo (lat, lon, dist em kpc em volta do foco). */
 export function posicionar(cam) {
   const c = GX.camera, G = GX.G;
   const lat = cam.lat * RAD, lon = cam.lon * RAD;
-  c.position.set(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon)).multiplyScalar(cam.dist).add(GX.foco);
-  c.up.set(0, 1, 0);
+  // perto do Sol a órbita da câmera é a do sistema solar (eclíptica); ao afastar, gira aos poucos para o plano da Galáxia
+  const q = GX.quadro.copy(GX.giroEcliptica).slerp(GX.semGiro, GX.giro);
+  c.position.set(Math.cos(lat) * Math.cos(lon), Math.sin(lat), -Math.cos(lat) * Math.sin(lon)).applyQuaternion(q).multiplyScalar(cam.dist).add(GX.foco);
+  c.up.copy(GX.cima.set(0, 1, 0).applyQuaternion(q));
   c.lookAt(GX.foco);
   const near = Math.max(1e-6, cam.dist * 0.001);
   if (c.aspect !== G.camera.aspect || Math.abs(c.near - near) > near * 0.25) { c.aspect = G.camera.aspect; c.near = near; c.far = Math.max(2e6, cam.dist * 10); c.updateProjectionMatrix(); }
@@ -682,8 +728,10 @@ export function atualizarGalaxia(agora) {
     G.cam.dist = Math.exp(Math.log(a.dist0) + (Math.log(a.dist1) - Math.log(a.dist0)) * e);
     G.cam.lat = a.lat0 + (a.lat1 - a.lat0) * e;
     G.cam.lon = a.lon0 + (a.lon1 - a.lon0) * e;
-    if (t >= 1) GX.anim = null;
-  }
+    if (t >= 1) { GX.anim = null; GX.focoAuto = a.para.distanceTo(focoDoZoom(a.dist1, GX.cima)) < 0.05; } // chegou ao Sol ou ao centro: o foco volta a acompanhar o zoom
+  } else if (GX.focoAuto) focoDoZoom(G.cam.dist, GX.foco);
+  const giro = GX.focoAuto || GX.foco.distanceTo(GX.sol) < 0.05 ? suave(Math.log10(PONTE.fim), Math.log10(8), Math.log10(G.cam.dist)) : 1;
+  GX.giro = Math.abs(giro - GX.giro) < 0.002 ? giro : GX.giro + (giro - GX.giro) * 0.2;
   posicionar(G.cam);
   _v.a ||= new THREE.Vector3(); _v.b ||= new THREE.Vector3();
   const olhar = GX.camera.getWorldDirection(_v.a);
@@ -1039,7 +1087,7 @@ export const estado = () => GX;
  */
 export function precisaDesenhar(agora) {
   const c = GX.G.cam, cv = GX.G.renderer.domElement, f = GX.foco;
-  const chave = `${c.lat.toFixed(4)} ${c.lon.toFixed(4)} ${c.dist.toPrecision(7)} ${f.x.toPrecision(7)} ${f.y.toPrecision(7)} ${f.z.toPrecision(7)} ${cv.width}x${cv.height} ${GX.revisao}`;
+  const chave = `${c.lat.toFixed(4)} ${c.lon.toFixed(4)} ${c.dist.toPrecision(7)} ${f.x.toPrecision(7)} ${f.y.toPrecision(7)} ${f.z.toPrecision(7)} ${cv.width}x${cv.height} ${GX.revisao} ${GX.giro.toFixed(3)}`;
   if (!GX.anim && chave === GX.chaveQuadro && agora - GX.ultimoDesenho < 400) return false;
   GX.chaveQuadro = chave; GX.ultimoDesenho = agora;
   return true;

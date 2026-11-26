@@ -1,0 +1,414 @@
+{
+ "fonte": "Wikimedia Commons (mapas da NASA, do JPL e do USGS, de licença livre)",
+ "corpos": {
+  "io": {
+   "arquivo": "Io modest scale map Io SSI-only color SIMP0 med.cub.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Io_modest_scale_map_Io_SSI-only_color_SIMP0_med.cub.jpg",
+   "autor": "USGS Astrogeology Science Center",
+   "credito": "PDS IMG Annex",
+   "licenca": "Public domain",
+   "largura": 1225,
+   "altura": 613,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Io modest scale map Io SSI-only color SIMP0 med.cub.jpg",
+     "largura": 1225,
+     "nota": 4.6
+    },
+    {
+     "arquivo": "Io volcanic hotspots.jpg",
+     "largura": 1524,
+     "nota": 0.7
+    }
+   ]
+  },
+  "europa": {
+   "arquivo": "Europa Voyager GalileoSSI global mosaic.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Europa_Voyager_GalileoSSI_global_mosaic.jpg",
+   "autor": "U.S. Geological Survey / Planetary Data System / Tammy Becker",
+   "credito": "https://astrogeology.usgs.gov/search/map/Europa/Voyager-Galileo/Europa_Voyager_GalileoSSI_global_mosaic_500m",
+   "licenca": "Public domain",
+   "largura": 1024,
+   "altura": 512,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Europa Voyager GalileoSSI global mosaic.jpg",
+     "largura": 1024,
+     "nota": 4.5
+    }
+   ]
+  },
+  "ganimedes": {
+   "arquivo": "Ganymede map by Askaniy.png",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Ganymede_map_by_Askaniy.png",
+   "autor": "Askaniy Anpilogov, USGS, Björn Jónsson, NASA/JPL-Caltech/SwRI/MSSS/Brian Swift",
+   "credito": "https://www.deviantart.com/askaniy/art/Ganymede-Texture-Map-11K-808732114",
+   "licenca": "CC BY-SA 3.0",
+   "largura": 11520,
+   "altura": 5760,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Ganymede map by Askaniy.png",
+     "largura": 11520,
+     "nota": 6.0
+    },
+    {
+     "arquivo": "Map of Ganymede by Björn Jónsson and centered by J N Squire.jpg",
+     "largura": 1800,
+     "nota": 2.9
+    },
+    {
+     "arquivo": "Ganymede map NASA JPL Voyager.jpg",
+     "largura": 1440,
+     "nota": 2.7
+    }
+   ]
+  },
+  "calisto": {
+   "arquivo": "Callisto map by Askaniy.png",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Callisto_map_by_Askaniy.png",
+   "autor": "Askaniy Anpilogov, John van Vliet",
+   "credito": "https://www.deviantart.com/askaniy/art/Callisto-Texture-Map-8K-808772741",
+   "licenca": "CC BY-SA 3.0",
+   "largura": 8192,
+   "altura": 4096,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Callisto map by Askaniy.png",
+     "largura": 8192,
+     "nota": 6.0
+    },
+    {
+     "arquivo": "Callisto USGS global small.jpg",
+     "largura": 1024,
+     "nota": 4.5
+    },
+    {
+     "arquivo": "Callisto map NASA JPL Voyager.jpg",
+     "largura": 1440,
+     "nota": 2.7
+    }
+   ]
+  },
+  "mimas": {
+   "arquivo": "Map of Mimas colorized 2014-04 PIA18437.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Map_of_Mimas_colorized_2014-04_PIA18437.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18437.jpg",
+   "licenca": "Public domain",
+   "largura": 6356,
+   "altura": 3178,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "encelado": {
+   "arquivo": "Color map of Enceladus PIA18435 (modified).jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Color_map_of_Enceladus_PIA18435_(modified).jpg",
+   "autor": "NASA",
+   "credito": "http://photojournal.jpl.nasa.gov/catalog/PIA18435 (other link)",
+   "licenca": "Public domain",
+   "largura": 5320,
+   "altura": 2660,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "tetis": {
+   "arquivo": "Tethys Color Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Tethys_Color_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18439.jpg",
+   "licenca": "Public domain",
+   "largura": 13467,
+   "altura": 6734,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "dione": {
+   "arquivo": "Dione Color Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Dione_Color_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18434.jpg",
+   "licenca": "Public domain",
+   "largura": 14134,
+   "altura": 7067,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "reia": {
+   "arquivo": "Rhea Color Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Rhea_Color_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18438.jpg",
+   "licenca": "Public domain",
+   "largura": 12015,
+   "altura": 6008,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "tita": {
+   "arquivo": "Titan map April 2011 full.png",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Titan_map_April_2011_full.png",
+   "autor": "NASA",
+   "credito": "http://photojournal.jpl.nasa.gov/catalog/PIA14908",
+   "licenca": "Public domain",
+   "largura": 4046,
+   "altura": 2023,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Titan map April 2011 full.png",
+     "largura": 4046,
+     "nota": 4.0
+    },
+    {
+     "arquivo": "Map of Titan cropped.jpg",
+     "largura": 1000,
+     "nota": 2.5
+    },
+    {
+     "arquivo": "Global Topographic Map of Titan (PIA16848).jpg",
+     "largura": 2196,
+     "nota": 1.1
+    }
+   ]
+  },
+  "japeto": {
+   "arquivo": "Iapetus Color Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Iapetus_Color_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Space Science Institute/Lunar and Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18436.jpg",
+   "licenca": "Public domain",
+   "largura": 11741,
+   "altura": 5871,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "miranda": {
+   "arquivo": "Miranda map JPL USGS.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Miranda_map_JPL_USGS.jpg",
+   "autor": "Caltech/JPL/USGS",
+   "credito": "https://maps.jpl.nasa.gov/tmaps/uranus.html, https://nasa3d.arc.nasa.gov/detail/ura5vuu2",
+   "licenca": "Public domain",
+   "largura": 1440,
+   "altura": 720,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Miranda map JPL USGS.jpg",
+     "largura": 1440,
+     "nota": 4.7
+    },
+    {
+     "arquivo": "Miranda map.jpg",
+     "largura": 5040,
+     "nota": 4.5
+    }
+   ]
+  },
+  "ariel": {
+   "arquivo": "Ariel map JPL USGS.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Ariel_map_JPL_USGS.jpg",
+   "autor": "Caltech/JPL/USGS",
+   "credito": "https://maps.jpl.nasa.gov/tmaps/uranus.html, https://nasa3d.arc.nasa.gov/detail/ura1vuu2",
+   "licenca": "Public domain",
+   "largura": 1440,
+   "altura": 720,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Ariel map JPL USGS.jpg",
+     "largura": 1440,
+     "nota": 4.7
+    }
+   ]
+  },
+  "umbriel": {
+   "arquivo": "Umbriel map JPL USGS.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Umbriel_map_JPL_USGS.jpg",
+   "autor": "Caltech/JPL/USGS",
+   "credito": "https://maps.jpl.nasa.gov/tmaps/uranus.html, https://nasa3d.arc.nasa.gov/detail/ura2vuu2",
+   "licenca": "Public domain",
+   "largura": 1440,
+   "altura": 720,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "titania": {
+   "arquivo": "Titania map JPL USGS.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Titania_map_JPL_USGS.jpg",
+   "autor": "Caltech/JPL/USGS",
+   "credito": "https://maps.jpl.nasa.gov/tmaps/uranus.html, https://nasa3d.arc.nasa.gov/detail/ura3vuu2",
+   "licenca": "Public domain",
+   "largura": 1440,
+   "altura": 720,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "oberon": {
+   "arquivo": "Oberon map JPL USGS.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Oberon_map_JPL_USGS.jpg",
+   "autor": "Caltech/JPL/USGS",
+   "credito": "https://maps.jpl.nasa.gov/tmaps/uranus.html, https://nasa3d.arc.nasa.gov/detail/ura4vuu2",
+   "licenca": "Public domain",
+   "largura": 1440,
+   "altura": 720,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "tritao": {
+   "arquivo": "Triton Map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Triton_Map.jpg",
+   "autor": "NASA/JPL-Caltech/Lunar & Planetary Institute",
+   "credito": "http://photojournal.jpl.nasa.gov/jpeg/PIA18668.jpg (Photojournal catalog link)",
+   "licenca": "Public domain",
+   "largura": 14138,
+   "altura": 7069,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Triton Map.jpg",
+     "largura": 14138,
+     "nota": 6.0
+    },
+    {
+     "arquivo": "Triton map no grid.jpg",
+     "largura": 14138,
+     "nota": 0.0
+    }
+   ]
+  },
+  "caronte": {
+   "arquivo": "Charon Topographic Map NASA PIA19866.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Charon_Topographic_Map_NASA_PIA19866.jpg",
+   "autor": "JPL/NASA",
+   "credito": "https://photojournal.jpl.nasa.gov/jpeg/PIA19866.jpg",
+   "licenca": "Public domain",
+   "largura": 9520,
+   "altura": 4760,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "plutao": {
+   "arquivo": "Pluto color mapmosaic.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Pluto_color_mapmosaic.jpg",
+   "autor": "NASA / Johns Hopkins University Applied Physics Laboratory / Southwest Research Institute",
+   "credito": "https://www.nasa.gov/image-feature/pluto-global-color-map",
+   "licenca": "Public domain",
+   "largura": 5926,
+   "altura": 2963,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": []
+  },
+  "fobos": {
+   "arquivo": "Phobos Viking Mosaic DLRcontrol 7200.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Phobos_Viking_Mosaic_DLRcontrol_7200.jpg",
+   "autor": "Planetary Data System / Phil Stooke",
+   "credito": "https://astrogeology.usgs.gov/search/map/Phobos/Viking/Phobos_Viking_Mosaic_40ppd_DLRcontrol",
+   "licenca": "Public domain",
+   "largura": 7200,
+   "altura": 3600,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Phobos Viking Mosaic DLRcontrol 7200.jpg",
+     "largura": 7200,
+     "nota": 5.5
+    },
+    {
+     "arquivo": "Phobos map by Askaniy.png",
+     "largura": 4096,
+     "nota": 4.0
+    }
+   ]
+  },
+  "deimos": {
+   "arquivo": "Deimos color map.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Deimos_color_map.jpg",
+   "autor": "Oleg-Pluton",
+   "credito": "https://www.deviantart.com/oleg-pluton/art/Deimos-texture-map-Upd-2024-772205702",
+   "licenca": "CC BY-SA 3.0",
+   "largura": 1264,
+   "altura": 632,
+   "tamanhos": [
+    2048,
+    1024
+   ],
+   "candidatos": [
+    {
+     "arquivo": "Deimos color map.jpg",
+     "largura": 1264,
+     "nota": 4.6
+    },
+    {
+     "arquivo": "Deimos map by Askaniy.png",
+     "largura": 4096,
+     "nota": 4.0
+    }
+   ]
+  }
+ }
+}

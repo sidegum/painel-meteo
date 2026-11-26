@@ -15,10 +15,11 @@ import * as K from './globo-corpos.js';
 import * as C from './ceu.js';
 import { cartaoAstro, cartaoEstrela, cartaoObjeto, cartaoSatelite, cartaoSonda, cartaoLua, cartaoPequeno, fusoS } from './globo-ceu.js';
 import { DIST_ESCALA, DIST_EXP, posicaoObjeto } from './globo-estrelas.js';
+import { criarEstrelasPerto } from './globo-estrela-perto.js';
 import { MISSOES, estadoSonda, interpolar, rotaCompleta } from './globo-sondas.js';
 import { geometriaNave, geometriaInstanciada, materialNaves, modeloDaSonda, modeloDoSatelite, fichaModelo } from './globo-naves.js';
 import { materialCorpo, materialAnel } from './globo-planetas.js';
-import { ANEL_SATURNO_KM, texturaPlaneta, texturaSol, texturaAnel, texturaPonto, texturaBrilho, texturaAnelSelecao, texturaReal, anelReal } from './globo-texturas.js';
+import { ANEL_SATURNO_KM, texturaPlaneta, texturaSol, texturaAnel, texturaPonto, texturaBrilho, texturaAnelSelecao, texturaReal, anelReal, texturaCorpoReal, texturasReaisProntas } from './globo-texturas.js';
 
 const num = (v, casas = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) : null);
 
@@ -132,6 +133,8 @@ export function prepararEspaco(G, THREE) {
     E.corpos = corpos.status === 'fulfilled' ? corpos.value : null;
     G.carga?.etapa('orbita');
     E.sistema = await montarSistema();
+    E.perto = criarEstrelasPerto(THREE, G.estrelas); G.cena.add(E.perto.grupo);
+    await texturasReaisProntas(); // os mapas reais entram na barra de carregamento: nada troca de aparência depois
     G.carga?.etapa('sistema');
     E.dom.nota.textContent = E.notaSat;
   })();
@@ -374,7 +377,7 @@ function tocarEstrela(considerar, rect) {
     const mag = magVista(e);
     if (mag > ceu.limite) continue;
     const w = ceu.posicaoVista(e, new E.THREE.Vector3()).applyMatrix4(m);
-    considerar(naTela(w, rect), 0, () => mostrarEstrela(e, w), prioridade(mag), () => ({ posicao: w, raio: 0.002, ponto: true }));
+    considerar(naTela(w, rect), 0, () => mostrarEstrela(e, w), prioridade(mag), () => ({ posicao: w, raio: E.perto?.raioEm(w) || 0.002, ponto: true }));
   }
   const P = ceu.profundas;
   if (P && ceu.pontosProfundos?.visible) {
@@ -384,7 +387,7 @@ function tocarEstrela(considerar, rect) {
       if (mag > limite) continue;
       ceu.posicaoProfunda(i, v).applyMatrix4(m);
       const tela = naTela(v, rect);
-      if (tela) { const w = v.clone(); considerar(tela, 0, () => mostrarEstrela(ceu.estrelaProfunda(i), w), prioridade(mag) - 4, () => ({ posicao: w, raio: 0.002, ponto: true })); }
+      if (tela) { const w = v.clone(); considerar(tela, 0, () => mostrarEstrela(ceu.estrelaProfunda(i), w), prioridade(mag) - 4, () => ({ posicao: w, raio: E.perto?.raioEm(w) || 0.002, ponto: true })); }
     }
   }
   if (ceu.pontosObjetos?.visible) for (const ob of ceu.objetos) considerar(naTela(posicaoObjeto(ceu, ob, v).applyMatrix4(m), rect), 0, () => mostrarObjeto(ob), ob.nome ? -2 : -8);
@@ -576,14 +579,17 @@ export function distanciaProxima(p) {
       if (ceu.profundas) for (let i = 0; i < ceu.profundas.n; i++) if (ceu.profundas.dpc[i] > 0 && ceu.profundas.dpc[i] < 60) lista.push(ceu.posicaoProfunda(i, new E.THREE.Vector3()).applyMatrix4(m));
       SIS.posEstrelas = lista; SIS.posEstrelasProfundas = !!ceu.profundas;
     }
-    for (const w of SIS.posEstrelas) { const d = w.distanceToSquared(p); if (d < min * min) min = Math.sqrt(d); }
+    let perto = null;
+    for (const w of SIS.posEstrelas) { const d = w.distanceToSquared(p); if (d < min * min) { min = Math.sqrt(d); perto = w; } }
+    if (perto) min = Math.max(min - (E.perto?.raioEm(perto) || 0), min * 0.02); // até a superfície da estrela, não o centro
   }
   return min;
 }
 
 /** Leva a câmera (modo orbital) até um ponto fixo do espaço, como uma estrela. */
 function focarPonto(w) {
-  E.G.focarSistema(() => w, 0.08, 0.002);
+  const r = E.perto?.raioEm(w) || 0; // estrela com esfera: a câmera para fora dela, com o disco inteiro na tela
+  E.G.focarSistema(() => w, Math.max(0.08, r * 4.5), Math.max(0.002, r * 1.3));
   SIS.focado = w;
   if (SIS.dom) SIS.dom.geral.hidden = false;
 }
@@ -602,7 +608,7 @@ function focarObjeto(obj) {
   const r = raioCena(obj), v = new E.THREE.Vector3();
   const comLuas = SIS.planetas?.some((P) => P.malha === obj && P.listaLuas.length); // enquadra o sistema de luas
   const nave = obj.userData.tipo === 'sonda', estreita = E.G.camera.aspect < 1; // a nave inteira na tela, também em pé no celular
-  E.G.focarSistema(() => obj.getWorldPosition(v), nave ? r * (estreita ? 9 : 5) : Math.max(r * (comLuas ? 16 : 7), 0.06), Math.max(r * 1.4, 0.004));
+  E.G.focarSistema(() => obj.getWorldPosition(v), nave ? r * (estreita ? 9 : 5) : Math.max(r * (comLuas ? 16 : 7), obj.geometry?.type === 'SphereGeometry' ? 0.008 : 0.06), Math.max(r * 1.4, 0.002));
   // chega pelo lado iluminado: a câmera fica a 40° da direção do Sol e um pouco acima do plano das órbitas
   if (obj !== SIS.sol && obj.getWorldPosition(v).lengthSq() > 1e-6) {
     const u = obj.material.uniforms;
@@ -769,7 +775,7 @@ async function montarSistema() {
   const grupo = new THREE.Group(); grupo.name = 'sistema'; grupo.visible = false;
   const tocaveis = [];
   grupo.userData.tocaveis = tocaveis;
-  SIS.comRotulo = []; SIS.planetas = []; SIS.pequenos = []; SIS.populacoes = [];
+  SIS.comRotulo = []; SIS.planetas = []; SIS.pequenos = []; SIS.populacoes = []; SIS.mapaReal = {};
   const rotulo = (obj, texto, prioridade, classe = '', deslocY = null) => {
     const r = el('span', { class: `globo-rotulo globo-rotulo-planeta ${classe}`, text: texto, hidden: true });
     G.dom.raiz.append(r);
@@ -809,6 +815,7 @@ async function montarSistema() {
     const mat = materialCorpo(THREE, { mapa: texturaPlaneta(THREE, p.corpo === 'Pluto' ? 'Mercúrio' : p.nome), corpo: p.corpo, tinta: p.corpo === 'Pluto' ? '#e6d2bc' : '#ffffff' });
     const real = MAPA_REAL[p.corpo];
     if (real) texturaReal(THREE, real, (t) => { mat.uniforms.mapa.value = t; });
+    if (p.corpo === 'Pluto') texturaCorpoReal(THREE, 'plutao', (t) => { mat.uniforms.mapa.value = t; mat.uniforms.tinta.value.set('#ffffff'); SIS.mapaReal.plutao = true; });
     const m = new THREE.Mesh(new THREE.SphereGeometry(r, 128, 96), mat);
     sistemaPlaneta.add(m);
     rotulo(m, p.nome, p.corpo === 'Earth' ? 90 : 80 - PLANETAS.indexOf(p), p.corpo === 'Pluto' ? 'anao' : '');
@@ -838,6 +845,7 @@ async function montarSistema() {
       const rl = Math.max(r * Math.sqrt(L.raioKm / raioKm) * 0.6, 0.0012);
       const lm = new THREE.Mesh(new THREE.SphereGeometry(rl, chave === 'lua' ? 96 : 48, chave === 'lua' ? 64 : 32), materialCorpo(THREE, { mapa: texturaPlaneta(THREE, 'Lua'), corpo: chave, tinta: COR_LUA[chave] || '#d4cec6' }));
       if (chave === 'lua') texturaReal(THREE, 'lua', (t) => { lm.material.uniforms.mapa.value = t; lm.material.uniforms.tinta.value.set('#ffffff'); });
+      else texturaCorpoReal(THREE, chave, (t, dados) => { lm.material.uniforms.mapa.value = t; lm.material.uniforms.tinta.value.set(chave === 'tita' ? '#f2cd92' : '#ffffff'); SIS.mapaReal[chave] = dados; }); // Titã: mapa da superfície no infravermelho, com o laranja da névoa por cima
       lm.name = L.nome;
       luas.add(lm);
       rotulo(lm, L.nome, chave === 'lua' ? 60 : 50, 'lua');
@@ -1111,7 +1119,7 @@ function mostrarTerra() {
 }
 
 function mostrarLua(chave) {
-  const c = cartaoLua(chave, E.corpos?.luas?.[chave], instanteSistema());
+  const c = cartaoLua(chave, E.corpos?.luas?.[chave], instanteSistema(), SIS.mapaReal[chave] || null);
   E.G.mostrarPainel(c.titulo, c.frase, c.numeros, c.fonte, acoesSistema([{ texto: 'Ver detalhes', onclick: c.detalhes }]));
 }
 
@@ -1169,12 +1177,32 @@ function orientar(malha, corpo, ms) {
   malha.quaternion.setFromRotationMatrix(_m4.m.makeBasis(_m4.x, _m4.y, _m4.z));
 }
 
+/**
+ * Rotação síncrona: a lua mostra sempre a mesma face ao planeta. Parte dos mapas tem o meridiano 180° no centro (o
+ * ponto oposto ao planeta: os da Cassini e o de Titã) e parte tem o 0° (MAPA_CENTRO_ZERO, conferido por uma
+ * formação conhecida de cada mapa: Pele em Io, Pwyll em Europa, Valhalla em Calisto, Stickney em Fobos). O norte
+ * acompanha o polo do planeta.
+ */
+const MAPA_CENTRO_ZERO = new Set(['lua', 'io', 'europa', 'ganimedes', 'calisto', 'fobos', 'deimos', 'caronte']); // mapas com o meridiano 0° no centro
+function orientarLua(L, P) {
+  const { THREE } = E;
+  if (!_m4.m) Object.assign(_m4, { m: new THREE.Matrix4(), x: new THREE.Vector3(), y: new THREE.Vector3(), z: new THREE.Vector3() });
+  _m4.x.copy(L.malha.position).normalize();
+  if (MAPA_CENTRO_ZERO.has(L.chave)) _m4.x.negate();
+  _m4.y.set(0, 1, 0); if (L.chave !== 'lua') _m4.y.applyQuaternion(P.malha.quaternion);
+  if (L.chave === 'tritao') _m4.y.negate(); // órbita retrógrada: o polo norte dele aponta para o sul de Netuno
+  _m4.z.crossVectors(_m4.x, _m4.y).normalize();
+  _m4.y.crossVectors(_m4.z, _m4.x);
+  L.malha.quaternion.setFromRotationMatrix(_m4.m.makeBasis(_m4.x, _m4.y, _m4.z));
+}
+
 function atualizarSistema(agora) {
   const { G } = E;
   if (SIS.vel) SIS.desloc += (agora - SIS.ultimo) / 1000 * SIS.vel * 86400000;
   SIS.ultimo = agora;
   const ms = instanteSistema();
   const cam = G.camera.position;
+  E.perto?.atualizar(G.camera, agora, G.dom.canvas.clientHeight);
   // a anos-luz do Sol, o sistema inteiro cabe num ponto: some a maquete e fica o Sol como estrela do catálogo
   E.sistema.visible = cam.length() <= LONGE_DO_SOL;
   orientar(SIS.sol, 'Sun', ms);
@@ -1183,6 +1211,7 @@ function atualizarSistema(agora) {
     paraCena(pos.x, pos.y, pos.z, P.grupo.position);
     P.helio = pos;
     orientar(P.malha, P.p.corpo, ms);
+    if (P.p.corpo === 'Pluto' && SIS.mapaReal.plutao) P.malha.rotateY(Math.PI); // o mapa da New Horizons tem o meridiano 180° no centro
     const u = P.malha.material.uniforms;
     u.centro.value.copy(P.grupo.position); u.eixo.value.set(0, 1, 0).applyQuaternion(P.malha.quaternion);
     // em órbita, um planeta que passa rente à câmera vira um disco enorme na frente de tudo: some enquanto não for o foco
@@ -1193,7 +1222,7 @@ function atualizarSistema(agora) {
     if (P.luas.visible) for (const L of P.listaLuas) {
       const q = K.posicaoLua(L.chave, ms, L.el);
       L.malha.visible = !!q;
-      if (q) { escalaLua(P.r, P.raioKm, q, L.malha.position); L.malha.material.uniforms.centro.value.copy(L.malha.position).add(P.grupo.position); }
+      if (q) { escalaLua(P.r, P.raioKm, q, L.malha.position); L.malha.material.uniforms.centro.value.copy(L.malha.position).add(P.grupo.position); orientarLua(L, P); }
     }
   }
   for (const s of SIS.pequenos) {

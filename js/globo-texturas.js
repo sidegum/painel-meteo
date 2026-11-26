@@ -148,6 +148,62 @@ export function texturaReal(THREE, nome, aplicar) {
   reais.get(url).then((t) => { if (t) aplicar(t); });
 }
 
+// ---------- mapas reais de luas e de Plutão (vendor/texturas/corpos, do Wikimedia Commons; ver mapas.json) ----------
+
+const LADO_CORPO = matchMedia('(pointer: coarse)').matches ? 1024 : 2048;
+let mapasCorpos = null;
+/** Lista dos mapas baixados (id → arquivo, autor, licença, tamanhos), lida uma vez. Sem rede, lista vazia. */
+export function listaMapasCorpos() {
+  mapasCorpos ||= fetch(new URL('../vendor/texturas/corpos/mapas.json', import.meta.url)).then((r) => (r.ok ? r.json() : {})).then((j) => j.corpos || {}).catch(() => ({}));
+  return mapasCorpos;
+}
+
+/**
+ * Carrega o mapa real de uma lua ou de Plutão (missões Voyager, Galileo, Cassini e New Horizons) e o entrega a
+ * aplicar(textura, dados). Corpo sem mapa na lista fica com a textura desenhada. 2.048 px no computador, 1.024 no celular.
+ */
+export function texturaCorpoReal(THREE, id, aplicar) {
+  const pedido = listaMapasCorpos().then((lista) => {
+    const dados = lista[id];
+    if (!dados) return null;
+    const lado = dados.tamanhos.includes(LADO_CORPO) ? LADO_CORPO : Math.min(...dados.tamanhos);
+    const url = new URL(`../vendor/texturas/corpos/${id}-${lado}.jpg`, import.meta.url).href;
+    return new THREE.ImageLoader().loadAsync(url).then((img) => { const t = textura(THREE, preencherSemImagem(img)); t.anisotropy = 8; aplicar(t, dados); return t; }).catch(() => null);
+  });
+  reais.set(`corpo:${id}`, pedido);
+}
+
+/**
+ * Vários mapas são parciais: a Voyager 2 só viu o hemisfério sul das luas de Urano, a New Horizons não viu o sul de
+ * Plutão. No arquivo essas áreas são pretas; aqui recebem a cor média do corpo, escurecida, para a lua não virar um
+ * disco preto quando o lado nunca fotografado está voltado para a câmera. Mapa completo passa sem mudança.
+ */
+function preencherSemImagem(img) {
+  const cv = canvas(img.width, img.height), ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const dados = ctx.getImageData(0, 0, cv.width, cv.height), d = dados.data;
+  let r = 0, g = 0, b = 0, n = 0, vazios = 0;
+  for (let i = 0; i < d.length; i += 16) { // amostra 1 a cada 4 pixels
+    const l = d[i] + d[i + 1] + d[i + 2];
+    if (l < 24) vazios++; else { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+  }
+  if (!n || vazios < (vazios + n) * 0.03) return cv;
+  r = r / n * 0.55; g = g / n * 0.55; b = b / n * 0.55;
+  for (let i = 0; i < d.length; i += 4) {
+    const l = (d[i] + d[i + 1] + d[i + 2]) / 3;
+    if (l >= 30) continue;
+    const k = l <= 6 ? 0 : (l - 6) / 24; // borda suave entre a área fotografada e o preenchimento
+    d[i] = r + (d[i] - r) * k; d[i + 1] = g + (d[i + 1] - g) * k; d[i + 2] = b + (d[i + 2] - b) * k;
+  }
+  ctx.putImageData(dados, 0, 0);
+  return cv;
+}
+
+/** Resolve quando todos os mapas reais pedidos até aqui chegaram (ou falharam), ou depois de `ms`: a barra de carregamento espera por eles. */
+export function texturasReaisProntas(ms = 20000) {
+  return Promise.race([Promise.allSettled([...reais.values()]), new Promise((ok) => setTimeout(ok, ms))]);
+}
+
 /** Anel de Saturno real (faixa radial com transparência, da borda interna para a externa). */
 export function anelReal(THREE, aplicar) {
   new THREE.TextureLoader().loadAsync(new URL('../vendor/texturas/planetas/saturno-anel.png', import.meta.url).href)
