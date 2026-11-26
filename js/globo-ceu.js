@@ -10,6 +10,7 @@ import { fichaModelo, modeloDaSonda } from './globo-naves.js';
 import * as CORPOS_EXTRA from './globo-corpos.js';
 import * as A from '../vendor/astronomy/astronomy.min.js';
 import { TIPOS_OBJETO } from './globo-estrelas.js';
+import { fisicaEstelar } from './globo-estrela-perto.js';
 
 /** Número em pt-BR com separador de milhar a partir de 10.000 (regra do CLDR para o português). */
 const num = (v, casas = 0) => (Number.isFinite(v) ? v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) : null);
@@ -196,6 +197,7 @@ export function cartaoEstrela(e, constelacao, estadoApp, t = Date.now()) {
     linha('Brilho real', Number.isFinite(e.magAbs) ? `magnitude absoluta ${num(e.magAbs, 2)}${Number.isFinite(e.lum) ? `; ${e.lum >= 1 ? `${num(e.lum, e.lum < 10 ? 1 : 0)} vezes a` : `${num(e.lum, 3)} da`} luminosidade do Sol (no visível)` : ''}` : null),
     linha('Tipo', tipo ? tipo.longo : null),
     linha('Cor e temperatura', T ? `${corEstrela(T)}; superfície a cerca de ${num(Math.round(T / 100) * 100)} K (pelo índice de cor B−V ${num(e.bv, 2)})` : null),
+    Number.isFinite(e.magAbs) && Number.isFinite(e.bv) ? (() => { const f = fisicaEstelar(e.magAbs, e.bv, e.hip), r = f.raioSol; return linha(f.medido ? 'Tamanho' : 'Tamanho estimado', `cerca de ${num(r, r < 10 ? 2 : 0)} ${r >= 1.95 ? 'vezes o' : 'do'} raio do Sol (${f.medido ? 'medido por interferometria' : 'calculado pelo brilho e pela cor'}; de perto, o desenho da superfície é uma ilustração)`); })() : null,
     linha('Variável', e.variavel ? 'sim: o brilho dela muda com o tempo' : 'não consta como variável'),
     linha('Agora', `${num(i.altura, 1)}° de altura, azimute ${num(i.azimute, 0)}° (${C.rumo(i.azimute)})`),
     linha('Nasce e se põe', i.sempre === 'acima' ? 'nunca se põe neste local' : i.sempre === 'abaixo' ? 'nunca nasce neste local' : [i.nasce && `nasce ${diaHora(i.nasce, off, t)}`, i.poe && `se põe ${diaHora(i.poe, off, t)}`].filter(Boolean).join('; ')),
@@ -550,7 +552,7 @@ const periodoTexto = (dias) => (dias < 2 ? `${num(dias * 24, 1)} horas` : dias <
  * Cartão de uma lua: o que é, distância ao planeta agora, período, tamanho e descoberta.
  * @param {object} [el] elementos do Horizons (para as luas fora do Astronomy Engine)
  */
-export function cartaoLua(chave, elem, t = Date.now()) {
+export function cartaoLua(chave, elem, t = Date.now(), mapa = null) {
   const L = CORPOS_EXTRA.LUAS[chave];
   const p = CORPOS_EXTRA.posicaoLua(chave, t, elem);
   const dist = p ? Math.hypot(p.x, p.y, p.z) : null;
@@ -564,6 +566,7 @@ export function cartaoLua(chave, elem, t = Date.now()) {
     linha('Uma volta no planeta', periodo ? periodoTexto(periodo) : null),
     linha('Descoberta', L.descoberta || 'conhecida desde sempre'),
     elem?.e != null ? linha('Excentricidade e inclinação', `${num(elem.e, 4)} · ${num(elem.i, 1)}° (sobre a eclíptica)`) : null,
+    mapa ? linha('Superfície', `mapa real das missões espaciais (${mapa.autor || 'NASA'}; ${mapa.licenca}). Áreas lisas e escuras nunca foram fotografadas de perto.`) : chave !== 'lua' ? linha('Superfície', 'ilustração: ainda sem mapa real neste app') : null,
   ];
   return {
     titulo: L.nome, frase: L.frase, numeros: `Lua de ${pai}${dist ? ` · ${km(dist)} do planeta` : ''}`, fonte,

@@ -55,7 +55,6 @@
    "largura": 11520,
    "altura": 5760,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -86,7 +85,6 @@
    "largura": 8192,
    "altura": 4096,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -117,7 +115,6 @@
    "largura": 6356,
    "altura": 3178,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -132,7 +129,6 @@
    "largura": 5320,
    "altura": 2660,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -147,7 +143,6 @@
    "largura": 13467,
    "altura": 6734,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -162,7 +157,6 @@
    "largura": 14134,
    "altura": 7067,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -177,7 +171,6 @@
    "largura": 12015,
    "altura": 6008,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -192,7 +185,6 @@
    "largura": 4046,
    "altura": 2023,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -223,7 +215,6 @@
    "largura": 11741,
    "altura": 5871,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -325,7 +316,6 @@
    "largura": 14138,
    "altura": 7069,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -351,7 +341,6 @@
    "largura": 9520,
    "altura": 4760,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -366,7 +355,6 @@
    "largura": 5926,
    "altura": 2963,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -381,7 +369,6 @@
    "largura": 7200,
    "altura": 3600,
    "tamanhos": [
-    4096,
     2048,
     1024
    ],
@@ -420,52 +407,6 @@
      "arquivo": "Deimos map by Askaniy.png",
      "largura": 4096,
      "nota": 4.0
-    }
-   ]
-  },
-  "ceres": {
-   "arquivo": "Map of Ceres (PIA19625 cropped).png",
-   "pagina": "https://commons.wikimedia.org/wiki/File:Map_of_Ceres_(PIA19625_cropped).png",
-   "autor": "NASA",
-   "credito": "http://photojournal.jpl.nasa.gov/catalog/PIA19625 (cropped for using in positional maps)",
-   "licenca": "Public domain",
-   "largura": 2828,
-   "altura": 1412,
-   "tamanhos": [
-    2048,
-    1024
-   ],
-   "candidatos": [
-    {
-     "arquivo": "Map of Ceres (PIA19625 cropped).png",
-     "largura": 2828,
-     "nota": 5.4
-    }
-   ]
-  },
-  "vesta": {
-   "arquivo": "Vesta map for GeoHack.png",
-   "pagina": "https://commons.wikimedia.org/wiki/File:Vesta_map_for_GeoHack.png",
-   "autor": "NASA/JPL-Caltech/UCLA/MPS/DLR/IDA",
-   "credito": "https://planetarynames.wr.usgs.gov/Page/VESTA/target / https://planetarynames.wr.usgs.gov/images/vesta.pdf",
-   "licenca": "Public domain",
-   "largura": 3561,
-   "altura": 1781,
-   "tamanhos": [
-    4096,
-    2048,
-    1024
-   ],
-   "candidatos": [
-    {
-     "arquivo": "Vesta map for GeoHack.png",
-     "largura": 3561,
-     "nota": 3.7
-    },
-    {
-     "arquivo": "Atlas of Vesta (PIA17480).tif",
-     "largura": 2362,
-     "nota": 3.2
     }
    ]
   }

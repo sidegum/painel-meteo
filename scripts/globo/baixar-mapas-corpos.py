@@ -7,7 +7,7 @@ Para cada corpo do manifesto (scripts/globo/mapas-corpos.json):
 1. Usa o primeiro arquivo de 'arquivos' que existir no Commons. Sem nenhum, procura pelas frases de 'buscas' e fica com
    o melhor candidato: imagem na proporção 2:1 (projeção cilíndrica simples do corpo inteiro), com pelo menos 1.000 px
    de largura, de licença livre, sem ser mapa com nomes, geológico ou topográfico.
-2. Baixa até 4.096 px de largura e grava <id>-4096.jpg (se a fonte chega a 3.000 px), <id>-2048.jpg e <id>-1024.jpg.
+2. Baixa até 4.096 px de largura e grava <id>-2048.jpg (computador) e <id>-1024.jpg (celular).
 Saída: mapas.json (arquivo de origem, página, autor, licença e tamanhos de cada corpo; os candidatos vistos ficam
 registrados para conferência) e contato.jpg, uma folha com todos os mapas para conferir a olho.
 """
@@ -127,9 +127,7 @@ def main():
             print(c['id'], 'imagem ilegível', e)
             continue
         tamanhos = []
-        for lado in (4096, 2048, 1024):
-            if lado == 4096 and img.width < 3000:
-                continue
+        for lado in (2048, 1024):
             w = min(lado, img.width)
             img.resize((w, w // 2), Image.LANCZOS).save(saida / f"{c['id']}-{lado}.jpg", quality=88, optimize=True)
             tamanhos.append(lado)

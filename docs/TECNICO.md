@@ -813,6 +813,7 @@ Módulos, todos ES modules carregados só quando a aba abre:
 | `globo-carga.js` | tela de carregamento com barra de progresso real (1.12.0) |
 | `globo-naves.js` | modelos 3D de sondas, telescópios e satélites (1.14.0): peças em metros, uma malha por nave, material único |
 | `globo-planetas.js` | material dos planetas, das luas e dos anéis de Saturno (1.14.0): achatamento, terminador, sombras e borda suavizada |
+| `globo-estrela-perto.js` | estrelas vistas de perto (1.16.0): esfera com fotosfera, cor e raio medidos ou estimados |
 | `globo-pos.js` | pós-processamento da cena do universo: alvo de alta faixa dinâmica, halo de luz e curva de tom (1.12.3) |
 | `cosmologia.js` | cálculo puro (testado em `test/cosmologia.test.mjs`): ΛCDM plano do Planck 2018, distância comóvel, tempo da luz, idade e horizonte |
 | `globo-universo.js` | escala do universo (1.12.0): Volume Local, teia cósmica, aglomerados, superaglomerados, vazios, quasares, radiação cósmica de fundo |
@@ -1162,3 +1163,63 @@ No celular, a resolução no sistema solar não desce de 1,5.
 **Testado e não testado.** Testado no Chromium (renderização por software), em 1600×900 e no perfil do iPhone 13: os
 14 modelos de sondas em "Ir até", ISS e Tiangong tocadas, o filtro de satélites, Saturno de vários ângulos. Não
 testado em iPhone real: a fluidez com os modelos e com a resolução mínima de 1,5.
+
+### 12.w Zoom contínuo, mapas reais das luas e estrelas de perto (1.16.0)
+
+**Zoom contínuo do sistema solar até fora da Via Láctea.** Não há mais troca de cena à vista nem viagem automática.
+A cena do sistema solar (distâncias comprimidas, `DIST_ESCALA · UA^DIST_EXP`) vai agora até 60 parsecs do Sol
+(`DIST_MAX_SISTEMA = cenaDoKpc(PONTE.inicio)`): depois dos planetas a câmera passa entre as estrelas vizinhas, que
+estão na distância medida do catálogo. Dali em diante a cena é a da galáxia, em kpc reais. A passagem é a **ponte**
+(`PONTE` em `globo-escalas.js`: `inicio` 0,06 kpc, `fim` 1,2 kpc):
+
+- ao passar de `inicio`, `abrirGalaxia({ voar: false })` troca a cena sem mexer em latitude e longitude da câmera; a
+  distância vira kpc (`kpcDaCena` / `cenaDoKpc` em `globo.js` convertem entre as duas cenas);
+- entre `inicio` e `fim` as duas cenas são desenhadas no mesmo quadro: a do sistema solar direto na tela e a da
+  galáxia por cima, com peso `1 − G.ponte` (`pos.desenhar(cena, camera, peso)` mistura o resultado em vez de
+  substituir). `pesoDaPonte` (globo-galaxia.js) dá o peso pela distância ao Sol, em escala logarítmica;
+- a câmera da galáxia começa no referencial do sistema solar (eclíptica) e gira aos poucos para o da Galáxia
+  (`GX.giro`, de `fim` até 8 kpc; `giroDaEcliptica` calcula a rotação entre as duas cenas), então a direção do olhar
+  e o "para cima" não saltam;
+- o foco acompanha o zoom (`focoDoZoom`): Sol até 2 kpc, deslizando até o centro da Galáxia em 40 kpc. Assim, ao
+  afastar, a Via Láctea aparece inteira e centrada só com o gesto do usuário; aproximar faz o caminho de volta e,
+  abaixo de `inicio`, devolve à cena do sistema solar na mesma direção. Ir até um objeto desliga esse foco
+  automático (`GX.focoAuto`), que volta quando uma viagem termina no Sol ou no centro.
+
+Pela régua de escalas a viagem automática continua existindo, partindo da vista atual (sem o salto para perto do
+Sol). Entre as estrelas e as galáxias o mesmo gesto rende mais (`forcaDoZoom`: 1,5 além dos planetas, 1,8 na galáxia).
+De 1 parsec em diante o lugar se chama "Vizinhança do Sol" na régua. A mais de 40 unidades, o foco num planeta
+desliza para o Sol.
+
+**Mapas reais das luas e de Plutão.** `scripts/globo/baixar-mapas-corpos.py` (workflow `mapas-corpos.yml`, sob
+demanda) procura no Wikimedia Commons o mapa cilíndrico de cada corpo de `scripts/globo/mapas-corpos.json`, aceita
+só proporção 2:1 e licença livre, e grava `vendor/texturas/corpos/<id>-2048|1024.jpg`, `mapas.json` (arquivo,
+autor, licença) e `contato.jpg` (folha para revisão humana). Os arquivos aprovados ficam fixados em `arquivos`; a
+busca só vale para quem ainda não tem. No app, `texturaCorpoReal` (globo-texturas.js) carrega 2.048 px no computador
+e 1.024 no celular. Mapas parciais (a Voyager 2 só viu o sul das luas de Urano; a New Horizons não viu o sul de
+Plutão) têm a área nunca fotografada preenchida com a cor média do corpo, escurecida (`preencherSemImagem`), e o
+cartão diz isso. As luas passam a ter rotação síncrona (`orientarLua`): o meridiano 0° olha para o planeta. O centro
+de cada mapa (0° ou 180°) foi conferido por uma formação conhecida: Herschel em Mimas, o lado escuro de Jápeto,
+Xanadu em Titã e Sputnik em Plutão (180°); Pele em Io, Pwyll em Europa, Valhalla em Calisto e Stickney em Fobos
+(0°, `MAPA_CENTRO_ZERO`). Não conferido, por falta de referência segura: luas de Urano, Tritão e Caronte. Corpo sem mapa aprovado continua com a textura desenhada e o cartão avisa.
+Todos os mapas reais entram na barra de carregamento (`texturasReaisProntas`).
+
+**Estrelas de perto** (`globo-estrela-perto.js`). No modo 3D, as até quatro estrelas com maior tamanho na tela
+ganham uma esfera: cor pela temperatura, células de convecção (poucas e grandes nas gigantes), escurecimento de
+borda, manchas nas frias e um halo. O raio vem de medidas de interferometria para 28 estrelas conhecidas (`MEDIDAS`,
+por número Hipparcos) e, para as outras, da estimativa `fisicaEstelar`: temperatura por B−V (Ballesteros 2012),
+correção bolométrica (Reed 1998) e lei de Stefan-Boltzmann. Conferência da estimativa contra as medidas (raios
+solares, estimado/medido): Sirius 1,85/1,71; Vega 2,70/2,5; Procyon 1,99/2,05; Altair 1,79/1,8; Arcturus 29,8/25,4;
+Pollux 10,3/9,06; Aldebaran 60/45; Rigel 83/79; Betelgeuse 510/764; Antares 832/680; Deneb 99/203; Spica 12,1/7,5.
+Erro típico de 10 a 30% nas anãs e gigantes; maior nas supergigantes (distância incerta) e nas estrelas muito
+quentes. O desenho da superfície é ilustração: nenhuma estrela além do Sol tem mapa. O raio na cena passa pela
+mesma compressão das distâncias (o Sol tem 0,11 unidade). "Ir até" e a navegação livre param fora do disco.
+
+**Conferência com fontes oficiais.** Raios médios e polos de rotação de `PLANETA_FISICO` e raios de `LUAS`
+(globo-corpos.js) conferidos com o relatório IAU WGCCRE 2015 e as fichas da NASA (NSSDC Planetary Fact Sheets):
+iguais na precisão mostrada. Achatamentos de `globo-planetas.js` iguais aos das fichas da NASA.
+
+**Testado e não testado.** Testado no Chromium (renderização por software), 1600×900 e perfil do iPhone 13: zoom
+pela roda e por pinça do sistema solar ao Grupo Local e de volta; luas com mapa (Mimas, Encélado, Dione, Jápeto,
+Titânia, Caronte) e Plutão; Sirius, Betelgeuse, Arcturus e Rigel de perto. Não testado em aparelho real: a fluidez
+da ponte (duas cenas no mesmo quadro) e o custo das esferas no iPhone.
+

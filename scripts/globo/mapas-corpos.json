@@ -4,7 +4,9 @@
   {
    "id": "io",
    "nome": "Io",
-   "arquivos": [],
+   "arquivos": [
+    "Io modest scale map Io SSI-only color SIMP0 med.cub.jpg"
+   ],
    "buscas": [
     "Io global map Galileo Voyager mosaic",
     "Io cylindrical map USGS",
@@ -17,7 +19,9 @@
   {
    "id": "europa",
    "nome": "Europa",
-   "arquivos": [],
+   "arquivos": [
+    "Europa Voyager GalileoSSI global mosaic.jpg"
+   ],
    "buscas": [
     "Europa moon global map mosaic",
     "Europa cylindrical map USGS Galileo",
@@ -30,7 +34,9 @@
   {
    "id": "ganimedes",
    "nome": "Ganymede",
-   "arquivos": [],
+   "arquivos": [
+    "Ganymede map by Askaniy.png"
+   ],
    "buscas": [
     "Ganymede global map mosaic",
     "Ganymede cylindrical map USGS",
@@ -42,7 +48,9 @@
   {
    "id": "calisto",
    "nome": "Callisto",
-   "arquivos": [],
+   "arquivos": [
+    "Callisto map by Askaniy.png"
+   ],
    "buscas": [
     "Callisto global map mosaic",
     "Callisto cylindrical map USGS",
@@ -109,7 +117,9 @@
   {
    "id": "tita",
    "nome": "Titan",
-   "arquivos": [],
+   "arquivos": [
+    "Titan map April 2011 full.png"
+   ],
    "buscas": [
     "Titan global map Cassini ISS mosaic",
     "Titan surface map cylindrical",
@@ -133,7 +143,9 @@
   {
    "id": "miranda",
    "nome": "Miranda",
-   "arquivos": [],
+   "arquivos": [
+    "Miranda map JPL USGS.jpg"
+   ],
    "buscas": [
     "Miranda moon map Voyager 2 mosaic",
     "Miranda cylindrical map",
@@ -144,7 +156,9 @@
   {
    "id": "ariel",
    "nome": "Ariel",
-   "arquivos": [],
+   "arquivos": [
+    "Ariel map JPL USGS.jpg"
+   ],
    "buscas": [
     "Ariel moon map Voyager 2 mosaic",
     "Ariel cylindrical map",
@@ -188,7 +202,9 @@
   {
    "id": "tritao",
    "nome": "Triton",
-   "arquivos": [],
+   "arquivos": [
+    "Triton Map.jpg"
+   ],
    "buscas": [
     "Triton global map Voyager 2 mosaic",
     "Triton cylindrical map",
@@ -222,7 +238,9 @@
   {
    "id": "fobos",
    "nome": "Phobos",
-   "arquivos": [],
+   "arquivos": [
+    "Phobos Viking Mosaic DLRcontrol 7200.jpg"
+   ],
    "buscas": [
     "Phobos global map mosaic",
     "Phobos cylindrical map",
@@ -234,37 +252,14 @@
   {
    "id": "deimos",
    "nome": "Deimos",
-   "arquivos": [],
+   "arquivos": [
+    "Deimos color map.jpg"
+   ],
    "buscas": [
     "Deimos global map mosaic",
     "Deimos cylindrical map",
     "Deimos map",
     "Deimos texture"
-   ]
-  },
-  {
-   "id": "ceres",
-   "nome": "Ceres",
-   "arquivos": [],
-   "buscas": [
-    "Ceres global map Dawn mosaic",
-    "Ceres cylindrical map color",
-    "Ceres map Dawn",
-    "Ceres global mosaic PIA",
-    "Ceres equirectangular",
-    "Ceres LAMO global"
-   ]
-  },
-  {
-   "id": "vesta",
-   "nome": "Vesta",
-   "arquivos": [],
-   "buscas": [
-    "Vesta global map Dawn mosaic",
-    "Vesta cylindrical map",
-    "Vesta map Dawn",
-    "Vesta global mosaic PIA",
-    "Vesta equirectangular"
    ]
   }
  ]

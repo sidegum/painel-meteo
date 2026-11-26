@@ -1,16 +1,9 @@
 name: Mapas reais de luas e corpos pequenos
 
 # Baixa do Wikimedia Commons os mapas globais das luas e dos corpos pequenos listados em scripts/globo/mapas-corpos.json
-# (scripts/globo/baixar-mapas-corpos.py) e grava em vendor/texturas/corpos no branch em que rodou. Sob demanda, ou ao
-# mudar a lista ou o script no branch do Globo (nunca em branches de outros trabalhos).
+# (scripts/globo/baixar-mapas-corpos.py) e grava em vendor/texturas/corpos no branch em que rodou. Só sob demanda.
 on:
   workflow_dispatch:
-  push:
-    branches: [claude/project-thread-n94x6z]
-    paths:
-      - scripts/globo/mapas-corpos.json
-      - scripts/globo/baixar-mapas-corpos.py
-      - .github/workflows/mapas-corpos.yml
 
 permissions:
   contents: write
