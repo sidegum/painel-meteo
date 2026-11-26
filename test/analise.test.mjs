@@ -279,3 +279,15 @@ test('sinaisGranizo: aviso do INMET que cita granizo, código do UKMO e ambiente
   assert.equal(sinaisGranizo({ cape: 1500, congelamento: 3800, nivelTemporal: 'alto' }), null);
   assert.equal(sinaisGranizo({ cape: null, congelamento: null, nivelTemporal: 'alto' }), null);
 });
+
+test('graficoInicial: Temperatura sem chuva prevista, Chuva a partir do limite ou com chuva agora', async () => {
+  const { graficoInicial, REGRAS } = await import('../js/analise.js');
+  const limite = REGRAS.ocorrencia.poucoProvavel;
+  assert.ok(limite >= 0.10 && limite <= 0.20); // faixa pedida: 10 a 20%
+  assert.equal(graficoInicial(0), 'temp');
+  assert.equal(graficoInicial(limite - 0.01), 'temp');
+  assert.equal(graficoInicial(limite), 'chance');
+  assert.equal(graficoInicial(0.6), 'chance');
+  assert.equal(graficoInicial(null), 'temp'); // sem dado de chance: não abre num gráfico vazio
+  assert.equal(graficoInicial(0, true), 'chance'); // chovendo agora ou chuva chegando pelo radar
+});

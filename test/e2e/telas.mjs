@@ -79,6 +79,26 @@ for (const tela of TELAS) {
       if (larg > 1) problemas.push(`${tela.nome}/${aba}: rolagem horizontal de ${larg} px`);
       if (capturas) await pag.screenshot({ path: join(capturas, `${tela.nome}-${tema}-${aba}.png`), fullPage: true });
     }
+    // Gráfico inicial de cada dia: Chuva a partir do limite de chance, senão Temperatura (mesma chance do resumo).
+    // A escolha à mão vale só para o dia e o local em que foi feita.
+    const modos = await pag.evaluate(async () => {
+      const { graficoInicial } = await import('./js/analise.js');
+      const ler = (id) => { const r = document.querySelector(id); const b = [...r.querySelectorAll('.troca-modo button')];
+        const pct = r.querySelector('.bloco-t.chuva b').textContent; const i = b.findIndex((x) => x.getAttribute('aria-pressed') === 'true');
+        return { i, esperado: pct === 'agora' ? 0 : ['chance', 'temp'].indexOf(graficoInicial(parseInt(pct, 10) / 100)), pct }; };
+      const antes = ['#hoje-primeira', '#amanha-primeira'].map(ler);
+      document.querySelectorAll('#amanha-primeira .troca-modo button')[2].click(); // Céu, à mão
+      window.__painel.renderTudo();
+      const mantida = ler('#amanha-primeira').i === 2 && ler('#hoje-primeira').i === antes[0].i;
+      const est = window.__painel.estado, local = est.local;
+      est.local = { ...local, lat: local.lat + 1, lon: local.lon + 1 }; window.__painel.renderTudo();
+      const voltou = ler('#amanha-primeira').i === antes[1].i;
+      est.local = local; est.modoGrafico = {}; window.__painel.renderTudo();
+      return { antes, mantida, voltou };
+    });
+    for (const m of modos.antes) if (m.i !== m.esperado) problemas.push(`${tela.nome}: gráfico inicial errado para chuva ${m.pct}`);
+    if (!modos.mantida) problemas.push(`${tela.nome}: a escolha manual do gráfico não se manteve ao atualizar (ou vazou para outro dia)`);
+    if (!modos.voltou) problemas.push(`${tela.nome}: a escolha manual do gráfico não voltou ao padrão ao trocar de local`);
     // Cenário de tempestade: núcleo de 52 dBZ a 60 km a oeste vindo para leste a 50 km/h e outro de 58 dBZ ao sul.
     await pag.evaluate(async () => {
       const { celulasTempestade } = await import('./js/analise.js');
@@ -100,6 +120,8 @@ for (const tela of TELAS) {
     await pag.waitForTimeout(1200);
     const textoTemp = await pag.evaluate(() => document.querySelector('main').innerText);
     if (/\b(null|undefined|NaN)\b/.test(textoTemp)) problemas.push(`${tela.nome}/tempestade: aparece null, undefined ou NaN`);
+    // Com chuva chegando pelo radar, o gráfico de Hoje abre em Chuva mesmo com chance baixa no dia.
+    if (!await pag.evaluate(() => document.querySelector('#hoje-primeira .troca-modo button').getAttribute('aria-pressed') === 'true')) problemas.push(`${tela.nome}/tempestade: o gráfico de Hoje não abriu em Chuva com chuva chegando`);
     // O radar de tempestade fica colado logo acima do mapa e diz o que cada núcleo faz em relação ao local.
     const radar = await pag.evaluate(() => { const r = document.querySelector('#hoje-detalhes .radar-t'); return r ? { antesDoMapa: !!r.nextElementSibling?.querySelector('.mapa'), texto: r.innerText } : null; });
     if (!radar) problemas.push(`${tela.nome}/tempestade: seção do radar de tempestade ausente`);
