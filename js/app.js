@@ -3,7 +3,7 @@ import { CONFIG } from './config.js';
 import {
   REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
   indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, limitesCoerentes, horasProvaveisDeChuva, fraseDoDia,
-  horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, periodoDoDia, classeRajada,
+  horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, graficoInicial, periodoDoDia, classeRajada,
   condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
   calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
 } from './analise.js';
@@ -147,7 +147,7 @@ async function permissaoGps() {
 /**
  * GPS automático (abrir o app, voltar a ele, rodada de 10 min): só roda quando a permissão já está concedida.
  * Sem ela, cada chamada abre o pedido de novo (no iPhone, com o app na tela inicial, a cada abertura); então vale
- * o último local salvo, e a posição atual fica para o botão "Usar minha localização atual".
+ * o último local salvo, e a posição atual fica para a linha "Sua localização atual" da janela de locais.
  * Na primeiríssima abertura, sem nenhum local salvo, o pedido aparece uma vez.
  */
 async function localizarSozinho() {
@@ -210,8 +210,14 @@ async function trocarLocal(l) {
   atualizar({ forcar: true });
 }
 
-/** Aba "Aqui": mostra na hora o último ponto do GPS e confirma a posição; se ela mudou, troca os dados de novo. */
-async function usarLocalizacaoAtual() {
+/**
+ * Volta para a posição do aparelho: mostra na hora o último ponto do GPS e confirma a posição; se ela mudou, troca
+ * os dados de novo. A aba "Aqui" (pedir = false) reaproveita o ponto já obtido e só consulta o GPS com a permissão
+ * concedida, para o pedido do sistema não reaparecer a cada troca de aba; a linha "Sua localização atual" da janela de
+ * locais (pedir = true) consulta o GPS sempre.
+ * @param {{pedir?: boolean}} [op]
+ */
+async function usarLocalizacaoAtual({ pedir = false } = {}) {
   marcarEscolha(false);
   const ultimo = prefs.ler('ultimoGps', null);
   if (ultimo && Number.isFinite(ultimo.lat) && Number.isFinite(ultimo.lon)) {
@@ -220,7 +226,7 @@ async function usarLocalizacaoAtual() {
   }
   const antes = estado.local ? chaveLocal(estado.local) : null;
   const pedido = ultimo ? atualizar({ forcar: true }) : Promise.resolve();
-  await localizarGps(false);
+  await (pedir || !ultimo ? localizarGps(false) : localizarSozinho());
   await pedido;
   if (chaveLocal(estado.local) !== antes || !ultimo) { await carregarInstantaneo(); await atualizar({ forcar: true }); }
 }
@@ -1002,10 +1008,12 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
   const ini = p.horas[(desdeAgora && a.idxAgora.length ? a.idxAgora : a.idxTodo)[0]];
   const fim = p.horas[a.idxTodo[a.idxTodo.length - 1]] + 3600000;
   const caixa = el('div', { class: 'grafico-primeira' });
-  // Gráfico inicial: chuva quando há chance de chuva no dia (ou chuva agora/chegando); sem chuva, a temperatura,
-  // para não abrir num gráfico vazio. A escolha da pessoa vale até fechar o app (estado.modoGrafico).
+  // Gráfico inicial pela regra graficoInicial (Chuva a partir de REGRAS.ocorrencia.poucoProvavel, senão Temperatura).
+  // A escolha feita à mão vale até fechar o app, só para este dia e este local (chave local|data): ao trocar de
+  // cidade ou virar o dia, o gráfico volta ao padrão da regra.
   estado.modoGrafico ||= {};
-  let modo = estado.modoGrafico[diaIndice] || (temChuva || chovendo || chegando ? 'chance' : 'temp');
+  const chaveModo = `${estado.local ? chaveLocal(estado.local) : ''}|${data}`;
+  let modo = estado.modoGrafico[chaveModo] || graficoInicial(av.prob, chovendo || !!chegando);
   const botoes = el('div', { class: 'troca', role: 'group', 'aria-label': 'Gráfico' });
   const iniDia = p.horas[a.idxTodo[0]];
   const desenharModo = () => {
@@ -1013,7 +1021,7 @@ function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
     const todas = desdeAgora && prefs.ler('horasTodas', false);
     const iniUsado = todas ? iniDia : ini;
     botoes.replaceChildren(el('span', { class: 'troca-modo' }, ...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
-      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; estado.modoGrafico[diaIndice] = k; desenharModo(); } }, nome))),
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; estado.modoGrafico[chaveModo] = k; desenharModo(); } }, nome))),
     desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
       el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : '');
     caixa.replaceChildren();
