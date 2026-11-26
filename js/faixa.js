@@ -175,7 +175,10 @@ export function criarFaixa(container, { prev, modelos, iniMs, fimMs, id, chance 
     const k = d.ms.findIndex((t) => t === ms);
     if (k >= 0) selecionar(k, false);
   });
-  const ro = new ResizeObserver(() => desenhar());
+  // Redesenha só quando a largura muda de fato: o ResizeObserver dispara uma vez ao começar a observar, e sem
+  // essa conferência cada faixa era desenhada duas vezes.
+  let larguraDesenhada = canvas.clientWidth;
+  const ro = new ResizeObserver(() => { const w = canvas.clientWidth; if (w && w !== larguraDesenhada) { larguraDesenhada = w; desenhar(); } });
   ro.observe(canvas);
   desenhar();
   return { desenhar, destruir() { off(); ro.disconnect(); } };

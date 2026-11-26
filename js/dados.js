@@ -512,7 +512,8 @@ async function gradeRadar(host, path, lat, lon) {
  * (deslocamentoRadar sobre a intensidade). As duas velocidades precisam concordar dentro de
  * REGRAS.radar.concordanciaKmh; a de 60 min é extrapolada até o local (chegadaChuva). Coordenada arredondada.
  * secoMin: minutos garantidos sem chuva no local (secoPeloRadar), mesmo quando o movimento não pode ser medido.
- * tempestades: núcleos de chuva forte e de tempestade (celulasTempestade) com o mesmo movimento; mapa: a grade
+ * tempestades: núcleos de chuva forte e de tempestade (celulasTempestade) com o mesmo movimento e a evolução
+ * em relação ao quadro de 30 min antes; mapa: a grade
  * de refletividade usada, para o radar desenhado no bloco "Radar de tempestade"; movimento: velocidade e rumo dos ecos.
  * @returns {Promise<{ms:number, minutos:number|null, chegaMs:number|null, kmh:number|null, vemDe:string|null, secoMin:number|null,
  *   movimento:{kmh:number, paraGraus:number}|null, tempestades:object[], mapa:object}|null>}
@@ -527,9 +528,10 @@ export async function buscarChegadaChuva(lat, lon) {
   const la = arredondaCoord(lat), lo = arredondaCoord(lon);
   const g = await gradeRadar(r.host, ult.path, la, lo);
   // Movimento dos ecos (células por REGRAS.radar.intervaloMin), só quando as medidas de 30 e 60 min concordam.
-  let v60 = null;
+  let v60 = null, g30 = null;
   if (q30 && q60) {
-    const [g60, g30] = await Promise.all([q60, q30].map((q) => gradeRadar(r.host, q.path, la, lo)));
+    let g60;
+    [g60, g30] = await Promise.all([q60, q30].map((q) => gradeRadar(r.host, q.path, la, lo)));
     // velocidade em células por REGRAS.radar.intervaloMin, normalizada pelo intervalo real entre os quadros
     const vel = (ga, q) => {
       const d = deslocamentoRadar(ga.intensidade, g.intensidade, g.n);
@@ -544,7 +546,8 @@ export async function buscarChegadaChuva(lat, lon) {
   // Radar de tempestade: núcleos de refletividade alta na grade de 2 x 2 pixels, com o mesmo movimento medido.
   const fator = g.nDbz / g.n;
   const tempestades = celulasTempestade({ dbz: g.dbz, n: g.nDbz, px: g.px * fator, py: g.py * fator, kmCelula: g.kmCelula / fator,
-    vel: v60 ? { lesteKmh: v60.dx * g.kmCelula * (60 / R.intervaloMin), sulKmh: v60.dy * g.kmCelula * (60 / R.intervaloMin) } : null });
+    vel: v60 ? { lesteKmh: v60.dx * g.kmCelula * (60 / R.intervaloMin), sulKmh: v60.dy * g.kmCelula * (60 / R.intervaloMin) } : null,
+    anterior: g30 ? { dbz: g30.dbz, min: (ult.ms - q30.ms) / 60000 } : null });
   let minutos = v60 ? chegadaChuva(g.eco, g.n, g.px, g.py, v60) : null;
   // um núcleo forte chegando é chuva chegando: a chegada da chuva nunca fica depois da do núcleo
   const nucleo = tempestades.find((c) => c.chegaMin !== null && c.chegaMin <= R.horizonteMin);

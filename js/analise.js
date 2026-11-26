@@ -104,6 +104,9 @@ export const REGRAS = {
     raioKm: 250,               // alcance do bloco (o mosaico de radar cobre pelo menos isso em volta do local)
     localKm: 10,               // núcleo a até 10 km = sobre o local
     horizonteMin: 180,         // chegada estimada só nas próximas 3 h (extrapolação perde valor depois disso)
+    pertoKm: 40,               // passa a até 40 km sem atingir o local = "aproximando" (perto o bastante para raios e rajadas)
+    evolucaoDbz: 5,            // diferença de refletividade em 30 min para dizer que o núcleo intensifica ou enfraquece
+    evolucaoBuscaKm: 15,       // folga em volta da posição anterior do núcleo (erro do movimento medido)
     areaMinKm2: 30,            // núcleo menor que isso é ignorado (ruído), salvo se passar de 50 dBZ
     idadeMaxMin: 30,           // quadro de radar mais velho que isso não vale como "agora"
   },
@@ -1410,22 +1413,39 @@ export function classeNucleo(dbz) {
 }
 
 /**
- * Núcleos de chuva forte e de tempestade no radar em volta do local, com distância, direção e chegada estimada.
+ * Núcleos de chuva forte e de tempestade no radar em volta do local, com posição, movimento, tendência e chegada.
  * Agrupa as células com refletividade de pelo menos REGRAS.tempestade.dbz.forte em núcleos (vizinhança de 8),
  * descarta os menores que areaMinKm2 (salvo acima de 50 dBZ) e os além de raioKm.
- * Chegada: cada célula do núcleo segue a velocidade medida dos ecos (a mesma da "chuva chegando"); a chegada é o
- * primeiro instante em que alguma delas passa a até localKm do local, dentro de horizonteMin. Sem velocidade
- * medida, não há chegada nem tendência, só posição.
- * @param {{dbz:ArrayLike<number>, n:number, px:number, py:number, kmCelula:number, vel?:{lesteKmh:number, sulKmh:number}|null}} g
+ *
+ * Movimento: cada célula do núcleo segue a velocidade medida dos ecos (a mesma da "chuva chegando").
+ * - chegaMin: primeiro instante em que alguma célula passa a até localKm do local, dentro de horizonteMin;
+ * - passaKm e passaMin: a menor distância a que o núcleo passa do local e quando, dentro de horizonteMin
+ *   (para dizer "vindo nesta direção, passa a 30 km" quando ele não chega a atingir o local);
+ * - tendencia: 'sobre' (a até localKm), 'chegando' (tem chegaMin), 'aproximando' (não atinge, mas passa a até
+ *   pertoKm e mais perto do que está agora), 'afastando' ou 'passando' (ao largo).
+ * Sem velocidade medida, não há chegada nem tendência, só posição.
+ *
+ * Evolução: com a grade de `anterior` (quadro de `anterior.min` minutos antes), compara a refletividade máxima do
+ * núcleo com a máxima em volta de onde ele estava (posição de agora recuada pelo movimento medido; sem movimento,
+ * a mesma posição): 'nova' (não havia chuva forte ali), 'intensificando', 'enfraquecendo' (diferença de pelo
+ * menos evolucaoDbz) ou 'estavel'. Sem `anterior`, null.
+ * @param {{dbz:ArrayLike<number>, n:number, px:number, py:number, kmCelula:number,
+ *   vel?:{lesteKmh:number, sulKmh:number}|null, anterior?:{dbz:ArrayLike<number>, min:number}|null}} g
  *   dbz: refletividade máxima por célula (n x n, linha 0 ao norte; -128 sem eco); px/py: célula do local;
  *   vel: movimento dos ecos em km/h (leste e sul positivos) ou null
- * @returns {Array<{dbz:number, classe:string, distanciaKm:number, rumo:number, areaKm2:number, chegaMin:number|null,
- *   tendencia:'chegando'|'afastando'|'passando'|'sobre'|null}>} do mais relevante (chegando antes; depois o mais perto)
+ * @returns {Array<{dbz:number, classe:string, distanciaKm:number, rumo:number, areaKm2:number, leste:number, sul:number,
+ *   chegaMin:number|null, passaKm:number|null, passaMin:number|null,
+ *   tendencia:'chegando'|'aproximando'|'afastando'|'passando'|'sobre'|null,
+ *   evolucao:'nova'|'intensificando'|'enfraquecendo'|'estavel'|null}>}
+ *   do mais relevante ao menos: sobre o local, chegando (o que chega antes), aproximando, e então o mais perto;
+ *   leste/sul: centro do núcleo em km a partir do local
  */
-export function celulasTempestade({ dbz, n, px, py, kmCelula, vel = null }) {
+export function celulasTempestade({ dbz, n, px, py, kmCelula, vel = null, anterior = null }) {
   const T = REGRAS.tempestade, min = T.dbz.forte;
   const visto = new Uint8Array(n * n), saida = [];
   const vKmh = vel ? Math.hypot(vel.lesteKmh, vel.sulKmh) : 0;
+  const movendo = vKmh > 1;
+  const ux = movendo ? vel.lesteKmh / vKmh : 0, uy = movendo ? vel.sulKmh / vKmh : 0;
   for (let k0 = 0; k0 < n * n; k0++) {
     if (visto[k0] || !(dbz[k0] >= min)) continue;
     const pilha = [k0], celulas = [];
@@ -1439,23 +1459,24 @@ export function celulasTempestade({ dbz, n, px, py, kmCelula, vel = null }) {
         visto[kk] = 1; pilha.push(kk);
       }
     }
-    let maxDbz = -Infinity, dMin = Infinity, cx = 0, cy = 0, peso = 0, chega = null;
+    let maxDbz = -Infinity, dMin = Infinity, cx = 0, cy = 0, peso = 0, chega = null, passaKm = null, passaMin = null;
     for (const k of celulas) {
       const x = k % n, y = (k - x) / n, v = dbz[k];
       maxDbz = Math.max(maxDbz, v);
       // posição em km relativa ao local (leste e sul positivos)
-      const ex = (x - px) * kmCelula, sy = (y - py) * kmCelula;
-      dMin = Math.min(dMin, Math.hypot(ex, sy));
+      const ex = (x - px) * kmCelula, sy = (y - py) * kmCelula, d = Math.hypot(ex, sy);
+      dMin = Math.min(dMin, d);
       const w = 10 ** (v / 10); cx += ex * w; cy += sy * w; peso += w; // centro pela refletividade (Z linear)
-      if (vKmh > 1) {
-        // aproximação máxima da célula ao local seguindo vel: componente ao longo do movimento e distância lateral
-        const ux = vel.lesteKmh / vKmh, uy = vel.sulKmh / vKmh;
-        const ao = -(ex * ux + sy * uy), lado = Math.abs(ex * uy - sy * ux);
-        if (Math.hypot(ex, sy) <= T.localKm) chega = 0;
-        else if (ao > 0 && lado <= T.localKm) {
-          const t = ((ao - Math.sqrt(T.localKm ** 2 - lado ** 2)) / vKmh) * 60;
-          if (t <= T.horizonteMin && (chega === null || t < chega)) chega = t;
-        }
+      if (d <= T.localKm) chega = 0;
+      if (!movendo) continue;
+      // trajetória da célula: `ao` = km que faltam até o ponto mais próximo do local; `lado` = distância nesse ponto
+      const ao = -(ex * ux + sy * uy), lado = Math.abs(ex * uy - sy * ux);
+      if (ao <= 0) continue; // já passou do ponto mais próximo: só se afasta
+      const tPerto = (ao / vKmh) * 60;
+      if (tPerto <= T.horizonteMin && (passaKm === null || lado < passaKm)) { passaKm = lado; passaMin = tPerto; }
+      if (chega !== 0 && lado <= T.localKm) {
+        const t = ((ao - Math.sqrt(T.localKm ** 2 - lado ** 2)) / vKmh) * 60;
+        if (t <= T.horizonteMin && (chega === null || t < chega)) chega = t;
       }
     }
     const areaKm2 = celulas.length * kmCelula ** 2;
@@ -1464,14 +1485,33 @@ export function celulasTempestade({ dbz, n, px, py, kmCelula, vel = null }) {
     const rumo = (Math.atan2(cx, -cy) * 180 / Math.PI + 360) % 360; // de onde o local vê o núcleo (0 = norte)
     let tendencia = null;
     if (dMin <= T.localKm) tendencia = 'sobre';
-    else if (vKmh > 1) {
-      const aprox = -(cx * vel.lesteKmh + cy * vel.sulKmh) / (Math.hypot(cx, cy) * vKmh); // cosseno entre movimento e direção ao local
-      tendencia = chega !== null ? 'chegando' : aprox < -0.3 ? 'afastando' : 'passando';
+    else if (movendo) {
+      const aprox = -(cx * ux + cy * uy) / Math.hypot(cx, cy); // cosseno entre o movimento e a direção ao local
+      tendencia = chega !== null ? 'chegando'
+        : passaKm !== null && passaKm <= T.pertoKm && passaKm < dMin - T.localKm ? 'aproximando'
+          : aprox < -0.3 ? 'afastando' : 'passando';
     }
-    saida.push({ dbz: maxDbz, classe: classeNucleo(maxDbz), distanciaKm: dMin, rumo, areaKm2,
-      chegaMin: chega === null ? null : Math.round(chega), tendencia });
+    // Evolução: máximo do quadro anterior em volta de onde o núcleo estava.
+    let evolucao = null;
+    if (anterior?.dbz && anterior.min > 0) {
+      const h = anterior.min / 60;
+      const ax = px + (cx - (movendo ? vel.lesteKmh * h : 0)) / kmCelula, ay = py + (cy - (movendo ? vel.sulKmh * h : 0)) / kmCelula;
+      const r = Math.ceil((Math.sqrt(areaKm2 / Math.PI) + T.evolucaoBuscaKm) / kmCelula);
+      let antes = -Infinity, dentro = 0;
+      for (let y = Math.round(ay) - r; y <= Math.round(ay) + r; y++) for (let x = Math.round(ax) - r; x <= Math.round(ax) + r; x++) {
+        if (x < 0 || y < 0 || x >= n || y >= n) continue;
+        dentro++;
+        if (anterior.dbz[y * n + x] > antes) antes = anterior.dbz[y * n + x];
+      }
+      if (dentro) evolucao = antes < min ? 'nova' : maxDbz - antes >= T.evolucaoDbz ? 'intensificando' : antes - maxDbz >= T.evolucaoDbz ? 'enfraquecendo' : 'estavel';
+    }
+    const semChegada = chega === null && tendencia !== 'sobre';
+    saida.push({ dbz: maxDbz, classe: classeNucleo(maxDbz), distanciaKm: dMin, rumo, areaKm2, leste: cx, sul: cy,
+      chegaMin: chega === null ? null : Math.round(chega),
+      passaKm: semChegada && passaKm !== null ? passaKm : null, passaMin: semChegada && passaMin !== null ? Math.round(passaMin) : null,
+      tendencia, evolucao });
   }
-  const ordem = (c) => (c.tendencia === 'sobre' ? 0 : c.chegaMin !== null ? 1 : 2);
+  const ordem = (c) => (c.tendencia === 'sobre' ? 0 : c.chegaMin !== null ? 1 : c.tendencia === 'aproximando' ? 2 : 3);
   return saida.sort((a, b) => ordem(a) - ordem(b) || (a.chegaMin ?? 0) - (b.chegaMin ?? 0) || a.distanciaKm - b.distanciaKm);
 }
 
