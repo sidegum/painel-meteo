@@ -1,0 +1,10818 @@
+{
+ "versao": 1,
+ "geradoEm": "2026-11-27T19:41:50.511Z",
+ "estacao": {
+  "id": "A884",
+  "nome": "Campo Bom",
+  "lat": -29.67416666,
+  "lon": -51.06416666
+ },
+ "periodo": {
+  "ini": "2021-03-01",
+  "fim": "2026-10-31",
+  "diasComMedicao": 2071
+ },
+ "fontes": {
+  "medicoes": "INMET, BDMEP (portal.inmet.gov.br/dadoshistoricos), estação automática A884 Campo Bom",
+  "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
+ },
+ "metodo": {
+  "validacao": "leave-one-month-out",
+  "encolhimentoDias": 20,
+  "ganhoMinimo": 0.02,
+  "limitesFatorVento": [
+   0.5,
+   1.6
+  ],
+  "documento": "docs/CALIBRACAO.md"
+ },
+ "cobertura": {
+  "ecmwf_ifs": {
+   "ini": "2022-01-01",
+   "fim": "2026-11-26",
+   "dias": 1791
+  },
+  "ecmwf_aifs025_single": {
+   "ini": "2025-02-18",
+   "fim": "2026-11-26",
+   "dias": 647
+  },
+  "ukmo_global_deterministic_10km": {
+   "ini": "2022-03-01",
+   "fim": "2026-11-26",
+   "dias": 1732
+  },
+  "ecmwf_ifs025": {
+   "ini": "2024-02-04",
+   "fim": "2026-11-26",
+   "dias": 1027
+  },
+  "ncep_gfs_seamless": {
+   "ini": "2021-03-24",
+   "fim": "2026-11-26",
+   "dias": 2074
+  },
+  "dwd_icon_global": {
+   "ini": "2022-11-17",
+   "fim": "2026-11-26",
+   "dias": 1471
+  }
+ },
+ "pesos": {
+  "ecmwf_ifs": 1.016,
+  "ecmwf_aifs025_single": 1.097,
+  "ukmo_global_deterministic_10km": 0.923
+ },
+ "maeComum": {
+  "ecmwf_ifs": {
+   "chuva": 4.31,
+   "tmax": 2.16,
+   "rajada": null
+  },
+  "ecmwf_aifs025_single": {
+   "chuva": 3.37,
+   "tmax": 2.41,
+   "rajada": null
+  },
+  "ukmo_global_deterministic_10km": {
+   "chuva": 4.79,
+   "tmax": 2.36,
+   "rajada": 10.82
+  }
+ },
+ "diasComuns": 621,
+ "resumo": {
+  "temperaturaEcmwf": {
+   "tmax": {
+    "1": {
+     "n": 364,
+     "maeAntes": 1.93,
+     "maeDepois": 1.32,
+     "usar": true
+    },
+    "2": {
+     "n": 367,
+     "maeAntes": 2,
+     "maeDepois": 1.36,
+     "usar": true
+    },
+    "3": {
+     "n": 362,
+     "maeAntes": 2.12,
+     "maeDepois": 1.59,
+     "usar": true
+    },
+    "4": {
+     "n": 381,
+     "maeAntes": 2.3,
+     "maeDepois": 1.68,
+     "usar": true
+    },
+    "5": {
+     "n": 360,
+     "maeAntes": 2.47,
+     "maeDepois": 1.92,
+     "usar": true
+    }
+   },
+   "tmin": {
+    "1": {
+     "n": 364,
+     "maeAntes": 0.93,
+     "maeDepois": 0.91,
+     "usar": true
+    },
+    "2": {
+     "n": 367,
+     "maeAntes": 1.05,
+     "maeDepois": 1.03,
+     "usar": true
+    },
+    "3": {
+     "n": 362,
+     "maeAntes": 1.04,
+     "maeDepois": 1.04,
+     "usar": false
+    },
+    "4": {
+     "n": 381,
+     "maeAntes": 1.13,
+     "maeDepois": 1.13,
+     "usar": false
+    },
+    "5": {
+     "n": 360,
+     "maeAntes": 1.36,
+     "maeDepois": 1.36,
+     "usar": false
+    }
+   }
+  },
+  "rajadaMediana": {
+   "1": {
+    "n": 518,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
+    "maeAntes": 23.69,
+    "maeDepois": 16.32,
+    "viesAntes": 21.55,
+    "viesDepois": 11.45
+   },
+   "2": {
+    "n": 525,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
+    "maeAntes": 10.91,
+    "maeDepois": 6.39,
+    "viesAntes": 8.42,
+    "viesDepois": 0.85
+   },
+   "3": {
+    "n": 510,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
+    "maeAntes": 25.07,
+    "maeDepois": 18.49,
+    "viesAntes": 22.14,
+    "viesDepois": 12.13
+   },
+   "4": {
+    "n": 505,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
+    "maeAntes": 10.72,
+    "maeDepois": 6.66,
+    "viesAntes": 7.72,
+    "viesDepois": 0.24
+   },
+   "5": {
+    "n": 457,
+    "modelos": [
+     "ukmo_global_deterministic_10km"
+    ],
+    "maeAntes": 23.36,
+    "maeDepois": 17.3,
+    "viesAntes": 20.02,
+    "viesDepois": 10.45
+   }
+  }
+ },
+ "placar": {
+  "antecedencia": 1,
+  "limites": {
+   "tempC": 2,
+   "rajadaKmh": 10,
+   "dias": 30
+  },
+  "fonte": "INMET A884",
+  "ultimos": {
+   "ini": "2026-10-01",
+   "fim": "2026-10-30",
+   "dias": 30,
+   "chuva": {
+    "n": 30,
+    "acertos": 23,
+    "pct": 0.767
+   },
+   "tmax": {
+    "n": 30,
+    "acertos": 22,
+    "pct": 0.733,
+    "erroMedio": 1.71
+   },
+   "tmin": {
+    "n": 30,
+    "acertos": 30,
+    "pct": 1,
+    "erroMedio": 0.78
+   },
+   "rajada": {
+    "n": 30,
+    "acertos": 26,
+    "pct": 0.867,
+    "erroMedio": 6.55
+   }
+  },
+  "completo": {
+   "ini": "2025-10-16",
+   "fim": "2026-10-30",
+   "dias": 318,
+   "chuva": {
+    "n": 318,
+    "acertos": 272,
+    "pct": 0.855
+   },
+   "tmax": {
+    "n": 302,
+    "acertos": 242,
+    "pct": 0.801,
+    "erroMedio": 1.31
+   },
+   "tmin": {
+    "n": 302,
+    "acertos": 286,
+    "pct": 0.947,
+    "erroMedio": 0.89
+   },
+   "rajada": {
+    "n": 296,
+    "acertos": 234,
+    "pct": 0.791,
+    "erroMedio": 6.74
+   }
+  }
+ },
+ "outras": {
+  "A801": {
+   "estacao": {
+    "id": "A801",
+    "tipo": "inmet",
+    "nome": "Porto Alegre Jardim Botânico",
+    "lat": -30.05361111,
+    "lon": -51.17472221,
+    "altitude": 41.18
+   },
+   "periodo": {
+    "ini": "2021-03-01",
+    "fim": "2026-10-31",
+    "diasComMedicao": 2071
+   },
+   "fontes": {
+    "medicoes": "INMET, BDMEP (portal.inmet.gov.br/dadoshistoricos), estação automática A801 Porto Alegre Jardim Botânico",
+    "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
+   },
+   "modelos": {
+    "ecmwf_ifs": {
+     "1": {
+      "n": 383,
+      "acertoChuva": 0.778,
+      "maeChuva": 3.41,
+      "maeTmax": 1.56,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 376,
+      "acertoChuva": 0.774,
+      "maeChuva": 3.64,
+      "maeTmax": 1.7,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 370,
+      "acertoChuva": 0.741,
+      "maeChuva": 3.74,
+      "maeTmax": 1.82,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 387,
+      "acertoChuva": 0.747,
+      "maeChuva": 3.63,
+      "maeTmax": 1.96,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 379,
+      "acertoChuva": 0.72,
+      "maeChuva": 4.51,
+      "maeTmax": 2.1,
+      "maeRajada": null
+     }
+    },
+    "ecmwf_aifs025_single": {
+     "1": {
+      "n": 608,
+      "acertoChuva": 0.78,
+      "maeChuva": 2.81,
+      "maeTmax": 1.83,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 607,
+      "acertoChuva": 0.77,
+      "maeChuva": 2.92,
+      "maeTmax": 1.81,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 606,
+      "acertoChuva": 0.764,
+      "maeChuva": 2.98,
+      "maeTmax": 1.79,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 592,
+      "acertoChuva": 0.75,
+      "maeChuva": 3.27,
+      "maeTmax": 1.86,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 592,
+      "acertoChuva": 0.708,
+      "maeChuva": 3.57,
+      "maeTmax": 2.01,
+      "maeRajada": null
+     }
+    },
+    "ukmo_global_deterministic_10km": {
+     "1": {
+      "n": 647,
+      "acertoChuva": 0.821,
+      "maeChuva": 3.44,
+      "maeTmax": 1.44,
+      "maeRajada": 24.65
+     },
+     "2": {
+      "n": 686,
+      "acertoChuva": 0.798,
+      "maeChuva": 3.81,
+      "maeTmax": 1.68,
+      "maeRajada": 11.84
+     },
+     "3": {
+      "n": 647,
+      "acertoChuva": 0.777,
+      "maeChuva": 4.27,
+      "maeTmax": 1.73,
+      "maeRajada": 28.12
+     },
+     "4": {
+      "n": 597,
+      "acertoChuva": 0.758,
+      "maeChuva": 4.7,
+      "maeTmax": 1.87,
+      "maeRajada": 12.26
+     },
+     "5": {
+      "n": 642,
+      "acertoChuva": 0.733,
+      "maeChuva": 4.92,
+      "maeTmax": 2.07,
+      "maeRajada": 24.19
+     }
+    }
+   }
+  },
+  "SBCO": {
+   "estacao": {
+    "id": "SBCO",
+    "tipo": "metar",
+    "nome": "Canoas",
+    "lat": -29.945,
+    "lon": -51.144
+   },
+   "periodo": {
+    "ini": "2021-03-01",
+    "fim": "2026-11-26",
+    "diasComMedicao": 2097
+   },
+   "fontes": {
+    "medicoes": "METAR SBCO Canoas, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
+    "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
+   },
+   "modelos": {
+    "ecmwf_ifs": {
+     "1": {
+      "n": 382,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.27,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 384,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.4,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 378,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.49,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 396,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.65,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 374,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.82,
+      "maeRajada": null
+     }
+    },
+    "ecmwf_aifs025_single": {
+     "1": {
+      "n": 622,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.33,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 621,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.38,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 620,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.4,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 605,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.5,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 604,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.7,
+      "maeRajada": null
+     }
+    },
+    "ukmo_global_deterministic_10km": {
+     "1": {
+      "n": 622,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.28,
+      "maeRajada": 22.14
+     },
+     "2": {
+      "n": 698,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.43,
+      "maeRajada": 11.23
+     },
+     "3": {
+      "n": 658,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.51,
+      "maeRajada": 25.29
+     },
+     "4": {
+      "n": 606,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.68,
+      "maeRajada": 11.83
+     },
+     "5": {
+      "n": 652,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.91,
+      "maeRajada": 21.84
+     }
+    }
+   }
+  },
+  "SBPA": {
+   "estacao": {
+    "id": "SBPA",
+    "tipo": "metar",
+    "nome": "Porto Alegre aeroporto",
+    "lat": -29.994,
+    "lon": -51.171
+   },
+   "periodo": {
+    "ini": "2021-03-01",
+    "fim": "2026-11-26",
+    "diasComMedicao": 1940
+   },
+   "fontes": {
+    "medicoes": "METAR SBPA Porto Alegre aeroporto, arquivo da Iowa Environmental Mesonet (mesonet.agron.iastate.edu)",
+    "previsoes": "Open-Meteo Previous Runs API (CC BY 4.0), valores previstos 1 a 5 dias antes"
+   },
+   "modelos": {
+    "ecmwf_ifs": {
+     "1": {
+      "n": 383,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.21,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 385,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.3,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 379,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.45,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 397,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.56,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 375,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.69,
+      "maeRajada": null
+     }
+    },
+    "ecmwf_aifs025_single": {
+     "1": {
+      "n": 623,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.26,
+      "maeRajada": null
+     },
+     "2": {
+      "n": 622,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.32,
+      "maeRajada": null
+     },
+     "3": {
+      "n": 621,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.33,
+      "maeRajada": null
+     },
+     "4": {
+      "n": 606,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.45,
+      "maeRajada": null
+     },
+     "5": {
+      "n": 605,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.62,
+      "maeRajada": null
+     }
+    },
+    "ukmo_global_deterministic_10km": {
+     "1": {
+      "n": 572,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.18,
+      "maeRajada": 12.72
+     },
+     "2": {
+      "n": 647,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.34,
+      "maeRajada": 12.43
+     },
+     "3": {
+      "n": 574,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.43,
+      "maeRajada": 12.77
+     },
+     "4": {
+      "n": 567,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.58,
+      "maeRajada": 13.12
+     },
+     "5": {
+      "n": 569,
+      "acertoChuva": null,
+      "maeChuva": null,
+      "maeTmax": 1.84,
+      "maeRajada": 12.98
+     }
+    }
+   }
+  }
+ },
+ "temperaturaHoraria": {
+  "fontes": {
+   "o": "INMET A884, temperatura do ar (bulbo seco) na hora cheia; od: ponto de orvalho; ow: vento médio (km/h)",
+   "h0": "Open-Meteo Historical Forecast API (CC BY 4.0): primeiras horas de cada rodada",
+   "p": "Open-Meteo Previous Runs API (CC BY 4.0): temperatura prevista 1 a 5 dias antes (p1 a p5); na véspera, ponto de orvalho (d1) e vento em km/h (w1)"
+  },
+  "metodo": {
+   "minHorasDia": 20,
+   "encolhimento": 20,
+   "minDias": 60,
+   "tarde": [
+    12,
+    18
+   ],
+   "documento": "docs/CALIBRACAO.md"
+  },
+  "modelos": {
+   "ecmwf_ifs": {
+    "nome": "ECMWF IFS",
+    "curtoPrazo": {
+     "dias": 1641,
+     "ini": "2022-01-01",
+     "fim": "2026-10-31",
+     "validacao": {
+      "horaria": {
+       "bruta": {
+        "n": 38980,
+        "mae": 1.23,
+        "vies": -0.4
+       },
+       "diaria": {
+        "n": 38980,
+        "mae": 1.23,
+        "vies": -0.4
+       },
+       "horaria": {
+        "n": 38980,
+        "mae": 1.19,
+        "vies": 0.3
+       }
+      },
+      "tarde": {
+       "bruta": {
+        "n": 11360,
+        "mae": 1.55,
+        "vies": -0.73
+       },
+       "diaria": {
+        "n": 11360,
+        "mae": 1.55,
+        "vies": -0.73
+       },
+       "horaria": {
+        "n": 11360,
+        "mae": 1.46,
+        "vies": 0.71
+       }
+      },
+      "tmax": {
+       "bruta": {
+        "n": 1641,
+        "mae": 2.02,
+        "vies": -1.67
+       },
+       "diaria": {
+        "n": 1641,
+        "mae": 2.02,
+        "vies": -1.67
+       },
+       "horaria": {
+        "n": 1641,
+        "mae": 1.22,
+        "vies": 0
+       }
+      },
+      "tmin": {
+       "bruta": {
+        "n": 1641,
+        "mae": 0.83,
+        "vies": -0.13
+       },
+       "diaria": {
+        "n": 1641,
+        "mae": 0.83,
+        "vies": -0.13
+       },
+       "horaria": {
+        "n": 1641,
+        "mae": 0.82,
+        "vies": 0
+       }
+      }
+     }
+    },
+    "leads": {
+     "1": {
+      "usar": true,
+      "dias": 364,
+      "nEstacao": {
+       "verao": 90,
+       "outono": 77,
+       "inverno": 90,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -0.84,
+        -0.75,
+        -0.69,
+        -0.66,
+        -0.61,
+        -0.59,
+        -0.34,
+        0.53,
+        0.69,
+        0.2,
+        0.06,
+        -0.11,
+        -0.35,
+        -0.59,
+        -0.99,
+        -1.77,
+        -1.88,
+        -1.71,
+        -1.88,
+        -1.6,
+        -1.36,
+        -1.01,
+        -1.01,
+        -0.85
+       ],
+       "outono": [
+        -0.55,
+        -0.5,
+        -0.56,
+        -0.64,
+        -0.61,
+        -0.59,
+        -0.52,
+        -0.38,
+        0.33,
+        0.18,
+        -0.01,
+        -0.26,
+        -0.36,
+        -0.58,
+        -0.87,
+        -1.19,
+        -1.46,
+        -1.52,
+        -1.2,
+        -0.64,
+        -0.43,
+        -0.5,
+        -0.67,
+        -0.63
+       ],
+       "inverno": [
+        -0.38,
+        -0.28,
+        -0.26,
+        -0.16,
+        -0.26,
+        -0.41,
+        -0.48,
+        -0.5,
+        -0.21,
+        -0.22,
+        -0.14,
+        -0.07,
+        -0.05,
+        0.06,
+        -0.07,
+        -0.22,
+        -0.06,
+        -0.32,
+        -0.31,
+        -0.31,
+        -0.31,
+        -0.23,
+        -0.32,
+        -0.38
+       ],
+       "primavera": [
+        -0.85,
+        -0.77,
+        -0.75,
+        -0.64,
+        -0.57,
+        -0.64,
+        -0.51,
+        -0.03,
+        -0.17,
+        -0.1,
+        -0.03,
+        0.05,
+        0.1,
+        -0.06,
+        -0.32,
+        -0.66,
+        -0.96,
+        -1.17,
+        -1.33,
+        -1.32,
+        -1.07,
+        -0.94,
+        -0.94,
+        -0.92
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -0.64,
+        "outono": -0.57,
+        "inverno": -0.29,
+        "primavera": -0.48
+       },
+       "tmin": {
+        "verao": 0.14,
+        "outono": 0.22,
+        "inverno": 0.18,
+        "primavera": 0.13
+       }
+      },
+      "ini": "2025-10-16",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 8661,
+         "mae": 1.38,
+         "vies": -0.58
+        },
+        "diaria": {
+         "n": 8661,
+         "mae": 1.3,
+         "vies": 0.15
+        },
+        "horaria": {
+         "n": 8661,
+         "mae": 1.24,
+         "vies": 0.08
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 2519,
+         "mae": 1.7,
+         "vies": -0.77
+        },
+        "diaria": {
+         "n": 2519,
+         "mae": 1.54,
+         "vies": 0.32
+        },
+        "horaria": {
+         "n": 2519,
+         "mae": 1.47,
+         "vies": 0.38
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 364,
+         "mae": 1.93,
+         "vies": -1.25
+        },
+        "diaria": {
+         "n": 364,
+         "mae": 1.32,
+         "vies": 0.01
+        },
+        "horaria": {
+         "n": 364,
+         "mae": 1.29,
+         "vies": 0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 364,
+         "mae": 0.93,
+         "vies": -0.32
+        },
+        "diaria": {
+         "n": 364,
+         "mae": 0.92,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 364,
+         "mae": 0.93,
+         "vies": -0.04
+        }
+       }
+      }
+     },
+     "2": {
+      "usar": true,
+      "dias": 363,
+      "nEstacao": {
+       "verao": 90,
+       "outono": 76,
+       "inverno": 90,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -0.85,
+        -0.74,
+        -0.65,
+        -0.61,
+        -0.52,
+        -0.46,
+        -0.23,
+        0.55,
+        0.64,
+        0.03,
+        -0.06,
+        -0.16,
+        -0.29,
+        -0.6,
+        -0.98,
+        -1.58,
+        -1.95,
+        -1.8,
+        -1.97,
+        -1.66,
+        -1.38,
+        -1.12,
+        -1.04,
+        -0.9
+       ],
+       "outono": [
+        -0.65,
+        -0.5,
+        -0.56,
+        -0.63,
+        -0.62,
+        -0.61,
+        -0.62,
+        -0.45,
+        0.3,
+        0.28,
+        0.07,
+        -0.29,
+        -0.4,
+        -0.67,
+        -1.07,
+        -1.29,
+        -1.58,
+        -1.55,
+        -1.24,
+        -0.59,
+        -0.38,
+        -0.45,
+        -0.67,
+        -0.68
+       ],
+       "inverno": [
+        -0.37,
+        -0.29,
+        -0.22,
+        -0.18,
+        -0.3,
+        -0.42,
+        -0.5,
+        -0.52,
+        -0.15,
+        -0.19,
+        -0.27,
+        -0.27,
+        -0.25,
+        -0.14,
+        -0.16,
+        -0.26,
+        -0.07,
+        -0.4,
+        -0.36,
+        -0.37,
+        -0.37,
+        -0.37,
+        -0.39,
+        -0.45
+       ],
+       "primavera": [
+        -0.75,
+        -0.68,
+        -0.66,
+        -0.56,
+        -0.47,
+        -0.56,
+        -0.51,
+        -0.05,
+        -0.14,
+        -0.14,
+        -0.14,
+        -0.12,
+        -0.11,
+        -0.3,
+        -0.44,
+        -0.8,
+        -1.01,
+        -1.28,
+        -1.36,
+        -1.25,
+        -0.97,
+        -0.83,
+        -0.88,
+        -0.82
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -0.65,
+        "outono": -0.64,
+        "inverno": -0.33,
+        "primavera": -0.55
+       },
+       "tmin": {
+        "verao": 0.15,
+        "outono": 0.12,
+        "inverno": 0.18,
+        "primavera": 0.16
+       }
+      },
+      "ini": "2025-10-16",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 8637,
+         "mae": 1.46,
+         "vies": -0.61
+        },
+        "diaria": {
+         "n": 8637,
+         "mae": 1.39,
+         "vies": 0.17
+        },
+        "horaria": {
+         "n": 8637,
+         "mae": 1.33,
+         "vies": 0.11
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 2512,
+         "mae": 1.81,
+         "vies": -0.86
+        },
+        "diaria": {
+         "n": 2512,
+         "mae": 1.63,
+         "vies": 0.3
+        },
+        "horaria": {
+         "n": 2512,
+         "mae": 1.57,
+         "vies": 0.41
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 363,
+         "mae": 2,
+         "vies": -1.34
+        },
+        "diaria": {
+         "n": 363,
+         "mae": 1.36,
+         "vies": 0.02
+        },
+        "horaria": {
+         "n": 363,
+         "mae": 1.36,
+         "vies": 0.02
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 363,
+         "mae": 1.05,
+         "vies": -0.33
+        },
+        "diaria": {
+         "n": 363,
+         "mae": 1.03,
+         "vies": 0.01
+        },
+        "horaria": {
+         "n": 363,
+         "mae": 1.04,
+         "vies": -0.03
+        }
+       }
+      }
+     },
+     "3": {
+      "usar": true,
+      "dias": 362,
+      "nEstacao": {
+       "verao": 90,
+       "outono": 75,
+       "inverno": 90,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -0.74,
+        -0.63,
+        -0.57,
+        -0.53,
+        -0.42,
+        -0.35,
+        -0.1,
+        0.62,
+        0.71,
+        0.03,
+        -0.16,
+        -0.2,
+        -0.44,
+        -0.77,
+        -1.31,
+        -1.58,
+        -2.01,
+        -1.88,
+        -2.1,
+        -1.69,
+        -1.35,
+        -1.09,
+        -0.98,
+        -0.82
+       ],
+       "outono": [
+        -0.66,
+        -0.64,
+        -0.74,
+        -0.63,
+        -0.53,
+        -0.5,
+        -0.53,
+        -0.4,
+        0.29,
+        0.21,
+        -0.03,
+        -0.31,
+        -0.43,
+        -0.75,
+        -0.95,
+        -1.24,
+        -1.53,
+        -1.45,
+        -1.13,
+        -0.55,
+        -0.29,
+        -0.41,
+        -0.6,
+        -0.64
+       ],
+       "inverno": [
+        -0.36,
+        -0.35,
+        -0.3,
+        -0.33,
+        -0.48,
+        -0.57,
+        -0.67,
+        -0.66,
+        -0.27,
+        -0.19,
+        -0.25,
+        -0.2,
+        -0.19,
+        -0.07,
+        -0.1,
+        -0.37,
+        -0.25,
+        -0.47,
+        -0.42,
+        -0.4,
+        -0.38,
+        -0.44,
+        -0.42,
+        -0.39
+       ],
+       "primavera": [
+        -0.64,
+        -0.56,
+        -0.49,
+        -0.38,
+        -0.33,
+        -0.4,
+        -0.3,
+        0.16,
+        0.02,
+        0.02,
+        -0.05,
+        -0.07,
+        -0.07,
+        -0.23,
+        -0.42,
+        -0.5,
+        -0.89,
+        -1.16,
+        -1.32,
+        -1.22,
+        -0.93,
+        -0.77,
+        -0.75,
+        -0.71
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -0.72,
+        "outono": -0.7,
+        "inverno": -0.29,
+        "primavera": -0.53
+       },
+       "tmin": {
+        "verao": 0.15,
+        "outono": 0.02,
+        "inverno": 0.15,
+        "primavera": 0.23
+       }
+      },
+      "ini": "2025-10-16",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 8613,
+         "mae": 1.55,
+         "vies": -0.58
+        },
+        "diaria": {
+         "n": 8613,
+         "mae": 1.5,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 8613,
+         "mae": 1.43,
+         "vies": 0.11
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 2505,
+         "mae": 1.96,
+         "vies": -0.87
+        },
+        "diaria": {
+         "n": 2505,
+         "mae": 1.77,
+         "vies": 0.2
+        },
+        "horaria": {
+         "n": 2505,
+         "mae": 1.71,
+         "vies": 0.39
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 362,
+         "mae": 2.12,
+         "vies": -1.32
+        },
+        "diaria": {
+         "n": 362,
+         "mae": 1.59,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 362,
+         "mae": 1.58,
+         "vies": 0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 362,
+         "mae": 1.04,
+         "vies": -0.27
+        },
+        "diaria": {
+         "n": 362,
+         "mae": 1.04,
+         "vies": -0.27
+        },
+        "horaria": {
+         "n": 362,
+         "mae": 1.06,
+         "vies": -0.05
+        }
+       }
+      }
+     },
+     "4": {
+      "usar": true,
+      "dias": 379,
+      "nEstacao": {
+       "verao": 90,
+       "outono": 92,
+       "inverno": 90,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -0.84,
+        -0.71,
+        -0.62,
+        -0.52,
+        -0.52,
+        -0.56,
+        -0.14,
+        0.51,
+        0.54,
+        -0.17,
+        -0.45,
+        -0.56,
+        -0.7,
+        -0.98,
+        -1.51,
+        -1.88,
+        -2.29,
+        -2.09,
+        -2.17,
+        -1.52,
+        -1.19,
+        -1.09,
+        -1.12,
+        -0.94
+       ],
+       "outono": [
+        -0.69,
+        -0.69,
+        -0.82,
+        -0.79,
+        -0.81,
+        -0.89,
+        -0.64,
+        0.13,
+        0.74,
+        0.21,
+        -0.12,
+        -0.27,
+        -0.32,
+        -0.6,
+        -0.9,
+        -1.24,
+        -1.72,
+        -1.85,
+        -1.19,
+        -0.48,
+        -0.35,
+        -0.51,
+        -0.71,
+        -0.69
+       ],
+       "inverno": [
+        -0.45,
+        -0.42,
+        -0.37,
+        -0.12,
+        -0.31,
+        -0.56,
+        -0.55,
+        -0.13,
+        0.28,
+        -0.21,
+        -0.45,
+        -0.25,
+        -0.13,
+        -0.07,
+        -0.15,
+        -0.63,
+        -0.75,
+        -1.15,
+        -0.67,
+        -0.59,
+        -0.56,
+        -0.36,
+        -0.38,
+        -0.44
+       ],
+       "primavera": [
+        -0.66,
+        -0.62,
+        -0.58,
+        -0.41,
+        -0.43,
+        -0.54,
+        -0.28,
+        0.19,
+        0.05,
+        0.03,
+        -0.07,
+        -0.02,
+        0.01,
+        -0.16,
+        -0.3,
+        -0.54,
+        -0.99,
+        -1.37,
+        -1.17,
+        -0.72,
+        -0.64,
+        -0.83,
+        -0.86,
+        -0.78
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -0.85,
+        "outono": -0.61,
+        "inverno": -0.3,
+        "primavera": -0.68
+       },
+       "tmin": {
+        "verao": 0.25,
+        "outono": 0.12,
+        "inverno": 0.18,
+        "primavera": 0.24
+       }
+      },
+      "ini": "2025-10-16",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 9027,
+         "mae": 1.64,
+         "vies": -0.64
+        },
+        "diaria": {
+         "n": 9027,
+         "mae": 1.58,
+         "vies": 0.01
+        },
+        "horaria": {
+         "n": 9027,
+         "mae": 1.51,
+         "vies": 0.09
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 2624,
+         "mae": 2.18,
+         "vies": -1.02
+        },
+        "diaria": {
+         "n": 2624,
+         "mae": 1.95,
+         "vies": 0.17
+        },
+        "horaria": {
+         "n": 2624,
+         "mae": 1.88,
+         "vies": 0.4
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 379,
+         "mae": 2.29,
+         "vies": -1.45
+        },
+        "diaria": {
+         "n": 379,
+         "mae": 1.69,
+         "vies": -0.01
+        },
+        "horaria": {
+         "n": 379,
+         "mae": 1.72,
+         "vies": 0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 379,
+         "mae": 1.12,
+         "vies": -0.3
+        },
+        "diaria": {
+         "n": 379,
+         "mae": 1.12,
+         "vies": -0.3
+        },
+        "horaria": {
+         "n": 379,
+         "mae": 1.15,
+         "vies": -0.02
+        }
+       }
+      }
+     },
+     "5": {
+      "usar": false,
+      "dias": 360,
+      "nEstacao": {
+       "verao": 90,
+       "outono": 73,
+       "inverno": 90,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -0.85,
+        -0.73,
+        -0.68,
+        -0.55,
+        -0.58,
+        -0.64,
+        -0.24,
+        0.42,
+        0.46,
+        -0.24,
+        -0.51,
+        -0.57,
+        -0.67,
+        -0.93,
+        -1.49,
+        -1.97,
+        -2.4,
+        -2.16,
+        -2.22,
+        -1.57,
+        -1.19,
+        -1.21,
+        -1.2,
+        -0.99
+       ],
+       "outono": [
+        -0.77,
+        -0.74,
+        -0.88,
+        -0.73,
+        -0.73,
+        -0.78,
+        -0.53,
+        0.2,
+        0.85,
+        0.44,
+        -0.05,
+        -0.35,
+        -0.46,
+        -0.79,
+        -1.11,
+        -1.15,
+        -1.65,
+        -1.8,
+        -1.23,
+        -0.49,
+        -0.31,
+        -0.5,
+        -0.74,
+        -0.76
+       ],
+       "inverno": [
+        -0.59,
+        -0.5,
+        -0.4,
+        -0.53,
+        -0.69,
+        -0.87,
+        -0.8,
+        -0.33,
+        0.12,
+        -0.48,
+        -0.75,
+        -0.59,
+        -0.49,
+        -0.43,
+        -0.46,
+        -0.59,
+        -0.69,
+        -1.08,
+        -0.6,
+        -0.57,
+        -0.56,
+        -0.44,
+        -0.5,
+        -0.57
+       ],
+       "primavera": [
+        -0.68,
+        -0.65,
+        -0.62,
+        -0.44,
+        -0.5,
+        -0.64,
+        -0.37,
+        0.07,
+        0,
+        0.06,
+        -0.04,
+        0.01,
+        0.02,
+        -0.2,
+        -0.39,
+        -0.4,
+        -0.9,
+        -1.31,
+        -1.16,
+        -0.7,
+        -0.59,
+        -0.8,
+        -0.86,
+        -0.78
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -0.85,
+        "outono": -0.67,
+        "inverno": -0.21,
+        "primavera": -0.56
+       },
+       "tmin": {
+        "verao": 0.21,
+        "outono": 0.13,
+        "inverno": -0.02,
+        "primavera": 0.12
+       }
+      },
+      "ini": "2025-10-16",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 8565,
+         "mae": 1.84,
+         "vies": -0.71
+        },
+        "diaria": {
+         "n": 8565,
+         "mae": 1.77,
+         "vies": -0.07
+        },
+        "horaria": {
+         "n": 8565,
+         "mae": 1.71,
+         "vies": 0.11
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 2491,
+         "mae": 2.39,
+         "vies": -1.07
+        },
+        "diaria": {
+         "n": 2491,
+         "mae": 2.15,
+         "vies": 0.1
+        },
+        "horaria": {
+         "n": 2491,
+         "mae": 2.08,
+         "vies": 0.38
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 360,
+         "mae": 2.47,
+         "vies": -1.44
+        },
+        "diaria": {
+         "n": 360,
+         "mae": 1.92,
+         "vies": -0.01
+        },
+        "horaria": {
+         "n": 360,
+         "mae": 1.93,
+         "vies": 0
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 360,
+         "mae": 1.36,
+         "vies": -0.46
+        },
+        "diaria": {
+         "n": 360,
+         "mae": 1.36,
+         "vies": -0.46
+        },
+        "horaria": {
+         "n": 360,
+         "mae": 1.42,
+         "vies": -0.02
+        }
+       }
+      }
+     }
+    }
+   },
+   "ecmwf_aifs025_single": {
+    "nome": "ECMWF AIFS",
+    "curtoPrazo": {
+     "dias": 498,
+     "ini": "2025-02-17",
+     "fim": "2026-10-31",
+     "validacao": {
+      "horaria": {
+       "bruta": {
+        "n": 11850,
+        "mae": 1.2,
+        "vies": -0.25
+       },
+       "diaria": {
+        "n": 11850,
+        "mae": 1.2,
+        "vies": -0.25
+       },
+       "horaria": {
+        "n": 11850,
+        "mae": 1.12,
+        "vies": 0.29
+       }
+      },
+      "tarde": {
+       "bruta": {
+        "n": 3445,
+        "mae": 1.39,
+        "vies": -0.8
+       },
+       "diaria": {
+        "n": 3445,
+        "mae": 1.39,
+        "vies": -0.8
+       },
+       "horaria": {
+        "n": 3445,
+        "mae": 1.38,
+        "vies": 0.96
+       }
+      },
+      "tmax": {
+       "bruta": {
+        "n": 498,
+        "mae": 2.01,
+        "vies": -1.95
+       },
+       "diaria": {
+        "n": 498,
+        "mae": 2.01,
+        "vies": -1.95
+       },
+       "horaria": {
+        "n": 498,
+        "mae": 0.91,
+        "vies": 0.01
+       }
+      },
+      "tmin": {
+       "bruta": {
+        "n": 498,
+        "mae": 0.93,
+        "vies": 0.62
+       },
+       "diaria": {
+        "n": 498,
+        "mae": 0.93,
+        "vies": 0.62
+       },
+       "horaria": {
+        "n": 498,
+        "mae": 0.93,
+        "vies": -0.02
+       }
+      }
+     }
+    },
+    "leads": {
+     "1": {
+      "usar": false,
+      "dias": 497,
+      "nEstacao": {
+       "verao": 101,
+       "outono": 183,
+       "inverno": 106,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -0.98,
+        -0.89,
+        -0.72,
+        -0.35,
+        0.32,
+        1.2,
+        2.23,
+        2.55,
+        1.63,
+        -0.01,
+        -0.95,
+        -1.33,
+        -1.34,
+        -1.19,
+        -1.26,
+        -1.32,
+        -1.59,
+        -1.34,
+        -1.5,
+        -1.07,
+        -0.83,
+        -0.78,
+        -0.91,
+        -0.92
+       ],
+       "outono": [
+        -0.65,
+        -0.64,
+        -0.55,
+        -0.35,
+        0.08,
+        0.52,
+        0.98,
+        1.35,
+        0.73,
+        -0.7,
+        -1.7,
+        -2.08,
+        -1.93,
+        -1.63,
+        -1.19,
+        -0.88,
+        -0.8,
+        -0.58,
+        0.19,
+        0.41,
+        0.09,
+        -0.27,
+        -0.5,
+        -0.59
+       ],
+       "inverno": [
+        -0.62,
+        -0.55,
+        -0.37,
+        -0.19,
+        -0.06,
+        0.11,
+        0.32,
+        0.64,
+        0.71,
+        -0.36,
+        -1.27,
+        -1.71,
+        -1.68,
+        -1.31,
+        -1.01,
+        -0.97,
+        -0.61,
+        -0.44,
+        0.32,
+        0.19,
+        -0.11,
+        -0.34,
+        -0.45,
+        -0.57
+       ],
+       "primavera": [
+        -0.93,
+        -0.91,
+        -0.76,
+        -0.46,
+        0.11,
+        0.72,
+        1.4,
+        1.53,
+        0.57,
+        -0.34,
+        -1.06,
+        -1.36,
+        -1.33,
+        -1.28,
+        -1.13,
+        -1.1,
+        -1.28,
+        -1.39,
+        -1.14,
+        -0.71,
+        -0.66,
+        -0.77,
+        -0.88,
+        -0.94
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.43,
+        "outono": -1.39,
+        "inverno": -0.84,
+        "primavera": -1.26
+       },
+       "tmin": {
+        "verao": 0.37,
+        "outono": 0.6,
+        "inverno": 0.5,
+        "primavera": 0.37
+       }
+      },
+      "ini": "2025-02-18",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 11826,
+         "mae": 1.42,
+         "vies": -0.51
+        },
+        "diaria": {
+         "n": 11826,
+         "mae": 1.38,
+         "vies": 0.28
+        },
+        "horaria": {
+         "n": 11826,
+         "mae": 1.27,
+         "vies": 0.28
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3438,
+         "mae": 1.76,
+         "vies": -1.12
+        },
+        "diaria": {
+         "n": 3438,
+         "mae": 1.51,
+         "vies": 0.85
+        },
+        "horaria": {
+         "n": 3438,
+         "mae": 1.55,
+         "vies": 1
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 497,
+         "mae": 2.41,
+         "vies": -2.34
+        },
+        "diaria": {
+         "n": 497,
+         "mae": 1.04,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 497,
+         "mae": 1.06,
+         "vies": -0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 497,
+         "mae": 1.02,
+         "vies": 0.5
+        },
+        "diaria": {
+         "n": 497,
+         "mae": 0.93,
+         "vies": -0.01
+        },
+        "horaria": {
+         "n": 497,
+         "mae": 1.04,
+         "vies": -0.03
+        }
+       }
+      }
+     },
+     "2": {
+      "usar": false,
+      "dias": 496,
+      "nEstacao": {
+       "verao": 100,
+       "outono": 183,
+       "inverno": 106,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -1.04,
+        -0.94,
+        -0.76,
+        -0.39,
+        0.28,
+        1.18,
+        2.23,
+        2.59,
+        1.68,
+        0.06,
+        -0.86,
+        -1.21,
+        -1.19,
+        -1.02,
+        -1.05,
+        -1.13,
+        -1.38,
+        -1.18,
+        -1.39,
+        -1.01,
+        -0.82,
+        -0.79,
+        -0.95,
+        -0.96
+       ],
+       "outono": [
+        -0.67,
+        -0.65,
+        -0.55,
+        -0.35,
+        0.09,
+        0.54,
+        0.99,
+        1.37,
+        0.77,
+        -0.66,
+        -1.66,
+        -2.04,
+        -1.89,
+        -1.59,
+        -1.16,
+        -0.86,
+        -0.77,
+        -0.57,
+        0.19,
+        0.4,
+        0.08,
+        -0.3,
+        -0.52,
+        -0.6
+       ],
+       "inverno": [
+        -0.62,
+        -0.57,
+        -0.39,
+        -0.21,
+        -0.08,
+        0.08,
+        0.29,
+        0.61,
+        0.69,
+        -0.39,
+        -1.3,
+        -1.73,
+        -1.7,
+        -1.32,
+        -1,
+        -0.97,
+        -0.61,
+        -0.44,
+        0.32,
+        0.19,
+        -0.12,
+        -0.34,
+        -0.47,
+        -0.6
+       ],
+       "primavera": [
+        -0.95,
+        -0.94,
+        -0.8,
+        -0.51,
+        0.06,
+        0.69,
+        1.37,
+        1.53,
+        0.58,
+        -0.33,
+        -1.04,
+        -1.34,
+        -1.3,
+        -1.26,
+        -1.11,
+        -1.08,
+        -1.26,
+        -1.37,
+        -1.11,
+        -0.67,
+        -0.63,
+        -0.74,
+        -0.86,
+        -0.94
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.41,
+        "outono": -1.36,
+        "inverno": -0.82,
+        "primavera": -1.22
+       },
+       "tmin": {
+        "verao": 0.37,
+        "outono": 0.62,
+        "inverno": 0.44,
+        "primavera": 0.38
+       }
+      },
+      "ini": "2025-02-19",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 11802,
+         "mae": 1.48,
+         "vies": -0.5
+        },
+        "diaria": {
+         "n": 11802,
+         "mae": 1.44,
+         "vies": 0.27
+        },
+        "horaria": {
+         "n": 11802,
+         "mae": 1.33,
+         "vies": 0.27
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3431,
+         "mae": 1.78,
+         "vies": -1.06
+        },
+        "diaria": {
+         "n": 3431,
+         "mae": 1.55,
+         "vies": 0.84
+        },
+        "horaria": {
+         "n": 3431,
+         "mae": 1.6,
+         "vies": 1
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 496,
+         "mae": 2.37,
+         "vies": -2.26
+        },
+        "diaria": {
+         "n": 496,
+         "mae": 1.13,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 496,
+         "mae": 1.14,
+         "vies": 0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 496,
+         "mae": 1.06,
+         "vies": 0.46
+        },
+        "diaria": {
+         "n": 496,
+         "mae": 1,
+         "vies": -0.01
+        },
+        "horaria": {
+         "n": 496,
+         "mae": 1.1,
+         "vies": -0.03
+        }
+       }
+      }
+     },
+     "3": {
+      "usar": false,
+      "dias": 495,
+      "nEstacao": {
+       "verao": 99,
+       "outono": 183,
+       "inverno": 106,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -1.02,
+        -0.91,
+        -0.72,
+        -0.35,
+        0.32,
+        1.22,
+        2.27,
+        2.62,
+        1.71,
+        0.08,
+        -0.85,
+        -1.19,
+        -1.17,
+        -1,
+        -1.03,
+        -1.12,
+        -1.38,
+        -1.18,
+        -1.38,
+        -1,
+        -0.82,
+        -0.78,
+        -0.94,
+        -0.95
+       ],
+       "outono": [
+        -0.61,
+        -0.6,
+        -0.5,
+        -0.29,
+        0.15,
+        0.6,
+        1.07,
+        1.46,
+        0.86,
+        -0.57,
+        -1.57,
+        -1.96,
+        -1.82,
+        -1.53,
+        -1.12,
+        -0.8,
+        -0.74,
+        -0.53,
+        0.24,
+        0.44,
+        0.13,
+        -0.25,
+        -0.47,
+        -0.55
+       ],
+       "inverno": [
+        -0.58,
+        -0.52,
+        -0.36,
+        -0.18,
+        -0.06,
+        0.12,
+        0.34,
+        0.67,
+        0.75,
+        -0.33,
+        -1.24,
+        -1.68,
+        -1.67,
+        -1.32,
+        -1.03,
+        -1,
+        -0.63,
+        -0.45,
+        0.33,
+        0.21,
+        -0.08,
+        -0.29,
+        -0.41,
+        -0.54
+       ],
+       "primavera": [
+        -0.81,
+        -0.81,
+        -0.66,
+        -0.37,
+        0.19,
+        0.82,
+        1.51,
+        1.65,
+        0.7,
+        -0.19,
+        -0.89,
+        -1.18,
+        -1.13,
+        -1.07,
+        -0.91,
+        -0.88,
+        -1.06,
+        -1.18,
+        -0.94,
+        -0.53,
+        -0.49,
+        -0.6,
+        -0.72,
+        -0.8
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.4,
+        "outono": -1.4,
+        "inverno": -0.83,
+        "primavera": -1.2
+       },
+       "tmin": {
+        "verao": 0.36,
+        "outono": 0.59,
+        "inverno": 0.46,
+        "primavera": 0.42
+       }
+      },
+      "ini": "2025-02-20",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 11779,
+         "mae": 1.48,
+         "vies": -0.42
+        },
+        "diaria": {
+         "n": 11779,
+         "mae": 1.48,
+         "vies": 0.27
+        },
+        "horaria": {
+         "n": 11779,
+         "mae": 1.37,
+         "vies": 0.27
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3424,
+         "mae": 1.77,
+         "vies": -0.99
+        },
+        "diaria": {
+         "n": 3424,
+         "mae": 1.6,
+         "vies": 0.84
+        },
+        "horaria": {
+         "n": 3424,
+         "mae": 1.65,
+         "vies": 1.01
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 495,
+         "mae": 2.33,
+         "vies": -2.19
+        },
+        "diaria": {
+         "n": 495,
+         "mae": 1.2,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 495,
+         "mae": 1.21,
+         "vies": 0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 495,
+         "mae": 1.15,
+         "vies": 0.55
+        },
+        "diaria": {
+         "n": 495,
+         "mae": 1.06,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 495,
+         "mae": 1.12,
+         "vies": -0.02
+        }
+       }
+      }
+     },
+     "4": {
+      "usar": true,
+      "dias": 480,
+      "nEstacao": {
+       "verao": 98,
+       "outono": 169,
+       "inverno": 106,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -1.03,
+        -0.91,
+        -0.71,
+        -0.33,
+        0.36,
+        1.24,
+        2.29,
+        2.64,
+        1.71,
+        0.06,
+        -0.88,
+        -1.22,
+        -1.18,
+        -1.01,
+        -1.05,
+        -1.13,
+        -1.45,
+        -1.19,
+        -1.41,
+        -1.05,
+        -0.87,
+        -0.84,
+        -0.97,
+        -0.98
+       ],
+       "outono": [
+        -0.64,
+        -0.61,
+        -0.48,
+        -0.27,
+        0.19,
+        0.64,
+        1.11,
+        1.48,
+        0.83,
+        -0.64,
+        -1.65,
+        -2.02,
+        -1.87,
+        -1.57,
+        -1.14,
+        -0.81,
+        -0.7,
+        -0.46,
+        0.3,
+        0.42,
+        0.07,
+        -0.32,
+        -0.53,
+        -0.62
+       ],
+       "inverno": [
+        -0.49,
+        -0.45,
+        -0.3,
+        -0.12,
+        0.02,
+        0.21,
+        0.46,
+        0.82,
+        0.9,
+        -0.15,
+        -1.07,
+        -1.51,
+        -1.52,
+        -1.2,
+        -0.92,
+        -0.88,
+        -0.53,
+        -0.35,
+        0.44,
+        0.32,
+        0.04,
+        -0.18,
+        -0.31,
+        -0.45
+       ],
+       "primavera": [
+        -0.65,
+        -0.63,
+        -0.49,
+        -0.19,
+        0.38,
+        0.99,
+        1.67,
+        1.82,
+        0.86,
+        -0.05,
+        -0.76,
+        -1.06,
+        -1.02,
+        -0.97,
+        -0.82,
+        -0.79,
+        -0.96,
+        -1.08,
+        -0.85,
+        -0.4,
+        -0.36,
+        -0.46,
+        -0.58,
+        -0.66
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.4,
+        "outono": -1.44,
+        "inverno": -0.78,
+        "primavera": -1.19
+       },
+       "tmin": {
+        "verao": 0.36,
+        "outono": 0.59,
+        "inverno": 0.41,
+        "primavera": 0.45
+       }
+      },
+      "ini": "2025-02-21",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 11420,
+         "mae": 1.57,
+         "vies": -0.37
+        },
+        "diaria": {
+         "n": 11420,
+         "mae": 1.6,
+         "vies": 0.3
+        },
+        "horaria": {
+         "n": 11420,
+         "mae": 1.48,
+         "vies": 0.28
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3320,
+         "mae": 1.88,
+         "vies": -0.94
+        },
+        "diaria": {
+         "n": 3320,
+         "mae": 1.76,
+         "vies": 0.85
+        },
+        "horaria": {
+         "n": 3320,
+         "mae": 1.79,
+         "vies": 1.01
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 480,
+         "mae": 2.38,
+         "vies": -2.15
+        },
+        "diaria": {
+         "n": 480,
+         "mae": 1.36,
+         "vies": 0.01
+        },
+        "horaria": {
+         "n": 480,
+         "mae": 1.37,
+         "vies": 0.02
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 480,
+         "mae": 1.22,
+         "vies": 0.58
+        },
+        "diaria": {
+         "n": 480,
+         "mae": 1.15,
+         "vies": -0.01
+        },
+        "horaria": {
+         "n": 480,
+         "mae": 1.19,
+         "vies": -0.03
+        }
+       }
+      }
+     },
+     "5": {
+      "usar": false,
+      "dias": 479,
+      "nEstacao": {
+       "verao": 97,
+       "outono": 169,
+       "inverno": 106,
+       "primavera": 107
+      },
+      "vies": {
+       "verao": [
+        -1.02,
+        -0.9,
+        -0.7,
+        -0.32,
+        0.36,
+        1.24,
+        2.27,
+        2.61,
+        1.68,
+        0.02,
+        -0.93,
+        -1.3,
+        -1.28,
+        -1.12,
+        -1.16,
+        -1.25,
+        -1.51,
+        -1.27,
+        -1.48,
+        -1.1,
+        -0.9,
+        -0.84,
+        -0.96,
+        -0.98
+       ],
+       "outono": [
+        -0.56,
+        -0.52,
+        -0.38,
+        -0.16,
+        0.28,
+        0.73,
+        1.18,
+        1.54,
+        0.87,
+        -0.6,
+        -1.61,
+        -1.98,
+        -1.85,
+        -1.52,
+        -1.1,
+        -0.79,
+        -0.67,
+        -0.43,
+        0.32,
+        0.45,
+        0.1,
+        -0.29,
+        -0.5,
+        -0.58
+       ],
+       "inverno": [
+        -0.49,
+        -0.47,
+        -0.34,
+        -0.17,
+        -0.03,
+        0.18,
+        0.45,
+        0.82,
+        0.94,
+        -0.12,
+        -1.02,
+        -1.47,
+        -1.48,
+        -1.13,
+        -0.82,
+        -0.79,
+        -0.45,
+        -0.24,
+        0.53,
+        0.42,
+        0.15,
+        -0.11,
+        -0.25,
+        -0.41
+       ],
+       "primavera": [
+        -0.64,
+        -0.63,
+        -0.49,
+        -0.19,
+        0.38,
+        1.01,
+        1.7,
+        1.86,
+        0.9,
+        0,
+        -0.72,
+        -1.04,
+        -1.02,
+        -1,
+        -0.85,
+        -0.83,
+        -1.01,
+        -1.12,
+        -0.87,
+        -0.41,
+        -0.37,
+        -0.45,
+        -0.57,
+        -0.65
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.37,
+        "outono": -1.44,
+        "inverno": -0.83,
+        "primavera": -1.22
+       },
+       "tmin": {
+        "verao": 0.35,
+        "outono": 0.62,
+        "inverno": 0.44,
+        "primavera": 0.47
+       }
+      },
+      "ini": "2025-02-22",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 11397,
+         "mae": 1.68,
+         "vies": -0.35
+        },
+        "diaria": {
+         "n": 11397,
+         "mae": 1.72,
+         "vies": 0.3
+        },
+        "horaria": {
+         "n": 11397,
+         "mae": 1.6,
+         "vies": 0.29
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3313,
+         "mae": 2.04,
+         "vies": -0.94
+        },
+        "diaria": {
+         "n": 3313,
+         "mae": 1.93,
+         "vies": 0.86
+        },
+        "horaria": {
+         "n": 3313,
+         "mae": 1.95,
+         "vies": 1.01
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 479,
+         "mae": 2.58,
+         "vies": -2.17
+        },
+        "diaria": {
+         "n": 479,
+         "mae": 1.61,
+         "vies": -0.01
+        },
+        "horaria": {
+         "n": 479,
+         "mae": 1.61,
+         "vies": 0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 479,
+         "mae": 1.29,
+         "vies": 0.63
+        },
+        "diaria": {
+         "n": 479,
+         "mae": 1.21,
+         "vies": -0.01
+        },
+        "horaria": {
+         "n": 479,
+         "mae": 1.28,
+         "vies": -0.02
+        }
+       }
+      }
+     }
+    }
+   },
+   "ukmo_global_deterministic_10km": {
+    "nome": "UKMO 10 km",
+    "curtoPrazo": {
+     "dias": 1582,
+     "ini": "2022-03-01",
+     "fim": "2026-10-31",
+     "validacao": {
+      "horaria": {
+       "bruta": {
+        "n": 37564,
+        "mae": 1.24,
+        "vies": -0.53
+       },
+       "diaria": {
+        "n": 37564,
+        "mae": 1.24,
+        "vies": -0.53
+       },
+       "horaria": {
+        "n": 37564,
+        "mae": 1.15,
+        "vies": 0.3
+       }
+      },
+      "tarde": {
+       "bruta": {
+        "n": 10947,
+        "mae": 1.58,
+        "vies": -0.84
+       },
+       "diaria": {
+        "n": 10947,
+        "mae": 1.58,
+        "vies": -0.84
+       },
+       "horaria": {
+        "n": 10947,
+        "mae": 1.41,
+        "vies": 0.68
+       }
+      },
+      "tmax": {
+       "bruta": {
+        "n": 1582,
+        "mae": 2.05,
+        "vies": -1.81
+       },
+       "diaria": {
+        "n": 1582,
+        "mae": 2.05,
+        "vies": -1.81
+       },
+       "horaria": {
+        "n": 1582,
+        "mae": 1.2,
+        "vies": 0
+       }
+      },
+      "tmin": {
+       "bruta": {
+        "n": 1582,
+        "mae": 0.86,
+        "vies": -0.18
+       },
+       "diaria": {
+        "n": 1582,
+        "mae": 0.86,
+        "vies": -0.18
+       },
+       "horaria": {
+        "n": 1582,
+        "mae": 0.84,
+        "vies": 0
+       }
+      }
+     }
+    },
+    "leads": {
+     "1": {
+      "usar": true,
+      "dias": 510,
+      "nEstacao": {
+       "verao": 136,
+       "outono": 103,
+       "inverno": 109,
+       "primavera": 162
+      },
+      "vies": {
+       "verao": [
+        -0.13,
+        -0.17,
+        -0.29,
+        -0.41,
+        -0.36,
+        -0.38,
+        -0.07,
+        0.32,
+        -0.37,
+        -1.14,
+        -1.33,
+        -1.25,
+        -1.1,
+        -1.03,
+        -1.13,
+        -1.22,
+        -1.02,
+        -0.66,
+        -0.52,
+        -0.23,
+        -0.17,
+        -0.13,
+        -0.23,
+        -0.07
+       ],
+       "outono": [
+        -0.24,
+        -0.23,
+        -0.27,
+        -0.56,
+        -0.55,
+        -0.54,
+        -0.61,
+        -0.37,
+        -0.34,
+        -1.01,
+        -1.33,
+        -1.44,
+        -1.42,
+        -1.44,
+        -1.39,
+        -1.26,
+        -1.08,
+        -0.79,
+        -0.26,
+        0.09,
+        0.22,
+        0.06,
+        -0.04,
+        -0.14
+       ],
+       "inverno": [
+        -0.11,
+        0.03,
+        0.13,
+        0.02,
+        -0.05,
+        -0.09,
+        -0.18,
+        -0.31,
+        0.11,
+        -0.36,
+        -0.84,
+        -1.13,
+        -1.18,
+        -1.09,
+        -0.99,
+        -0.88,
+        -0.54,
+        -0.68,
+        -0.39,
+        -0.09,
+        -0.01,
+        0.07,
+        0.01,
+        -0.08
+       ],
+       "primavera": [
+        -0.4,
+        -0.4,
+        -0.48,
+        -0.53,
+        -0.5,
+        -0.6,
+        -0.43,
+        -0.27,
+        -0.84,
+        -1.1,
+        -1.31,
+        -1.16,
+        -1.03,
+        -1.04,
+        -0.91,
+        -0.94,
+        -0.93,
+        -0.84,
+        -0.62,
+        -0.46,
+        -0.33,
+        -0.38,
+        -0.48,
+        -0.49
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -0.87,
+        "outono": -0.86,
+        "inverno": -0.62,
+        "primavera": -0.74
+       },
+       "tmin": {
+        "verao": 0.03,
+        "outono": 0.1,
+        "inverno": 0.25,
+        "primavera": 0.05
+       }
+      },
+      "ini": "2024-08-09",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 12140,
+         "mae": 1.42,
+         "vies": -0.57
+        },
+        "diaria": {
+         "n": 12140,
+         "mae": 1.35,
+         "vies": 0.39
+        },
+        "horaria": {
+         "n": 12140,
+         "mae": 1.32,
+         "vies": 0.29
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3539,
+         "mae": 1.82,
+         "vies": -0.95
+        },
+        "diaria": {
+         "n": 3539,
+         "mae": 1.58,
+         "vies": 0.61
+        },
+        "horaria": {
+         "n": 3539,
+         "mae": 1.59,
+         "vies": 0.62
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 510,
+         "mae": 2.21,
+         "vies": -1.8
+        },
+        "diaria": {
+         "n": 510,
+         "mae": 1.37,
+         "vies": 0.01
+        },
+        "horaria": {
+         "n": 510,
+         "mae": 1.36,
+         "vies": 0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 510,
+         "mae": 1,
+         "vies": -0.23
+        },
+        "diaria": {
+         "n": 510,
+         "mae": 0.97,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 510,
+         "mae": 0.97,
+         "vies": -0.04
+        }
+       }
+      }
+     },
+     "2": {
+      "usar": true,
+      "dias": 582,
+      "nEstacao": {
+       "verao": 132,
+       "outono": 183,
+       "inverno": 115,
+       "primavera": 152
+      },
+      "vies": {
+       "verao": [
+        -0.02,
+        -0.09,
+        -0.18,
+        -0.21,
+        -0.25,
+        -0.26,
+        0.06,
+        0.2,
+        -0.31,
+        -0.97,
+        -1.21,
+        -1.17,
+        -0.89,
+        -0.79,
+        -0.86,
+        -0.88,
+        -0.77,
+        -0.58,
+        -0.37,
+        0.18,
+        0.33,
+        0.01,
+        -0.03,
+        0.04
+       ],
+       "outono": [
+        -0.07,
+        -0.09,
+        -0.21,
+        -0.29,
+        -0.4,
+        -0.6,
+        -0.54,
+        -0.05,
+        -0.18,
+        -1.1,
+        -1.52,
+        -1.67,
+        -1.56,
+        -1.41,
+        -1.23,
+        -1,
+        -1.1,
+        -1.07,
+        -0.22,
+        0.4,
+        0.51,
+        0.17,
+        0.02,
+        0.02
+       ],
+       "inverno": [
+        -0.04,
+        0,
+        0.01,
+        0.02,
+        -0.12,
+        -0.24,
+        -0.18,
+        0.18,
+        0.42,
+        -0.45,
+        -0.97,
+        -1.19,
+        -1.25,
+        -1.19,
+        -1.08,
+        -1.11,
+        -1.06,
+        -1.22,
+        -0.47,
+        -0.18,
+        -0.03,
+        0.04,
+        0.02,
+        0
+       ],
+       "primavera": [
+        -0.31,
+        -0.29,
+        -0.4,
+        -0.42,
+        -0.43,
+        -0.47,
+        -0.25,
+        -0.21,
+        -0.81,
+        -1.14,
+        -1.34,
+        -1.26,
+        -1.03,
+        -1.04,
+        -0.93,
+        -0.89,
+        -1.06,
+        -1.16,
+        -0.65,
+        -0.1,
+        -0.07,
+        -0.31,
+        -0.39,
+        -0.43
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.06,
+        "outono": -1.21,
+        "inverno": -0.74,
+        "primavera": -1.05
+       },
+       "tmin": {
+        "verao": 0.15,
+        "outono": 0.2,
+        "inverno": 0.39,
+        "primavera": 0.3
+       }
+      },
+      "ini": "2024-08-07",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 13837,
+         "mae": 1.54,
+         "vies": -0.5
+        },
+        "diaria": {
+         "n": 13837,
+         "mae": 1.51,
+         "vies": 0.44
+        },
+        "horaria": {
+         "n": 13837,
+         "mae": 1.48,
+         "vies": 0.34
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 4027,
+         "mae": 1.98,
+         "vies": -0.98
+        },
+        "diaria": {
+         "n": 4027,
+         "mae": 1.71,
+         "vies": 0.74
+        },
+        "horaria": {
+         "n": 4027,
+         "mae": 1.75,
+         "vies": 0.84
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 582,
+         "mae": 2.39,
+         "vies": -2.02
+        },
+        "diaria": {
+         "n": 582,
+         "mae": 1.44,
+         "vies": 0.03
+        },
+        "horaria": {
+         "n": 582,
+         "mae": 1.43,
+         "vies": 0.02
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 582,
+         "mae": 1.07,
+         "vies": 0
+        },
+        "diaria": {
+         "n": 582,
+         "mae": 1.07,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 582,
+         "mae": 1.1,
+         "vies": -0.03
+        }
+       }
+      }
+     },
+     "3": {
+      "usar": true,
+      "dias": 557,
+      "nEstacao": {
+       "verao": 143,
+       "outono": 117,
+       "inverno": 117,
+       "primavera": 180
+      },
+      "vies": {
+       "verao": [
+        -0.16,
+        -0.18,
+        -0.23,
+        -0.29,
+        -0.3,
+        -0.28,
+        0.02,
+        0.08,
+        -0.44,
+        -1.04,
+        -1.32,
+        -1.21,
+        -1.13,
+        -1.04,
+        -1.16,
+        -1.27,
+        -1.28,
+        -0.97,
+        -0.82,
+        -0.11,
+        0.05,
+        -0.27,
+        -0.41,
+        -0.25
+       ],
+       "outono": [
+        -0.01,
+        -0.03,
+        -0.13,
+        -0.3,
+        -0.4,
+        -0.5,
+        -0.41,
+        0.1,
+        -0.06,
+        -1.02,
+        -1.49,
+        -1.6,
+        -1.53,
+        -1.35,
+        -1.23,
+        -1.06,
+        -1.13,
+        -1.08,
+        -0.24,
+        0.34,
+        0.42,
+        0.17,
+        0.02,
+        0.02
+       ],
+       "inverno": [
+        0,
+        0.05,
+        0.13,
+        0.11,
+        -0.01,
+        -0.11,
+        -0.04,
+        0.31,
+        0.51,
+        -0.35,
+        -0.87,
+        -1.03,
+        -1.06,
+        -1.06,
+        -0.98,
+        -1,
+        -0.93,
+        -1.05,
+        -0.24,
+        0.1,
+        0.24,
+        0.27,
+        0.17,
+        0.08
+       ],
+       "primavera": [
+        -0.14,
+        -0.12,
+        -0.21,
+        -0.17,
+        -0.15,
+        -0.18,
+        0.05,
+        0.04,
+        -0.58,
+        -1.09,
+        -1.35,
+        -1.27,
+        -1.11,
+        -1.15,
+        -1.02,
+        -0.94,
+        -1.06,
+        -1.08,
+        -0.5,
+        0.04,
+        -0.01,
+        -0.18,
+        -0.24,
+        -0.25
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.11,
+        "outono": -1.23,
+        "inverno": -0.75,
+        "primavera": -1.11
+       },
+       "tmin": {
+        "verao": 0.1,
+        "outono": 0.3,
+        "inverno": 0.39,
+        "primavera": 0.29
+       }
+      },
+      "ini": "2024-08-08",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 13274,
+         "mae": 1.55,
+         "vies": -0.48
+        },
+        "diaria": {
+         "n": 13274,
+         "mae": 1.57,
+         "vies": 0.5
+        },
+        "horaria": {
+         "n": 13274,
+         "mae": 1.52,
+         "vies": 0.35
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3864,
+         "mae": 2.06,
+         "vies": -1.04
+        },
+        "diaria": {
+         "n": 3864,
+         "mae": 1.85,
+         "vies": 0.74
+        },
+        "horaria": {
+         "n": 3864,
+         "mae": 1.88,
+         "vies": 0.85
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 557,
+         "mae": 2.49,
+         "vies": -2.1
+        },
+        "diaria": {
+         "n": 557,
+         "mae": 1.6,
+         "vies": 0.01
+        },
+        "horaria": {
+         "n": 557,
+         "mae": 1.59,
+         "vies": 0.01
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 557,
+         "mae": 1.09,
+         "vies": 0.12
+        },
+        "diaria": {
+         "n": 557,
+         "mae": 1.09,
+         "vies": 0.12
+        },
+        "horaria": {
+         "n": 557,
+         "mae": 1.1,
+         "vies": -0.02
+        }
+       }
+      }
+     },
+     "4": {
+      "usar": true,
+      "dias": 527,
+      "nEstacao": {
+       "verao": 138,
+       "outono": 101,
+       "inverno": 108,
+       "primavera": 180
+      },
+      "vies": {
+       "verao": [
+        -0.01,
+        0,
+        -0.07,
+        -0.1,
+        -0.11,
+        -0.1,
+        0.17,
+        0.25,
+        -0.31,
+        -1.09,
+        -1.34,
+        -1.29,
+        -1.13,
+        -1.12,
+        -1.28,
+        -1.48,
+        -1.49,
+        -1.03,
+        -0.81,
+        -0.13,
+        0.06,
+        -0.16,
+        -0.28,
+        -0.09
+       ],
+       "outono": [
+        0.14,
+        0.03,
+        -0.06,
+        -0.19,
+        -0.39,
+        -0.56,
+        -0.44,
+        0.15,
+        0.17,
+        -0.63,
+        -1.06,
+        -1.16,
+        -1.02,
+        -1.01,
+        -0.93,
+        -0.82,
+        -0.95,
+        -0.91,
+        -0.1,
+        0.56,
+        0.66,
+        0.29,
+        0.1,
+        0.2
+       ],
+       "inverno": [
+        -0.16,
+        -0.1,
+        -0.02,
+        -0.04,
+        -0.14,
+        -0.24,
+        -0.21,
+        0.12,
+        0.32,
+        -0.42,
+        -0.84,
+        -0.91,
+        -0.91,
+        -0.8,
+        -0.63,
+        -0.61,
+        -0.53,
+        -0.71,
+        -0.09,
+        0.14,
+        0.26,
+        0,
+        -0.06,
+        -0.12
+       ],
+       "primavera": [
+        0,
+        0.01,
+        -0.09,
+        -0.11,
+        -0.17,
+        -0.26,
+        -0.07,
+        -0.04,
+        -0.59,
+        -0.95,
+        -1.17,
+        -1.06,
+        -0.91,
+        -0.89,
+        -0.72,
+        -0.66,
+        -0.78,
+        -0.82,
+        -0.26,
+        0.23,
+        0.15,
+        -0.11,
+        -0.17,
+        -0.11
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.16,
+        "outono": -1.05,
+        "inverno": -0.72,
+        "primavera": -1.01
+       },
+       "tmin": {
+        "verao": 0.27,
+        "outono": 0.2,
+        "inverno": 0.23,
+        "primavera": 0.25
+       }
+      },
+      "ini": "2024-08-17",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 12554,
+         "mae": 1.67,
+         "vies": -0.38
+        },
+        "diaria": {
+         "n": 12554,
+         "mae": 1.68,
+         "vies": 0.51
+        },
+        "horaria": {
+         "n": 12554,
+         "mae": 1.65,
+         "vies": 0.35
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3659,
+         "mae": 2.2,
+         "vies": -0.83
+        },
+        "diaria": {
+         "n": 3659,
+         "mae": 2.05,
+         "vies": 0.77
+        },
+        "horaria": {
+         "n": 3659,
+         "mae": 2.06,
+         "vies": 0.84
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 527,
+         "mae": 2.6,
+         "vies": -1.88
+        },
+        "diaria": {
+         "n": 527,
+         "mae": 1.84,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 527,
+         "mae": 1.85,
+         "vies": 0.02
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 527,
+         "mae": 1.18,
+         "vies": 0.13
+        },
+        "diaria": {
+         "n": 527,
+         "mae": 1.18,
+         "vies": 0.13
+        },
+        "horaria": {
+         "n": 527,
+         "mae": 1.19,
+         "vies": -0.02
+        }
+       }
+      }
+     },
+     "5": {
+      "usar": true,
+      "dias": 566,
+      "nEstacao": {
+       "verao": 172,
+       "outono": 99,
+       "inverno": 106,
+       "primavera": 189
+      },
+      "vies": {
+       "verao": [
+        0.19,
+        0.21,
+        0.14,
+        0.12,
+        0.12,
+        0.14,
+        0.4,
+        0.39,
+        -0.31,
+        -1.18,
+        -1.51,
+        -1.44,
+        -1.34,
+        -1.28,
+        -1.43,
+        -1.43,
+        -1.35,
+        -0.99,
+        -0.65,
+        -0.12,
+        0.12,
+        0.02,
+        -0.08,
+        0.12
+       ],
+       "outono": [
+        -0.18,
+        -0.26,
+        -0.35,
+        -0.46,
+        -0.53,
+        -0.69,
+        -0.58,
+        -0.03,
+        0.04,
+        -0.88,
+        -1.24,
+        -1.29,
+        -1.11,
+        -1.15,
+        -1.07,
+        -0.93,
+        -0.94,
+        -0.78,
+        -0.05,
+        0.41,
+        0.43,
+        -0.01,
+        -0.19,
+        -0.16
+       ],
+       "inverno": [
+        0.05,
+        0.09,
+        0.12,
+        0.07,
+        -0.05,
+        -0.16,
+        -0.1,
+        0.29,
+        0.52,
+        -0.34,
+        -0.84,
+        -1.04,
+        -1.1,
+        -1.06,
+        -0.99,
+        -1,
+        -0.88,
+        -1.01,
+        -0.2,
+        0.24,
+        0.3,
+        0.11,
+        0.07,
+        0.04
+       ],
+       "primavera": [
+        0,
+        0.03,
+        -0.02,
+        -0.03,
+        -0.07,
+        -0.18,
+        -0.03,
+        0.02,
+        -0.49,
+        -0.72,
+        -0.93,
+        -0.86,
+        -0.8,
+        -0.86,
+        -0.75,
+        -0.78,
+        -0.9,
+        -0.97,
+        -0.4,
+        0.2,
+        0.17,
+        0,
+        -0.11,
+        -0.09
+       ]
+      },
+      "pico": {
+       "tmax": {
+        "verao": -1.11,
+        "outono": -1.1,
+        "inverno": -0.77,
+        "primavera": -0.98
+       },
+       "tmin": {
+        "verao": 0.32,
+        "outono": 0.16,
+        "inverno": 0.2,
+        "primavera": 0.15
+       }
+      },
+      "ini": "2024-08-10",
+      "fim": "2026-10-31",
+      "validacao": {
+       "horaria": {
+        "bruta": {
+         "n": 13461,
+         "mae": 1.9,
+         "vies": -0.39
+        },
+        "diaria": {
+         "n": 13461,
+         "mae": 1.95,
+         "vies": 0.54
+        },
+        "horaria": {
+         "n": 13461,
+         "mae": 1.9,
+         "vies": 0.36
+        }
+       },
+       "tarde": {
+        "bruta": {
+         "n": 3924,
+         "mae": 2.45,
+         "vies": -0.96
+        },
+        "diaria": {
+         "n": 3924,
+         "mae": 2.35,
+         "vies": 0.72
+        },
+        "horaria": {
+         "n": 3924,
+         "mae": 2.36,
+         "vies": 0.8
+        }
+       },
+       "tmax": {
+        "bruta": {
+         "n": 566,
+         "mae": 2.83,
+         "vies": -1.99
+        },
+        "diaria": {
+         "n": 566,
+         "mae": 2.12,
+         "vies": 0
+        },
+        "horaria": {
+         "n": 566,
+         "mae": 2.11,
+         "vies": 0
+        }
+       },
+       "tmin": {
+        "bruta": {
+         "n": 566,
+         "mae": 1.42,
+         "vies": 0.15
+        },
+        "diaria": {
+         "n": 566,
+         "mae": 1.42,
+         "vies": 0.15
+        },
+        "horaria": {
+         "n": 566,
+         "mae": 1.41,
+         "vies": -0.03
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "orvalhoHorario": {
+  "modelos": {
+   "ecmwf_ifs": {
+    "usar": true,
+    "dias": 379,
+    "vies": {
+     "verao": [
+      -0.63,
+      -0.76,
+      -0.92,
+      -1.1,
+      -1.09,
+      -1.11,
+      -1.02,
+      -0.47,
+      -0.07,
+      -0.38,
+      -0.93,
+      -1.49,
+      -1.85,
+      -2.18,
+      -2.45,
+      -2.53,
+      -2.48,
+      -2.02,
+      -1.2,
+      -0.57,
+      -0.51,
+      -0.44,
+      -0.5,
+      -0.56
+     ],
+     "outono": [
+      -1.05,
+      -1.15,
+      -1.25,
+      -1.3,
+      -1.2,
+      -1.24,
+      -1.27,
+      -1.16,
+      -0.65,
+      -0.4,
+      -0.51,
+      -0.92,
+      -1.3,
+      -1.68,
+      -1.91,
+      -2.08,
+      -1.91,
+      -1.24,
+      -0.89,
+      -0.83,
+      -0.9,
+      -0.83,
+      -0.92,
+      -1.03
+     ],
+     "inverno": [
+      -1.24,
+      -1.23,
+      -1.22,
+      -1.22,
+      -1.23,
+      -1.31,
+      -1.31,
+      -1.29,
+      -1.05,
+      -1,
+      -0.91,
+      -0.98,
+      -1.02,
+      -1.2,
+      -1.42,
+      -1.26,
+      -1.1,
+      -0.71,
+      -0.91,
+      -1.16,
+      -1.25,
+      -1.2,
+      -1.24,
+      -1.22
+     ],
+     "primavera": [
+      -0.95,
+      -0.92,
+      -0.97,
+      -0.96,
+      -0.92,
+      -1,
+      -0.92,
+      -0.69,
+      -0.43,
+      -0.56,
+      -0.69,
+      -0.96,
+      -1.29,
+      -1.55,
+      -1.59,
+      -1.5,
+      -1.38,
+      -1.13,
+      -0.74,
+      -0.89,
+      -0.92,
+      -0.91,
+      -0.92,
+      -0.93
+     ]
+    },
+    "validacao": {
+     "antes": {
+      "n": 9027,
+      "mae": 1.41,
+      "vies": -1.1
+     },
+     "depois": {
+      "n": 9027,
+      "mae": 1.01,
+      "vies": 0
+     }
+    }
+   },
+   "ecmwf_aifs025_single": {
+    "usar": true,
+    "dias": 497,
+    "vies": {
+     "verao": [
+      -0.75,
+      -0.96,
+      -1.1,
+      -1.07,
+      -0.82,
+      -0.42,
+      -0.02,
+      0.11,
+      0.25,
+      0.16,
+      -0.07,
+      -0.3,
+      -0.55,
+      -0.86,
+      -1.12,
+      -1.23,
+      -1.06,
+      -0.69,
+      -0.39,
+      -0.09,
+      -0.04,
+      -0.13,
+      -0.31,
+      -0.56
+     ],
+     "outono": [
+      -0.53,
+      -0.68,
+      -0.75,
+      -0.68,
+      -0.42,
+      -0.19,
+      0.08,
+      0.22,
+      0.07,
+      -0.02,
+      0.29,
+      0.48,
+      0.41,
+      0.43,
+      0.43,
+      0.27,
+      0.31,
+      0.41,
+      0.54,
+      0.45,
+      0.26,
+      0.06,
+      -0.11,
+      -0.33
+     ],
+     "inverno": [
+      -0.87,
+      -0.92,
+      -0.87,
+      -0.76,
+      -0.64,
+      -0.49,
+      -0.31,
+      -0.11,
+      -0.07,
+      -0.43,
+      -0.43,
+      -0.22,
+      -0.06,
+      -0.05,
+      -0.1,
+      -0.1,
+      -0.1,
+      -0.14,
+      -0.22,
+      -0.45,
+      -0.6,
+      -0.71,
+      -0.79,
+      -0.84
+     ],
+     "primavera": [
+      -0.95,
+      -0.98,
+      -0.98,
+      -0.88,
+      -0.61,
+      -0.34,
+      -0.02,
+      -0.06,
+      -0.02,
+      -0.05,
+      -0.04,
+      -0.07,
+      -0.23,
+      -0.45,
+      -0.58,
+      -0.55,
+      -0.48,
+      -0.4,
+      -0.32,
+      -0.31,
+      -0.42,
+      -0.56,
+      -0.65,
+      -0.81
+     ]
+    },
+    "validacao": {
+     "antes": {
+      "n": 11825,
+      "mae": 1,
+      "vies": -0.28
+     },
+     "depois": {
+      "n": 11825,
+      "mae": 0.93,
+      "vies": -0.02
+     }
+    }
+   },
+   "ukmo_global_deterministic_10km": {
+    "usar": true,
+    "dias": 433,
+    "vies": {
+     "verao": [
+      -0.32,
+      -0.44,
+      -0.52,
+      -0.61,
+      -0.61,
+      -0.65,
+      -0.5,
+      -0.48,
+      -0.14,
+      -0.08,
+      -0.44,
+      -0.99,
+      -1.48,
+      -1.8,
+      -2.1,
+      -2.17,
+      -2.03,
+      -1.57,
+      -1.03,
+      -0.59,
+      -0.43,
+      -0.35,
+      -0.36,
+      -0.37
+     ],
+     "outono": [
+      -0.58,
+      -0.61,
+      -0.74,
+      -0.74,
+      -0.74,
+      -0.77,
+      -0.79,
+      -0.69,
+      -0.72,
+      -0.67,
+      -0.42,
+      -0.53,
+      -0.97,
+      -1.2,
+      -1.3,
+      -1.43,
+      -1.07,
+      -0.55,
+      -0.39,
+      -0.19,
+      -0.19,
+      -0.28,
+      -0.32,
+      -0.44
+     ],
+     "inverno": [
+      -0.81,
+      -0.74,
+      -0.71,
+      -0.87,
+      -0.9,
+      -0.93,
+      -0.91,
+      -1.01,
+      -0.86,
+      -1.23,
+      -1.19,
+      -1.05,
+      -1.1,
+      -1.25,
+      -1.36,
+      -1.18,
+      -0.8,
+      -0.51,
+      -0.93,
+      -0.93,
+      -0.83,
+      -0.89,
+      -0.84,
+      -0.77
+     ],
+     "primavera": [
+      -0.69,
+      -0.62,
+      -0.62,
+      -0.78,
+      -0.74,
+      -0.79,
+      -0.68,
+      -0.72,
+      -0.58,
+      -0.54,
+      -0.47,
+      -0.58,
+      -0.83,
+      -1.01,
+      -1.13,
+      -1.13,
+      -1.08,
+      -0.9,
+      -0.63,
+      -0.68,
+      -0.78,
+      -0.74,
+      -0.7,
+      -0.73
+     ]
+    },
+    "validacao": {
+     "antes": {
+      "n": 10326,
+      "mae": 1.45,
+      "vies": -0.8
+     },
+     "depois": {
+      "n": 10326,
+      "mae": 1.35,
+      "vies": -0.05
+     }
+    }
+   }
+  }
+ },
+ "sensacao": {
+  "formula": "NWS: índice de calor (Rothfusz/WPC) e vento frio (≤ 10 °C, transição até 15 °C)",
+  "modelos": {
+   "ecmwf_ifs": {
+    "dias": 351,
+    "hora": {
+     "bruta": {
+      "n": 8343,
+      "mae": 1.69,
+      "vies": -0.94
+     },
+     "corrigida": {
+      "n": 8343,
+      "mae": 1.41,
+      "vies": 0.03
+     }
+    },
+    "tarde": {
+     "bruta": {
+      "n": 2428,
+      "mae": 2.41,
+      "vies": -1.45
+     },
+     "corrigida": {
+      "n": 2428,
+      "mae": 1.88,
+      "vies": 0.31
+     }
+    },
+    "max": {
+     "bruta": {
+      "n": 351,
+      "mae": 2.57,
+      "vies": -1.7
+     },
+     "corrigida": {
+      "n": 351,
+      "mae": 1.78,
+      "vies": 0.28
+     }
+    },
+    "min": {
+     "bruta": {
+      "n": 351,
+      "mae": 1.09,
+      "vies": -0.75
+     },
+     "corrigida": {
+      "n": 351,
+      "mae": 0.99,
+      "vies": -0.29
+     }
+    }
+   },
+   "ecmwf_aifs025_single": {
+    "dias": 495,
+    "hora": {
+     "bruta": {
+      "n": 11772,
+      "mae": 1.65,
+      "vies": -0.73
+     },
+     "corrigida": {
+      "n": 11772,
+      "mae": 1.55,
+      "vies": 0.24
+     }
+    },
+    "tarde": {
+     "bruta": {
+      "n": 3423,
+      "mae": 2.22,
+      "vies": -1.45
+     },
+     "corrigida": {
+      "n": 3423,
+      "mae": 1.89,
+      "vies": 0.84
+     }
+    },
+    "max": {
+     "bruta": {
+      "n": 495,
+      "mae": 2.56,
+      "vies": -2.42
+     },
+     "corrigida": {
+      "n": 495,
+      "mae": 1.55,
+      "vies": 0.32
+     }
+    },
+    "min": {
+     "bruta": {
+      "n": 495,
+      "mae": 1.02,
+      "vies": 0.1
+     },
+     "corrigida": {
+      "n": 495,
+      "mae": 1.02,
+      "vies": -0.27
+     }
+    }
+   },
+   "ukmo_global_deterministic_10km": {
+    "dias": 377,
+    "hora": {
+     "bruta": {
+      "n": 9000,
+      "mae": 1.72,
+      "vies": -0.86
+     },
+     "corrigida": {
+      "n": 9000,
+      "mae": 1.51,
+      "vies": 0.24
+     }
+    },
+    "tarde": {
+     "bruta": {
+      "n": 2619,
+      "mae": 2.52,
+      "vies": -1.59
+     },
+     "corrigida": {
+      "n": 2619,
+      "mae": 1.98,
+      "vies": 0.44
+     }
+    },
+    "max": {
+     "bruta": {
+      "n": 377,
+      "mae": 2.81,
+      "vies": -2.24
+     },
+     "corrigida": {
+      "n": 377,
+      "mae": 1.82,
+      "vies": 0.13
+     }
+    },
+    "min": {
+     "bruta": {
+      "n": 377,
+      "mae": 1.12,
+      "vies": -0.61
+     },
+     "corrigida": {
+      "n": 377,
+      "mae": 1.05,
+      "vies": -0.28
+     }
+    }
+   }
+  }
+ },
+ "modelos": {
+  "ecmwf_ifs": {
+   "nome": "ECMWF IFS",
+   "app": true,
+   "tmax": {
+    "1": {
+     "usar": true,
+     "n": 364,
+     "viesAnual": -1.246,
+     "vies": {
+      "verao": -1.863,
+      "outono": -1.595,
+      "inverno": -0.548,
+      "primavera": -1.05
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 77,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 1.93,
+     "maeDepois": 1.32,
+     "ganho": 0.315
+    },
+    "2": {
+     "usar": true,
+     "n": 367,
+     "viesAnual": -1.345,
+     "vies": {
+      "verao": -1.821,
+      "outono": -1.752,
+      "inverno": -0.682,
+      "primavera": -1.184
+     },
+     "nEstacao": {
+      "verao": 94,
+      "outono": 76,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 2,
+     "maeDepois": 1.36,
+     "ganho": 0.321
+    },
+    "3": {
+     "usar": true,
+     "n": 362,
+     "viesAnual": -1.321,
+     "vies": {
+      "verao": -1.979,
+      "outono": -1.701,
+      "inverno": -0.662,
+      "primavera": -1.038
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 75,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 2.12,
+     "maeDepois": 1.59,
+     "ganho": 0.252
+    },
+    "4": {
+     "usar": true,
+     "n": 381,
+     "viesAnual": -1.461,
+     "vies": {
+      "verao": -2.318,
+      "outono": -1.622,
+      "inverno": -0.797,
+      "primavera": -1.138
+     },
+     "nEstacao": {
+      "verao": 92,
+      "outono": 92,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 2.3,
+     "maeDepois": 1.68,
+     "ganho": 0.267
+    },
+    "5": {
+     "usar": true,
+     "n": 360,
+     "viesAnual": -1.444,
+     "vies": {
+      "verao": -2.33,
+      "outono": -1.748,
+      "inverno": -0.813,
+      "primavera": -1
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 73,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 2.47,
+     "maeDepois": 1.92,
+     "ganho": 0.222
+    }
+   },
+   "tmin": {
+    "1": {
+     "usar": true,
+     "n": 364,
+     "viesAnual": -0.319,
+     "vies": {
+      "verao": -0.301,
+      "outono": -0.241,
+      "inverno": -0.23,
+      "primavera": -0.472
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 77,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 0.93,
+     "maeDepois": 0.91,
+     "ganho": 0.021
+    },
+    "2": {
+     "usar": true,
+     "n": 367,
+     "viesAnual": -0.337,
+     "vies": {
+      "verao": -0.307,
+      "outono": -0.374,
+      "inverno": -0.244,
+      "primavera": -0.417
+     },
+     "nEstacao": {
+      "verao": 94,
+      "outono": 76,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 1.05,
+     "maeDepois": 1.03,
+     "ganho": 0.023
+    },
+    "3": {
+     "usar": false,
+     "n": 362,
+     "viesAnual": -0.266,
+     "vies": {
+      "verao": -0.139,
+      "outono": -0.422,
+      "inverno": -0.336,
+      "primavera": -0.198
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 75,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 1.04,
+     "maeDepois": 1.04,
+     "ganho": 0.004
+    },
+    "4": {
+     "usar": false,
+     "n": 381,
+     "viesAnual": -0.312,
+     "vies": {
+      "verao": -0.243,
+      "outono": -0.486,
+      "inverno": -0.219,
+      "primavera": -0.3
+     },
+     "nEstacao": {
+      "verao": 92,
+      "outono": 92,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 1.13,
+     "maeDepois": 1.13,
+     "ganho": 0
+    },
+    "5": {
+     "usar": false,
+     "n": 360,
+     "viesAnual": -0.455,
+     "vies": {
+      "verao": -0.316,
+      "outono": -0.416,
+      "inverno": -0.614,
+      "primavera": -0.467
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 73,
+      "inverno": 90,
+      "primavera": 107
+     },
+     "maeAntes": 1.36,
+     "maeDepois": 1.39,
+     "ganho": -0.018
+    }
+   },
+   "rajada": {
+    "1": {
+     "usar": true,
+     "n": 1639,
+     "fatorAnual": 0.753,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.757
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 9.23,
+     "maeDepois": 4.78,
+     "viesAntes": 7.98,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    },
+    "2": {
+     "usar": true,
+     "n": 1639,
+     "fatorAnual": 0.753,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.757
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 9.23,
+     "maeDepois": 4.78,
+     "viesAntes": 7.98,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    },
+    "3": {
+     "usar": true,
+     "n": 1639,
+     "fatorAnual": 0.753,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.757
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 9.23,
+     "maeDepois": 4.78,
+     "viesAntes": 7.98,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    },
+    "4": {
+     "usar": true,
+     "n": 1639,
+     "fatorAnual": 0.753,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.757
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 9.23,
+     "maeDepois": 4.78,
+     "viesAntes": 7.98,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    },
+    "5": {
+     "usar": true,
+     "n": 1639,
+     "fatorAnual": 0.753,
+     "fator": {
+      "verao": 0.75,
+      "outono": 0.746,
+      "inverno": 0.759,
+      "primavera": 0.757
+     },
+     "nEstacao": {
+      "verao": 420,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 9.23,
+     "maeDepois": 4.78,
+     "viesAntes": 7.98,
+     "viesDepois": 0,
+     "ganho": 0.482,
+     "origem": "curto prazo"
+    }
+   },
+   "vento": {
+    "1": {
+     "usar": true,
+     "n": 372,
+     "fatorAnual": 0.591,
+     "fator": {
+      "verao": 0.589,
+      "outono": 0.593,
+      "inverno": 0.622,
+      "primavera": 0.565
+     },
+     "nEstacao": {
+      "verao": 95,
+      "outono": 81,
+      "inverno": 91,
+      "primavera": 105
+     },
+     "maeAntes": 6.11,
+     "maeDepois": 2.1,
+     "viesAntes": 5.89,
+     "viesDepois": 0,
+     "ganho": 0.657
+    },
+    "2": {
+     "usar": true,
+     "n": 362,
+     "fatorAnual": 0.586,
+     "fator": {
+      "verao": 0.577,
+      "outono": 0.597,
+      "inverno": 0.625,
+      "primavera": 0.558
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 76,
+      "inverno": 91,
+      "primavera": 105
+     },
+     "maeAntes": 6.19,
+     "maeDepois": 2.07,
+     "viesAntes": 5.96,
+     "viesDepois": 0,
+     "ganho": 0.665
+    },
+    "3": {
+     "usar": true,
+     "n": 361,
+     "fatorAnual": 0.584,
+     "fator": {
+      "verao": 0.572,
+      "outono": 0.586,
+      "inverno": 0.624,
+      "primavera": 0.561
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 75,
+      "inverno": 91,
+      "primavera": 105
+     },
+     "maeAntes": 6.2,
+     "maeDepois": 2.13,
+     "viesAntes": 6.02,
+     "viesDepois": 0.01,
+     "ganho": 0.657
+    },
+    "4": {
+     "usar": true,
+     "n": 349,
+     "fatorAnual": 0.61,
+     "fator": {
+      "verao": 0.604,
+      "outono": 0.596,
+      "inverno": 0.651,
+      "primavera": 0.592
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 63,
+      "inverno": 91,
+      "primavera": 105
+     },
+     "maeAntes": 5.8,
+     "maeDepois": 2.36,
+     "viesAntes": 5.4,
+     "viesDepois": 0,
+     "ganho": 0.593
+    },
+    "5": {
+     "usar": true,
+     "n": 378,
+     "fatorAnual": 0.603,
+     "fator": {
+      "verao": 0.595,
+      "outono": 0.612,
+      "inverno": 0.632,
+      "primavera": 0.581
+     },
+     "nEstacao": {
+      "verao": 90,
+      "outono": 92,
+      "inverno": 91,
+      "primavera": 105
+     },
+     "maeAntes": 5.89,
+     "maeDepois": 2.43,
+     "viesAntes": 5.58,
+     "viesDepois": 0,
+     "ganho": 0.587
+    }
+   },
+   "chuva": {
+    "1": {
+     "n": 330,
+     "mae": 3.64,
+     "vies": 0.85,
+     "razaoVolume": 1.207,
+     "acerto": 0.773,
+     "pod": 0.904,
+     "far": 0.437,
+     "viesFrequencia": 1.606,
+     "csi": 0.531
+    },
+    "2": {
+     "n": 318,
+     "mae": 4.42,
+     "vies": 1.29,
+     "razaoVolume": 1.318,
+     "acerto": 0.748,
+     "pod": 0.857,
+     "far": 0.462,
+     "viesFrequencia": 1.593,
+     "csi": 0.494
+    },
+    "3": {
+     "n": 299,
+     "mae": 4.55,
+     "vies": 1.11,
+     "razaoVolume": 1.263,
+     "acerto": 0.712,
+     "pod": 0.835,
+     "far": 0.503,
+     "viesFrequencia": 1.682,
+     "csi": 0.452
+    },
+    "4": {
+     "n": 330,
+     "mae": 3.93,
+     "vies": 0.56,
+     "razaoVolume": 1.137,
+     "acerto": 0.727,
+     "pod": 0.84,
+     "far": 0.487,
+     "viesFrequencia": 1.638,
+     "csi": 0.467
+    },
+    "5": {
+     "n": 330,
+     "mae": 5.03,
+     "vies": 1.36,
+     "razaoVolume": 1.33,
+     "acerto": 0.73,
+     "pod": 0.819,
+     "far": 0.483,
+     "viesFrequencia": 1.585,
+     "csi": 0.464
+    }
+   },
+   "chuvaQuantis": {
+    "usar": true,
+    "n": 1607,
+    "tabela": {
+     "verao": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.08,
+       0.18,
+       0.18,
+       0.2,
+       0.28,
+       0.38,
+       0.48,
+       0.58,
+       0.68,
+       0.76,
+       0.88,
+       1.16,
+       1.28,
+       1.56,
+       1.86,
+       2.42,
+       2.79,
+       3.29,
+       3.84,
+       4.48,
+       5.14,
+       5.61,
+       6.41,
+       7.35,
+       8.02,
+       8.91,
+       10.09,
+       11.61,
+       13.29,
+       16.05,
+       18.2,
+       20.75,
+       24.94,
+       31.83,
+       74.27
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.04,
+       0.1,
+       0.2,
+       0.24,
+       0.4,
+       0.6,
+       0.73,
+       1,
+       1.53,
+       2.16,
+       3.78,
+       4.12,
+       4.99,
+       6.15,
+       9.9,
+       11.11,
+       12.37,
+       17.81,
+       18.94,
+       25.22,
+       37.04,
+       52.77
+      ],
+      "n": 450
+     },
+     "outono": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.02,
+       0.02,
+       0.04,
+       0.04,
+       0.06,
+       0.16,
+       0.18,
+       0.28,
+       0.32,
+       0.4,
+       0.52,
+       0.64,
+       0.75,
+       0.86,
+       1.02,
+       1.5,
+       1.84,
+       2.11,
+       2.53,
+       3.2,
+       3.63,
+       4.27,
+       5.11,
+       6.01,
+       7.15,
+       8.17,
+       9.02,
+       9.89,
+       11.5,
+       14.25,
+       16.89,
+       21.7,
+       27.22,
+       58.3
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.04,
+       0.04,
+       0.2,
+       0.24,
+       0.4,
+       0.44,
+       0.48,
+       0.84,
+       1.04,
+       1.2,
+       1.53,
+       2.11,
+       2.69,
+       4.45,
+       5.2,
+       6.66,
+       8.43,
+       11.31,
+       14.36,
+       18.11,
+       24.21,
+       49.07
+      ],
+      "n": 392
+     },
+     "inverno": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.03,
+       0.1,
+       0.2,
+       0.27,
+       0.37,
+       0.47,
+       0.56,
+       0.69,
+       0.88,
+       1.11,
+       1.28,
+       1.69,
+       2.01,
+       2.28,
+       2.81,
+       3.37,
+       3.74,
+       4.35,
+       5.17,
+       6.19,
+       7.04,
+       7.66,
+       9.17,
+       9.96,
+       11.42,
+       13.57,
+       15.14,
+       19.68,
+       23.24,
+       26.32,
+       28.82,
+       33.85,
+       38.23,
+       72.49
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.14,
+       0.14,
+       0.2,
+       0.34,
+       0.34,
+       0.51,
+       0.54,
+       0.63,
+       0.94,
+       2.26,
+       3.16,
+       5.58,
+       7.36,
+       8.24,
+       8.77,
+       11.36,
+       15.93,
+       22.12,
+       24.3,
+       36.88,
+       38.66,
+       42.42,
+       48.22,
+       59.04
+      ],
+      "n": 235
+     },
+     "primavera": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.08,
+       0.08,
+       0.18,
+       0.18,
+       0.28,
+       0.28,
+       0.38,
+       0.55,
+       0.58,
+       0.77,
+       0.85,
+       1.05,
+       1.17,
+       1.37,
+       1.57,
+       1.73,
+       1.98,
+       2.38,
+       2.81,
+       3.36,
+       3.72,
+       4.32,
+       5.15,
+       6.34,
+       7.46,
+       8.67,
+       10.53,
+       12.45,
+       14.7,
+       17.07,
+       19.87,
+       22.97,
+       28.73,
+       32.94,
+       42.62,
+       127.7
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.17,
+       0.17,
+       0.2,
+       0.2,
+       0.37,
+       0.4,
+       0.4,
+       0.6,
+       0.8,
+       0.83,
+       1.03,
+       1.66,
+       2.8,
+       5.53,
+       7.76,
+       9.65,
+       13.57,
+       17.99,
+       20.65,
+       22.9,
+       24.53,
+       31.2,
+       36.24,
+       75.6
+      ],
+      "n": 530
+     }
+    },
+    "validacao": {
+     "total": {
+      "antes": {
+       "acerto": 0.739,
+       "pod": 0.852,
+       "far": 0.474,
+       "viesFrequencia": 1.62,
+       "mae": 4.308,
+       "razaoVolume": 1.25
+      },
+      "depois": {
+       "acerto": 0.798,
+       "pod": 0.646,
+       "far": 0.355,
+       "viesFrequencia": 1.002,
+       "mae": 4.131,
+       "razaoVolume": 1.055
+      }
+     },
+     "porLead": {
+      "1": {
+       "n": 330,
+       "antes": {
+        "acerto": 0.773,
+        "pod": 0.904,
+        "far": 0.437,
+        "viesFrequencia": 1.606,
+        "mae": 3.639,
+        "razaoVolume": 1.207
+       },
+       "depois": {
+        "acerto": 0.833,
+        "pod": 0.713,
+        "far": 0.295,
+        "viesFrequencia": 1.011,
+        "mae": 3.537,
+        "razaoVolume": 1.035
+       }
+      },
+      "2": {
+       "n": 318,
+       "antes": {
+        "acerto": 0.748,
+        "pod": 0.857,
+        "far": 0.462,
+        "viesFrequencia": 1.593,
+        "mae": 4.417,
+        "razaoVolume": 1.318
+       },
+       "depois": {
+        "acerto": 0.814,
+        "pod": 0.692,
+        "far": 0.33,
+        "viesFrequencia": 1.033,
+        "mae": 4.176,
+        "razaoVolume": 1.099
+       }
+      },
+      "3": {
+       "n": 299,
+       "antes": {
+        "acerto": 0.712,
+        "pod": 0.835,
+        "far": 0.503,
+        "viesFrequencia": 1.682,
+        "mae": 4.55,
+        "razaoVolume": 1.263
+       },
+       "depois": {
+        "acerto": 0.786,
+        "pod": 0.647,
+        "far": 0.382,
+        "viesFrequencia": 1.047,
+        "mae": 4.377,
+        "razaoVolume": 1.071
+       }
+      },
+      "4": {
+       "n": 330,
+       "antes": {
+        "acerto": 0.727,
+        "pod": 0.84,
+        "far": 0.487,
+        "viesFrequencia": 1.638,
+        "mae": 3.934,
+        "razaoVolume": 1.137
+       },
+       "depois": {
+        "acerto": 0.785,
+        "pod": 0.606,
+        "far": 0.374,
+        "viesFrequencia": 0.968,
+        "mae": 3.87,
+        "razaoVolume": 0.944
+       }
+      },
+      "5": {
+       "n": 330,
+       "antes": {
+        "acerto": 0.73,
+        "pod": 0.819,
+        "far": 0.483,
+        "viesFrequencia": 1.585,
+        "mae": 5.025,
+        "razaoVolume": 1.33
+       },
+       "depois": {
+        "acerto": 0.77,
+        "pod": 0.574,
+        "far": 0.4,
+        "viesFrequencia": 0.957,
+        "mae": 4.722,
+        "razaoVolume": 1.128
+       }
+      }
+     }
+    }
+   },
+   "rajadaCoerencia": null,
+   "ventoCoerencia": 1.045,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 1639,
+    "fatorAnual": 0.753,
+    "fator": {
+     "verao": 0.75,
+     "outono": 0.746,
+     "inverno": 0.759,
+     "primavera": 0.757
+    },
+    "nEstacao": {
+     "verao": 420,
+     "outono": 459,
+     "inverno": 382,
+     "primavera": 378
+    },
+    "maeAntes": 9.23,
+    "maeDepois": 4.78,
+    "viesAntes": 7.98,
+    "viesDepois": 0,
+    "ganho": 0.482
+   }
+  },
+  "ecmwf_aifs025_single": {
+   "nome": "ECMWF AIFS",
+   "app": true,
+   "tmax": {
+    "1": {
+     "usar": true,
+     "n": 497,
+     "viesAnual": -2.335,
+     "vies": {
+      "verao": -2.698,
+      "outono": -2.381,
+      "inverno": -1.872,
+      "primavera": -2.376
+     },
+     "nEstacao": {
+      "verao": 101,
+      "outono": 183,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 2.41,
+     "maeDepois": 1.04,
+     "ganho": 0.567
+    },
+    "2": {
+     "usar": true,
+     "n": 496,
+     "viesAnual": -2.257,
+     "vies": {
+      "verao": -2.494,
+      "outono": -2.342,
+      "inverno": -1.822,
+      "primavera": -2.328
+     },
+     "nEstacao": {
+      "verao": 100,
+      "outono": 183,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 2.37,
+     "maeDepois": 1.13,
+     "ganho": 0.523
+    },
+    "3": {
+     "usar": true,
+     "n": 495,
+     "viesAnual": -2.188,
+     "vies": {
+      "verao": -2.472,
+      "outono": -2.279,
+      "inverno": -1.825,
+      "primavera": -2.137
+     },
+     "nEstacao": {
+      "verao": 99,
+      "outono": 183,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 2.33,
+     "maeDepois": 1.2,
+     "ganho": 0.486
+    },
+    "4": {
+     "usar": true,
+     "n": 480,
+     "viesAnual": -2.147,
+     "vies": {
+      "verao": -2.481,
+      "outono": -2.332,
+      "inverno": -1.669,
+      "primavera": -2.033
+     },
+     "nEstacao": {
+      "verao": 98,
+      "outono": 169,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 2.38,
+     "maeDepois": 1.36,
+     "ganho": 0.43
+    },
+    "5": {
+     "usar": true,
+     "n": 479,
+     "viesAnual": -2.163,
+     "vies": {
+      "verao": -2.599,
+      "outono": -2.316,
+      "inverno": -1.618,
+      "primavera": -2.074
+     },
+     "nEstacao": {
+      "verao": 97,
+      "outono": 169,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 2.58,
+     "maeDepois": 1.6,
+     "ganho": 0.378
+    }
+   },
+   "tmin": {
+    "1": {
+     "usar": true,
+     "n": 497,
+     "viesAnual": 0.495,
+     "vies": {
+      "verao": 0.569,
+      "outono": 0.648,
+      "inverno": 0.429,
+      "primavera": 0.247
+     },
+     "nEstacao": {
+      "verao": 101,
+      "outono": 183,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 1.02,
+     "maeDepois": 0.93,
+     "ganho": 0.081
+    },
+    "2": {
+     "usar": true,
+     "n": 496,
+     "viesAnual": 0.465,
+     "vies": {
+      "verao": 0.503,
+      "outono": 0.667,
+      "inverno": 0.333,
+      "primavera": 0.235
+     },
+     "nEstacao": {
+      "verao": 100,
+      "outono": 183,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 1.06,
+     "maeDepois": 1,
+     "ganho": 0.052
+    },
+    "3": {
+     "usar": true,
+     "n": 495,
+     "viesAnual": 0.549,
+     "vies": {
+      "verao": 0.576,
+      "outono": 0.707,
+      "inverno": 0.413,
+      "primavera": 0.406
+     },
+     "nEstacao": {
+      "verao": 99,
+      "outono": 183,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 1.15,
+     "maeDepois": 1.06,
+     "ganho": 0.08
+    },
+    "4": {
+     "usar": true,
+     "n": 480,
+     "viesAnual": 0.584,
+     "vies": {
+      "verao": 0.569,
+      "outono": 0.698,
+      "inverno": 0.439,
+      "primavera": 0.571
+     },
+     "nEstacao": {
+      "verao": 98,
+      "outono": 169,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 1.22,
+     "maeDepois": 1.15,
+     "ganho": 0.061
+    },
+    "5": {
+     "usar": true,
+     "n": 479,
+     "viesAnual": 0.632,
+     "vies": {
+      "verao": 0.585,
+      "outono": 0.842,
+      "inverno": 0.448,
+      "primavera": 0.547
+     },
+     "nEstacao": {
+      "verao": 97,
+      "outono": 169,
+      "inverno": 106,
+      "primavera": 107
+     },
+     "maeAntes": 1.29,
+     "maeDepois": 1.21,
+     "ganho": 0.065
+    }
+   },
+   "rajada": {},
+   "vento": {
+    "1": {
+     "usar": true,
+     "n": 496,
+     "fatorAnual": 0.746,
+     "fator": {
+      "verao": 0.768,
+      "outono": 0.737,
+      "inverno": 0.764,
+      "primavera": 0.723
+     },
+     "nEstacao": {
+      "verao": 101,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 105
+     },
+     "maeAntes": 3.64,
+     "maeDepois": 2.2,
+     "viesAntes": 2.76,
+     "viesDepois": 0,
+     "ganho": 0.394
+    },
+    "2": {
+     "usar": true,
+     "n": 495,
+     "fatorAnual": 0.755,
+     "fator": {
+      "verao": 0.778,
+      "outono": 0.75,
+      "inverno": 0.769,
+      "primavera": 0.731
+     },
+     "nEstacao": {
+      "verao": 100,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 105
+     },
+     "maeAntes": 3.62,
+     "maeDepois": 2.28,
+     "viesAntes": 2.63,
+     "viesDepois": 0.01,
+     "ganho": 0.369
+    },
+    "3": {
+     "usar": true,
+     "n": 494,
+     "fatorAnual": 0.769,
+     "fator": {
+      "verao": 0.804,
+      "outono": 0.772,
+      "inverno": 0.776,
+      "primavera": 0.73
+     },
+     "nEstacao": {
+      "verao": 99,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 105
+     },
+     "maeAntes": 3.52,
+     "maeDepois": 2.33,
+     "viesAntes": 2.43,
+     "viesDepois": 0.01,
+     "ganho": 0.338
+    },
+    "4": {
+     "usar": true,
+     "n": 493,
+     "fatorAnual": 0.767,
+     "fator": {
+      "verao": 0.801,
+      "outono": 0.766,
+      "inverno": 0.784,
+      "primavera": 0.726
+     },
+     "nEstacao": {
+      "verao": 98,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 105
+     },
+     "maeAntes": 3.5,
+     "maeDepois": 2.28,
+     "viesAntes": 2.46,
+     "viesDepois": 0,
+     "ganho": 0.347
+    },
+    "5": {
+     "usar": true,
+     "n": 492,
+     "fatorAnual": 0.766,
+     "fator": {
+      "verao": 0.793,
+      "outono": 0.765,
+      "inverno": 0.787,
+      "primavera": 0.726
+     },
+     "nEstacao": {
+      "verao": 97,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 105
+     },
+     "maeAntes": 3.64,
+     "maeDepois": 2.48,
+     "viesAntes": 2.48,
+     "viesDepois": 0,
+     "ganho": 0.319
+    }
+   },
+   "chuva": {
+    "1": {
+     "n": 448,
+     "mae": 3.19,
+     "vies": 0.77,
+     "razaoVolume": 1.19,
+     "acerto": 0.712,
+     "pod": 0.975,
+     "far": 0.521,
+     "viesFrequencia": 2.034,
+     "csi": 0.473
+    },
+    "2": {
+     "n": 447,
+     "mae": 3.1,
+     "vies": 0.52,
+     "razaoVolume": 1.129,
+     "acerto": 0.718,
+     "pod": 0.966,
+     "far": 0.515,
+     "viesFrequencia": 1.992,
+     "csi": 0.477
+    },
+    "3": {
+     "n": 446,
+     "mae": 3.24,
+     "vies": 0.55,
+     "razaoVolume": 1.136,
+     "acerto": 0.715,
+     "pod": 0.975,
+     "far": 0.517,
+     "viesFrequencia": 2.017,
+     "csi": 0.477
+    },
+    "4": {
+     "n": 431,
+     "mae": 3.44,
+     "vies": 0.75,
+     "razaoVolume": 1.18,
+     "acerto": 0.675,
+     "pod": 0.94,
+     "far": 0.547,
+     "viesFrequencia": 2.077,
+     "csi": 0.44
+    },
+    "5": {
+     "n": 444,
+     "mae": 3.86,
+     "vies": 1.12,
+     "razaoVolume": 1.273,
+     "acerto": 0.658,
+     "pod": 0.95,
+     "far": 0.564,
+     "viesFrequencia": 2.176,
+     "csi": 0.426
+    }
+   },
+   "chuvaQuantis": {
+    "usar": true,
+    "n": 2216,
+    "tabela": {
+     "verao": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.03,
+       0.4,
+       0.6,
+       0.6,
+       0.69,
+       1.17,
+       1.2,
+       1.57,
+       1.77,
+       1.93,
+       2.2,
+       2.65,
+       3.13,
+       3.5,
+       3.73,
+       4.27,
+       4.82,
+       5.27,
+       5.7,
+       6,
+       6.51,
+       7.03,
+       7.8,
+       8.28,
+       8.79,
+       9.64,
+       10.57,
+       11.54,
+       13.25,
+       16.23,
+       19.08,
+       26.05,
+       50.6
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.1,
+       0.2,
+       0.2,
+       0.4,
+       0.57,
+       0.93,
+       1.13,
+       1.67,
+       2.07,
+       3.36,
+       4.02,
+       4.9,
+       5.86,
+       9.76,
+       10.74,
+       12.32,
+       17.92,
+       20.7,
+       25.95,
+       30.5,
+       52.39
+      ],
+      "n": 495
+     },
+     "outono": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.02,
+       0.04,
+       0.24,
+       0.42,
+       0.62,
+       0.64,
+       0.66,
+       0.86,
+       1.24,
+       1.26,
+       1.48,
+       1.68,
+       1.9,
+       2.01,
+       2.3,
+       2.7,
+       2.92,
+       3.16,
+       3.58,
+       4.03,
+       4.63,
+       5.4,
+       6,
+       6.81,
+       7.64,
+       8.38,
+       9.53,
+       10.97,
+       12.23,
+       15.14,
+       19.55,
+       25.21,
+       42.11
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.02,
+       0.02,
+       0.02,
+       0.22,
+       0.22,
+       0.24,
+       0.26,
+       0.46,
+       0.5,
+       0.94,
+       1.27,
+       1.67,
+       2.49,
+       4.17,
+       5.61,
+       7.58,
+       10.23,
+       15.27,
+       20.61,
+       40.57,
+       52.8
+      ],
+      "n": 876
+     },
+     "inverno": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.15,
+       0.3,
+       0.5,
+       0.6,
+       0.99,
+       1.34,
+       1.56,
+       1.91,
+       2.26,
+       2.46,
+       2.71,
+       3.01,
+       3.54,
+       4.09,
+       4.65,
+       5.53,
+       5.78,
+       6.33,
+       6.88,
+       7.61,
+       9.02,
+       10.15,
+       11.4,
+       12.2,
+       13.3,
+       14.23,
+       17.72,
+       21.16,
+       23.99,
+       26.65,
+       28.43,
+       31.91,
+       35.75,
+       43.77,
+       69.4
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.15,
+       0.15,
+       0.15,
+       0.3,
+       0.3,
+       0.5,
+       0.5,
+       0.81,
+       1.16,
+       2.22,
+       3.03,
+       5.58,
+       6.01,
+       7.4,
+       8.26,
+       9.98,
+       10.82,
+       15.68,
+       22.41,
+       23.6,
+       24.72,
+       36.53,
+       40.16,
+       45.85,
+       50.02,
+       68.16
+      ],
+      "n": 315
+     },
+     "primavera": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.17,
+       0.34,
+       0.5,
+       0.54,
+       0.57,
+       0.94,
+       1.1,
+       1.14,
+       1.34,
+       1.54,
+       1.74,
+       2.1,
+       2.3,
+       2.7,
+       2.9,
+       3.14,
+       3.5,
+       3.7,
+       3.94,
+       4.29,
+       4.77,
+       5.52,
+       6.5,
+       7.44,
+       8.04,
+       9.15,
+       9.62,
+       11.03,
+       12.65,
+       13.91,
+       15.55,
+       16.67,
+       18.12,
+       23.03,
+       28.34,
+       53.92
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.17,
+       0.17,
+       0.17,
+       0.2,
+       0.37,
+       0.37,
+       0.4,
+       0.57,
+       0.77,
+       0.8,
+       1,
+       1.57,
+       2.7,
+       5.45,
+       7.68,
+       9.43,
+       13.46,
+       17.9,
+       20.46,
+       22.92,
+       24.68,
+       31.7,
+       36.56,
+       75.6
+      ],
+      "n": 530
+     }
+    },
+    "validacao": {
+     "total": {
+      "antes": {
+       "acerto": 0.696,
+       "pod": 0.961,
+       "far": 0.533,
+       "viesFrequencia": 2.059,
+       "mae": 3.366,
+       "razaoVolume": 1.181
+      },
+      "depois": {
+       "acerto": 0.845,
+       "pod": 0.728,
+       "far": 0.296,
+       "viesFrequencia": 1.035,
+       "mae": 3.153,
+       "razaoVolume": 1.044
+      }
+     },
+     "porLead": {
+      "1": {
+       "n": 448,
+       "antes": {
+        "acerto": 0.712,
+        "pod": 0.975,
+        "far": 0.521,
+        "viesFrequencia": 2.034,
+        "mae": 3.185,
+        "razaoVolume": 1.19
+       },
+       "depois": {
+        "acerto": 0.859,
+        "pod": 0.731,
+        "far": 0.263,
+        "viesFrequencia": 0.992,
+        "mae": 3.047,
+        "razaoVolume": 1.093
+       }
+      },
+      "2": {
+       "n": 447,
+       "antes": {
+        "acerto": 0.718,
+        "pod": 0.966,
+        "far": 0.515,
+        "viesFrequencia": 1.992,
+        "mae": 3.104,
+        "razaoVolume": 1.129
+       },
+       "depois": {
+        "acerto": 0.859,
+        "pod": 0.723,
+        "far": 0.259,
+        "viesFrequencia": 0.975,
+        "mae": 2.843,
+        "razaoVolume": 0.973
+       }
+      },
+      "3": {
+       "n": 446,
+       "antes": {
+        "acerto": 0.715,
+        "pod": 0.975,
+        "far": 0.517,
+        "viesFrequencia": 2.017,
+        "mae": 3.241,
+        "razaoVolume": 1.136
+       },
+       "depois": {
+        "acerto": 0.836,
+        "pod": 0.714,
+        "far": 0.315,
+        "viesFrequencia": 1.042,
+        "mae": 2.937,
+        "razaoVolume": 0.978
+       }
+      },
+      "4": {
+       "n": 431,
+       "antes": {
+        "acerto": 0.675,
+        "pod": 0.94,
+        "far": 0.547,
+        "viesFrequencia": 2.077,
+        "mae": 3.439,
+        "razaoVolume": 1.18
+       },
+       "depois": {
+        "acerto": 0.854,
+        "pod": 0.761,
+        "far": 0.282,
+        "viesFrequencia": 1.06,
+        "mae": 3.234,
+        "razaoVolume": 1.047
+       }
+      },
+      "5": {
+       "n": 444,
+       "antes": {
+        "acerto": 0.658,
+        "pod": 0.95,
+        "far": 0.564,
+        "viesFrequencia": 2.176,
+        "mae": 3.864,
+        "razaoVolume": 1.273
+       },
+       "depois": {
+        "acerto": 0.818,
+        "pod": 0.714,
+        "far": 0.356,
+        "viesFrequencia": 1.109,
+        "mae": 3.71,
+        "razaoVolume": 1.127
+       }
+      }
+     }
+    }
+   },
+   "rajadaCoerencia": null,
+   "ventoCoerencia": 1.031
+  },
+  "ukmo_global_deterministic_10km": {
+   "nome": "UKMO 10 km",
+   "app": true,
+   "tmax": {
+    "1": {
+     "usar": true,
+     "n": 510,
+     "viesAnual": -1.802,
+     "vies": {
+      "verao": -1.966,
+      "outono": -2.097,
+      "inverno": -1.524,
+      "primavera": -1.658
+     },
+     "nEstacao": {
+      "verao": 136,
+      "outono": 103,
+      "inverno": 109,
+      "primavera": 162
+     },
+     "maeAntes": 2.21,
+     "maeDepois": 1.36,
+     "ganho": 0.383
+    },
+    "2": {
+     "usar": true,
+     "n": 583,
+     "viesAnual": -2.029,
+     "vies": {
+      "verao": -1.97,
+      "outono": -2.275,
+      "inverno": -1.778,
+      "primavera": -1.988
+     },
+     "nEstacao": {
+      "verao": 133,
+      "outono": 183,
+      "inverno": 115,
+      "primavera": 152
+     },
+     "maeAntes": 2.39,
+     "maeDepois": 1.45,
+     "ganho": 0.394
+    },
+    "3": {
+     "usar": true,
+     "n": 557,
+     "viesAnual": -2.099,
+     "vies": {
+      "verao": -2.281,
+      "outono": -2.32,
+      "inverno": -1.701,
+      "primavera": -2.072
+     },
+     "nEstacao": {
+      "verao": 143,
+      "outono": 117,
+      "inverno": 117,
+      "primavera": 180
+     },
+     "maeAntes": 2.49,
+     "maeDepois": 1.6,
+     "ganho": 0.357
+    },
+    "4": {
+     "usar": true,
+     "n": 528,
+     "viesAnual": -1.873,
+     "vies": {
+      "verao": -2.424,
+      "outono": -1.905,
+      "inverno": -1.358,
+      "primavera": -1.745
+     },
+     "nEstacao": {
+      "verao": 139,
+      "outono": 101,
+      "inverno": 108,
+      "primavera": 180
+     },
+     "maeAntes": 2.6,
+     "maeDepois": 1.84,
+     "ganho": 0.293
+    },
+    "5": {
+     "usar": true,
+     "n": 566,
+     "viesAnual": -1.996,
+     "vies": {
+      "verao": -2.388,
+      "outono": -2.062,
+      "inverno": -1.695,
+      "primavera": -1.78
+     },
+     "nEstacao": {
+      "verao": 172,
+      "outono": 99,
+      "inverno": 106,
+      "primavera": 189
+     },
+     "maeAntes": 2.83,
+     "maeDepois": 2.12,
+     "ganho": 0.249
+    }
+   },
+   "tmin": {
+    "1": {
+     "usar": true,
+     "n": 510,
+     "viesAnual": -0.235,
+     "vies": {
+      "verao": -0.214,
+      "outono": -0.311,
+      "inverno": 0.09,
+      "primavera": -0.431
+     },
+     "nEstacao": {
+      "verao": 136,
+      "outono": 103,
+      "inverno": 109,
+      "primavera": 162
+     },
+     "maeAntes": 1,
+     "maeDepois": 0.97,
+     "ganho": 0.034
+    },
+    "2": {
+     "usar": false,
+     "n": 583,
+     "viesAnual": -0.005,
+     "vies": {
+      "verao": 0.018,
+      "outono": -0.154,
+      "inverno": 0.298,
+      "primavera": -0.089
+     },
+     "nEstacao": {
+      "verao": 133,
+      "outono": 183,
+      "inverno": 115,
+      "primavera": 152
+     },
+     "maeAntes": 1.07,
+     "maeDepois": 1.09,
+     "ganho": -0.015
+    },
+    "3": {
+     "usar": false,
+     "n": 557,
+     "viesAnual": 0.118,
+     "vies": {
+      "verao": -0.103,
+      "outono": 0.032,
+      "inverno": 0.416,
+      "primavera": 0.154
+     },
+     "nEstacao": {
+      "verao": 143,
+      "outono": 117,
+      "inverno": 117,
+      "primavera": 180
+     },
+     "maeAntes": 1.09,
+     "maeDepois": 1.09,
+     "ganho": 0.003
+    },
+    "4": {
+     "usar": false,
+     "n": 528,
+     "viesAnual": 0.125,
+     "vies": {
+      "verao": 0.247,
+      "outono": -0.009,
+      "inverno": 0.137,
+      "primavera": 0.103
+     },
+     "nEstacao": {
+      "verao": 139,
+      "outono": 101,
+      "inverno": 108,
+      "primavera": 180
+     },
+     "maeAntes": 1.18,
+     "maeDepois": 1.2,
+     "ganho": -0.012
+    },
+    "5": {
+     "usar": false,
+     "n": 566,
+     "viesAnual": 0.154,
+     "vies": {
+      "verao": 0.467,
+      "outono": -0.232,
+      "inverno": 0.193,
+      "primavera": 0.063
+     },
+     "nEstacao": {
+      "verao": 172,
+      "outono": 99,
+      "inverno": 106,
+      "primavera": 189
+     },
+     "maeAntes": 1.42,
+     "maeDepois": 1.4,
+     "ganho": 0.013
+    }
+   },
+   "rajada": {
+    "1": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.756,
+     "fator": {
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.731
+     },
+     "nEstacao": {
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 10.01,
+     "maeDepois": 5.46,
+     "viesAntes": 7.78,
+     "viesDepois": 0.01,
+     "ganho": 0.454,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.517,
+      "motivo": "fator varia 1.47× entre antecedências"
+     }
+    },
+    "2": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.756,
+     "fator": {
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.731
+     },
+     "nEstacao": {
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 10.01,
+     "maeDepois": 5.46,
+     "viesAntes": 7.78,
+     "viesDepois": 0.01,
+     "ganho": 0.454,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.726,
+      "motivo": "fator varia 1.47× entre antecedências"
+     }
+    },
+    "3": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.756,
+     "fator": {
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.731
+     },
+     "nEstacao": {
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 10.01,
+     "maeDepois": 5.46,
+     "viesAntes": 7.78,
+     "viesDepois": 0.01,
+     "ganho": 0.454,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.508,
+      "motivo": "fator varia 1.47× entre antecedências"
+     }
+    },
+    "4": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.756,
+     "fator": {
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.731
+     },
+     "nEstacao": {
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 10.01,
+     "maeDepois": 5.46,
+     "viesAntes": 7.78,
+     "viesDepois": 0.01,
+     "ganho": 0.454,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.745,
+      "motivo": "fator varia 1.47× entre antecedências"
+     }
+    },
+    "5": {
+     "usar": true,
+     "n": 1580,
+     "fatorAnual": 0.756,
+     "fator": {
+      "verao": 0.708,
+      "outono": 0.771,
+      "inverno": 0.83,
+      "primavera": 0.731
+     },
+     "nEstacao": {
+      "verao": 361,
+      "outono": 459,
+      "inverno": 382,
+      "primavera": 378
+     },
+     "maeAntes": 10.01,
+     "maeDepois": 5.46,
+     "viesAntes": 7.78,
+     "viesDepois": 0.01,
+     "ganho": 0.454,
+     "origem": "curto prazo",
+     "arquivoLead": {
+      "fatorAnual": 0.531,
+      "motivo": "fator varia 1.47× entre antecedências"
+     }
+    }
+   },
+   "vento": {
+    "1": {
+     "usar": true,
+     "n": 519,
+     "fatorAnual": 0.6,
+     "fator": {
+      "verao": 0.567,
+      "outono": 0.587,
+      "inverno": 0.665,
+      "primavera": 0.597
+     },
+     "nEstacao": {
+      "verao": 117,
+      "outono": 132,
+      "inverno": 104,
+      "primavera": 166
+     },
+     "maeAntes": 5.85,
+     "maeDepois": 2.19,
+     "viesAntes": 5.61,
+     "viesDepois": 0,
+     "ganho": 0.626
+    },
+    "2": {
+     "usar": true,
+     "n": 560,
+     "fatorAnual": 0.62,
+     "fator": {
+      "verao": 0.581,
+      "outono": 0.605,
+      "inverno": 0.697,
+      "primavera": 0.623
+     },
+     "nEstacao": {
+      "verao": 150,
+      "outono": 129,
+      "inverno": 115,
+      "primavera": 166
+     },
+     "maeAntes": 5.6,
+     "maeDepois": 2.44,
+     "viesAntes": 5.18,
+     "viesDepois": 0,
+     "ganho": 0.564
+    },
+    "3": {
+     "usar": true,
+     "n": 537,
+     "fatorAnual": 0.63,
+     "fator": {
+      "verao": 0.612,
+      "outono": 0.618,
+      "inverno": 0.711,
+      "primavera": 0.606
+     },
+     "nEstacao": {
+      "verao": 144,
+      "outono": 123,
+      "inverno": 109,
+      "primavera": 161
+     },
+     "maeAntes": 5.44,
+     "maeDepois": 2.43,
+     "viesAntes": 4.99,
+     "viesDepois": -0.01,
+     "ganho": 0.553
+    },
+    "4": {
+     "usar": true,
+     "n": 532,
+     "fatorAnual": 0.623,
+     "fator": {
+      "verao": 0.6,
+      "outono": 0.61,
+      "inverno": 0.702,
+      "primavera": 0.603
+     },
+     "nEstacao": {
+      "verao": 144,
+      "outono": 114,
+      "inverno": 121,
+      "primavera": 153
+     },
+     "maeAntes": 5.54,
+     "maeDepois": 2.51,
+     "viesAntes": 5.09,
+     "viesDepois": 0,
+     "ganho": 0.548
+    },
+    "5": {
+     "usar": true,
+     "n": 551,
+     "fatorAnual": 0.626,
+     "fator": {
+      "verao": 0.593,
+      "outono": 0.616,
+      "inverno": 0.707,
+      "primavera": 0.622
+     },
+     "nEstacao": {
+      "verao": 164,
+      "outono": 115,
+      "inverno": 104,
+      "primavera": 168
+     },
+     "maeAntes": 5.64,
+     "maeDepois": 2.71,
+     "viesAntes": 5.04,
+     "viesDepois": 0,
+     "ganho": 0.519
+    }
+   },
+   "chuva": {
+    "1": {
+     "n": 529,
+     "mae": 4.12,
+     "vies": 0.59,
+     "razaoVolume": 1.14,
+     "acerto": 0.802,
+     "pod": 0.864,
+     "far": 0.401,
+     "viesFrequencia": 1.442,
+     "csi": 0.547
+    },
+    "2": {
+     "n": 494,
+     "mae": 4.29,
+     "vies": 0.77,
+     "razaoVolume": 1.192,
+     "acerto": 0.771,
+     "pod": 0.771,
+     "far": 0.429,
+     "viesFrequencia": 1.35,
+     "csi": 0.489
+    },
+    "3": {
+     "n": 399,
+     "mae": 5.15,
+     "vies": 1.14,
+     "razaoVolume": 1.27,
+     "acerto": 0.772,
+     "pod": 0.847,
+     "far": 0.44,
+     "viesFrequencia": 1.514,
+     "csi": 0.508
+    },
+    "4": {
+     "n": 457,
+     "mae": 4.87,
+     "vies": 0.92,
+     "razaoVolume": 1.217,
+     "acerto": 0.737,
+     "pod": 0.82,
+     "far": 0.468,
+     "viesFrequencia": 1.541,
+     "csi": 0.476
+    },
+    "5": {
+     "n": 487,
+     "mae": 5.74,
+     "vies": 1.14,
+     "razaoVolume": 1.266,
+     "acerto": 0.721,
+     "pod": 0.746,
+     "far": 0.485,
+     "viesFrequencia": 1.451,
+     "csi": 0.438
+    }
+   },
+   "chuvaQuantis": {
+    "usar": true,
+    "n": 2366,
+    "tabela": {
+     "verao": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.09,
+       0.17,
+       0.26,
+       0.27,
+       0.29,
+       0.3,
+       0.52,
+       0.57,
+       0.69,
+       0.82,
+       0.99,
+       1.29,
+       1.66,
+       2.04,
+       2.45,
+       3.02,
+       4.22,
+       4.73,
+       5.8,
+       7.2,
+       8.28,
+       9.45,
+       10.79,
+       12.08,
+       14.46,
+       17.17,
+       20.65,
+       24.51,
+       28.59,
+       37.6,
+       46.88,
+       119.7
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.03,
+       0.2,
+       0.2,
+       0.22,
+       0.4,
+       0.6,
+       0.97,
+       1.17,
+       2.07,
+       2.5,
+       3.82,
+       4.29,
+       4.99,
+       8.37,
+       9.82,
+       11.6,
+       15.6,
+       17.72,
+       21.86,
+       27.05,
+       37.07,
+       61.82
+      ],
+      "n": 682
+     },
+     "outono": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.01,
+       0.03,
+       0.13,
+       0.21,
+       0.31,
+       0.34,
+       0.36,
+       0.6,
+       0.77,
+       1.06,
+       1.44,
+       1.59,
+       1.82,
+       2.28,
+       2.75,
+       3.29,
+       3.91,
+       4.64,
+       5.5,
+       6.57,
+       7.85,
+       9.31,
+       11.14,
+       12.93,
+       15.47,
+       17.8,
+       22.68,
+       32.1,
+       62.53
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.03,
+       0.03,
+       0.03,
+       0.05,
+       0.23,
+       0.26,
+       0.29,
+       0.32,
+       0.52,
+       0.95,
+       1.07,
+       1.58,
+       1.75,
+       2.71,
+       4.44,
+       5.47,
+       6.91,
+       9.66,
+       13.8,
+       18.37,
+       40.82,
+       53.96
+      ],
+      "n": 576
+     },
+     "inverno": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.1,
+       0.28,
+       0.35,
+       0.45,
+       0.55,
+       0.75,
+       0.93,
+       1.13,
+       1.56,
+       1.93,
+       2.29,
+       2.57,
+       2.99,
+       3.59,
+       4.37,
+       5.16,
+       5.77,
+       6.6,
+       7.72,
+       9.72,
+       11.15,
+       13,
+       15.52,
+       18.33,
+       25.25,
+       28.44,
+       34.83,
+       41.67,
+       104.82
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.15,
+       0.15,
+       0.15,
+       0.35,
+       0.35,
+       0.5,
+       0.53,
+       0.74,
+       1.21,
+       2.32,
+       3.13,
+       3.33,
+       5.82,
+       7.58,
+       8.51,
+       8.92,
+       11.28,
+       16.28,
+       21.77,
+       24.4,
+       25.88,
+       39.52,
+       43.61,
+       50.17,
+       68.16
+      ],
+      "n": 315
+     },
+     "primavera": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.1,
+       0.2,
+       0.3,
+       0.3,
+       0.4,
+       0.6,
+       0.7,
+       0.9,
+       1.11,
+       1.31,
+       1.52,
+       1.83,
+       2.32,
+       2.77,
+       3.35,
+       3.96,
+       4.66,
+       5.38,
+       6.19,
+       7.2,
+       8.5,
+       9.83,
+       11.92,
+       15.29,
+       18.64,
+       22.61,
+       29.78,
+       36.47,
+       72.99
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.18,
+       0.18,
+       0.2,
+       0.2,
+       0.38,
+       0.39,
+       0.4,
+       0.78,
+       0.8,
+       1,
+       1.56,
+       1.98,
+       2.6,
+       3.8,
+       5.45,
+       8.04,
+       11.16,
+       14.01,
+       18.8,
+       21.95,
+       24.64,
+       32.38,
+       40.41,
+       75.6
+      ],
+      "n": 793
+     }
+    },
+    "validacao": {
+     "total": {
+      "antes": {
+       "acerto": 0.761,
+       "pod": 0.808,
+       "far": 0.445,
+       "viesFrequencia": 1.456,
+       "mae": 4.811,
+       "razaoVolume": 1.214
+      },
+      "depois": {
+       "acerto": 0.796,
+       "pod": 0.646,
+       "far": 0.359,
+       "viesFrequencia": 1.009,
+       "mae": 4.464,
+       "razaoVolume": 1.03
+      }
+     },
+     "porLead": {
+      "1": {
+       "n": 529,
+       "antes": {
+        "acerto": 0.802,
+        "pod": 0.864,
+        "far": 0.401,
+        "viesFrequencia": 1.442,
+        "mae": 4.122,
+        "razaoVolume": 1.14
+       },
+       "depois": {
+        "acerto": 0.82,
+        "pod": 0.68,
+        "far": 0.324,
+        "viesFrequencia": 1.007,
+        "mae": 3.89,
+        "razaoVolume": 0.969
+       }
+      },
+      "2": {
+       "n": 494,
+       "antes": {
+        "acerto": 0.771,
+        "pod": 0.771,
+        "far": 0.429,
+        "viesFrequencia": 1.35,
+        "mae": 4.294,
+        "razaoVolume": 1.192
+       },
+       "depois": {
+        "acerto": 0.824,
+        "pod": 0.65,
+        "far": 0.295,
+        "viesFrequencia": 0.921,
+        "mae": 4.107,
+        "razaoVolume": 1.008
+       }
+      },
+      "3": {
+       "n": 399,
+       "antes": {
+        "acerto": 0.772,
+        "pod": 0.847,
+        "far": 0.44,
+        "viesFrequencia": 1.514,
+        "mae": 5.15,
+        "razaoVolume": 1.27
+       },
+       "depois": {
+        "acerto": 0.805,
+        "pod": 0.694,
+        "far": 0.364,
+        "viesFrequencia": 1.09,
+        "mae": 4.664,
+        "razaoVolume": 1.081
+       }
+      },
+      "4": {
+       "n": 457,
+       "antes": {
+        "acerto": 0.737,
+        "pod": 0.82,
+        "far": 0.468,
+        "viesFrequencia": 1.541,
+        "mae": 4.875,
+        "razaoVolume": 1.217
+       },
+       "depois": {
+        "acerto": 0.772,
+        "pod": 0.647,
+        "far": 0.399,
+        "viesFrequencia": 1.075,
+        "mae": 4.599,
+        "razaoVolume": 1.051
+       }
+      },
+      "5": {
+       "n": 487,
+       "antes": {
+        "acerto": 0.721,
+        "pod": 0.746,
+        "far": 0.485,
+        "viesFrequencia": 1.451,
+        "mae": 5.745,
+        "razaoVolume": 1.266
+       },
+       "depois": {
+        "acerto": 0.758,
+        "pod": 0.57,
+        "far": 0.413,
+        "viesFrequencia": 0.972,
+        "mae": 5.159,
+        "razaoVolume": 1.055
+       }
+      }
+     }
+    }
+   },
+   "rajadaCoerencia": 1.467,
+   "ventoCoerencia": 1.05,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 1580,
+    "fatorAnual": 0.756,
+    "fator": {
+     "verao": 0.708,
+     "outono": 0.771,
+     "inverno": 0.83,
+     "primavera": 0.731
+    },
+    "nEstacao": {
+     "verao": 361,
+     "outono": 459,
+     "inverno": 382,
+     "primavera": 378
+    },
+    "maeAntes": 10.01,
+    "maeDepois": 5.46,
+    "viesAntes": 7.78,
+    "viesDepois": 0.01,
+    "ganho": 0.454
+   }
+  },
+  "ecmwf_ifs025": {
+   "nome": "ECMWF IFS 0,25°",
+   "app": false,
+   "tmax": {
+    "1": {
+     "usar": true,
+     "n": 877,
+     "viesAnual": -1.747,
+     "vies": {
+      "verao": -2.601,
+      "outono": -1.701,
+      "inverno": -0.932,
+      "primavera": -1.736
+     },
+     "nEstacao": {
+      "verao": 206,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 2.29,
+     "maeDepois": 1.45,
+     "ganho": 0.367
+    },
+    "2": {
+     "usar": true,
+     "n": 876,
+     "viesAnual": -1.848,
+     "vies": {
+      "verao": -2.545,
+      "outono": -1.835,
+      "inverno": -1.104,
+      "primavera": -1.89
+     },
+     "nEstacao": {
+      "verao": 205,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 2.41,
+     "maeDepois": 1.55,
+     "ganho": 0.355
+    },
+    "3": {
+     "usar": true,
+     "n": 875,
+     "viesAnual": -1.89,
+     "vies": {
+      "verao": -2.6,
+      "outono": -1.889,
+      "inverno": -1.167,
+      "primavera": -1.883
+     },
+     "nEstacao": {
+      "verao": 204,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 2.52,
+     "maeDepois": 1.68,
+     "ganho": 0.333
+    },
+    "4": {
+     "usar": true,
+     "n": 874,
+     "viesAnual": -1.878,
+     "vies": {
+      "verao": -2.566,
+      "outono": -1.872,
+      "inverno": -1.206,
+      "primavera": -1.854
+     },
+     "nEstacao": {
+      "verao": 203,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 2.59,
+     "maeDepois": 1.81,
+     "ganho": 0.299
+    },
+    "5": {
+     "usar": true,
+     "n": 873,
+     "viesAnual": -1.868,
+     "vies": {
+      "verao": -2.808,
+      "outono": -1.793,
+      "inverno": -1.111,
+      "primavera": -1.771
+     },
+     "nEstacao": {
+      "verao": 202,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 2.81,
+     "maeDepois": 2.06,
+     "ganho": 0.266
+    }
+   },
+   "tmin": {
+    "1": {
+     "usar": false,
+     "n": 877,
+     "viesAnual": -0.108,
+     "vies": {
+      "verao": -0.255,
+      "outono": -0.037,
+      "inverno": 0.108,
+      "primavera": -0.267
+     },
+     "nEstacao": {
+      "verao": 206,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 0.91,
+     "maeDepois": 0.91,
+     "ganho": 0.006
+    },
+    "2": {
+     "usar": false,
+     "n": 876,
+     "viesAnual": -0.143,
+     "vies": {
+      "verao": -0.224,
+      "outono": -0.109,
+      "inverno": -0.023,
+      "primavera": -0.226
+     },
+     "nEstacao": {
+      "verao": 205,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 0.99,
+     "maeDepois": 0.99,
+     "ganho": -0.002
+    },
+    "3": {
+     "usar": false,
+     "n": 875,
+     "viesAnual": -0.155,
+     "vies": {
+      "verao": -0.177,
+      "outono": -0.124,
+      "inverno": -0.174,
+      "primavera": -0.154
+     },
+     "nEstacao": {
+      "verao": 204,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.03,
+     "maeDepois": 1.04,
+     "ganho": -0.003
+    },
+    "4": {
+     "usar": false,
+     "n": 874,
+     "viesAnual": -0.134,
+     "vies": {
+      "verao": -0.103,
+      "outono": -0.158,
+      "inverno": -0.031,
+      "primavera": -0.234
+     },
+     "nEstacao": {
+      "verao": 203,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.14,
+     "maeDepois": 1.15,
+     "ganho": -0.008
+    },
+    "5": {
+     "usar": false,
+     "n": 873,
+     "viesAnual": -0.15,
+     "vies": {
+      "verao": -0.034,
+      "outono": -0.05,
+      "inverno": -0.336,
+      "primavera": -0.218
+     },
+     "nEstacao": {
+      "verao": 202,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.33,
+     "maeDepois": 1.34,
+     "ganho": -0.009
+    }
+   },
+   "rajada": {
+    "1": {
+     "usar": true,
+     "n": 594,
+     "fatorAnual": 0.738,
+     "fator": {
+      "verao": 0.735,
+      "outono": 0.73,
+      "inverno": 0.755,
+      "primavera": 0.738
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 124
+     },
+     "maeAntes": 9.73,
+     "maeDepois": 5.07,
+     "viesAntes": 8.11,
+     "viesDepois": 0,
+     "ganho": 0.479,
+     "origem": "curto prazo"
+    },
+    "2": {
+     "usar": true,
+     "n": 594,
+     "fatorAnual": 0.738,
+     "fator": {
+      "verao": 0.735,
+      "outono": 0.73,
+      "inverno": 0.755,
+      "primavera": 0.738
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 124
+     },
+     "maeAntes": 9.73,
+     "maeDepois": 5.07,
+     "viesAntes": 8.11,
+     "viesDepois": 0,
+     "ganho": 0.479,
+     "origem": "curto prazo"
+    },
+    "3": {
+     "usar": true,
+     "n": 594,
+     "fatorAnual": 0.738,
+     "fator": {
+      "verao": 0.735,
+      "outono": 0.73,
+      "inverno": 0.755,
+      "primavera": 0.738
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 124
+     },
+     "maeAntes": 9.73,
+     "maeDepois": 5.07,
+     "viesAntes": 8.11,
+     "viesDepois": 0,
+     "ganho": 0.479,
+     "origem": "curto prazo"
+    },
+    "4": {
+     "usar": true,
+     "n": 594,
+     "fatorAnual": 0.738,
+     "fator": {
+      "verao": 0.735,
+      "outono": 0.73,
+      "inverno": 0.755,
+      "primavera": 0.738
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 124
+     },
+     "maeAntes": 9.73,
+     "maeDepois": 5.07,
+     "viesAntes": 8.11,
+     "viesDepois": 0,
+     "ganho": 0.479,
+     "origem": "curto prazo"
+    },
+    "5": {
+     "usar": true,
+     "n": 594,
+     "fatorAnual": 0.738,
+     "fator": {
+      "verao": 0.735,
+      "outono": 0.73,
+      "inverno": 0.755,
+      "primavera": 0.738
+     },
+     "nEstacao": {
+      "verao": 180,
+      "outono": 183,
+      "inverno": 107,
+      "primavera": 124
+     },
+     "maeAntes": 9.73,
+     "maeDepois": 5.07,
+     "viesAntes": 8.11,
+     "viesDepois": 0,
+     "ganho": 0.479,
+     "origem": "curto prazo"
+    }
+   },
+   "vento": {
+    "1": {
+     "usar": true,
+     "n": 876,
+     "fatorAnual": 0.585,
+     "fator": {
+      "verao": 0.586,
+      "outono": 0.588,
+      "inverno": 0.608,
+      "primavera": 0.561
+     },
+     "nEstacao": {
+      "verao": 206,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 6.1,
+     "maeDepois": 2.16,
+     "viesAntes": 5.82,
+     "viesDepois": 0,
+     "ganho": 0.647
+    },
+    "2": {
+     "usar": true,
+     "n": 875,
+     "fatorAnual": 0.584,
+     "fator": {
+      "verao": 0.574,
+      "outono": 0.584,
+      "inverno": 0.614,
+      "primavera": 0.569
+     },
+     "nEstacao": {
+      "verao": 205,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 6.21,
+     "maeDepois": 2.21,
+     "viesAntes": 5.84,
+     "viesDepois": 0,
+     "ganho": 0.644
+    },
+    "3": {
+     "usar": true,
+     "n": 874,
+     "fatorAnual": 0.584,
+     "fator": {
+      "verao": 0.573,
+      "outono": 0.582,
+      "inverno": 0.617,
+      "primavera": 0.569
+     },
+     "nEstacao": {
+      "verao": 204,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 6.16,
+     "maeDepois": 2.31,
+     "viesAntes": 5.85,
+     "viesDepois": 0,
+     "ganho": 0.625
+    },
+    "4": {
+     "usar": true,
+     "n": 873,
+     "fatorAnual": 0.584,
+     "fator": {
+      "verao": 0.582,
+      "outono": 0.578,
+      "inverno": 0.621,
+      "primavera": 0.56
+     },
+     "nEstacao": {
+      "verao": 203,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 6.27,
+     "maeDepois": 2.34,
+     "viesAntes": 5.86,
+     "viesDepois": 0,
+     "ganho": 0.627
+    },
+    "5": {
+     "usar": true,
+     "n": 872,
+     "fatorAnual": 0.57,
+     "fator": {
+      "verao": 0.576,
+      "outono": 0.569,
+      "inverno": 0.599,
+      "primavera": 0.539
+     },
+     "nEstacao": {
+      "verao": 202,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 6.6,
+     "maeDepois": 2.54,
+     "viesAntes": 6.21,
+     "viesDepois": 0,
+     "ganho": 0.615
+    }
+   },
+   "chuva": {
+    "1": {
+     "n": 827,
+     "mae": 3.97,
+     "vies": 0.43,
+     "razaoVolume": 1.088,
+     "acerto": 0.81,
+     "pod": 0.9,
+     "far": 0.371,
+     "viesFrequencia": 1.43,
+     "csi": 0.588
+    },
+    "2": {
+     "n": 826,
+     "mae": 4.23,
+     "vies": 0.44,
+     "razaoVolume": 1.091,
+     "acerto": 0.814,
+     "pod": 0.892,
+     "far": 0.364,
+     "viesFrequencia": 1.402,
+     "csi": 0.59
+    },
+    "3": {
+     "n": 825,
+     "mae": 4.46,
+     "vies": 0.35,
+     "razaoVolume": 1.073,
+     "acerto": 0.777,
+     "pod": 0.851,
+     "far": 0.409,
+     "viesFrequencia": 1.442,
+     "csi": 0.535
+    },
+    "4": {
+     "n": 824,
+     "mae": 4.55,
+     "vies": 0.02,
+     "razaoVolume": 1.004,
+     "acerto": 0.772,
+     "pod": 0.811,
+     "far": 0.411,
+     "viesFrequencia": 1.378,
+     "csi": 0.518
+    },
+    "5": {
+     "n": 817,
+     "mae": 5.4,
+     "vies": 0.21,
+     "razaoVolume": 1.044,
+     "acerto": 0.758,
+     "pod": 0.799,
+     "far": 0.427,
+     "viesFrequencia": 1.394,
+     "csi": 0.501
+    }
+   },
+   "chuvaQuantis": {
+    "usar": true,
+    "n": 4119,
+    "tabela": {
+     "verao": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.09,
+       0.27,
+       0.27,
+       0.27,
+       0.3,
+       0.57,
+       0.57,
+       0.58,
+       0.87,
+       0.87,
+       1.17,
+       1.18,
+       1.48,
+       1.78,
+       2.09,
+       2.4,
+       2.7,
+       3.3,
+       4.05,
+       4.8,
+       5.7,
+       6.6,
+       8.35,
+       9.55,
+       10.5,
+       11.75,
+       13.61,
+       15.91,
+       18.31,
+       21.96,
+       25.87,
+       30.52,
+       68.91
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.02,
+       0.02,
+       0.2,
+       0.2,
+       0.22,
+       0.4,
+       0.6,
+       1,
+       1.4,
+       2.15,
+       2.66,
+       3.88,
+       4.84,
+       5.42,
+       6.93,
+       9.91,
+       12.14,
+       15.91,
+       18.1,
+       23.78,
+       27.39,
+       35.68,
+       63.82
+      ],
+      "n": 1020
+     },
+     "outono": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.02,
+       0.3,
+       0.3,
+       0.31,
+       0.51,
+       0.6,
+       0.62,
+       0.91,
+       1.21,
+       1.51,
+       1.81,
+       2.12,
+       2.51,
+       3.12,
+       3.8,
+       4.8,
+       5.64,
+       6.56,
+       7.46,
+       8.56,
+       10.22,
+       12.3,
+       14.98,
+       18.44,
+       22.26,
+       25.94,
+       32.66,
+       41.45,
+       79.3
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.01,
+       0.2,
+       0.2,
+       0.2,
+       0.21,
+       0.21,
+       0.41,
+       0.63,
+       0.84,
+       1.23,
+       1.47,
+       2.26,
+       3.64,
+       5.04,
+       6.38,
+       8.32,
+       9.52,
+       15.11,
+       21.2,
+       23.99,
+       41.76,
+       55.08,
+       104.8
+      ],
+      "n": 1344
+     },
+     "inverno": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.03,
+       0.03,
+       0.12,
+       0.22,
+       0.33,
+       0.6,
+       0.67,
+       0.99,
+       1.21,
+       1.42,
+       1.91,
+       2.4,
+       3.23,
+       3.81,
+       4.43,
+       5.33,
+       6.08,
+       7.2,
+       8.35,
+       10.33,
+       11.95,
+       14.13,
+       17.9,
+       19.86,
+       22.27,
+       25.52,
+       33.1,
+       39.66,
+       78.89
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.18,
+       0.18,
+       0.18,
+       0.18,
+       0.2,
+       0.2,
+       0.2,
+       0.38,
+       0.58,
+       0.75,
+       1.13,
+       1.71,
+       2.64,
+       2.84,
+       3.64,
+       3.89,
+       7.39,
+       9.44,
+       12.1,
+       14.61,
+       17.82,
+       20.72,
+       25.98,
+       29.43,
+       43.27,
+       50.8,
+       75.57
+      ],
+      "n": 775
+     },
+     "primavera": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.18,
+       0.3,
+       0.3,
+       0.3,
+       0.58,
+       0.6,
+       0.87,
+       0.9,
+       1.18,
+       1.39,
+       1.69,
+       2,
+       2.4,
+       2.7,
+       3.12,
+       3.45,
+       4.12,
+       4.88,
+       6.08,
+       7.16,
+       8.46,
+       9.77,
+       11.82,
+       13.7,
+       17.3,
+       21.37,
+       24.8,
+       31.36,
+       42.63,
+       112.9
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.18,
+       0.18,
+       0.2,
+       0.2,
+       0.38,
+       0.38,
+       0.4,
+       0.58,
+       0.78,
+       1,
+       1.38,
+       1.6,
+       2.04,
+       2.64,
+       3.29,
+       5.24,
+       7.84,
+       10.91,
+       12.14,
+       18.81,
+       21.56,
+       24.88,
+       34.74,
+       47.39,
+       78.3
+      ],
+      "n": 980
+     }
+    },
+    "validacao": {
+     "total": {
+      "antes": {
+       "acerto": 0.786,
+       "pod": 0.851,
+       "far": 0.396,
+       "viesFrequencia": 1.409,
+       "mae": 4.519,
+       "razaoVolume": 1.06
+      },
+      "depois": {
+       "acerto": 0.816,
+       "pod": 0.688,
+       "far": 0.302,
+       "viesFrequencia": 0.986,
+       "mae": 4.552,
+       "razaoVolume": 0.988
+      }
+     },
+     "porLead": {
+      "1": {
+       "n": 827,
+       "antes": {
+        "acerto": 0.81,
+        "pod": 0.9,
+        "far": 0.371,
+        "viesFrequencia": 1.43,
+        "mae": 3.967,
+        "razaoVolume": 1.088
+       },
+       "depois": {
+        "acerto": 0.836,
+        "pod": 0.723,
+        "far": 0.271,
+        "viesFrequencia": 0.992,
+        "mae": 4.002,
+        "razaoVolume": 1.015
+       }
+      },
+      "2": {
+       "n": 826,
+       "antes": {
+        "acerto": 0.814,
+        "pod": 0.892,
+        "far": 0.364,
+        "viesFrequencia": 1.402,
+        "mae": 4.23,
+        "razaoVolume": 1.091
+       },
+       "depois": {
+        "acerto": 0.847,
+        "pod": 0.755,
+        "far": 0.257,
+        "viesFrequencia": 1.016,
+        "mae": 4.318,
+        "razaoVolume": 1.035
+       }
+      },
+      "3": {
+       "n": 825,
+       "antes": {
+        "acerto": 0.777,
+        "pod": 0.851,
+        "far": 0.409,
+        "viesFrequencia": 1.442,
+        "mae": 4.458,
+        "razaoVolume": 1.073
+       },
+       "depois": {
+        "acerto": 0.806,
+        "pod": 0.679,
+        "far": 0.321,
+        "viesFrequencia": 1,
+        "mae": 4.395,
+        "razaoVolume": 1.002
+       }
+      },
+      "4": {
+       "n": 824,
+       "antes": {
+        "acerto": 0.772,
+        "pod": 0.811,
+        "far": 0.411,
+        "viesFrequencia": 1.378,
+        "mae": 4.549,
+        "razaoVolume": 1.004
+       },
+       "depois": {
+        "acerto": 0.809,
+        "pod": 0.663,
+        "far": 0.307,
+        "viesFrequencia": 0.956,
+        "mae": 4.616,
+        "razaoVolume": 0.923
+       }
+      },
+      "5": {
+       "n": 817,
+       "antes": {
+        "acerto": 0.758,
+        "pod": 0.799,
+        "far": 0.427,
+        "viesFrequencia": 1.394,
+        "mae": 5.401,
+        "razaoVolume": 1.044
+       },
+       "depois": {
+        "acerto": 0.78,
+        "pod": 0.622,
+        "far": 0.357,
+        "viesFrequencia": 0.968,
+        "mae": 5.439,
+        "razaoVolume": 0.966
+       }
+      }
+     }
+    }
+   },
+   "rajadaCoerencia": null,
+   "ventoCoerencia": 1.026,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 594,
+    "fatorAnual": 0.738,
+    "fator": {
+     "verao": 0.735,
+     "outono": 0.73,
+     "inverno": 0.755,
+     "primavera": 0.738
+    },
+    "nEstacao": {
+     "verao": 180,
+     "outono": 183,
+     "inverno": 107,
+     "primavera": 124
+    },
+    "maeAntes": 9.73,
+    "maeDepois": 5.07,
+    "viesAntes": 8.11,
+    "viesDepois": 0,
+    "ganho": 0.479
+   }
+  },
+  "ncep_gfs_seamless": {
+   "nome": "GFS",
+   "app": false,
+   "tmax": {
+    "1": {
+     "usar": true,
+     "n": 1903,
+     "viesAnual": -0.415,
+     "vies": {
+      "verao": 0.407,
+      "outono": -0.409,
+      "inverno": -0.709,
+      "primavera": -0.877
+     },
+     "nEstacao": {
+      "verao": 430,
+      "outono": 528,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 1.68,
+     "maeDepois": 1.53,
+     "ganho": 0.088
+    },
+    "2": {
+     "usar": true,
+     "n": 1901,
+     "viesAnual": -0.273,
+     "vies": {
+      "verao": 0.693,
+      "outono": -0.302,
+      "inverno": -0.552,
+      "primavera": -0.842
+     },
+     "nEstacao": {
+      "verao": 429,
+      "outono": 527,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 1.8,
+     "maeDepois": 1.68,
+     "ganho": 0.067
+    },
+    "3": {
+     "usar": true,
+     "n": 1899,
+     "viesAnual": -0.211,
+     "vies": {
+      "verao": 0.75,
+      "outono": -0.317,
+      "inverno": -0.455,
+      "primavera": -0.725
+     },
+     "nEstacao": {
+      "verao": 428,
+      "outono": 526,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 1.9,
+     "maeDepois": 1.79,
+     "ganho": 0.056
+    },
+    "4": {
+     "usar": true,
+     "n": 1897,
+     "viesAnual": -0.075,
+     "vies": {
+      "verao": 0.934,
+      "outono": -0.238,
+      "inverno": -0.477,
+      "primavera": -0.41
+     },
+     "nEstacao": {
+      "verao": 427,
+      "outono": 525,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 2.04,
+     "maeDepois": 1.95,
+     "ganho": 0.041
+    },
+    "5": {
+     "usar": false,
+     "n": 1895,
+     "viesAnual": -0.136,
+     "vies": {
+      "verao": 0.62,
+      "outono": -0.14,
+      "inverno": -0.491,
+      "primavera": -0.461
+     },
+     "nEstacao": {
+      "verao": 426,
+      "outono": 524,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 2.23,
+     "maeDepois": 2.2,
+     "ganho": 0.014
+    }
+   },
+   "tmin": {
+    "1": {
+     "usar": true,
+     "n": 1903,
+     "viesAnual": -0.059,
+     "vies": {
+      "verao": -0.638,
+      "outono": -0.145,
+      "inverno": 0.737,
+      "primavera": -0.232
+     },
+     "nEstacao": {
+      "verao": 430,
+      "outono": 528,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 1.15,
+     "maeDepois": 1.09,
+     "ganho": 0.057
+    },
+    "2": {
+     "usar": true,
+     "n": 1901,
+     "viesAnual": 0.025,
+     "vies": {
+      "verao": -0.527,
+      "outono": -0.063,
+      "inverno": 0.838,
+      "primavera": -0.191
+     },
+     "nEstacao": {
+      "verao": 429,
+      "outono": 527,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 1.24,
+     "maeDepois": 1.18,
+     "ganho": 0.042
+    },
+    "3": {
+     "usar": true,
+     "n": 1899,
+     "viesAnual": 0.13,
+     "vies": {
+      "verao": -0.355,
+      "outono": 0.047,
+      "inverno": 0.915,
+      "primavera": -0.126
+     },
+     "nEstacao": {
+      "verao": 428,
+      "outono": 526,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 1.32,
+     "maeDepois": 1.28,
+     "ganho": 0.03
+    },
+    "4": {
+     "usar": true,
+     "n": 1897,
+     "viesAnual": 0.141,
+     "vies": {
+      "verao": -0.323,
+      "outono": 0.067,
+      "inverno": 0.953,
+      "primavera": -0.17
+     },
+     "nEstacao": {
+      "verao": 427,
+      "outono": 525,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 1.43,
+     "maeDepois": 1.38,
+     "ganho": 0.036
+    },
+    "5": {
+     "usar": true,
+     "n": 1895,
+     "viesAnual": 0.097,
+     "vies": {
+      "verao": -0.41,
+      "outono": 0.032,
+      "inverno": 1.012,
+      "primavera": -0.291
+     },
+     "nEstacao": {
+      "verao": 426,
+      "outono": 524,
+      "inverno": 474,
+      "primavera": 471
+     },
+     "maeAntes": 1.56,
+     "maeDepois": 1.51,
+     "ganho": 0.038
+    }
+   },
+   "rajada": {
+    "1": {
+     "usar": true,
+     "n": 891,
+     "fatorAnual": 0.849,
+     "fator": {
+      "verao": 0.839,
+      "outono": 0.827,
+      "inverno": 0.892,
+      "primavera": 0.849
+     },
+     "nEstacao": {
+      "verao": 221,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 8.32,
+     "maeDepois": 6.62,
+     "viesAntes": 4.14,
+     "viesDepois": 0,
+     "ganho": 0.204
+    },
+    "2": {
+     "usar": true,
+     "n": 890,
+     "fatorAnual": 0.841,
+     "fator": {
+      "verao": 0.809,
+      "outono": 0.83,
+      "inverno": 0.892,
+      "primavera": 0.848
+     },
+     "nEstacao": {
+      "verao": 220,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 8.46,
+     "maeDepois": 6.63,
+     "viesAntes": 4.39,
+     "viesDepois": 0,
+     "ganho": 0.217
+    },
+    "3": {
+     "usar": true,
+     "n": 889,
+     "fatorAnual": 0.843,
+     "fator": {
+      "verao": 0.821,
+      "outono": 0.822,
+      "inverno": 0.893,
+      "primavera": 0.853
+     },
+     "nEstacao": {
+      "verao": 219,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 8.58,
+     "maeDepois": 6.81,
+     "viesAntes": 4.31,
+     "viesDepois": 0,
+     "ganho": 0.206
+    },
+    "4": {
+     "usar": true,
+     "n": 888,
+     "fatorAnual": 0.829,
+     "fator": {
+      "verao": 0.809,
+      "outono": 0.803,
+      "inverno": 0.879,
+      "primavera": 0.841
+     },
+     "nEstacao": {
+      "verao": 218,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 9.03,
+     "maeDepois": 7.04,
+     "viesAntes": 4.77,
+     "viesDepois": -0.01,
+     "ganho": 0.22
+    },
+    "5": {
+     "usar": true,
+     "n": 887,
+     "fatorAnual": 0.869,
+     "fator": {
+      "verao": 0.882,
+      "outono": 0.837,
+      "inverno": 0.921,
+      "primavera": 0.849
+     },
+     "nEstacao": {
+      "verao": 217,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 8.95,
+     "maeDepois": 7.57,
+     "viesAntes": 3.5,
+     "viesDepois": 0,
+     "ganho": 0.154
+    }
+   },
+   "vento": {
+    "1": {
+     "usar": true,
+     "n": 891,
+     "fatorAnual": 0.712,
+     "fator": {
+      "verao": 0.624,
+      "outono": 0.707,
+      "inverno": 0.864,
+      "primavera": 0.714
+     },
+     "nEstacao": {
+      "verao": 221,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 3.94,
+     "maeDepois": 2.21,
+     "viesAntes": 3.33,
+     "viesDepois": 0,
+     "ganho": 0.439
+    },
+    "2": {
+     "usar": true,
+     "n": 890,
+     "fatorAnual": 0.714,
+     "fator": {
+      "verao": 0.615,
+      "outono": 0.723,
+      "inverno": 0.874,
+      "primavera": 0.711
+     },
+     "nEstacao": {
+      "verao": 220,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 4.09,
+     "maeDepois": 2.29,
+     "viesAntes": 3.3,
+     "viesDepois": 0.01,
+     "ganho": 0.439
+    },
+    "3": {
+     "usar": true,
+     "n": 889,
+     "fatorAnual": 0.714,
+     "fator": {
+      "verao": 0.625,
+      "outono": 0.716,
+      "inverno": 0.866,
+      "primavera": 0.711
+     },
+     "nEstacao": {
+      "verao": 219,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 4.05,
+     "maeDepois": 2.31,
+     "viesAntes": 3.29,
+     "viesDepois": 0.01,
+     "ganho": 0.429
+    },
+    "4": {
+     "usar": true,
+     "n": 888,
+     "fatorAnual": 0.7,
+     "fator": {
+      "verao": 0.615,
+      "outono": 0.7,
+      "inverno": 0.858,
+      "primavera": 0.689
+     },
+     "nEstacao": {
+      "verao": 218,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 4.41,
+     "maeDepois": 2.42,
+     "viesAntes": 3.52,
+     "viesDepois": 0,
+     "ganho": 0.452
+    },
+    "5": {
+     "usar": true,
+     "n": 887,
+     "fatorAnual": 0.75,
+     "fator": {
+      "verao": 0.686,
+      "outono": 0.731,
+      "inverno": 0.898,
+      "primavera": 0.736
+     },
+     "nEstacao": {
+      "verao": 217,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 3.74,
+     "maeDepois": 2.47,
+     "viesAntes": 2.74,
+     "viesDepois": 0,
+     "ganho": 0.341
+    }
+   },
+   "chuva": {
+    "1": {
+     "n": 842,
+     "mae": 4.21,
+     "vies": -0.19,
+     "razaoVolume": 0.96,
+     "acerto": 0.843,
+     "pod": 0.841,
+     "far": 0.303,
+     "viesFrequencia": 1.206,
+     "csi": 0.616
+    },
+    "2": {
+     "n": 841,
+     "mae": 4.03,
+     "vies": -0.49,
+     "razaoVolume": 0.898,
+     "acerto": 0.839,
+     "pod": 0.857,
+     "far": 0.315,
+     "viesFrequencia": 1.251,
+     "csi": 0.614
+    },
+    "3": {
+     "n": 840,
+     "mae": 4.53,
+     "vies": -0.41,
+     "razaoVolume": 0.915,
+     "acerto": 0.826,
+     "pod": 0.864,
+     "far": 0.341,
+     "viesFrequencia": 1.312,
+     "csi": 0.597
+    },
+    "4": {
+     "n": 839,
+     "mae": 4.8,
+     "vies": -0.43,
+     "razaoVolume": 0.909,
+     "acerto": 0.812,
+     "pod": 0.852,
+     "far": 0.362,
+     "viesFrequencia": 1.336,
+     "csi": 0.574
+    },
+    "5": {
+     "n": 838,
+     "mae": 4.53,
+     "vies": -2.28,
+     "razaoVolume": 0.523,
+     "acerto": 0.785,
+     "pod": 0.68,
+     "far": 0.37,
+     "viesFrequencia": 1.08,
+     "csi": 0.486
+    }
+   },
+   "chuvaQuantis": {
+    "usar": false,
+    "n": 4200,
+    "tabela": {
+     "verao": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.01,
+       0.11,
+       0.2,
+       0.3,
+       0.4,
+       0.51,
+       0.71,
+       0.91,
+       1.12,
+       1.52,
+       1.91,
+       2.41,
+       2.82,
+       3.43,
+       3.93,
+       4.46,
+       5.17,
+       5.81,
+       6.94,
+       8.25,
+       10.19,
+       11.7,
+       14.82,
+       21.19,
+       32.14,
+       107.99
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.02,
+       0.02,
+       0.02,
+       0.2,
+       0.22,
+       0.4,
+       0.6,
+       0.62,
+       1.2,
+       1.78,
+       2.2,
+       3.05,
+       4.19,
+       5.03,
+       5.87,
+       9.72,
+       11.65,
+       15.7,
+       17.81,
+       22.34,
+       27.33,
+       35.59,
+       63.57
+      ],
+      "n": 1095
+     },
+     "outono": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.01,
+       0.11,
+       0.2,
+       0.3,
+       0.35,
+       0.51,
+       0.71,
+       0.91,
+       1.15,
+       1.45,
+       1.81,
+       2.22,
+       2.72,
+       3.23,
+       3.83,
+       4.63,
+       5.34,
+       6.64,
+       8.31,
+       10.97,
+       13.36,
+       15.94,
+       20.45,
+       25.56,
+       37.09,
+       115.6
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.01,
+       0.2,
+       0.2,
+       0.2,
+       0.21,
+       0.21,
+       0.41,
+       0.61,
+       0.83,
+       1.23,
+       1.46,
+       2.26,
+       3.49,
+       5.03,
+       6.31,
+       8.32,
+       9.5,
+       14.48,
+       21.2,
+       23.94,
+       41.74,
+       55.08,
+       104.8
+      ],
+      "n": 1350
+     },
+     "inverno": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.09,
+       0.1,
+       0.2,
+       0.29,
+       0.39,
+       0.58,
+       0.78,
+       1.07,
+       1.35,
+       1.73,
+       2.08,
+       2.53,
+       3.06,
+       3.87,
+       4.43,
+       5.1,
+       6.34,
+       7.2,
+       8.98,
+       10.89,
+       13.26,
+       15.68,
+       19.55,
+       23.42,
+       28.56,
+       40.73,
+       63.7
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.18,
+       0.18,
+       0.18,
+       0.18,
+       0.2,
+       0.2,
+       0.2,
+       0.38,
+       0.58,
+       0.75,
+       1.13,
+       1.69,
+       2.62,
+       2.84,
+       3.62,
+       3.89,
+       7.38,
+       9.42,
+       12.05,
+       14.59,
+       17.78,
+       20.7,
+       25.98,
+       29.34,
+       43.23,
+       50.8,
+       75.57
+      ],
+      "n": 775
+     },
+     "primavera": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.09,
+       0.1,
+       0.2,
+       0.29,
+       0.39,
+       0.58,
+       0.78,
+       0.98,
+       1.27,
+       1.48,
+       1.79,
+       2.27,
+       2.95,
+       3.46,
+       4.15,
+       4.94,
+       5.75,
+       6.54,
+       7.85,
+       8.86,
+       10.68,
+       12.88,
+       14.61,
+       18.41,
+       23.43,
+       33.4,
+       91.83
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.18,
+       0.18,
+       0.2,
+       0.2,
+       0.38,
+       0.38,
+       0.4,
+       0.58,
+       0.78,
+       0.98,
+       1.36,
+       1.6,
+       2.03,
+       2.64,
+       3.28,
+       5.22,
+       7.8,
+       10.9,
+       12.11,
+       18.8,
+       21.56,
+       24.8,
+       34.72,
+       47.39,
+       78.3
+      ],
+      "n": 980
+     }
+    },
+    "validacao": {
+     "total": {
+      "antes": {
+       "acerto": 0.821,
+       "pod": 0.819,
+       "far": 0.338,
+       "viesFrequencia": 1.237,
+       "mae": 4.422,
+       "razaoVolume": 0.841
+      },
+      "depois": {
+       "acerto": 0.83,
+       "pod": 0.711,
+       "far": 0.282,
+       "viesFrequencia": 0.99,
+       "mae": 4.895,
+       "razaoVolume": 0.994
+      }
+     },
+     "porLead": {
+      "1": {
+       "n": 842,
+       "antes": {
+        "acerto": 0.843,
+        "pod": 0.841,
+        "far": 0.303,
+        "viesFrequencia": 1.206,
+        "mae": 4.213,
+        "razaoVolume": 0.96
+       },
+       "depois": {
+        "acerto": 0.848,
+        "pod": 0.742,
+        "far": 0.252,
+        "viesFrequencia": 0.992,
+        "mae": 4.792,
+        "razaoVolume": 1.151
+       }
+      },
+      "2": {
+       "n": 841,
+       "antes": {
+        "acerto": 0.839,
+        "pod": 0.857,
+        "far": 0.315,
+        "viesFrequencia": 1.251,
+        "mae": 4.031,
+        "razaoVolume": 0.898
+       },
+       "depois": {
+        "acerto": 0.845,
+        "pod": 0.737,
+        "far": 0.257,
+        "viesFrequencia": 0.992,
+        "mae": 4.684,
+        "razaoVolume": 1.101
+       }
+      },
+      "3": {
+       "n": 840,
+       "antes": {
+        "acerto": 0.826,
+        "pod": 0.864,
+        "far": 0.341,
+        "viesFrequencia": 1.312,
+        "mae": 4.529,
+        "razaoVolume": 0.915
+       },
+       "depois": {
+        "acerto": 0.854,
+        "pod": 0.788,
+        "far": 0.262,
+        "viesFrequencia": 1.068,
+        "mae": 5.055,
+        "razaoVolume": 1.077
+       }
+      },
+      "4": {
+       "n": 839,
+       "antes": {
+        "acerto": 0.812,
+        "pod": 0.852,
+        "far": 0.362,
+        "viesFrequencia": 1.336,
+        "mae": 4.804,
+        "razaoVolume": 0.909
+       },
+       "depois": {
+        "acerto": 0.818,
+        "pod": 0.744,
+        "far": 0.324,
+        "viesFrequencia": 1.1,
+        "mae": 5.246,
+        "razaoVolume": 1.066
+       }
+      },
+      "5": {
+       "n": 838,
+       "antes": {
+        "acerto": 0.785,
+        "pod": 0.68,
+        "far": 0.37,
+        "viesFrequencia": 1.08,
+        "mae": 4.532,
+        "razaoVolume": 0.523
+       },
+       "depois": {
+        "acerto": 0.788,
+        "pod": 0.544,
+        "far": 0.32,
+        "viesFrequencia": 0.8,
+        "mae": 4.699,
+        "razaoVolume": 0.577
+       }
+      }
+     }
+    }
+   },
+   "rajadaCoerencia": 1.048,
+   "ventoCoerencia": 1.071,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 1639,
+    "fatorAnual": 0.9,
+    "fator": {
+     "verao": 0.918,
+     "outono": 0.876,
+     "inverno": 0.903,
+     "primavera": 0.903
+    },
+    "nEstacao": {
+     "verao": 420,
+     "outono": 459,
+     "inverno": 382,
+     "primavera": 378
+    },
+    "maeAntes": 7.15,
+    "maeDepois": 6.18,
+    "viesAntes": 2.69,
+    "viesDepois": 0,
+    "ganho": 0.136
+   }
+  },
+  "dwd_icon_global": {
+   "nome": "ICON",
+   "app": false,
+   "tmax": {
+    "1": {
+     "usar": true,
+     "n": 889,
+     "viesAnual": -0.807,
+     "vies": {
+      "verao": -0.92,
+      "outono": -0.872,
+      "inverno": -0.555,
+      "primavera": -0.849
+     },
+     "nEstacao": {
+      "verao": 221,
+      "outono": 272,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.68,
+     "maeDepois": 1.48,
+     "ganho": 0.123
+    },
+    "2": {
+     "usar": true,
+     "n": 891,
+     "viesAnual": -0.803,
+     "vies": {
+      "verao": -0.837,
+      "outono": -0.854,
+      "inverno": -0.653,
+      "primavera": -0.849
+     },
+     "nEstacao": {
+      "verao": 220,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.81,
+     "maeDepois": 1.62,
+     "ganho": 0.102
+    },
+    "3": {
+     "usar": true,
+     "n": 887,
+     "viesAnual": -0.693,
+     "vies": {
+      "verao": -0.772,
+      "outono": -0.75,
+      "inverno": -0.511,
+      "primavera": -0.711
+     },
+     "nEstacao": {
+      "verao": 219,
+      "outono": 272,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.88,
+     "maeDepois": 1.76,
+     "ganho": 0.068
+    },
+    "4": {
+     "usar": true,
+     "n": 886,
+     "viesAnual": -0.707,
+     "vies": {
+      "verao": -0.756,
+      "outono": -0.732,
+      "inverno": -0.526,
+      "primavera": -0.803
+     },
+     "nEstacao": {
+      "verao": 218,
+      "outono": 272,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 2.05,
+     "maeDepois": 1.94,
+     "ganho": 0.055
+    },
+    "5": {
+     "usar": true,
+     "n": 885,
+     "viesAnual": -0.968,
+     "vies": {
+      "verao": -1.096,
+      "outono": -1.069,
+      "inverno": -0.554,
+      "primavera": -1.109
+     },
+     "nEstacao": {
+      "verao": 217,
+      "outono": 272,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 2.4,
+     "maeDepois": 2.21,
+     "ganho": 0.081
+    }
+   },
+   "tmin": {
+    "1": {
+     "usar": true,
+     "n": 889,
+     "viesAnual": 0.983,
+     "vies": {
+      "verao": 0.623,
+      "outono": 0.907,
+      "inverno": 1.522,
+      "primavera": 0.943
+     },
+     "nEstacao": {
+      "verao": 221,
+      "outono": 272,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.46,
+     "maeDepois": 1.24,
+     "ganho": 0.152
+    },
+    "2": {
+     "usar": true,
+     "n": 891,
+     "viesAnual": 0.995,
+     "vies": {
+      "verao": 0.586,
+      "outono": 0.906,
+      "inverno": 1.494,
+      "primavera": 1.065
+     },
+     "nEstacao": {
+      "verao": 220,
+      "outono": 275,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.51,
+     "maeDepois": 1.29,
+     "ganho": 0.146
+    },
+    "3": {
+     "usar": true,
+     "n": 887,
+     "viesAnual": 1.003,
+     "vies": {
+      "verao": 0.73,
+      "outono": 0.89,
+      "inverno": 1.291,
+      "primavera": 1.167
+     },
+     "nEstacao": {
+      "verao": 219,
+      "outono": 272,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.57,
+     "maeDepois": 1.36,
+     "ganho": 0.136
+    },
+    "4": {
+     "usar": true,
+     "n": 886,
+     "viesAnual": 0.973,
+     "vies": {
+      "verao": 0.67,
+      "outono": 0.851,
+      "inverno": 1.271,
+      "primavera": 1.169
+     },
+     "nEstacao": {
+      "verao": 218,
+      "outono": 272,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.65,
+     "maeDepois": 1.47,
+     "ganho": 0.109
+    },
+    "5": {
+     "usar": true,
+     "n": 885,
+     "viesAnual": 0.936,
+     "vies": {
+      "verao": 0.501,
+      "outono": 0.774,
+      "inverno": 1.563,
+      "primavera": 1
+     },
+     "nEstacao": {
+      "verao": 217,
+      "outono": 272,
+      "inverno": 198,
+      "primavera": 198
+     },
+     "maeAntes": 1.87,
+     "maeDepois": 1.69,
+     "ganho": 0.099
+    }
+   },
+   "rajada": {
+    "1": {
+     "usar": true,
+     "n": 891,
+     "fatorAnual": 0.69,
+     "fator": {
+      "verao": 0.688,
+      "outono": 0.694,
+      "inverno": 0.689,
+      "primavera": 0.688
+     },
+     "nEstacao": {
+      "verao": 221,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 11.23,
+     "maeDepois": 5.11,
+     "viesAntes": 10.42,
+     "viesDepois": 0.01,
+     "ganho": 0.545
+    },
+    "2": {
+     "usar": true,
+     "n": 890,
+     "fatorAnual": 0.688,
+     "fator": {
+      "verao": 0.687,
+      "outono": 0.701,
+      "inverno": 0.683,
+      "primavera": 0.678
+     },
+     "nEstacao": {
+      "verao": 220,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 11.44,
+     "maeDepois": 5.36,
+     "viesAntes": 10.54,
+     "viesDepois": 0.01,
+     "ganho": 0.531
+    },
+    "3": {
+     "usar": true,
+     "n": 889,
+     "fatorAnual": 0.68,
+     "fator": {
+      "verao": 0.681,
+      "outono": 0.693,
+      "inverno": 0.678,
+      "primavera": 0.665
+     },
+     "nEstacao": {
+      "verao": 219,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 12.02,
+     "maeDepois": 5.57,
+     "viesAntes": 10.92,
+     "viesDepois": 0.01,
+     "ganho": 0.537
+    },
+    "4": {
+     "usar": true,
+     "n": 888,
+     "fatorAnual": 0.699,
+     "fator": {
+      "verao": 0.711,
+      "outono": 0.718,
+      "inverno": 0.699,
+      "primavera": 0.666
+     },
+     "nEstacao": {
+      "verao": 218,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 11.25,
+     "maeDepois": 5.69,
+     "viesAntes": 9.97,
+     "viesDepois": 0.02,
+     "ganho": 0.494
+    },
+    "5": {
+     "usar": true,
+     "n": 887,
+     "fatorAnual": 0.71,
+     "fator": {
+      "verao": 0.711,
+      "outono": 0.727,
+      "inverno": 0.695,
+      "primavera": 0.701
+     },
+     "nEstacao": {
+      "verao": 217,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 11.38,
+     "maeDepois": 6.33,
+     "viesAntes": 9.47,
+     "viesDepois": 0.02,
+     "ganho": 0.444
+    }
+   },
+   "vento": {
+    "1": {
+     "usar": true,
+     "n": 891,
+     "fatorAnual": 0.709,
+     "fator": {
+      "verao": 0.654,
+      "outono": 0.727,
+      "inverno": 0.799,
+      "primavera": 0.684
+     },
+     "nEstacao": {
+      "verao": 221,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 4.11,
+     "maeDepois": 2.33,
+     "viesAntes": 3.37,
+     "viesDepois": 0,
+     "ganho": 0.433
+    },
+    "2": {
+     "usar": true,
+     "n": 890,
+     "fatorAnual": 0.703,
+     "fator": {
+      "verao": 0.65,
+      "outono": 0.736,
+      "inverno": 0.786,
+      "primavera": 0.664
+     },
+     "nEstacao": {
+      "verao": 220,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 4.22,
+     "maeDepois": 2.38,
+     "viesAntes": 3.47,
+     "viesDepois": 0.01,
+     "ganho": 0.436
+    },
+    "3": {
+     "usar": true,
+     "n": 889,
+     "fatorAnual": 0.696,
+     "fator": {
+      "verao": 0.644,
+      "outono": 0.734,
+      "inverno": 0.772,
+      "primavera": 0.655
+     },
+     "nEstacao": {
+      "verao": 219,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 4.41,
+     "maeDepois": 2.46,
+     "viesAntes": 3.59,
+     "viesDepois": 0.01,
+     "ganho": 0.443
+    },
+    "4": {
+     "usar": true,
+     "n": 888,
+     "fatorAnual": 0.721,
+     "fator": {
+      "verao": 0.671,
+      "outono": 0.755,
+      "inverno": 0.813,
+      "primavera": 0.669
+     },
+     "nEstacao": {
+      "verao": 218,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 4.16,
+     "maeDepois": 2.51,
+     "viesAntes": 3.19,
+     "viesDepois": 0.01,
+     "ganho": 0.395
+    },
+    "5": {
+     "usar": true,
+     "n": 887,
+     "fatorAnual": 0.739,
+     "fator": {
+      "verao": 0.674,
+      "outono": 0.775,
+      "inverno": 0.82,
+      "primavera": 0.709
+     },
+     "nEstacao": {
+      "verao": 217,
+      "outono": 275,
+      "inverno": 199,
+      "primavera": 196
+     },
+     "maeAntes": 4.03,
+     "maeDepois": 2.61,
+     "viesAntes": 2.91,
+     "viesDepois": 0.01,
+     "ganho": 0.352
+    }
+   },
+   "chuva": {
+    "1": {
+     "n": 837,
+     "mae": 4.28,
+     "vies": 0.44,
+     "razaoVolume": 1.09,
+     "acerto": 0.838,
+     "pod": 0.865,
+     "far": 0.32,
+     "viesFrequencia": 1.271,
+     "csi": 0.615
+    },
+    "2": {
+     "n": 836,
+     "mae": 5,
+     "vies": 0.37,
+     "razaoVolume": 1.077,
+     "acerto": 0.835,
+     "pod": 0.836,
+     "far": 0.317,
+     "viesFrequencia": 1.224,
+     "csi": 0.602
+    },
+    "3": {
+     "n": 840,
+     "mae": 4.72,
+     "vies": -0.01,
+     "razaoVolume": 0.998,
+     "acerto": 0.808,
+     "pod": 0.816,
+     "far": 0.361,
+     "viesFrequencia": 1.276,
+     "csi": 0.559
+    },
+    "4": {
+     "n": 839,
+     "mae": 5.07,
+     "vies": 0.15,
+     "razaoVolume": 1.032,
+     "acerto": 0.795,
+     "pod": 0.816,
+     "far": 0.382,
+     "viesFrequencia": 1.32,
+     "csi": 0.543
+    },
+    "5": {
+     "n": 838,
+     "mae": 5.5,
+     "vies": 0.5,
+     "razaoVolume": 1.105,
+     "acerto": 0.77,
+     "pod": 0.776,
+     "far": 0.414,
+     "viesFrequencia": 1.324,
+     "csi": 0.501
+    }
+   },
+   "chuvaQuantis": {
+    "usar": true,
+    "n": 4190,
+    "tabela": {
+     "verao": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.01,
+       0.1,
+       0.2,
+       0.21,
+       0.31,
+       0.51,
+       0.62,
+       0.84,
+       1.13,
+       1.52,
+       2.01,
+       2.59,
+       3.27,
+       3.88,
+       4.62,
+       5.57,
+       6.64,
+       7.83,
+       9.07,
+       10.84,
+       12.82,
+       15.61,
+       19.4,
+       22.15,
+       25.32,
+       36.3,
+       79.36
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.02,
+       0.02,
+       0.02,
+       0.2,
+       0.22,
+       0.4,
+       0.6,
+       0.62,
+       1.2,
+       1.78,
+       2.2,
+       3.05,
+       4.19,
+       5.03,
+       5.87,
+       9.72,
+       11.65,
+       15.7,
+       17.81,
+       22.34,
+       27.33,
+       35.59,
+       63.57
+      ],
+      "n": 1095
+     },
+     "outono": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.09,
+       0.1,
+       0.19,
+       0.29,
+       0.39,
+       0.49,
+       0.6,
+       0.8,
+       1,
+       1.21,
+       1.51,
+       2.01,
+       2.51,
+       3.12,
+       3.82,
+       4.53,
+       5.67,
+       6.76,
+       8.84,
+       10.64,
+       12.82,
+       15.81,
+       19.11,
+       22.63,
+       28.06,
+       33.29,
+       42.31,
+       123.49
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.01,
+       0.2,
+       0.2,
+       0.2,
+       0.21,
+       0.21,
+       0.41,
+       0.61,
+       0.83,
+       1.23,
+       1.46,
+       2.26,
+       3.49,
+       5.03,
+       6.59,
+       8.32,
+       9.5,
+       15.4,
+       21.2,
+       23.94,
+       41.74,
+       55.08,
+       104.8
+      ],
+      "n": 1340
+     },
+     "inverno": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.1,
+       0.19,
+       0.2,
+       0.39,
+       0.58,
+       0.78,
+       0.98,
+       1.44,
+       1.77,
+       2.14,
+       2.63,
+       3.23,
+       3.92,
+       4.9,
+       5.73,
+       6.44,
+       7.36,
+       8.25,
+       9.37,
+       11.1,
+       14.82,
+       17.77,
+       21.06,
+       26.1,
+       33.78,
+       42.24,
+       109.09
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.18,
+       0.18,
+       0.18,
+       0.18,
+       0.2,
+       0.2,
+       0.2,
+       0.38,
+       0.58,
+       0.75,
+       1.13,
+       1.69,
+       2.62,
+       2.84,
+       3.62,
+       3.89,
+       7.38,
+       9.42,
+       12.05,
+       14.59,
+       17.78,
+       20.7,
+       25.98,
+       29.34,
+       43.23,
+       50.8,
+       75.57
+      ],
+      "n": 775
+     },
+     "primavera": {
+      "p": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.01,
+       0.1,
+       0.2,
+       0.3,
+       0.4,
+       0.58,
+       0.71,
+       0.91,
+       1.12,
+       1.43,
+       1.92,
+       2.43,
+       3.2,
+       4.14,
+       5.27,
+       5.97,
+       7,
+       8.55,
+       9.92,
+       11.78,
+       13.88,
+       16.11,
+       18.43,
+       22.68,
+       28.93,
+       42.76,
+       150.1
+      ],
+      "o": [
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0,
+       0.18,
+       0.18,
+       0.2,
+       0.2,
+       0.38,
+       0.38,
+       0.4,
+       0.58,
+       0.78,
+       0.98,
+       1.36,
+       1.6,
+       2.03,
+       2.64,
+       3.28,
+       5.22,
+       7.8,
+       10.9,
+       12.11,
+       18.8,
+       21.56,
+       24.8,
+       34.72,
+       47.39,
+       78.3
+      ],
+      "n": 980
+     }
+    },
+    "validacao": {
+     "total": {
+      "antes": {
+       "acerto": 0.809,
+       "pod": 0.822,
+       "far": 0.36,
+       "viesFrequencia": 1.283,
+       "mae": 4.914,
+       "razaoVolume": 1.06
+      },
+      "depois": {
+       "acerto": 0.821,
+       "pod": 0.694,
+       "far": 0.297,
+       "viesFrequencia": 0.986,
+       "mae": 4.894,
+       "razaoVolume": 0.979
+      }
+     },
+     "porLead": {
+      "1": {
+       "n": 837,
+       "antes": {
+        "acerto": 0.838,
+        "pod": 0.865,
+        "far": 0.32,
+        "viesFrequencia": 1.271,
+        "mae": 4.278,
+        "razaoVolume": 1.09
+       },
+       "depois": {
+        "acerto": 0.854,
+        "pod": 0.745,
+        "far": 0.237,
+        "viesFrequencia": 0.976,
+        "mae": 4.231,
+        "razaoVolume": 1.008
+       }
+      },
+      "2": {
+       "n": 836,
+       "antes": {
+        "acerto": 0.835,
+        "pod": 0.836,
+        "far": 0.317,
+        "viesFrequencia": 1.224,
+        "mae": 4.997,
+        "razaoVolume": 1.077
+       },
+       "depois": {
+        "acerto": 0.829,
+        "pod": 0.708,
+        "far": 0.283,
+        "viesFrequencia": 0.988,
+        "mae": 5.003,
+        "razaoVolume": 0.99
+       }
+      },
+      "3": {
+       "n": 840,
+       "antes": {
+        "acerto": 0.808,
+        "pod": 0.816,
+        "far": 0.361,
+        "viesFrequencia": 1.276,
+        "mae": 4.724,
+        "razaoVolume": 0.998
+       },
+       "depois": {
+        "acerto": 0.826,
+        "pod": 0.7,
+        "far": 0.289,
+        "viesFrequencia": 0.984,
+        "mae": 4.834,
+        "razaoVolume": 0.929
+       }
+      },
+      "4": {
+       "n": 839,
+       "antes": {
+        "acerto": 0.795,
+        "pod": 0.816,
+        "far": 0.382,
+        "viesFrequencia": 1.32,
+        "mae": 5.071,
+        "razaoVolume": 1.032
+       },
+       "depois": {
+        "acerto": 0.808,
+        "pod": 0.672,
+        "far": 0.32,
+        "viesFrequencia": 0.988,
+        "mae": 5.036,
+        "razaoVolume": 0.949
+       }
+      },
+      "5": {
+       "n": 838,
+       "antes": {
+        "acerto": 0.77,
+        "pod": 0.776,
+        "far": 0.414,
+        "viesFrequencia": 1.324,
+        "mae": 5.5,
+        "razaoVolume": 1.105
+       },
+       "depois": {
+        "acerto": 0.789,
+        "pod": 0.644,
+        "far": 0.353,
+        "viesFrequencia": 0.996,
+        "mae": 5.365,
+        "razaoVolume": 1.018
+       }
+      }
+     }
+    }
+   },
+   "rajadaCoerencia": 1.044,
+   "ventoCoerencia": 1.062,
+   "rajadaCurtoPrazo": {
+    "usar": true,
+    "n": 1320,
+    "fatorAnual": 0.709,
+    "fator": {
+     "verao": 0.726,
+     "outono": 0.713,
+     "inverno": 0.681,
+     "primavera": 0.71
+    },
+    "nEstacao": {
+     "verao": 361,
+     "outono": 367,
+     "inverno": 291,
+     "primavera": 301
+    },
+    "maeAntes": 10.82,
+    "maeDepois": 5,
+    "viesAntes": 9.82,
+    "viesDepois": 0,
+    "ganho": 0.538
+   }
+  }
+ }
+}

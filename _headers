@@ -1,0 +1,17 @@
+# Cabeçalhos do Cloudflare Pages (https://developers.cloudflare.com/pages/configuration/headers/).
+# Copiado para a raiz do site por scripts/montar-site.sh. Não é servido como arquivo.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(self), camera=(), microphone=()
+  X-Robots-Tag: noindex
+
+# O navegador sempre confere se há service worker novo.
+/sw.js
+  Cache-Control: no-cache
+
+# Campos do Globo: o GitHub Actions publica novos a cada hora; os arquivos levam ?r= e ?t= da rodada.
+/globo-dados/*
+  Cache-Control: public, max-age=300

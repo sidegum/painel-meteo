@@ -1,0 +1,1094 @@
+{
+ "fonte": "Wikimedia Commons (autor e licença de cada imagem em cada entrada); medidas do HyperLEDA (Makarov et al. 2014; VizieR VII/237)",
+ "galaxias": [
+  {
+   "id": "m31",
+   "nome": "Galáxia de Andrômeda",
+   "ra": 10.6847,
+   "dec": 41.2687,
+   "arquivo": "Andromeda Galaxy (with h-alpha).jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Andromeda_Galaxy_(with_h-alpha).jpg",
+   "licenca": "CC BY 2.0",
+   "autor": "Adam Evans",
+   "credito": "M31, the Andromeda Galaxy (now with h-alpha) Uploaded by NotFromUtrecht",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1346,
+    "centro": [
+     0.5058,
+     0.5007
+    ],
+    "anguloEixoMaior": 31.1,
+    "sigmaMaior": 0.158,
+    "sigmaMenor": 0.0657,
+    "fundo": 0.029
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m33",
+   "nome": "Galáxia do Triângulo",
+   "ra": 23.4621,
+   "dec": 30.6599,
+   "arquivo": "VST snaps a very detailed view of the Triangulum Galaxy.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:VST_snaps_a_very_detailed_view_of_the_Triangulum_Galaxy.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/public/images/eso1424a/",
+   "imagem": {
+    "largura": 1717,
+    "altura": 2048,
+    "centro": [
+     0.5028,
+     0.5133
+    ],
+    "anguloEixoMaior": 65.7,
+    "sigmaMaior": 0.1967,
+    "sigmaMenor": 0.1205,
+    "fundo": 0.05
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "lmc",
+   "nome": "Grande Nuvem de Magalhães",
+   "ra": 80.8942,
+   "dec": -69.7561,
+   "arquivo": "Large Magellanic Cloud.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Large_Magellanic_Cloud.jpg",
+   "licenca": "Public domain",
+   "autor": "ESA/NASA/JPL-Caltech/STScI",
+   "credito": "NASA Jet Propulsion Laboratory",
+   "imagem": {
+    "largura": 2048,
+    "altura": 2048,
+    "centro": [
+     0.4385,
+     0.5593
+    ],
+    "anguloEixoMaior": -25.6,
+    "sigmaMaior": 0.1952,
+    "sigmaMenor": 0.1554,
+    "fundo": 0.031
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "smc",
+   "nome": "Pequena Nuvem de Magalhães",
+   "ra": 13.1583,
+   "dec": -72.8003,
+   "arquivo": "Small Magellanic Cloud (Digitized Sky Survey 2).jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Small_Magellanic_Cloud_(Digitized_Sky_Survey_2).jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESA/Hubble and Digitized Sky Survey 2",
+   "credito": "http://www.spacetelescope.org/images/heic0514c (direct link)",
+   "imagem": {
+    "largura": 1970,
+    "altura": 2048,
+    "centro": [
+     0.4129,
+     0.3955
+    ],
+    "anguloEixoMaior": 41.5,
+    "sigmaMaior": 0.1774,
+    "sigmaMenor": 0.1328,
+    "fundo": 0.02
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m51",
+   "nome": "Galáxia do Redemoinho",
+   "ra": 202.4696,
+   "dec": 47.1952,
+   "arquivo": "Messier51 sRGB.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier51_sRGB.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA and European Space Agency",
+   "credito": "http://antwrp.gsfc.nasa.gov/apod/ap050428.html SOURCE OF 2ND VERSION: http://www.spacetelescope.org/images/heic0506a/ also bigger versions up to about 12000x8000 pixel available",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1421,
+    "centro": [
+     0.4675,
+     0.4477
+    ],
+    "anguloEixoMaior": -15.8,
+    "sigmaMaior": 0.2118,
+    "sigmaMenor": 0.1075,
+    "fundo": 0.073
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m81",
+   "nome": "Galáxia de Bode",
+   "ra": 148.8882,
+   "dec": 69.0653,
+   "arquivo": "Messier 81 HST.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier_81_HST.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA, ESA and the Hubble Heritage Team (STScI/AURA)",
+   "credito": "http://www.spacetelescope.org/images/heic0710a/ (very high quality ([cdn.spacetelescope.org/archives/images/screen//heic0710a.jpg JPEG file] 346 MB) http://hubblesite.org/newscenter/archive/releases/2",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1376,
+    "centro": [
+     0.5154,
+     0.4942
+    ],
+    "anguloEixoMaior": 5.9,
+    "sigmaMaior": 0.1444,
+    "sigmaMenor": 0.0822,
+    "fundo": 0.02
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m82",
+   "nome": "Galáxia do Charuto",
+   "ra": 148.9685,
+   "dec": 69.6797,
+   "arquivo": "M82 HST ACS 2006-14-a-large web.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M82_HST_ACS_2006-14-a-large_web.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA, ESA, and The Hubble Heritage Team (STScI/AURA)",
+   "credito": "http://www.spacetelescope.org/images/heic0604a/ ([cdn.spacetelescope.org/archives/images/screen/heic0604a.jpg direct link]) http://hubblesite.org/gallery/album/entire_collection/pr2006014a/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1595,
+    "centro": [
+     0.5225,
+     0.4892
+    ],
+    "anguloEixoMaior": -25.4,
+    "sigmaMaior": 0.1885,
+    "sigmaMenor": 0.0858,
+    "fundo": 0.051
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m101",
+   "nome": "Galáxia do Cata-vento",
+   "ra": 210.8024,
+   "dec": 54.3488,
+   "arquivo": "M101 hires STScI-PRC2006-10a.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M101_hires_STScI-PRC2006-10a.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "Credit: Image: European Space Agency & NASA Acknowledgements: Project Investigators for the original Hubble data: K.D. Kuntz (GSFC), F. Bresolin (University of ",
+   "credito": "https://esahubble.org/news/heic0602/ (direct link) See also: https://esahubble.org/images/heic0602a/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1601,
+    "centro": [
+     0.491,
+     0.5297
+    ],
+    "anguloEixoMaior": 43.7,
+    "sigmaMaior": 0.1456,
+    "sigmaMenor": 0.1347,
+    "fundo": 0.058
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m104",
+   "nome": "Galáxia do Sombreiro",
+   "ra": 189.9976,
+   "dec": -11.6231,
+   "arquivo": "M104 ngc4594 sombrero galaxy hi-res.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M104_ngc4594_sombrero_galaxy_hi-res.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA/ESA and The Hubble Heritage Team (STScI/AURA)",
+   "credito": "http://www.spacetelescope.org/images/opo0328a/ ([cdn.spacetelescope.org/archives/images/screen/opo0328a.jpg direct link]) http://hubblesite.org/newscenter/newsdesk/archive/releases/2003/28/image/a",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1148,
+    "centro": [
+     0.4978,
+     0.494
+    ],
+    "anguloEixoMaior": 7.5,
+    "sigmaMaior": 0.145,
+    "sigmaMenor": 0.0851,
+    "fundo": 0.035
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m87",
+   "nome": "Virgem A (M87)",
+   "ra": 187.7059,
+   "dec": 12.3911,
+   "arquivo": "Messier 87 Hubble WikiSky.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier_87_Hubble_WikiSky.jpg",
+   "licenca": "Public domain",
+   "autor": "en:NASA, en:STScI, en:WikiSky",
+   "credito": "http://wikisky.org/snapshot?img_size=&img_res=&ra=12.5138&de=12.3896&angle=0.0293&projection=tan&rotation=0.0&survey=astrophoto&img_id=905632&width=2160&height=2160&img_borders=&interpolation=bicubic&",
+   "imagem": {
+    "largura": 2048,
+    "altura": 2048,
+    "centro": [
+     0.5329,
+     0.4476
+    ],
+    "anguloEixoMaior": -66.7,
+    "sigmaMaior": 0.1314,
+    "sigmaMenor": 0.1254,
+    "fundo": 0.051
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "ngc5128",
+   "nome": "Centaurus A",
+   "ra": 201.3651,
+   "dec": -43.0191,
+   "arquivo": "ESO Centaurus A LABOCA.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:ESO_Centaurus_A_LABOCA.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO/WFI (Optical); MPIfR/ESO/APEX/A.Weiss et al. (Submillimetre); NASA/CXC/CfA/R.Kraft et al. (X-ray)",
+   "credito": "http://www.eso.org/public/images/eso0903a/",
+   "imagem": {
+    "largura": 1945,
+    "altura": 2048,
+    "centro": [
+     0.5012,
+     0.498
+    ],
+    "anguloEixoMaior": 53.1,
+    "sigmaMaior": 0.1646,
+    "sigmaMenor": 0.1239,
+    "fundo": 0.012
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m83",
+   "nome": "Cata-vento do Sul",
+   "ra": 204.2538,
+   "dec": -29.8658,
+   "arquivo": "Hubble view of barred spiral galaxy Messier 83.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier83_-_Heic1403a.jpg",
+   "licenca": "Public domain",
+   "autor": "Credit: NASA, ESA, and the Hubble Heritage Team (STScI/AURA) Acknowledgement: William Blair (Johns Hopkins University)",
+   "credito": "https://www.spacetelescope.org/images/heic1403a/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1332,
+    "centro": [
+     0.4703,
+     0.4853
+    ],
+    "anguloEixoMaior": -37.0,
+    "sigmaMaior": 0.1626,
+    "sigmaMenor": 0.1254,
+    "fundo": 0.169
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "ngc1300",
+   "nome": "NGC 1300",
+   "ra": 49.9208,
+   "dec": -19.4111,
+   "arquivo": "Hubble2005-01-barred-spiral-galaxy-NGC1300.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Hubble2005-01-barred-spiral-galaxy-NGC1300.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA, ESA, and The Hubble Heritage Team STScI/AURA)",
+   "credito": "http://hubblesite.org/newscenter/archive/releases/2005/01/image/a http://www.spacetelescope.org/images/opo0501a/ ([cdn.spacetelescope.org/archives/images/screen/opo0501a.jpg direct link])",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1169,
+    "centro": [
+     0.4948,
+     0.4719
+    ],
+    "anguloEixoMaior": 22.0,
+    "sigmaMaior": 0.1709,
+    "sigmaMenor": 0.0913,
+    "fundo": 0.061
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m74",
+   "nome": "Galáxia Fantasma (M74)",
+   "ra": 24.174,
+   "dec": 15.7836,
+   "arquivo": "Messier 74 by HST.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier_74_by_HST.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA, ESA, and the Hubble Heritage (STScI/AURA)-ESA/Hubble Collaboration. Acknowledgment: R. Chandar (University of Toledo) and J. Miller (University of Michiga",
+   "credito": "https://hubblesite.org/contents/news-releases/2007/news-2007-41.html",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1972,
+    "centro": [
+     0.3685,
+     0.437
+    ],
+    "anguloEixoMaior": -70.8,
+    "sigmaMaior": 0.1666,
+    "sigmaMenor": 0.1629,
+    "fundo": 0.132
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m64",
+   "nome": "Galáxia do Olho Negro",
+   "ra": 194.1821,
+   "dec": 21.6827,
+   "arquivo": "Blackeyegalaxy.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Blackeyegalaxy.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA and The Hubble Heritage Team (AURA/STScI)",
+   "credito": "http://hubblesite.org/newscenter/archive/releases/2004/04/image/a/ (direct link)",
+   "imagem": {
+    "largura": 897,
+    "altura": 1065,
+    "centro": [
+     0.4747,
+     0.4493
+    ],
+    "anguloEixoMaior": -50.9,
+    "sigmaMaior": 0.2051,
+    "sigmaMenor": 0.137,
+    "fundo": 0.072
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "ngc253",
+   "nome": "Galáxia do Escultor",
+   "ra": 11.888,
+   "dec": -25.2882,
+   "arquivo": "Sculptor Galaxy by VISTA.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Sculptor_Galaxy_by_VISTA.jpg",
+   "licenca": "CC BY 3.0",
+   "autor": "ESO/J. Emerson/VISTA. Acknowledgment: Cambridge Astronomical Survey Unit",
+   "credito": "http://www.eso.org/public/images/eso1025a/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1363,
+    "centro": [
+     0.4827,
+     0.5017
+    ],
+    "anguloEixoMaior": 4.1,
+    "sigmaMaior": 0.1688,
+    "sigmaMenor": 0.0542,
+    "fundo": 0.025
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "ngc4565",
+   "nome": "Galáxia da Agulha",
+   "ra": 189.0866,
+   "dec": 25.9877,
+   "arquivo": "Needle Galaxy 4565.jpeg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Needle_Galaxy_4565.jpeg",
+   "licenca": "CC BY-SA 3.0",
+   "autor": "Ken Crawford",
+   "credito": "https://www.imagingdeepsky.com/Galaxies/NGC4565/NGC4565.htm",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1937,
+    "centro": [
+     0.5098,
+     0.4385
+    ],
+    "anguloEixoMaior": -38.6,
+    "sigmaMaior": 0.1499,
+    "sigmaMenor": 0.1083,
+    "fundo": 0.063
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "ngc891",
+   "nome": "NGC 891",
+   "ra": 35.6392,
+   "dec": 42.3491,
+   "arquivo": "NGC 891 HST.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Caldwell_23_-_2.jpg",
+   "licenca": "CC BY 2.0",
+   "autor": "NASA Hubble",
+   "credito": "https://www.flickr.com/photos/144614754@N02/49164938063/",
+   "imagem": {
+    "largura": 1972,
+    "altura": 2048,
+    "centro": [
+     0.3579,
+     0.5028
+    ],
+    "anguloEixoMaior": -52.4,
+    "sigmaMaior": 0.275,
+    "sigmaMenor": 0.0894,
+    "fundo": 0.034
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m106",
+   "nome": "M106",
+   "ra": 184.7396,
+   "dec": 47.304,
+   "arquivo": "Messier 106 visible and infrared composite.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier_106_visible_and_infrared_composite.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA, ESA, the Hubble Heritage Team (STScI/AURA), and R. Gendler (for the Hubble Heritage Team). Acknowledgment: J. GaBany",
+   "credito": "http://www.spacetelescope.org/news/heic1302/ (see also http://hubblesite.org/newscenter/archive/releases/2013/06/)",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1599,
+    "centro": [
+     0.5055,
+     0.46
+    ],
+    "anguloEixoMaior": -35.0,
+    "sigmaMaior": 0.1954,
+    "sigmaMenor": 0.0967,
+    "fundo": 0.09
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "ngc1365",
+   "nome": "Grande Espiral Barrada (NGC 1365)",
+   "ra": 53.4015,
+   "dec": -36.1404,
+   "arquivo": "Phot-08a-99-hires.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Phot-08a-99-hires.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/gallery/v/ESOPIA/Galaxies/phot-08a-99-hires.jpg.html",
+   "imagem": {
+    "largura": 2039,
+    "altura": 2037,
+    "centro": [
+     0.4619,
+     0.4972
+    ],
+    "anguloEixoMaior": -37.0,
+    "sigmaMaior": 0.1516,
+    "sigmaMenor": 0.1382,
+    "fundo": 0.058
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "ngc4414",
+   "nome": "NGC 4414",
+   "ra": 186.6129,
+   "dec": 31.2235,
+   "arquivo": "NGC 4414 (NASA-med).jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:NGC_4414_(NASA-med).jpg",
+   "licenca": "Public domain",
+   "autor": "The Hubble Heritage Team (AURA/STScI/NASA)NASA Headquarters - Greatest Images of NASA (NASA-HQ-GRIN)",
+   "credito": "http://nix.larc.nasa.gov/info;jsessionid=1sl2so6lc9mab?id=GPN-2000-000933&orgid=12http://imgsrc.hubblesite.org/hu/db/images/hs-1999-25-a-full_tif.tif",
+   "imagem": {
+    "largura": 1730,
+    "altura": 1428,
+    "centro": [
+     0.4964,
+     0.4941
+    ],
+    "anguloEixoMaior": 25.9,
+    "sigmaMaior": 0.1884,
+    "sigmaMenor": 0.1033,
+    "fundo": 0.008
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   },
+   "distMpc": 17.7,
+   "fonteDist": "cefeidas, Freedman et al. 2001"
+  },
+  {
+   "id": "m94",
+   "nome": "M94",
+   "ra": 192.7211,
+   "dec": 41.1203,
+   "arquivo": "Messier 94.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier_94.jpg",
+   "licenca": "CC BY-SA 3.0",
+   "autor": "R Jay Gabany (Blackbird Obs.)",
+   "credito": "original: http://www.cosmotography.com/images/small_new_m94.html enhanced: http://jean-baptiste-faure.blogspot.com/2012/01/m94-outer-disk-actively-engaged-in-star.html",
+   "imagem": {
+    "largura": 1200,
+    "altura": 1200,
+    "centro": [
+     0.4803,
+     0.5297
+    ],
+    "anguloEixoMaior": 24.4,
+    "sigmaMaior": 0.1894,
+    "sigmaMenor": 0.1439,
+    "fundo": 0.107
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m77",
+   "nome": "M77",
+   "ra": 40.6696,
+   "dec": -0.0133,
+   "arquivo": "Messier 77 spiral galaxy by HST.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier_77_spiral_galaxy_by_HST.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA, ESA & A. van der Hoeven",
+   "credito": "http://www.spacetelescope.org/news/heic1305/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1612,
+    "centro": [
+     0.4896,
+     0.4456
+    ],
+    "anguloEixoMaior": 22.8,
+    "sigmaMaior": 0.1539,
+    "sigmaMenor": 0.1205,
+    "fundo": 0.075
+   },
+   "leda": {
+    "pgc": "10266",
+    "tipo": "Sb",
+    "logD25": 1.84,
+    "logR25": 0.06,
+    "pa": 72.0,
+    "nomes": "NGC1068               UGC2188               MCG0-07-083           CGCG388-98    "
+   },
+   "distMpc": 14.4,
+   "fonteDist": "Tully 1988"
+  },
+  {
+   "id": "ngc6744",
+   "nome": "NGC 6744",
+   "ra": 287.4421,
+   "dec": -63.8575,
+   "arquivo": "Wide Field Imager view of a Milky Way look-alike NGC 6744.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Wide_Field_Imager_view_of_a_Milky_Way_look-alike_NGC_6744.jpg",
+   "licenca": "CC BY 3.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/public/images/eso1118a/ This is a featured picture on the Persian language Wikipedia (نگاره‌های برگزیده) and is considered one of the finest images. See its nomination here. If you ",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1724,
+    "centro": [
+     0.4713,
+     0.4942
+    ],
+    "anguloEixoMaior": -13.0,
+    "sigmaMaior": 0.151,
+    "sigmaMenor": 0.1078,
+    "fundo": 0.051
+   },
+   "leda": {
+    "pgc": "62836",
+    "tipo": "SBbc",
+    "logD25": 2.24,
+    "logR25": 0.2,
+    "pa": 16.0,
+    "nomes": "NGC6744               ESO104-42             ESO-LV1040420         IRAS19050-6354"
+   }
+  },
+  {
+   "id": "ngc1232",
+   "nome": "NGC 1232",
+   "ra": 47.4396,
+   "dec": -20.5794,
+   "arquivo": "NGC 1232.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:NGC_1232.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/gallery/v/ESOPIA/Galaxies/phot-37d-98.tif.html",
+   "imagem": {
+    "largura": 2032,
+    "altura": 2048,
+    "centro": [
+     0.6024,
+     0.5199
+    ],
+    "anguloEixoMaior": -4.9,
+    "sigmaMaior": 0.1646,
+    "sigmaMenor": 0.1477,
+    "fundo": 0.038
+   },
+   "leda": {
+    "pgc": "11819",
+    "tipo": "SBc",
+    "logD25": 1.82,
+    "logR25": 0.06,
+    "pa": 99.0,
+    "nomes": "NGC1232               ESO547-14             MCG-4-08-032          ESO-LV5470140 "
+   }
+  },
+  {
+   "id": "antenas",
+   "nome": "Galáxias das Antenas",
+   "ra": 180.4717,
+   "dec": -18.8769,
+   "arquivo": "Antennae Galaxies reloaded.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Antennae_Galaxies_reloaded.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESA/Hubble & NASA",
+   "credito": "https://esahubble.org/images/potw1345a/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 2034,
+    "centro": [
+     0.5447,
+     0.4513
+    ],
+    "anguloEixoMaior": -87.7,
+    "sigmaMaior": 0.2158,
+    "sigmaMenor": 0.1544,
+    "fundo": 0.059
+   },
+   "leda": {
+    "pgc": "37967",
+    "tipo": "SBm",
+    "logD25": 1.63,
+    "logR25": 0.19,
+    "pa": 120.0,
+    "nomes": "NGC4038               (ESO572-47)           MCG-3-31-014          UGCA264       "
+   }
+  },
+  {
+   "id": "m63",
+   "nome": "Galáxia do Girassol",
+   "ra": 198.9555,
+   "dec": 42.0293,
+   "arquivo": "M63 (NGC 5055).jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M63_(NGC_5055).jpg",
+   "licenca": "Public domain",
+   "autor": "NASA/ESA - The Hubble Legacy Archive (HLA): Space Telescope Science Institute (STScI), the Space Telescope European Coordinating Facility (ST-ECF), and the Cana",
+   "credito": "Hubble Space Telescope",
+   "imagem": {
+    "largura": 1557,
+    "altura": 1055,
+    "centro": [
+     0.4785,
+     0.4336
+    ],
+    "anguloEixoMaior": -4.3,
+    "sigmaMaior": 0.1591,
+    "sigmaMenor": 0.0955,
+    "fundo": 0.0
+   },
+   "leda": {
+    "pgc": "46153",
+    "tipo": "Sbc",
+    "logD25": 2.12,
+    "logR25": 0.22,
+    "pa": 102.0,
+    "nomes": "NGC5055               UGC8334               MCG7-27-054           CGCG217-23    "
+   }
+  },
+  {
+   "id": "m100",
+   "nome": "M100",
+   "ra": 185.7288,
+   "dec": 15.8223,
+   "arquivo": "M100.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M100.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/gallery/v/ESOPIA/Galaxies/phot-08a-06.tif.html",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1661,
+    "centro": [
+     0.4904,
+     0.4442
+    ],
+    "anguloEixoMaior": -26.1,
+    "sigmaMaior": 0.1658,
+    "sigmaMenor": 0.1086,
+    "fundo": 0.026
+   },
+   "leda": {
+    "pgc": "40153",
+    "tipo": "SBbc",
+    "logD25": 1.88,
+    "logR25": 0.05,
+    "pa": 170.0,
+    "nomes": "NGC4321               UGC7450               MCG3-32-015           CGCG99-30     "
+   }
+  },
+  {
+   "id": "m66",
+   "nome": "M66",
+   "ra": 170.0626,
+   "dec": 12.9915,
+   "arquivo": "Phot-33c-03-fullres.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Phot-33c-03-fullres.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/public/images/eso0338c/",
+   "imagem": {
+    "largura": 2046,
+    "altura": 2048,
+    "centro": [
+     0.5122,
+     0.5181
+    ],
+    "anguloEixoMaior": 47.8,
+    "sigmaMaior": 0.2086,
+    "sigmaMenor": 0.0998,
+    "fundo": 0.0
+   },
+   "leda": {
+    "pgc": "34695",
+    "tipo": null,
+    "logD25": 1.93,
+    "logR25": 0.35,
+    "pa": 173.0,
+    "nomes": "NGC3627               UGC6346               MCG2-29-019           CGCG67-57     "
+   }
+  },
+  {
+   "id": "ngc2903",
+   "nome": "NGC 2903",
+   "ra": 143.0421,
+   "dec": 21.5008,
+   "arquivo": "NGC 2903.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:NGC_2903.jpg",
+   "licenca": "CC BY 2.0",
+   "autor": "Judy Schmidt",
+   "credito": "Flickr: NGC 2903",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1037,
+    "centro": [
+     0.4999,
+     0.5063
+    ],
+    "anguloEixoMaior": -11.9,
+    "sigmaMaior": 0.1875,
+    "sigmaMenor": 0.067,
+    "fundo": 0.17
+   },
+   "leda": {
+    "pgc": "27077",
+    "tipo": "SBbc",
+    "logD25": 2.06,
+    "logR25": 0.34,
+    "pa": 23.0,
+    "nomes": "NGC2903               NGC2905               UGC5079               MCG4-23-009   "
+   }
+  },
+  {
+   "id": "ngc7331",
+   "nome": "NGC 7331",
+   "ra": 339.2671,
+   "dec": 34.4156,
+   "arquivo": "NGC 7331.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:NGC_7331_zoomed.jpg",
+   "licenca": "Public domain",
+   "autor": "NASA",
+   "credito": "NASA",
+   "imagem": {
+    "largura": 1239,
+    "altura": 645,
+    "centro": [
+     0.5115,
+     0.4815
+    ],
+    "anguloEixoMaior": 0.1,
+    "sigmaMaior": 0.1372,
+    "sigmaMenor": 0.0551,
+    "fundo": 0.0
+   },
+   "leda": {
+    "pgc": "69327",
+    "tipo": "Sbc",
+    "logD25": 2.02,
+    "logR25": 0.4,
+    "pa": 171.0,
+    "nomes": "NGC7331               UGC12113              MCG6-49-045           CGCG514-68    "
+   }
+  },
+  {
+   "id": "ic342",
+   "nome": "IC 342",
+   "ra": 56.7021,
+   "dec": 68.0961,
+   "arquivo": "IC342.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:IC342.jpg",
+   "licenca": "CC BY-SA 4.0",
+   "autor": "KeithSteffens",
+   "credito": "Own work",
+   "imagem": {
+    "largura": 2048,
+    "altura": 1528,
+    "centro": [
+     0.5027,
+     0.5059
+    ],
+    "anguloEixoMaior": 3.7,
+    "sigmaMaior": 0.1557,
+    "sigmaMenor": 0.1241,
+    "fundo": 0.051
+   },
+   "leda": {
+    "pgc": "13826",
+    "tipo": "SBc",
+    "logD25": 2.34,
+    "logR25": 0.02,
+    "pa": null,
+    "nomes": "IC342                 UGC2847               MCG11-05-003          CGCG305-2     "
+   }
+  },
+  {
+   "id": "ngc300",
+   "nome": "NGC 300",
+   "ra": 13.7229,
+   "dec": -37.6844,
+   "arquivo": "NGC 300.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:View_of_the_southern_spiral_NGC_300.jpg",
+   "licenca": "CC BY 4.0",
+   "autor": "ESO",
+   "credito": "http://www.eso.org/public/images/eso1037a/",
+   "imagem": {
+    "largura": 2048,
+    "altura": 2048,
+    "centro": [
+     0.4851,
+     0.48
+    ],
+    "anguloEixoMaior": -10.9,
+    "sigmaMaior": 0.148,
+    "sigmaMenor": 0.1241,
+    "fundo": 0.02
+   },
+   "leda": {
+    "pgc": "3238",
+    "tipo": "Scd",
+    "logD25": 2.32,
+    "logR25": 0.19,
+    "pa": 114.0,
+    "nomes": "NGC300                ESO295-20             MCG-6-03-005          ESO-LV2950200 "
+   }
+  },
+  {
+   "id": "m110",
+   "nome": "M110",
+   "ra": 10.0921,
+   "dec": 41.6853,
+   "arquivo": "Messier 110.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:Messier_110.jpg",
+   "licenca": "Public domain",
+   "autor": "Two Micron All Sky Survey (2MASS)",
+   "credito": "IPAC; Atlas Image mosaic obtained as part of the Two Micron All Sky Survey (2MASS).",
+   "imagem": {
+    "largura": 250,
+    "altura": 250,
+    "centro": [
+     0.4865,
+     0.5234
+    ],
+    "anguloEixoMaior": -71.7,
+    "sigmaMaior": 0.186,
+    "sigmaMenor": 0.1163,
+    "fundo": 0.119
+   },
+   "leda": {
+    "pgc": null,
+    "tipo": null,
+    "logD25": null,
+    "logR25": null,
+    "pa": null,
+    "nomes": ""
+   }
+  },
+  {
+   "id": "m32",
+   "nome": "M32",
+   "ra": 10.6743,
+   "dec": 40.8652,
+   "arquivo": "M32.jpg",
+   "pagina": "https://commons.wikimedia.org/wiki/File:M32.jpg",
+   "licenca": "Public domain",
+   "autor": "",
+   "credito": "",
+   "imagem": {
+    "largura": 480,
+    "altura": 480,
+    "centro": [
+     0.5034,
+     0.4968
+    ],
+    "anguloEixoMaior": -74.1,
+    "sigmaMaior": 0.1237,
+    "sigmaMenor": 0.0984,
+    "fundo": 0.01
+   },
+   "leda": {
+    "pgc": "2555",
+    "tipo": "E",
+    "logD25": 1.96,
+    "logR25": 0.16,
+    "pa": 170.0,
+    "nomes": "NGC221                UGC452                MCG7-02-015           CGCG535-16    "
+   }
+  }
+ ]
+}

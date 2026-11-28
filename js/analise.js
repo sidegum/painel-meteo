@@ -1,0 +1,1721 @@
+// Regras de análise do painel. Funções puras, sem acesso à rede nem ao DOM,
+// para poderem ser testadas no Node (test/analise.test.mjs).
+//
+// Todos os limites ficam em REGRAS. Para ajustar a confiança, mude só aqui.
+
+export const REGRAS = {
+  chuvaMinimaMm: 1,            // dia "com chuva" quando o total passa de 1 mm
+  chuvaHoraMm: 0.2,            // hora "com chuva" para achar o horário provável
+  ocorrencia: {                // probabilidade de cenários -> palavra
+    provavel: 0.7, possivel: 0.4, poucoProvavel: 0.15,
+  },
+  volumeIncertoRazao: 0.8,     // (máx - mín) / mediana acima disso = volume incerto
+  volumeMinimoRazaoMm: 2,      // mediana mínima usada na razão, para não explodir com 0,1 mm
+  rajadaIncertaRazao: 0.35,    // (máx - mín) / mediana das rajadas
+  rajadaClasses: [             // limites de rajada em km/h
+    { min: 80, nome: 'muito fortes' },
+    { min: 60, nome: 'fortes' },
+    { min: 40, nome: 'moderadas' },
+  ],
+  divisaoCenarios: [0.3, 0.7], // probabilidade nesse intervalo = cenários divididos (só informativo)
+  difSistemas: [0.3, 0.5],     // diferença de probabilidade entre sistemas de cenários: -1 / -2 níveis
+  horizonteLongoDias: 4,       // a partir do 5º dia, perde um nível de confiança
+  // Só os modelos globais de melhor desempenho nas verificações publicadas (centro líder da OMM para
+  // verificação, sediado no ECMWF): ECMWF IFS, ECMWF AIFS e UKMO. GFS e ICON saíram da previsão.
+  // Peso inicial maior para o ECMWF IFS; depois de 30 dias de dados locais, o acerto medido aqui ajusta.
+  pesoInicial: {
+    ecmwf_ifs: 1.3, ecmwf_aifs025_single: 1.15, ukmo_global_deterministic_10km: 1.15,
+  },
+  // Aprendizado: o painel compara o que previu com o que as estações mediram e se corrige aos poucos.
+  // Cada correção entra com peso n / (n + meia), ou seja, vale metade quando há "meia" dias de dados.
+  aprendizado: {
+    diasInicio: 7,             // começa a corrigir com 7 dias verificados
+    meiaPesos: 30,             // pesos dos modelos: confiança de 50% com 30 dias
+    meiaVies: 10,              // viés de temperatura: confiança de 50% com 10 dias
+    viesMax: 3,                // correção de temperatura limitada a ±3 °C
+    calibMinPares: 30,         // calibração da chance só com 30 pares previsão x medição
+    meiaCalib: 10,             // por faixa de chance: confiança de 50% com 10 casos
+  },
+  // Calibração com o histórico (dados/calibracao.json, gerado por scripts/calibrar.mjs; método em docs/CALIBRACAO.md).
+  // O histórico é o ponto de partida; o aprendizado recente do Worker o refina aos poucos.
+  calibracao: {
+    forcaHistorico: 20,        // o histórico vale como 20 dias recentes ao se misturar com o aprendizado do Worker
+    leadMax: 5,                // além de 5 dias, usa a correção de 5 dias (a mais longa medida)
+  },
+  acerto: {
+    diasMinimos: 30,           // a taxa de acerto local só pesa na confiança com 30 dias
+    pesoMin: 0.7, pesoMax: 1.3, // ajuste moderado depois disso
+    taxaAcertoBaixa: 0.6,      // acerto de chuva abaixo disso reduz a confiança
+    distanciaMaxKm: 50,        // estação de verificação mais longe que isso é ignorada
+  },
+  divergencia: {               // blocos de 6 h
+    chuvaMm: 5, chuvaRazao: 0.6, rajadaKmh: 25,
+  },
+  limitesSemana: { chuva: [1, 10, 30], rajada: [40, 60, 80] },
+  // Aba El Niño. Para mudar quanto tempo à frente um aviso aparece, ajuste só janelaAvisoDias.
+  enso: {
+    limiar: 0.5,               // °C: a partir de +0,5 é El Niño; de −0,5 para baixo, La Niña (critério da NOAA)
+    forcas: [1, 1.5, 2],       // °C: abaixo de 1 fraco; até 1,5 moderado; até 2 forte; daí em diante muito forte
+    semanasAgora: 4,           // a força de agora é a média das últimas 4 semanas do índice oficial
+    semanaMaxDias: 21,         // semana mais velha que isso não vale como "agora": usa a média de 3 meses
+    janelaAvisoDias: 7,        // dia de risco e aviso do INMET só aparecem se começam em até 7 dias
+    chuvaForteMm: 30, rajadaForteKmh: 60, // "forte": os limites mais altos da aba Semana
+    epocasRs: [                // meses em que o El Niño costuma aumentar a chuva no RS (Fontana e Berlato, 1997)
+      { meses: [10, 11], ano: 0 }, // primavera do ano em que começa
+      { meses: [4, 5, 6], ano: 1 }, // fim do outono do ano seguinte
+    ],
+    epocaAntecedenciaDias: 30, // a próxima época só é citada quando falta até um mês
+  },
+  ceu: {                       // cobertura média de nuvens (%) -> condição do céu
+    limpo: 20, poucasNuvens: 45, parcial: 75,
+  },
+  ceuMedido: {                 // céu de agora pelo METAR: aeroporto até 50 km, boletim de até 90 min
+    distanciaKm: 50, idadeMin: 90,
+  },
+  // Temperatura das próximas horas ancorada na medição: a diferença entre o medido e o previsto para a hora
+  // da leitura vai sendo somada à previsão e some aos poucos em `horas` (persistência do erro, padrão de nowcasting).
+  ancoragem: {
+    horas: 6,                  // a correção cai linearmente até zero em 6 h a partir da leitura
+    idadeMaxMin: 120,          // leitura de até 2 h
+    distanciaKm: 25,           // estação a até 25 km
+    deltaMax: 8,               // diferença acima de 8 °C é tratada como erro de leitura e ignorada
+  },
+  // Pressão ao nível do mar (hPa). Tendência de 3 h pelos termos do Met Office e da OMM:
+  // estável < 0,1; devagar 0,1 a 1,5; normal 1,6 a 3,5; rápido 3,6 a 6,0; muito rápido acima de 6,0.
+  pressao: {
+    tendencia3h: { estavel: 0.1, devagar: 1.5, normal: 3.5, rapido: 6.0 },
+    queda24hForte: 6,          // queda de 6 hPa ou mais em 24 h soma um ponto de sinal de chuva
+    previsaoHoras: 12,         // janela da variação prevista pelos modelos
+    variacaoPrevForte: 4,      // variação prevista de 4 hPa ou mais na janela soma (queda) ou tira (subida) um ponto
+    baixa: 1008, alta: 1020,   // nível: abaixo de 1008 favorece chuva, acima de 1020 favorece tempo firme
+    toleranciaMin: { h3: 40, h24: 90 }, // distância máxima da leitura de referência ao instante alvo
+  },
+  // Chuva chegando: extrapolação do movimento dos ecos de radar (nowcasting por correlação de blocos).
+  radar: {
+    // Eco que conta como chuva: 12 dBZ, a refletividade de 0,2 mm/h (REGRAS.chuvaHoraMm) pela relação de
+    // Marshall-Palmer (Z = 200 R^1,6). Abaixo disso o radar vê garoa que evapora, poeira ou ruído (antes: qualquer eco).
+    dbzChuva: 12,
+    intervaloMin: 60,          // intervalo entre os dois quadros comparados
+    deslocMax: 12,             // busca de deslocamento: até 12 células em cada eixo no intervalo
+    ecoMin: 0.3,               // fração de pixels com eco para a célula contar como chuva (chegada)
+    limiarMovimento: 0.05,     // intensidade mínima para a célula entrar na medida do movimento
+    concordanciaKmh: 15,       // velocidades medidas em 30 e 60 min precisam concordar dentro disso
+    celulasMin: 40,            // mínimo de células com eco nos dois quadros para medir o movimento
+    melhoraMin: 0.01,          // o melhor deslocamento precisa ser melhor que "parado" (a confiabilidade vem da concordância 30 x 60 min)
+    raioCelulas: 2,            // vizinhança verificada no ponto de origem da chuva
+    horizonteMin: 120,         // só avisa chegada nas próximas 2 h
+    passoMin: 5,
+    probChegando: 0.7,         // chuva chegando pelo radar: a chance do dia passa a ser no mínimo "provável"
+    probSeco: 0.1,             // radar seco no local e nada chegando: chance máxima nas horas cobertas pelo radar
+    secoMinimoMin: 30,         // janela seca mínima para valer (abaixo disso, os modelos decidem)
+    velMaxKmh: 100,            // sem movimento medido: a chuva mais próxima não chega mais rápido que isso
+  },
+  // Radar de tempestade (celulasTempestade): núcleos de refletividade alta no radar (RainViewer, dBZ exato pela
+  // tabela de cores). Limiares usuais de radar: 40 dBZ chuva forte; 45 dBZ núcleo de tempestade (convecção com
+  // raios provável); 55 dBZ tempestade forte, granizo possível. A refletividade sozinha não confirma raio nem granizo.
+  tempestade: {
+    dbz: { forte: 40, tempestade: 45, severa: 55 },
+    raioKm: 250,               // alcance do bloco (o mosaico de radar cobre pelo menos isso em volta do local)
+    localKm: 10,               // núcleo a até 10 km = sobre o local
+    horizonteMin: 180,         // chegada estimada só nas próximas 3 h (extrapolação perde valor depois disso)
+    pertoKm: 40,               // passa a até 40 km sem atingir o local = "aproximando" (perto o bastante para raios e rajadas)
+    evolucaoDbz: 5,            // diferença de refletividade em 30 min para dizer que o núcleo intensifica ou enfraquece
+    evolucaoBuscaKm: 15,       // folga em volta da posição anterior do núcleo (erro do movimento medido)
+    areaMinKm2: 30,            // núcleo menor que isso é ignorado (ruído), salvo se passar de 50 dBZ
+    idadeMaxMin: 30,           // quadro de radar mais velho que isso não vale como "agora"
+  },
+  // Risco de temporal: só avaliado quando há chuva prevista, chegando ou ocorrendo, ou aviso do INMET.
+  temporal: {
+    cape: [1000, 2500],        // J/kg: energia moderada (+1) e forte (+2) para tempestades
+    chuvaHoraMm: [10, 25],     // mm/h: chuva forte (+1) e muito forte (+2)
+    rajada: [60, 80],          // km/h: rajadas fortes (+1) e muito fortes (+2), as mesmas classes de rajadaClasses
+    quedaPressao3h: 3.5,       // queda de pressão acima disso em 3 h: +1
+    // Aviso de tempestade do INMET em vigor: o nível oficial prevalece, para o painel nunca contradizer o aviso.
+    aviso: { 'perigo potencial': 'moderado', perigo: 'alto', 'grande perigo': 'alto' },
+    niveis: { moderado: 2, alto: 4 },
+  },
+  // Granizo (sinaisGranizo). Fontes, da mais forte para a mais fraca:
+  // 1) aviso do INMET para o dia cujo texto cita granizo (os de Tempestade citam "queda de granizo");
+  // 2) código de tempo 96 ou 99 ("trovoada com granizo") do UKMO, que, segundo a documentação da Open-Meteo,
+  //    é um dos modelos com previsão explícita de granizo (os ECMWF só informam 95 e 97);
+  // 3) ambiente favorável, só com risco de temporal moderado ou alto: energia (CAPE) alta e nível de
+  //    congelamento baixo, que deixa o granizo chegar ao chão sem derreter.
+  granizo: {
+    codigos: [96, 99],
+    cape: 2000,                // J/kg
+    congelamentoMaxM: 4200,    // m acima do nível do mar
+  },
+};
+
+export const MODELOS = {
+  ecmwf_ifs: { nome: 'ECMWF IFS', curto: 'ECMWF', cor: 'var(--m-ecmwf)' },
+  ecmwf_aifs025_single: { nome: 'ECMWF AIFS', curto: 'AIFS', cor: 'var(--m-aifs)' },
+  ukmo_global_deterministic_10km: { nome: 'UKMO (Met Office)', curto: 'UKMO', cor: 'var(--m-ukmo)' },
+};
+
+// ---------- utilidades numéricas ----------
+
+export const valido = (v) => typeof v === 'number' && Number.isFinite(v);
+
+/**
+ * Mediana ponderada. Ordena os pares (valor, peso) válidos e devolve o primeiro valor cujo peso acumulado
+ * passa da metade do total; no empate exato, a média dos dois vizinhos. Sem pesos, é a mediana comum.
+ * @param {Array<number|null>} arr valores (inválidos são ignorados)
+ * @param {number[]} [pesos] peso de cada posição de arr (padrão 1)
+ * @returns {number|null} null se não houver valor válido
+ */
+export function mediana(arr, pesos) {
+  const xs = [];
+  arr.forEach((v, i) => { if (valido(v)) xs.push([v, pesos ? (pesos[i] ?? 1) : 1]); });
+  if (!xs.length) return null;
+  xs.sort((a, b) => a[0] - b[0]);
+  const total = xs.reduce((s, x) => s + x[1], 0);
+  let acc = 0;
+  for (let i = 0; i < xs.length; i++) {
+    acc += xs[i][1];
+    if (acc > total / 2) return xs[i][0];
+    if (acc === total / 2) return (xs[i][0] + xs[i + 1][0]) / 2;
+  }
+  return xs[xs.length - 1][0];
+}
+
+/**
+ * Quantil com interpolação linear entre as posições ordenadas (posição = (n - 1) * q).
+ * @param {Array<number|null>} arr
+ * @param {number} q entre 0 e 1
+ * @returns {number|null}
+ */
+export function quantil(arr, q) {
+  const xs = arr.filter(valido).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  const pos = (xs.length - 1) * q;
+  const lo = Math.floor(pos), hi = Math.ceil(pos);
+  return xs[lo] + (xs[hi] - xs[lo]) * (pos - lo);
+}
+
+export const minimo = (arr) => { const v = arr.filter(valido); return v.length ? Math.min(...v) : null; };
+export const maximo = (arr) => { const v = arr.filter(valido); return v.length ? Math.max(...v) : null; };
+
+export function distanciaKm(lat1, lon1, lat2, lon2) {
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+export const arredondaCoord = (x) => Math.round(x * 100) / 100;
+
+export function direcaoTexto(graus) {
+  if (!valido(graus)) return null;
+  const nomes = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'];
+  return nomes[Math.round(((graus % 360) + 360) % 360 / 45) % 8];
+}
+
+// ---------- tempo ----------
+
+// Open-Meteo devolve "2026-11-03T16:00" no fuso do local, mais utc_offset_seconds.
+/**
+ * Converte horário local ISO da Open-Meteo ("AAAA-MM-DDTHH:MM") em epoch ms usando o deslocamento do local,
+ * sem depender do fuso do aparelho.
+ * @param {string} iso
+ * @param {number} offsetSeg utc_offset_seconds da resposta
+ * @returns {number}
+ */
+export function isoLocalParaMs(iso, offsetSeg) {
+  const [d, t = '00:00'] = iso.split('T');
+  const [Y, M, D] = d.split('-').map(Number);
+  const [h, m] = t.split(':').map(Number);
+  return Date.UTC(Y, M - 1, D, h, m) - offsetSeg * 1000;
+}
+
+/**
+ * Decompõe um instante nas partes do calendário local do ponto (não do aparelho).
+ * @param {number} ms epoch ms
+ * @param {number} offsetSeg deslocamento UTC do local, em segundos
+ * @returns {{ano:number, mes:number, dia:number, hora:number, minuto:number, semana:number, data:string}}
+ */
+export function partesLocais(ms, offsetSeg) {
+  const d = new Date(ms + offsetSeg * 1000);
+  return {
+    ano: d.getUTCFullYear(), mes: d.getUTCMonth() + 1, dia: d.getUTCDate(),
+    hora: d.getUTCHours(), minuto: d.getUTCMinutes(), semana: d.getUTCDay(),
+    data: d.toISOString().slice(0, 10),
+  };
+}
+
+export function periodoDoDia(hora) {
+  if (hora < 6) return 'madrugada';
+  if (hora < 12) return 'manhã';
+  if (hora < 18) return 'tarde';
+  return 'noite';
+}
+
+// ---------- validação de leituras ----------
+
+const FAIXAS = {
+  temperatura: [-30, 50], umidade: [0, 100], orvalho: [-40, 40], pressao: [870, 1085],
+  vento: [0, 300], rajada: [0, 400], direcao: [0, 360], chuva: [0, 500], sensacao: [-45, 60],
+};
+const SENTINELAS = new Set([9999, -9999, 999.9, -999, 99999, -99999, 9999.9]);
+
+export function leituraValida(variavel, valor) {
+  if (!valido(valor)) return false;
+  if (SENTINELAS.has(valor)) return false;
+  const f = FAIXAS[variavel];
+  return !f || (valor >= f[0] && valor <= f[1]);
+}
+
+// fontes: [{ id, nome, tipo, lat, lon, leituras: { temperatura: { valor, ms } } }]
+// Ordena por distância calculada no aparelho e devolve { escolhida, outras }.
+/**
+ * Escolhe a estação mais próxima com leitura válida e recente de uma variável.
+ * Distâncias calculadas no aparelho (haversine); leituras inválidas, antigas ou mais de 15 min no futuro são descartadas.
+ * @returns {{escolhida: object|null, outras: object[]}} outras inclui o motivo do descarte
+ */
+export function escolherFonte(fontes, variavel, lat, lon, agoraMs, idadeMaxMin) {
+  const candidatas = [];
+  for (const f of fontes) {
+    const l = f.leituras?.[variavel];
+    const distancia = distanciaKm(lat, lon, f.lat, f.lon);
+    if (!l) continue;
+    const idadeMin = (agoraMs - l.ms) / 60000;
+    const ok = leituraValida(variavel, l.valor) && idadeMin <= idadeMaxMin && idadeMin > -15;
+    candidatas.push({ fonte: f, valor: l.valor, ms: l.ms, idadeMin, distancia, ok,
+      motivo: ok ? null : (!leituraValida(variavel, l.valor) ? 'leitura inválida' : 'leitura antiga') });
+  }
+  candidatas.sort((a, b) => a.distancia - b.distancia);
+  const validas = candidatas.filter((c) => c.ok);
+  return { escolhida: validas[0] || null, outras: candidatas.filter((c) => c !== validas[0]) };
+}
+
+// ---------- previsão: recortes por dia ----------
+
+/**
+ * Índices horários pertencentes a uma data local; com aPartirMs, exclui horas já encerradas.
+ * @param {number[]} horas epoch ms de cada hora
+ * @param {string} data "AAAA-MM-DD" no fuso do local
+ * @param {number} offsetSeg
+ * @param {number} [aPartirMs]
+ * @returns {number[]}
+ */
+export function indicesDoDia(horas, data, offsetSeg, aPartirMs = -Infinity) {
+  // número do dia local por aritmética (sem criar Date por hora): mesmo resultado de partesLocais(...).data
+  const [a, m, d] = String(data).split('-').map(Number);
+  const alvo = Date.UTC(a, m - 1, d) / 86400000;
+  const idx = [];
+  horas.forEach((ms, i) => {
+    if (ms + 3600000 <= aPartirMs) return;
+    if (Math.floor((ms + offsetSeg * 1000) / 86400000) === alvo) idx.push(i);
+  });
+  return idx;
+}
+
+function soma(serie, idx) {
+  if (!serie) return null;
+  let s = 0, n = 0;
+  for (const i of idx) if (valido(serie[i])) { s += serie[i]; n++; }
+  // Se faltar mais de um quarto das horas, o total não é confiável: devolve nulo.
+  if (n === 0 || n < idx.length * 0.75) return null;
+  return s;
+}
+
+function maxComHora(serie, idx, horas, dir) {
+  let melhor = null;
+  for (const i of idx) {
+    if (valido(serie?.[i]) && (!melhor || serie[i] > melhor.valor)) {
+      melhor = { valor: serie[i], ms: horas[i], direcao: dir?.[i] ?? null };
+    }
+  }
+  return melhor;
+}
+
+/**
+ * Resumo diário de um modelo determinístico: total de chuva (nulo se faltar mais de 25% das horas),
+ * probabilidade máxima, rajada máxima com hora e direção, vento máximo, mínima e máxima.
+ */
+export function resumoModeloDia(prev, modelo, idx) {
+  const v = prev.modelos[modelo]?.vars || {};
+  return {
+    modelo,
+    chuva: soma(v.precipitation, idx),
+    probMax: maximo(idx.map((i) => v.precipitation_probability?.[i])),
+    rajada: maxComHora(v.wind_gusts_10m, idx, prev.horas, v.wind_direction_10m),
+    ventoMax: maximo(idx.map((i) => v.wind_speed_10m?.[i])),
+    tmin: minimo(idx.map((i) => v.temperature_2m?.[i])),
+    tmax: maximo(idx.map((i) => v.temperature_2m?.[i])),
+  };
+}
+
+// Membros do ensemble: { precipitation: [[...horas], ...], wind_gusts_10m: [...] }
+/**
+ * Totais diários de chuva e rajada máxima de cada membro dos sistemas de cenários (ensemble).
+ * @returns {{chuva:number[], rajada:number[], modelos:string[], porModelo:Object<string, number[]>}|null}
+ */
+export function membrosDia(ens, data, offsetSeg, aPartirMs) {
+  if (!ens) return null;
+  const out = { chuva: [], rajada: [], modelos: [], porModelo: {} };
+  for (const [modelo, e] of Object.entries(ens)) {
+    const idx = indicesDoDia(e.horas, data, offsetSeg, aPartirMs);
+    if (!idx.length) continue;
+    let usou = false;
+    for (const m of e.membros.precipitation || []) {
+      const s = soma(m, idx); if (s !== null) { out.chuva.push(s); (out.porModelo[modelo] ||= []).push(s); usou = true; }
+    }
+    for (const m of e.membros.wind_gusts_10m || []) {
+      const x = maximo(idx.map((i) => m[i])); if (x !== null) { out.rajada.push(x); usou = true; }
+    }
+    if (usou) out.modelos.push(modelo);
+  }
+  return out.chuva.length || out.rajada.length ? out : null;
+}
+
+// ---------- confiança ----------
+
+const NIVEIS = ['baixa', 'baixa', 'média', 'alta'];
+
+export function palavraOcorrencia(p) {
+  const o = REGRAS.ocorrencia;
+  if (p >= o.provavel) return 'provável';
+  if (p >= o.possivel) return 'possível';
+  if (p >= o.poucoProvavel) return 'pouco provável';
+  return 'improvável';
+}
+
+/**
+ * Gráfico que abre por padrão abaixo do resumo do dia. Chuva quando a chance de chuva do dia chega ao limite
+ * REGRAS.ocorrencia.poucoProvavel (o mesmo que tira o resumo do "Não deve chover", para o gráfico e o resumo
+ * nunca se contradizerem) ou quando chove agora ou há chuva chegando pelo radar; senão Temperatura, para a
+ * tela não abrir num gráfico vazio.
+ * @param {number|null} prob chance de chuva do dia (0 a 1), a mesma do resumo (analisarDia(...).av.prob)
+ * @param {boolean} chuvaAgora chovendo agora ou chuva chegando (só em Hoje)
+ * @returns {'chance'|'temp'}
+ */
+export function graficoInicial(prob, chuvaAgora = false) {
+  return chuvaAgora || (valido(prob) && prob >= REGRAS.ocorrencia.poucoProvavel) ? 'chance' : 'temp';
+}
+
+export function classeRajada(kmh) {
+  if (!valido(kmh)) return null;
+  return REGRAS.rajadaClasses.find((c) => kmh >= c.min)?.nome || null;
+}
+
+// resumos: saída de resumoModeloDia para cada modelo; membros: membrosDia; ctx: { diaIndice, acerto, medicaoAgora }
+/**
+ * Avaliação completa de um dia: probabilidade de chuva (cenários por sistema, depois cenários, depois modelos),
+ * calibração local, volume provável, concordância, faixa de rajada e nível de confiança com motivos.
+ * Ver docs/TECNICO.md, seção 3.6.
+ * @param {object[]} resumos saída de resumoModeloDia por modelo
+ * @param {object|null} membros saída de membrosDia
+ * @param {{diaIndice?:number, acerto?:object, pesos?:object, medicaoAgora?:object, calibracao?:object}} [ctx]
+ */
+export function avaliarDia(resumos, membros, ctx = {}) {
+  const R = REGRAS;
+  const pesos = ctx.pesos || {};
+  const comChuva = resumos.filter((r) => r.chuva !== null);
+  const chuvas = comChuva.map((r) => r.chuva);
+  const pesosChuva = comChuva.map((r) => pesos[r.modelo] ?? 1);
+  const motivos = [];
+
+  // 1. probabilidade dos cenários
+  let prob = null, fonteProb = null;
+  const sistemas = Object.entries(membros?.porModelo || {}).filter(([, xs]) => xs.length >= 10);
+  if (sistemas.length >= 2) {
+    // média das probabilidades de cada sistema: o Met Office (18 cenários) pesa igual ao ECMWF (51)
+    prob = sistemas.reduce((t, [, xs]) => t + xs.filter((x) => x >= R.chuvaMinimaMm).length / xs.length, 0) / sistemas.length;
+    fonteProb = `${membros.chuva.length} cenários de ${sistemas.length} sistemas`;
+  } else if (membros?.chuva?.length >= 10) {
+    prob = membros.chuva.filter((x) => x >= R.chuvaMinimaMm).length / membros.chuva.length;
+    fonteProb = `${membros.chuva.length} cenários do ensemble`;
+  } else if (chuvas.length) {
+    prob = chuvas.filter((x) => x >= R.chuvaMinimaMm).length / chuvas.length;
+    fonteProb = `concordância entre ${chuvas.length} modelos (sem ensemble)`;
+  }
+  // calibração aprendida com o histórico local (quando houver casos suficientes)
+  const probBruta = prob;
+  if (prob !== null && ctx.calibracao) prob = calibrarProb(prob, ctx.calibracao);
+  // Chuva chegando pelo radar (só hoje): nas próximas 2 h a extrapolação do radar acerta mais que os modelos,
+  // então a chance do dia passa a ser no mínimo "provável", e todas as telas mostram o mesmo veredito.
+  if (ctx.chegando && (prob === null || prob < R.radar.probChegando)) {
+    prob = R.radar.probChegando;
+    fonteProb = `${fonteProb ? fonteProb + ' e ' : ''}radar mostrando chuva chegando`;
+  }
+  const probModelos = mediana(resumos.map((r) => r.probMax));
+
+  // volume se chover
+  let volume = null;
+  if (membros?.chuva?.length >= 10) {
+    const mol = membros.chuva.filter((x) => x >= R.chuvaMinimaMm);
+    if (mol.length) volume = { mediana: quantil(mol, 0.5), min: quantil(mol, 0.1), max: quantil(mol, 0.9), origem: 'cenários' };
+  }
+  if (!volume && chuvas.length) {
+    const mol = chuvas.filter((x) => x >= R.chuvaMinimaMm);
+    const base = mol.length ? mol : chuvas;
+    volume = { mediana: mediana(base, mol.length ? comChuva.filter((r) => r.chuva >= R.chuvaMinimaMm).map((r) => pesos[r.modelo] ?? 1) : pesosChuva),
+      min: minimo(base), max: maximo(base), origem: 'modelos' };
+  }
+
+  // 2. concordância entre modelos sobre ocorrência e volume
+  let concordancia = null, volumeIncerto = false;
+  if (chuvas.length >= 2) {
+    const sim = chuvas.filter((x) => x >= R.chuvaMinimaMm).length;
+    concordancia = Math.max(sim, chuvas.length - sim) / chuvas.length;
+    const molhados = chuvas.filter((x) => x >= R.chuvaMinimaMm);
+    if (molhados.length >= 1 && sim >= chuvas.length / 2) {
+      const med = Math.max(mediana(chuvas), R.volumeMinimoRazaoMm);
+      volumeIncerto = (maximo(chuvas) - minimo(chuvas)) / med >= R.volumeIncertoRazao;
+    }
+  }
+
+  // Confiança = quanto os sistemas independentes concordam sobre a estimativa (não se a chuva é certa).
+  // "30% de chance" com ECMWF e Met Office dizendo o mesmo é uma estimativa confiável.
+  // Cada motivo conta uma vez; volume diferente não rebaixa (mostramos a melhor estimativa e a faixa).
+  let pontosChuva = 3;
+  const porSistema = Object.values(membros?.porModelo || {}).filter((xs) => xs.length >= 10)
+    .map((xs) => xs.filter((x) => x >= R.chuvaMinimaMm).length / xs.length);
+  if (prob === null) { pontosChuva = 0; motivos.push('sem dados de chuva suficientes'); }
+  else if (porSistema.length >= 2) {
+    const dif = maximo(porSistema) - minimo(porSistema);
+    if (dif > R.difSistemas[1]) { pontosChuva -= 2; motivos.push(`os sistemas de cenários discordam muito (${Math.round(minimo(porSistema) * 100)}% a ${Math.round(maximo(porSistema) * 100)}%)`); }
+    else if (dif > R.difSistemas[0]) { pontosChuva -= 1; motivos.push(`os sistemas de cenários diferem (${Math.round(minimo(porSistema) * 100)}% a ${Math.round(maximo(porSistema) * 100)}%)`); }
+  } else if (membros?.chuva?.length >= 10) {
+    // um só sistema: perde um nível só se os modelos determinísticos contradizem os cenários
+    if (concordancia !== null && chuvas.length >= 2) {
+      const fracDet = chuvas.filter((x) => x >= R.chuvaMinimaMm).length / chuvas.length;
+      if (Math.abs(fracDet - prob) > 0.5) { pontosChuva -= 1; motivos.push('modelos e cenários apontam em direções opostas'); }
+    }
+  } else if (concordancia !== null && concordancia < 1) {
+    pontosChuva -= concordancia <= 0.6 ? 2 : 1;
+    motivos.push(`modelos discordam sobre chover (${Math.round(concordancia * 100)}% no mesmo lado), sem cenários para desempatar`);
+  } else if (chuvas.length < 2) { pontosChuva -= 1; motivos.push('menos de dois modelos com dados'); }
+
+  // 3. rajadas: cenários quando existem; senão, diferença entre modelos
+  const rajadas = resumos.map((r) => r.rajada?.valor).filter(valido);
+  let pontosRajada = 3, rajadaIncerta = false;
+  const rajadaMed = mediana(resumos.map((r) => r.rajada?.valor), resumos.map((r) => pesos[r.modelo] ?? 1));
+  if (membros?.rajada?.length >= 10) {
+    const q1 = quantil(membros.rajada, 0.1), q9 = quantil(membros.rajada, 0.9), qm = quantil(membros.rajada, 0.5);
+    rajadaIncerta = (q9 - q1) / Math.max(qm, 15) >= R.rajadaIncertaRazao * 2;
+    if (rajadaIncerta && classeRajada(q9)) { pontosRajada -= 1; motivos.push('cenários variam muito na força das rajadas'); }
+  } else if (rajadas.length >= 2) {
+    rajadaIncerta = (maximo(rajadas) - minimo(rajadas)) / Math.max(rajadaMed, 15) >= R.rajadaIncertaRazao;
+    if (rajadaIncerta && classeRajada(maximo(rajadas))) { pontosRajada -= 1; motivos.push('rajadas diferentes entre modelos'); }
+  } else if (!rajadas.length) { pontosRajada = 1; motivos.push('sem previsão de rajada'); }
+  const rajadaFaixa = membros?.rajada?.length >= 10
+    ? { min: quantil(membros.rajada, 0.1), max: quantil(membros.rajada, 0.9), mediana: quantil(membros.rajada, 0.5), origem: 'cenários' }
+    : rajadas.length ? { min: minimo(rajadas), max: maximo(rajadas), mediana: rajadaMed, origem: 'modelos' } : null;
+
+  // horizonte: a partir do 5º dia perde um nível; a partir do 8º, dois
+  const dia = ctx.diaIndice ?? 0;
+  if (dia >= R.horizonteLongoDias) {
+    const n = dia >= 7 ? 2 : 1;
+    pontosChuva -= n; pontosRajada -= n; motivos.push(`previsão para daqui a ${dia} dias`);
+  }
+
+  // 4. desempenho local recente e distância da estação
+  const a = ctx.acerto;
+  if (a && a.dias >= R.acerto.diasMinimos && a.distanciaKm <= R.acerto.distanciaMaxKm && valido(a.taxaChuva)) {
+    if (a.taxaChuva < R.acerto.taxaAcertoBaixa) { pontosChuva -= 1; motivos.push(`acerto local de chuva recente de ${Math.round(a.taxaChuva * 100)}%`); }
+  } else if (a && a.distanciaKm > R.acerto.distanciaMaxKm) {
+    motivos.push('estação de verificação longe demais, acerto local não usado');
+  }
+
+  // medição agora contradiz a previsão (só para hoje)
+  if (ctx.medicaoAgora && prob !== null) {
+    const m = ctx.medicaoAgora;
+    if (m.chovendo && prob < 0.2) { pontosChuva -= 1; motivos.push('estação próxima mede chuva que a previsão não esperava'); }
+  }
+
+  const nivel = (p) => NIVEIS[Math.max(0, Math.min(3, p))];
+  const chuvaNivel = nivel(pontosChuva), rajadaNivel = nivel(pontosRajada);
+  const ordem = { baixa: 0, 'média': 1, alta: 2 };
+  // a rajada só pesa no geral quando é relevante (moderada ou mais forte)
+  const rajadaRelevante = classeRajada(rajadaFaixa?.max ?? rajadaMed);
+  const geral = rajadaRelevante && ordem[rajadaNivel] < ordem[chuvaNivel] ? rajadaNivel : chuvaNivel;
+
+  // mensagem curta de chuva
+  let mensagemChuva = null;
+  if (prob !== null) {
+    const palavra = palavraOcorrencia(prob);
+    if (palavra === 'improvável') mensagemChuva = 'chuva improvável';
+    else mensagemChuva = `chuva ${palavra}` + (volumeIncerto ? ', volume incerto' : '');
+  }
+
+  return {
+    prob, probBruta, fonteProb, probModelos, volume, volumeIncerto, concordancia, mensagemChuva,
+    rajada: rajadaFaixa, rajadaIncerta,
+    confianca: { geral, chuva: chuvaNivel, rajada: rajadaNivel, motivos: [...new Set(motivos)] },
+  };
+}
+
+// Probabilidades de passar limites, para a aba Semana.
+/**
+ * Fração de cenários (ou de modelos, sem ensemble) acima de cada limite de REGRAS.limitesSemana.
+ */
+export function probLimites(resumos, membros) {
+  const L = REGRAS.limitesSemana;
+  const usarEns = membros && membros.chuva.length >= 10;
+  const chuvas = usarEns ? membros.chuva : resumos.map((r) => r.chuva).filter(valido);
+  const raj = usarEns && membros.rajada.length >= 10 ? membros.rajada : resumos.map((r) => r.rajada?.valor).filter(valido);
+  const frac = (arr, lim) => (arr.length ? arr.filter((x) => x > lim).length / arr.length : null);
+  return {
+    origem: usarEns ? 'cenários do ensemble' : 'concordância entre modelos',
+    n: { chuva: chuvas.length, rajada: raj.length },
+    chuva: L.chuva.map((l) => ({ limite: l, p: frac(chuvas, l) })),
+    rajada: L.rajada.map((l) => ({ limite: l, p: frac(raj, l) })),
+  };
+}
+
+/**
+ * Deixa a tabela de limites coerente com a chance principal do dia. A chance de passar de REGRAS.chuvaMinimaMm é a
+ * própria chance do dia (av.prob, já calibrada com o histórico e corrigida por radar e medição); os limites maiores
+ * mantêm a proporção dos cenários em relação a esse primeiro limite (distribuição condicional do ensemble).
+ * Assim, nenhuma tabela mostra "mais de 1 mm: 43%" ao lado de "chance de chuva 26%".
+ * @param {ReturnType<typeof probLimites>} limites
+ * @param {number|null} prob chance principal do dia
+ */
+export function limitesCoerentes(limites, prob) {
+  if (!valido(prob) || !limites?.chuva?.length) return limites;
+  const base = limites.chuva.find((c) => c.limite === REGRAS.chuvaMinimaMm)?.p;
+  const chuva = limites.chuva.map((c) => {
+    if (!valido(c.p)) return c;
+    if (c.limite <= REGRAS.chuvaMinimaMm) return { ...c, p: prob };
+    return { ...c, p: valido(base) && base > 0 ? Math.min(prob, prob * (c.p / base)) : Math.min(c.p, prob) };
+  });
+  return { ...limites, chuva };
+}
+
+// ---------- frase principal ----------
+
+/**
+ * Probabilidade horária de chuva e janela mais provável: o maior bloco contínuo (pela soma das probabilidades)
+ * acima de max(0,4; 0,8 x pico). Sem janela se o pico for menor que 0,3.
+ * @returns {{pico:number|null, janela:{ini:number, fim:number, soma:number}|null, porHora:object[]}}
+ */
+export function horasProvaveisDeChuva(prev, idx, modelos) {
+  // por hora: mediana da probabilidade; se não houver, fração de modelos com chuva
+  const porHora = idx.map((i) => {
+    const probs = modelos.map((m) => prev.modelos[m]?.vars.precipitation_probability?.[i]).filter(valido);
+    const mm = modelos.map((m) => prev.modelos[m]?.vars.precipitation?.[i]).filter(valido);
+    const fr = mm.length ? mm.filter((x) => x >= REGRAS.chuvaHoraMm).length / mm.length : null;
+    const p = probs.length ? mediana(probs) / 100 : fr;
+    return { i, ms: prev.horas[i], p, mm: mediana(mm) };
+  });
+  const pico = maximo(porHora.map((h) => h.p));
+  if (!valido(pico) || pico < 0.3) return { pico, janela: null, porHora };
+  const limite = Math.max(0.4, pico * 0.8);
+  // maior bloco contínuo acima do limite
+  let melhor = null, atual = null;
+  for (const h of porHora) {
+    if (valido(h.p) && h.p >= limite) {
+      if (!atual) atual = { ini: h.ms, fim: h.ms, soma: 0 };
+      atual.fim = h.ms; atual.soma += h.p;
+      if (!melhor || atual.soma > melhor.soma) melhor = { ...atual };
+    } else atual = null;
+  }
+  return { pico, janela: melhor, porHora };
+}
+
+export function fraseDoDia(av, janela, offsetSeg) {
+  let chuva;
+  const palavra = av.prob === null ? null : palavraOcorrencia(av.prob);
+  const periodo = janela ? periodosTexto(janela.ini, janela.fim, offsetSeg) : '';
+  if (palavra === null) chuva = 'Previsão de chuva indisponível';
+  else if (palavra === 'improvável') chuva = 'Sem chuva prevista';
+  else if (palavra === 'pouco provável') chuva = 'Pouca chance de chuva' + (periodo ? ' ' + periodo : '');
+  else if (palavra === 'possível') chuva = 'Chuva possível' + (periodo ? ' ' + periodo : '');
+  else chuva = 'Chuva' + (periodo ? ' ' + periodo : '');
+  const classe = classeRajada(av.rajada?.mediana);
+  let vento = '';
+  if (classe) vento = `com rajadas ${classe}`;
+  else if (palavra === 'improvável' && valido(av.rajada?.mediana)) vento = 'vento fraco';
+  if (!vento) return chuva;
+  return palavra === 'improvável' ? `${chuva}, ${vento}` : `${chuva}, ${vento}`;
+}
+
+export function periodosTexto(iniMs, fimMs, offsetSeg) {
+  const nomes = [];
+  for (let t = iniMs; t <= fimMs; t += 3600000) {
+    const p = periodoDoDia(partesLocais(t, offsetSeg).hora);
+    if (!nomes.includes(p)) nomes.push(p);
+  }
+  const art = { madrugada: 'de madrugada', 'manhã': 'pela manhã', tarde: 'à tarde', noite: 'à noite' };
+  if (nomes.length >= 3) return 'ao longo do dia';
+  return nomes.map((n) => art[n]).join(' e ');
+}
+
+// ---------- divergência e pesos ----------
+
+/**
+ * Primeiro bloco futuro de 6 h em que os modelos divergem em chuva ou rajada (limites em REGRAS.divergencia).
+ * @returns {{ms:number, motivo:string}|null}
+ */
+export function horizonteDivergencia(prev, modelos) {
+  const D = REGRAS.divergencia;
+  const ativos = modelos.filter((m) => prev.modelos[m]);
+  for (let i0 = 0; i0 + 6 <= prev.horas.length; i0 += 6) {
+    if (prev.horas[i0] < Date.now() - 3600000) continue;
+    const idx = [0, 1, 2, 3, 4, 5].map((k) => i0 + k);
+    const chuvas = ativos.map((m) => soma(prev.modelos[m].vars.precipitation, idx)).filter(valido);
+    const raj = ativos.map((m) => maximo(idx.map((i) => prev.modelos[m].vars.wind_gusts_10m?.[i]))).filter(valido);
+    let motivo = null;
+    if (chuvas.length >= 2) {
+      const d = maximo(chuvas) - minimo(chuvas);
+      if (d > Math.max(D.chuvaMm, D.chuvaRazao * mediana(chuvas))) motivo = `chuva varia ${d.toFixed(0)} mm em 6 h`;
+    }
+    if (!motivo && raj.length >= 2 && maximo(raj) - minimo(raj) > D.rajadaKmh) {
+      motivo = `rajadas variam ${Math.round(maximo(raj) - minimo(raj))} km/h`;
+    }
+    if (motivo) return { ms: prev.horas[i0], motivo };
+  }
+  return null;
+}
+
+/**
+ * Pesos dos modelos, em duas camadas:
+ * 1. ponto de partida: peso inicial (verificação global, REGRAS.pesoInicial) ajustado pelo erro relativo medido no
+ *    histórico local (dados/calibracao.json), com confiança c = dias / (dias + meiaPesos);
+ * 2. aprendizado recente do Worker: erro relativo de chuva e máxima dos últimos dias, com a mesma confiança.
+ * O resultado fica limitado a [pesoMin, pesoMax]. Ver docs/TECNICO.md, seção 3.7, e docs/CALIBRACAO.md.
+ * @param {Object<string, {dias:number, maeChuva?:number, maeTmax?:number}>|null} acertoPorModelo aprendizado recente
+ * @param {string[]} modelos
+ * @param {{pesos:Object<string, number>, dias:number}|null} [historico] pesos relativos do histórico (pesosHistoricos)
+ * @returns {{pesos:Object<string, number>, ajustado:boolean, historico:boolean}}
+ */
+export function pesosModelos(acertoPorModelo, modelos, historico = null) {
+  const A = REGRAS.acerto, L = REGRAS.aprendizado;
+  const lim = (w) => Math.min(A.pesoMax, Math.max(A.pesoMin, w));
+  const usaHist = !!historico && historico.dias >= L.diasInicio && modelos.filter((m) => valido(historico.pesos?.[m])).length >= 2;
+  const cHist = usaHist ? historico.dias / (historico.dias + L.meiaPesos) : 0;
+  const base = (m) => {
+    const ini = REGRAS.pesoInicial[m] ?? 1;
+    const r = usaHist ? historico.pesos[m] : null;
+    return valido(r) ? lim(ini * (1 + cHist * (r - 1))) : ini;
+  };
+  const pesos = Object.fromEntries(modelos.map((m) => [m, base(m)]));
+  if (!acertoPorModelo) return { pesos, ajustado: false, historico: usaHist };
+  const ok = modelos.filter((m) => acertoPorModelo[m]?.dias >= L.diasInicio && (valido(acertoPorModelo[m].maeChuva) || valido(acertoPorModelo[m].maeTmax)));
+  if (ok.length < 2) return { pesos, ajustado: false, historico: usaHist };
+  // erro relativo de cada modelo em cada medida (chuva e temperatura máxima): média dos outros / o dele
+  const rel = (campo, piso) => {
+    const xs = ok.filter((m) => valido(acertoPorModelo[m][campo]));
+    if (xs.length < 2) return null;
+    const media = xs.reduce((t, m) => t + Math.max(acertoPorModelo[m][campo], piso), 0) / xs.length;
+    return Object.fromEntries(xs.map((m) => [m, media / Math.max(acertoPorModelo[m][campo], piso)]));
+  };
+  const rc = rel('maeChuva', 0.5), rt = rel('maeTmax', 0.3);
+  ok.forEach((m) => {
+    const rs = [rc?.[m], rt?.[m]].filter(valido);
+    if (!rs.length) return;
+    const r = rs.reduce((t, x) => t + x, 0) / rs.length;
+    const c = acertoPorModelo[m].dias / (acertoPorModelo[m].dias + L.meiaPesos);
+    pesos[m] = lim(base(m) * (1 + c * (r - 1)));
+  });
+  return { pesos, ajustado: true, historico: usaHist };
+}
+
+/**
+ * Correção de viés de temperatura (previsto − medido), a subtrair da previsão do modelo.
+ * Combina o histórico (prioritário quando existe) com o aprendizado recente do Worker, como uma média
+ * ponderada pelo número de dias: vies = (n · recente + K · histórico) / (n + K).
+ * - sem histórico: K = meiaVies e histórico = 0 (comportamento original: correção cresce com os dias);
+ * - com histórico: K = REGRAS.calibracao.forcaHistorico; antes de diasInicio dias recentes, vale só o histórico.
+ * Limitada a ±viesMax.
+ * @param {{viesTmax?:number, amostrasTmax?:number, viesTmin?:number, amostrasTmin?:number}|null} acertoModeloLead
+ * @param {{tmax:number|null, tmin:number|null}|null} [historico] viés histórico (viesHistorico)
+ * @returns {{tmax:number, tmin:number}}
+ */
+export function correcaoTemperatura(acertoModeloLead, historico = null) {
+  const L = REGRAS.aprendizado;
+  const um = (vies, n, hist) => {
+    const temHist = valido(hist);
+    const K = temHist ? REGRAS.calibracao.forcaHistorico : L.meiaVies;
+    const prior = temHist ? hist : 0;
+    const recente = valido(vies) && n >= L.diasInicio;
+    const v = recente ? (n * vies + K * prior) / (n + K) : prior;
+    return Math.max(-L.viesMax, Math.min(L.viesMax, v));
+  };
+  const a = acertoModeloLead || {};
+  return { tmax: um(a.viesTmax, a.amostrasTmax, historico?.tmax), tmin: um(a.viesTmin, a.amostrasTmin, historico?.tmin) };
+}
+
+// ---------- calibração com o histórico (dados/calibracao.json) ----------
+
+const ESTACOES_ANO = ['verao', 'verao', 'outono', 'outono', 'outono', 'inverno', 'inverno', 'inverno', 'primavera', 'primavera', 'primavera', 'verao'];
+/** Estação do ano no hemisfério sul para um mês de 1 a 12 (mesma regra de scripts/lib/calibracao.mjs). */
+export const estacaoDoAno = (mes) => ESTACOES_ANO[mes - 1];
+
+/**
+ * A calibração só vale perto da estação onde foi medida (até REGRAS.acerto.distanciaMaxKm).
+ * @returns {boolean}
+ */
+export function calibracaoAplicavel(calib, lat, lon) {
+  const e = calib?.estacao;
+  if (!e || !valido(e.lat) || !valido(e.lon) || !calib.modelos) return false;
+  return distanciaKm(lat, lon, e.lat, e.lon) <= REGRAS.acerto.distanciaMaxKm;
+}
+
+const leadDe = (lead) => Math.min(REGRAS.calibracao.leadMax, Math.max(1, lead));
+
+/**
+ * Viés histórico de máxima e mínima (previsto − medido) de um modelo, para a antecedência e o mês.
+ * Só devolve valor quando a validação fora da amostra aprovou a correção ("usar": true).
+ * @param {object} calib dados/calibracao.json
+ * @param {string} modelo identificador Open-Meteo
+ * @param {number} lead antecedência em dias (1 a 5; acima de 5 usa 5)
+ * @param {number} mes 1 a 12
+ * @returns {{tmax:number|null, tmin:number|null}}
+ */
+export function viesHistorico(calib, modelo, lead, mes) {
+  const est = estacaoDoAno(mes), L = leadDe(lead);
+  const um = (campo) => {
+    const x = calib?.modelos?.[modelo]?.[campo]?.[L];
+    return x?.usar && valido(x.vies?.[est]) ? x.vies[est] : null;
+  };
+  return { tmax: um('tmax'), tmin: um('tmin') };
+}
+
+/**
+ * Fator histórico (medido ÷ previsto) de rajada ou vento de um modelo, para a antecedência e o mês.
+ * 1 quando não há calibração aprovada.
+ * @param {'rajada'|'vento'} campo
+ * @returns {number}
+ */
+export function fatorHistorico(calib, modelo, campo, lead, mes) {
+  const x = calib?.modelos?.[modelo]?.[campo]?.[leadDe(lead)];
+  const f = x?.usar ? x.fator?.[estacaoDoAno(mes)] : null;
+  return valido(f) ? f : 1;
+}
+
+/**
+ * Pesos relativos do histórico no formato aceito por pesosModelos.
+ * @returns {{pesos:Object<string, number>, dias:number}|null}
+ */
+export function pesosHistoricos(calib) {
+  if (!calib?.pesos || !(calib.diasComuns > 0)) return null;
+  return { pesos: calib.pesos, dias: calib.diasComuns };
+}
+
+/**
+ * Ancora a temperatura prevista das próximas horas na última medição (REGRAS.ancoragem).
+ * delta = medido − previsto na hora da leitura (série de referência, normalmente o ECMWF). Cada hora futura
+ * recebe delta × (1 − horas desde a leitura / REGRAS.ancoragem.horas), em todos os modelos, na temperatura e
+ * na sensação térmica, a partir da hora atual. Horas encerradas não mudam (a comparação previsto x medido usa só elas).
+ * @param {object} prev previsão (horas, modelos[m].vars)
+ * @param {{valor:number, ms:number}} medida última leitura válida
+ * @param {string} modeloRef modelo usado para medir a diferença (com fallback para a mediana dos outros)
+ * @param {number} agoraMs
+ * @returns {{prev:object, delta:number|null}}
+ */
+export function ancorarTemperatura(prev, medida, modeloRef, agoraMs) {
+  const R = REGRAS.ancoragem;
+  if (!prev?.horas || !medida || !valido(medida.valor) || !valido(medida.ms)) return { prev, delta: null };
+  // hora da previsão mais próxima da leitura
+  let k = -1;
+  prev.horas.forEach((ms, i) => { if (k < 0 || Math.abs(ms - medida.ms) < Math.abs(prev.horas[k] - medida.ms)) k = i; });
+  if (k < 0 || Math.abs(prev.horas[k] - medida.ms) > 3600000) return { prev, delta: null };
+  const ref = prev.modelos[modeloRef]?.vars.temperature_2m?.[k];
+  const base = valido(ref) ? ref : mediana(Object.values(prev.modelos).map((d) => d.vars.temperature_2m?.[k]));
+  if (!valido(base)) return { prev, delta: null };
+  const delta = medida.valor - base;
+  if (Math.abs(delta) > R.deltaMax || Math.abs(delta) < 0.1) return { prev, delta: Math.abs(delta) > R.deltaMax ? null : 0 };
+  const peso = prev.horas.map((ms) => (ms + 3600000 <= agoraMs || ms < medida.ms ? 0 : Math.max(0, 1 - (ms - medida.ms) / (R.horas * 3600000))));
+  const modelos = {};
+  for (const [m, dados] of Object.entries(prev.modelos)) {
+    const vars = { ...dados.vars };
+    for (const v of ['temperature_2m', 'apparent_temperature']) {
+      if (vars[v]) vars[v] = vars[v].map((x, i) => (valido(x) && peso[i] > 0 ? Math.round((x + delta * peso[i]) * 10) / 10 : x));
+    }
+    modelos[m] = { ...dados, vars };
+  }
+  return { prev: { ...prev, modelos }, delta };
+}
+
+/**
+ * Aplica a calibração às séries horárias de cada modelo, antes de qualquer análise, para que todas as telas
+ * (primeira tela, gráficos, semana, comparação, pressão) usem os mesmos valores. Não altera o objeto original.
+ *
+ * - Temperatura (temperature_2m e a temperatura "current"): por dia local, correcaoTemperaturaDia decide a
+ *   correção (hora a hora quando o histórico horário foi aprovado para o modelo; senão, só máxima e mínima) e
+ *   prepararCorrecaoDia a aplica. A máxima do gráfico horário é exatamente a máxima corrigida do dia.
+ * - Rajada e vento (wind_gusts_10m, wind_speed_10m): multiplicados pelo fator da antecedência e estação do ano.
+ * - Ponto de orvalho (dew_point_2m): menos o viés da hora do dia (orvalhoHorario), quando aprovado; umidade
+ *   relativa e sensação térmica (apparent_temperature) recalculadas com temperatura, orvalho e vento corrigidos
+ *   (umidadeESensacao). Sempre, mesmo sem calibração: a sensação usa a fórmula do painel, não a da Open-Meteo.
+ * - Chuva (precipitation): o total de cada dia local passa pela tabela de quantis do modelo (mapearChuva) e as
+ *   horas do dia são escaladas na mesma proporção; a soma do dia no gráfico é o total corrigido.
+ * A antecedência de um dia é a distância em dias do dia de referência (o dia em que a previsão foi buscada),
+ * com mínimo 1, igual ao uso em analisarDia.
+ *
+ * @param {object} prev previsão normalizada (js/dados.js: normalizarPrevisao)
+ * @param {{calib?:object|null, aprendizado?:object|null, refMs:number}} op calib: dados/calibracao.json (já
+ *   verificada com calibracaoAplicavel); aprendizado: porModelo do Worker (modelo → lead → viés), ou null
+ * @returns {object} nova previsão, com `calibracao` descrevendo o que foi aplicado
+ */
+export function calibrarPrevisao(prev, { calib = null, aprendizado = null, refMs }) {
+  if (!prev?.horas) return prev;
+  const hoje = partesLocais(refMs, prev.offset).data;
+  const diaMs = (d) => Date.parse(d + 'T00:00:00Z');
+  const leadDoDia = (d) => Math.max(1, Math.round((diaMs(d) - diaMs(hoje)) / 86400000));
+  const locais = prev.horas.map((ms) => partesLocais(ms, prev.offset));
+  const datas = locais.map((p) => p.data);
+  const indicesDia = new Map();
+  datas.forEach((d, i) => { if (!indicesDia.has(d)) indicesDia.set(d, []); indicesDia.get(d).push(i); });
+  const modelos = {};
+  const aplicado = { temperatura: [], temperaturaHoraria: [], vento: [], chuva: [], orvalho: [] };
+  const atualTemp = { ...(prev.atual?.temp || {}) };
+  const atualLocal = prev.atual?.ms ? partesLocais(prev.atual.ms, prev.offset) : null;
+
+  for (const [m, dados] of Object.entries(prev.modelos)) {
+    const vars = { ...dados.vars };
+    const t = vars.temperature_2m;
+    if (t) {
+      const nova = t.slice();
+      let mudou = false, horaria = false;
+      for (const [d, idx] of indicesDia) {
+        const lead = leadDoDia(d), mes = Number(d.slice(5, 7));
+        const c = correcaoTemperaturaDia(calib, aprendizado, m, lead, mes);
+        if (c.viesHora) horaria = true;
+        if (c.viesHora || c.extremos.tmax || c.extremos.tmin) mudou = true;
+        const corrigir = prepararCorrecaoDia(idx.map((i) => t[i]), idx.map((i) => locais[i].hora), c.viesHora, c.extremos);
+        idx.forEach((i) => { nova[i] = corrigir(t[i], locais[i].hora); });
+        if (atualLocal?.data === d && valido(atualTemp[m])) atualTemp[m] = corrigir(atualTemp[m], atualLocal.hora);
+      }
+      vars.temperature_2m = nova;
+      if (mudou) aplicado.temperatura.push(m);
+      if (horaria) aplicado.temperaturaHoraria.push(m);
+    }
+    if (calib) {
+      let mudou = false;
+      for (const [v, campo] of [['wind_gusts_10m', 'rajada'], ['wind_speed_10m', 'vento']]) {
+        if (!vars[v]) continue;
+        vars[v] = vars[v].map((x, i) => {
+          if (!valido(x)) return x;
+          const f = fatorHistorico(calib, m, campo, leadDoDia(datas[i]), locais[i].mes);
+          if (f !== 1) mudou = true;
+          return Math.round(x * f * 10) / 10;
+        });
+      }
+      if (mudou) aplicado.vento.push(m);
+      if (vars.precipitation) {
+        const nova = calibrarChuvaSerie(vars.precipitation, indicesDia, (d) => tabelaChuva(calib, m, Number(d.slice(5, 7))));
+        if (nova !== vars.precipitation) { vars.precipitation = nova; aplicado.chuva.push(m); }
+      }
+    }
+    // Umidade e sensação térmica refeitas com a temperatura, o orvalho e o vento já corrigidos, pela mesma
+    // fórmula da sensação medida (sensacaoTermica): previsão e medição falam a mesma língua.
+    if (umidadeESensacao(vars, dados.vars, locais, calib, m)) aplicado.orvalho.push(m);
+    modelos[m] = { ...dados, vars };
+  }
+  return {
+    ...prev, modelos, atual: prev.atual ? { ...prev.atual, temp: atualTemp } : prev.atual,
+    calibracao: { historico: !!calib, recente: !!aprendizado, ...aplicado },
+  };
+}
+
+/**
+ * Correção horária aprovada do histórico (calib.temperaturaHoraria, gerada por scripts/calibrar.mjs) para um
+ * modelo, antecedência e mês: o viés de cada hora do dia (previsto − medido) e o ajuste residual da máxima e
+ * da mínima depois dele. null quando o modelo não tem correção horária ou a validação não a aprovou.
+ * @returns {{viesHora:number[], pico:{tmax:number, tmin:number}}|null}
+ */
+export function temperaturaHoraria(calib, modelo, lead, mes) {
+  const y = calib?.temperaturaHoraria?.modelos?.[modelo]?.leads?.[leadDe(lead)], est = estacaoDoAno(mes);
+  const vh = y?.usar ? y.vies?.[est] : null;
+  if (!Array.isArray(vh) || vh.length !== 24 || !vh.every(valido)) return null;
+  const p = (c) => (valido(y.pico?.[c]?.[est]) ? y.pico[c][est] : 0);
+  return { viesHora: vh, pico: { tmax: p('tmax'), tmin: p('tmin') } };
+}
+
+/**
+ * Correção de temperatura de um dia local de um modelo, juntando as três fontes numa só regra:
+ * 1. histórico hora a hora (temperaturaHoraria), quando aprovado: viés de cada hora + ajuste residual de
+ *    máxima e mínima; senão, histórico diário de máxima e mínima (viesHistorico);
+ * 2. aprendizado recente do Worker (viés da máxima e da mínima brutas), misturado ao histórico diário por
+ *    correcaoTemperatura; o que ele acrescenta ao histórico diário soma-se aos extremos.
+ * @returns {{viesHora:number[]|null, extremos:{tmax:number, tmin:number}}}
+ */
+export function correcaoTemperaturaDia(calib, aprendizado, modelo, lead, mes) {
+  const diario = calib ? viesHistorico(calib, modelo, lead, mes) : { tmax: null, tmin: null };
+  const misturado = correcaoTemperatura(aprendizado?.[modelo]?.[leadDe(lead)], calib ? diario : null);
+  const h = calib ? temperaturaHoraria(calib, modelo, lead, mes) : null;
+  if (!h) return { viesHora: null, extremos: misturado };
+  // parte do aprendizado recente que vai além do histórico diário (zero sem Worker)
+  const extra = (c) => (aprendizado ? misturado[c] - (valido(diario[c]) ? diario[c] : 0) : 0);
+  return { viesHora: h.viesHora, extremos: { tmax: h.pico.tmax + extra('tmax'), tmin: h.pico.tmin + extra('tmin') } };
+}
+
+/**
+ * Prepara a correção de temperatura de um dia local (mesma conta no app e em scripts/calibrar.mjs).
+ * 1. Cada hora perde o viés da sua hora do dia (viesHora[hora], ou 0).
+ * 2. Na série resultante, cada valor perde a correção interpolada entre a da mínima e a da máxima conforme
+ *    sua posição entre a mínima e a máxima do dia: a máxima do gráfico horário é exatamente a máxima corrigida.
+ * @param {(number|null)[]} valores temperaturas do dia (previsão bruta)
+ * @param {number[]} horas hora local (0 a 23) de cada valor
+ * @param {number[]|null} viesHora viés por hora do dia (24 valores) ou null
+ * @param {{tmax:number|null, tmin:number|null}} extremos correção da máxima e da mínima
+ * @returns {(v:number|null, hora:number) => number|null} corrige um valor do dia (inclusive a leitura "agora")
+ */
+export function prepararCorrecaoDia(valores, horas, viesHora, extremos) {
+  const vh = (hora) => (viesHora && valido(viesHora[hora]) ? viesHora[hora] : 0);
+  const ct = valido(extremos?.tmax) ? extremos.tmax : 0, cn = valido(extremos?.tmin) ? extremos.tmin : 0;
+  let min = Infinity, max = -Infinity;
+  valores.forEach((v, k) => { if (valido(v)) { const x = v - vh(horas[k]); min = Math.min(min, x); max = Math.max(max, x); } });
+  return (v, hora) => {
+    if (!valido(v) || min === Infinity) return v;
+    const x = v - vh(hora);
+    const w = max > min ? Math.min(1, Math.max(0, (x - min) / (max - min))) : 0.5;
+    return Math.round((x - (cn + w * (ct - cn))) * 10) / 10;
+  };
+}
+
+// ---------- umidade e sensação térmica ----------
+
+/**
+ * Pressão de vapor em hPa a uma temperatura (fórmula de Tetens/Bolton). Com o ponto de orvalho, dá a pressão de vapor do ar; com a temperatura, a de saturação.
+ * @param {number} t °C
+ */
+export const pressaoVapor = (t) => 6.105 * Math.exp((17.27 * t) / (237.7 + t));
+
+/**
+ * Sensação térmica ("feels like") no padrão do serviço meteorológico dos EUA (NWS), o mesmo usado pela maior
+ * parte dos apps de tempo:
+ * - frio com vento (T ≤ 10 °C e vento > 4,8 km/h): índice de vento frio NWS/Environment Canada (2001),
+ *   13,12 + 0,6215·T − 11,37·v^0,16 + 0,3965·T·v^0,16, com v em km/h. Entre 10 e 15 °C o efeito do vento
+ *   diminui em linha reta até zero (escolha do painel, fora do padrão NWS, para não saltar 3 °C em 10 °C);
+ * - demais casos: índice de calor NWS (algoritmo do WPC). Primeiro a forma simples de Steadman,
+ *   0,5·(T + 61 + 1,2·(T − 68) + 0,094·UR) em °F; se a média dela com T passa de 80 °F, a regressão de
+ *   Rothfusz com os dois ajustes do NWS (ar muito seco; ar muito úmido entre 80 e 87 °F). Abaixo de 80 °F a
+ *   umidade só pode somar: o resultado nunca fica abaixo de T.
+ * Substitui a temperatura aparente de Steadman/BoM (T + 0,33·e − 0,7·v − 4), que exagerava o abafamento em
+ * temperaturas amenas e úmidas (21 °C com 100% de umidade virava 25 °C). Mesma conta para sensação medida
+ * e prevista, então as duas são comparáveis.
+ * @param {number} t temperatura (°C)
+ * @param {number} e pressão de vapor (hPa): pressaoVapor(orvalho) ou umidade/100 · pressaoVapor(t)
+ * @param {number} ventoKmh vento médio (km/h); só pesa no frio
+ * @returns {number|null} °C com uma casa
+ */
+export function sensacaoTermica(t, e, ventoKmh) {
+  if (![t, e, ventoKmh].every(valido)) return null;
+  const arred = (c) => Math.round(c * 10) / 10;
+  if (t < 15) {
+    if (ventoKmh <= 4.8) return arred(t);
+    const p = ventoKmh ** 0.16;
+    const frio = Math.min(t, 13.12 + 0.6215 * t - 11.37 * p + 0.3965 * t * p);
+    const peso = t <= 10 ? 1 : (15 - t) / 5; // transição até 15 °C, sem salto em 10 °C
+    return arred(peso * frio + (1 - peso) * t);
+  }
+  const ur = Math.min(100, Math.max(0, (100 * e) / pressaoVapor(t)));
+  const f = t * 1.8 + 32;
+  let hi = 0.5 * (f + 61 + (f - 68) * 1.2 + ur * 0.094);
+  if ((hi + f) / 2 >= 80) {
+    hi = -42.379 + 2.04901523 * f + 10.14333127 * ur - 0.22475541 * f * ur - 0.00683783 * f * f
+      - 0.05481717 * ur * ur + 0.00122874 * f * f * ur + 0.00085282 * f * ur * ur - 0.00000199 * f * f * ur * ur;
+    if (ur < 13 && f >= 80 && f <= 112) hi -= ((13 - ur) / 4) * Math.sqrt((17 - Math.abs(f - 95)) / 17);
+    else if (ur > 85 && f >= 80 && f <= 87) hi += ((ur - 85) / 10) * ((87 - f) / 5);
+  }
+  return arred(Math.max(t, (hi - 32) / 1.8));
+}
+
+/**
+ * Viés horário aprovado do ponto de orvalho de um modelo (calib.orvalhoHorario), ou null. Medido na véspera e
+ * usado em todas as antecedências: a umidade do ar muda pouco de erro com a antecedência (docs/CALIBRACAO.md).
+ * @returns {number[]|null} 24 valores, previsto − medido
+ */
+export function viesOrvalho(calib, modelo, mes) {
+  const x = calib?.orvalhoHorario?.modelos?.[modelo];
+  const v = x?.usar ? x.vies?.[estacaoDoAno(mes)] : null;
+  return Array.isArray(v) && v.length === 24 && v.every(valido) ? v : null;
+}
+
+/**
+ * Corrige o ponto de orvalho e refaz umidade relativa e sensação térmica de uma série de modelo.
+ * Sem orvalho previsto, a pressão de vapor sai da umidade e da temperatura brutas (a quantidade de vapor no ar
+ * não muda quando só a temperatura é corrigida). O orvalho nunca passa da temperatura.
+ * @param {object} vars variáveis já com temperatura e vento corrigidos (alteradas aqui)
+ * @param {object} brutas variáveis originais do modelo
+ * @param {{hora:number, mes:number}[]} locais partes locais de cada hora
+ * @returns {boolean} true se o orvalho recebeu correção histórica
+ */
+export function umidadeESensacao(vars, brutas, locais, calib, modelo) {
+  const t = vars.temperature_2m, td0 = brutas.dew_point_2m, ur0 = brutas.relative_humidity_2m, t0 = brutas.temperature_2m;
+  if (!t) return false;
+  let corrigido = false;
+  const td = t.map((tc, i) => {
+    let x = td0?.[i];
+    if (!valido(x)) return null;
+    const vh = calib ? viesOrvalho(calib, modelo, locais[i].mes) : null;
+    if (vh) { x -= vh[locais[i].hora]; corrigido = true; }
+    return valido(tc) ? Math.round(Math.min(x, tc) * 10) / 10 : x;
+  });
+  const e = t.map((_, i) => (valido(td[i]) ? pressaoVapor(td[i]) : valido(ur0?.[i]) && valido(t0?.[i]) ? (ur0[i] / 100) * pressaoVapor(t0[i]) : null));
+  if (td0) vars.dew_point_2m = td;
+  if (ur0 || td0) vars.relative_humidity_2m = t.map((tc, i) => (valido(tc) && valido(e[i]) ? Math.round(Math.min(100, (100 * e[i]) / pressaoVapor(tc))) : ur0?.[i] ?? null));
+  if (vars.wind_speed_10m && e.some(valido)) vars.apparent_temperature = t.map((tc, i) => sensacaoTermica(tc, e[i], vars.wind_speed_10m[i]) ?? brutas.apparent_temperature?.[i] ?? null);
+  return corrigido;
+}
+
+// Cenários: cada sistema usa a correção (rajada e chuva) do modelo determinístico mais próximo dele (mesma origem e
+// grade parecida). Suposição documentada em docs/CALIBRACAO.md: o erro de escala é do sistema, não do membro.
+// O AIFS ENS fica sem correção: é treinado de outro jeito que o AIFS determinístico e não tem histórico próprio.
+export const CALIBRACAO_ENSEMBLE = {
+  ecmwf_ifs025: 'ecmwf_ifs025',
+  ukmo_global_ensemble_20km: 'ukmo_global_deterministic_10km',
+};
+
+/**
+ * Aplica aos membros dos cenários a tabela de chuva e o fator de rajada do modelo determinístico de mesma origem,
+ * com a mesma antecedência e estação do ano usadas em calibrarPrevisao, para que a chance de chuva, a faixa de
+ * rajada dos cenários e as dos modelos falem a mesma língua.
+ * @param {Object<string, {horas:number[], membros:{wind_gusts_10m:number[][]}}>|null} ens
+ * @param {object|null} calib
+ * @param {number} refMs
+ * @param {number} offsetSeg
+ */
+export function calibrarEnsemble(ens, calib, refMs, offsetSeg) {
+  if (!ens || !calib) return ens;
+  const hoje = Date.parse(partesLocais(refMs, offsetSeg).data + 'T00:00:00Z');
+  const out = {};
+  for (const [sis, e0] of Object.entries(ens)) {
+    let e = e0;
+    const refChuva = CALIBRACAO_ENSEMBLE[sis];
+    if (refChuva && e.membros?.precipitation?.length) {
+      const locais = e.horas.map((ms) => partesLocais(ms, offsetSeg));
+      const indicesDia = new Map();
+      locais.forEach((p, i) => { if (!indicesDia.has(p.data)) indicesDia.set(p.data, []); indicesDia.get(p.data).push(i); });
+      const tab = (d) => tabelaChuva(calib, refChuva, Number(d.slice(5, 7)));
+      e = { ...e, membros: { ...e.membros, precipitation: e.membros.precipitation.map((s) => calibrarChuvaSerie(s, indicesDia, tab)) } };
+    }
+    const ref = CALIBRACAO_ENSEMBLE[sis];
+    if (!ref || !e.membros?.wind_gusts_10m?.length) { out[sis] = e; continue; }
+    const fatores = e.horas.map((ms) => {
+      const p = partesLocais(ms, offsetSeg);
+      const lead = Math.max(1, Math.round((Date.parse(p.data + 'T00:00:00Z') - hoje) / 86400000));
+      return fatorHistorico(calib, ref, 'rajada', lead, p.mes);
+    });
+    out[sis] = { ...e, membros: { ...e.membros, wind_gusts_10m: e.membros.wind_gusts_10m.map((s) => s.map((x, i) => (valido(x) ? Math.round(x * fatores[i] * 10) / 10 : x))) } };
+  }
+  return out;
+}
+
+// ---------- chuva: mapeamento de quantis (scripts/lib/chuva.mjs) ----------
+
+/**
+ * Mapeia um total diário de chuva previsto pela tabela de quantis: acha a posição do valor entre os quantis
+ * previstos (p) e devolve o valor na mesma posição entre os quantis medidos (o). Acima do maior quantil, mantém a
+ * razão do topo da tabela. Mesma função no app e em scripts/lib/chuva.mjs.
+ * @param {number|null} x total previsto (mm)
+ * @param {{p:number[], o:number[]}|null} tab quantis previstos e medidos, crescentes, do mesmo tamanho
+ * @returns {number|null}
+ */
+export function mapearChuva(x, tab) {
+  if (!valido(x) || x <= 0 || !tab?.p?.length || tab.p.length !== tab.o?.length) return x;
+  const { p, o } = tab, n = p.length;
+  if (x >= p[n - 1]) return p[n - 1] > 0 ? x * o[n - 1] / p[n - 1] : x;
+  let i = 0;
+  for (let k = 0; k < n; k++) if (p[k] <= x) i = k;
+  const j = i + 1, w = (x - p[i]) / (p[j] - p[i]);
+  return Math.max(0, o[i] + w * (o[j] - o[i]));
+}
+
+/**
+ * Tabela de chuva aprovada do histórico para um modelo e mês (calib.modelos[m].chuvaQuantis), ou null.
+ * @returns {{p:number[], o:number[]}|null}
+ */
+export function tabelaChuva(calib, modelo, mes) {
+  const q = calib?.modelos?.[modelo]?.chuvaQuantis;
+  return q?.usar ? q.tabela?.[estacaoDoAno(mes)] || null : null;
+}
+
+/**
+ * Corrige uma série horária de chuva dia a dia: total do dia mapeado (mapearChuva) e horas escaladas na mesma
+ * proporção. Devolve a própria série quando nada muda.
+ * @param {(number|null)[]} serie
+ * @param {Map<string, number[]>} indicesDia data local → índices da série
+ * @param {(data:string) => ({p:number[], o:number[]}|null)} tabelaDoDia
+ */
+export function calibrarChuvaSerie(serie, indicesDia, tabelaDoDia) {
+  let nova = null;
+  for (const [d, idx] of indicesDia) {
+    const tab = tabelaDoDia(d);
+    if (!tab) continue;
+    const total = idx.reduce((t, i) => t + (valido(serie[i]) ? serie[i] : 0), 0);
+    if (!(total > 0)) continue;
+    const f = mapearChuva(total, tab) / total;
+    if (Math.abs(f - 1) < 1e-6) continue;
+    nova ||= serie.slice();
+    for (const i of idx) if (valido(serie[i])) nova[i] = Math.round(serie[i] * f * 100) / 100;
+  }
+  return nova || serie;
+}
+
+// Chance de chuva calibrada pelo histórico: se, quando o painel disse 30%, choveu em 50% das vezes,
+// a chance sobe na direção de 50%, na medida da quantidade de casos naquela faixa.
+/**
+ * Calibração da chance pelo histórico: desloca p em direção à frequência observada na faixa de 10%
+ * correspondente, com peso c = n / (n + meiaCalib). Só com calibMinPares pares no total.
+ * @param {number} p probabilidade entre 0 e 1
+ * @param {{pares:number, bins:{n:number, freq:number|null}[]}|null} calib
+ * @returns {number}
+ */
+export function calibrarProb(p, calib) {
+  const L = REGRAS.aprendizado;
+  if (!valido(p) || !calib || !(calib.pares >= L.calibMinPares)) return p;
+  const b = calib.bins?.[Math.min(9, Math.floor(p * 10))];
+  if (!b?.n || !valido(b.freq)) return p;
+  const c = b.n / (b.n + L.meiaCalib);
+  return Math.max(0, Math.min(1, p + c * (b.freq - p)));
+}
+
+// Consenso por hora para gráficos: mediana, mínimo e máximo entre modelos.
+/**
+ * Séries horárias de mediana, mínimo e máximo de uma variável entre os modelos.
+ * @returns {{med:Array<number|null>, lo:Array<number|null>, hi:Array<number|null>}}
+ */
+// Memória por objeto de previsão: as telas pedem o mesmo consenso dezenas de vezes por renderização
+// (antes, até uma vez por hora do dia). Cada calibração ou ancoragem cria um objeto novo, então nada fica velho.
+const memoriaConsenso = new WeakMap();
+export function consensoHorario(prev, variavel, modelos) {
+  let porPrev = memoriaConsenso.get(prev);
+  if (!porPrev) { porPrev = new Map(); memoriaConsenso.set(prev, porPrev); }
+  const chave = `${variavel}|${modelos.join(',')}`;
+  if (!porPrev.has(chave)) porPrev.set(chave, calcularConsenso(prev, variavel, modelos));
+  return porPrev.get(chave);
+}
+function calcularConsenso(prev, variavel, modelos) {
+  const med = [], lo = [], hi = [];
+  for (let i = 0; i < prev.horas.length; i++) {
+    const vs = modelos.map((m) => prev.modelos[m]?.vars[variavel]?.[i]);
+    med.push(mediana(vs)); lo.push(minimo(vs)); hi.push(maximo(vs));
+  }
+  return { med, lo, hi };
+}
+
+// ---------- condição do céu ----------
+// cobertura: valores horários de cloud_cover (%) já em consenso entre modelos; dia: valores de is_day (0/1).
+// Usa as horas de dia quando houver; senão, todas as horas. Devolve null sem dado (nunca inventa).
+/**
+ * Condição do céu pela cobertura média (horas de dia, se houver) e pela probabilidade de chuva.
+ * @returns {{nivel:string, texto:string, noite:boolean, chuva:string|null, cobertura:number}|null}
+ */
+export function condicaoCeu(cobertura, dia, probChuva) {
+  const C = REGRAS.ceu;
+  const pares = (cobertura || []).map((c, i) => [c, dia?.[i]]).filter(([c]) => valido(c));
+  if (!pares.length) return null;
+  const deDia = pares.filter(([, d]) => d === 1 || d === true);
+  const usar = deDia.length ? deDia : pares;
+  const noite = !deDia.length && pares.some(([, d]) => d === 0 || d === false);
+  const media = usar.reduce((s, [c]) => s + c, 0) / usar.length;
+  let nivel, texto;
+  if (media <= C.limpo) { nivel = 'limpo'; texto = noite ? 'Céu limpo' : 'Ensolarado'; }
+  else if (media <= C.poucasNuvens) { nivel = 'poucas'; texto = noite ? 'Poucas nuvens' : 'Sol entre nuvens'; }
+  else if (media <= C.parcial) { nivel = 'parcial'; texto = 'Parcialmente nublado'; }
+  else { nivel = 'nublado'; texto = 'Nublado'; }
+  const o = REGRAS.ocorrencia;
+  let chuva = null;
+  if (valido(probChuva) && probChuva >= o.provavel) chuva = 'provavel';
+  else if (valido(probChuva) && probChuva >= o.possivel) chuva = 'possivel';
+  if (chuva === 'provavel') texto = nivel === 'nublado' || nivel === 'parcial' ? 'Nublado com chuva' : (noite ? 'Pancadas de chuva' : 'Sol e pancadas de chuva');
+  else if (chuva === 'possivel') texto = `${texto}, pode chover`;
+  return { nivel, texto, noite, chuva, cobertura: media };
+}
+
+// Resposta curta para "vai chover?".
+export function respostaChuva(prob) {
+  if (!valido(prob)) return null;
+  const p = palavraOcorrencia(prob);
+  return { 'provável': 'Vai chover', 'possível': 'Pode chover', 'pouco provável': 'Chuva pouco provável', 'improvável': 'Não deve chover' }[p];
+}
+
+// ---------- pressão atmosférica ----------
+
+/**
+ * Variação de uma série entre a leitura mais recente e a leitura mais próxima de "horas" antes dela.
+ * @param {{ms:number, valor:number|null}[]} serie leituras (qualquer ordem; inválidas são ignoradas)
+ * @param {number} horas intervalo desejado, em horas
+ * @param {number} toleranciaMin distância máxima, em minutos, entre a leitura de referência e o instante alvo
+ * @returns {{delta:number, de:{ms:number, valor:number}, ate:{ms:number, valor:number}}|null}
+ */
+export function variacaoSerie(serie, horas, toleranciaMin) {
+  const pts = (serie || []).filter((x) => valido(x?.valor) && valido(x?.ms)).sort((a, b) => a.ms - b.ms);
+  if (pts.length < 2) return null;
+  const ate = pts[pts.length - 1];
+  const alvo = ate.ms - horas * 3600000;
+  let de = null;
+  for (const x of pts) if (x !== ate && (!de || Math.abs(x.ms - alvo) < Math.abs(de.ms - alvo))) de = x;
+  if (!de || Math.abs(de.ms - alvo) > toleranciaMin * 60000) return null;
+  return { delta: ate.valor - de.valor, de, ate };
+}
+
+/**
+ * Classifica a tendência de 3 h da pressão pelos termos do Met Office e da OMM (REGRAS.pressao.tendencia3h).
+ * @param {number|null} delta3h variação em hPa nas últimas 3 h
+ * @returns {{sentido:'subindo'|'caindo'|'estavel', intensidade:string, texto:string}|null}
+ */
+export function classeTendenciaPressao(delta3h) {
+  if (!valido(delta3h)) return null;
+  const T = REGRAS.pressao.tendencia3h, a = Math.abs(delta3h);
+  if (a < T.estavel) return { sentido: 'estavel', intensidade: '', texto: 'estável' };
+  const sentido = delta3h > 0 ? 'subindo' : 'caindo';
+  const intensidade = a <= T.devagar ? 'devagar' : a <= T.normal ? '' : a <= T.rapido ? 'rápido' : 'muito rápido';
+  return { sentido, intensidade, texto: intensidade ? `${sentido} ${intensidade}` : sentido };
+}
+
+/**
+ * Sinal de chuva pela pressão. Soma pontos objetivos e devolve o nível do sinal e os motivos:
+ *   tendência de 3 h: queda acima de 3,5 hPa +2; queda de 1,6 a 3,5 +1; subida de 1,6 ou mais -1;
+ *   queda de 6 hPa ou mais em 24 h +1;
+ *   variação prevista nas próximas 12 h: queda de 4 hPa ou mais +1; subida de 4 hPa ou mais -1;
+ *   nível: abaixo de 1008 hPa +1; acima de 1020 hPa -1.
+ * Pontos: 3 ou mais = forte; 2 = moderado; 1 = fraco; 0 = nenhum; negativo = tempo firme.
+ * É um indicador auxiliar: não altera a chance de chuva calculada pelos modelos.
+ * @param {{atual?:number|null, d3?:number|null, d24?:number|null, prev?:number|null}} p
+ * @returns {{pontos:number, sinal:'forte'|'moderado'|'fraco'|'nenhum'|'firme', motivos:string[]}|null}
+ */
+export function avaliarPressao({ atual = null, d3 = null, d24 = null, prev = null } = {}) {
+  const R = REGRAS.pressao, T = R.tendencia3h;
+  if (![atual, d3, d24, prev].some(valido)) return null;
+  let pontos = 0;
+  const motivos = [];
+  const n1 = (v) => `${(Math.round(Math.abs(v) * 10) / 10).toString().replace('.', ',')} hPa`;
+  if (valido(d3)) {
+    if (d3 < -T.normal) { pontos += 2; motivos.push(`queda rápida de ${n1(d3)} em 3 h`); }
+    else if (d3 < -T.devagar) { pontos += 1; motivos.push(`queda de ${n1(d3)} em 3 h`); }
+    else if (d3 > T.devagar) { pontos -= 1; motivos.push(`subida de ${n1(d3)} em 3 h`); }
+  }
+  if (valido(d24) && d24 <= -R.queda24hForte) { pontos += 1; motivos.push(`queda de ${n1(d24)} em 24 h`); }
+  if (valido(prev)) {
+    if (prev <= -R.variacaoPrevForte) { pontos += 1; motivos.push(`modelos preveem queda de ${n1(prev)} nas próximas ${R.previsaoHoras} h`); }
+    else if (prev >= R.variacaoPrevForte) { pontos -= 1; motivos.push(`modelos preveem subida de ${n1(prev)} nas próximas ${R.previsaoHoras} h`); }
+  }
+  if (valido(atual)) {
+    if (atual < R.baixa) { pontos += 1; motivos.push(`pressão baixa (abaixo de ${R.baixa} hPa)`); }
+    else if (atual > R.alta) { pontos -= 1; motivos.push(`pressão alta (acima de ${R.alta} hPa)`); }
+  }
+  const sinal = pontos >= 3 ? 'forte' : pontos === 2 ? 'moderado' : pontos === 1 ? 'fraco' : pontos === 0 ? 'nenhum' : 'firme';
+  return { pontos, sinal, motivos };
+}
+
+/**
+ * Leitura final da pressão, sempre coerente com a chance de chuva principal (que é a referência).
+ * A pressão nunca contradiz a previsão: quando ela indica piora e os modelos não mostram chuva,
+ * o texto fala em mudança no tempo sem chuva prevista; quando os modelos mostram chuva e a pressão
+ * não cai, explica que a chuva prevista não depende de queda de pressão.
+ * @param {{sinal:string}|null} av saída de avaliarPressao
+ * @param {number|null} probChuva chance de chuva principal do dia (0 a 1), já calibrada
+ * @returns {{titulo:string, texto:string, classe:string}|null}
+ */
+export function leituraPressao(av, probChuva) {
+  if (!av) return null;
+  const chuvaPrevista = valido(probChuva) && probChuva >= REGRAS.ocorrencia.possivel;
+  const piora = av.sinal === 'forte' || av.sinal === 'moderado' || av.sinal === 'fraco';
+  if (!valido(probChuva)) {
+    return piora
+      ? { titulo: 'Pressão caindo', texto: 'Costuma anteceder mudança no tempo.', classe: 'mudanca' }
+      : { titulo: av.sinal === 'firme' ? 'Pressão subindo' : 'Pressão sem sinal de mudança', texto: 'Sem sinal de piora.', classe: av.sinal === 'firme' ? 'firme' : 'neutra' };
+  }
+  if (piora && chuvaPrevista) {
+    return { titulo: 'Confirma a chuva prevista', classe: av.sinal === 'forte' ? 'forte' : 'confirma',
+      texto: av.sinal === 'fraco' ? 'A pressão começa a cair.' : 'A pressão está caindo, como antes de uma frente.' };
+  }
+  if (piora) return { titulo: 'Mudança no tempo', classe: 'mudanca', texto: 'A pressão cai, mas sem chuva prevista hoje: por ora, mais nuvens ou vento.' };
+  // "sem sinal de mudança", e não "estável": a tendência de 3 h logo acima pode dizer "subindo devagar" (até 1,5 hPa)
+  if (chuvaPrevista) return { titulo: 'Pressão sem sinal de mudança', classe: 'neutra', texto: 'Isso não muda a chuva prevista.' };
+  return av.sinal === 'firme'
+    ? { titulo: 'Tempo firme', classe: 'firme', texto: 'Pressão subindo ou alta.' }
+    : { titulo: 'Pressão sem sinal de mudança', classe: 'neutra', texto: 'Variação pequena nas últimas horas.' };
+}
+
+// ---------- chuva chegando (radar) ----------
+
+/**
+ * Deslocamento dos ecos de radar entre dois quadros por correlação de blocos (block matching):
+ * procura o (dx, dy) que minimiza o erro absoluto médio entre o quadro novo e o antigo deslocado,
+ * contando só células com eco em algum dos dois. Recusa o resultado quando há pouco eco ou quando
+ * o melhor deslocamento não melhora o ajuste o bastante em relação a "parado".
+ * @param {ArrayLike<number>} antigo grade n x n, intensidade média do eco por célula (0 a 1)
+ * @param {ArrayLike<number>} novo grade n x n do quadro mais recente
+ * @param {number} n lado da grade
+ * @returns {{dx:number, dy:number, melhora:number}|null} deslocamento em células no intervalo
+ */
+export function deslocamentoRadar(antigo, novo, n) {
+  const R = REGRAS.radar, M = R.deslocMax, L = R.limiarMovimento;
+  let ca = 0, cn = 0;
+  for (let k = 0; k < n * n; k++) { if (antigo[k] >= L) ca++; if (novo[k] >= L) cn++; }
+  if (ca < R.celulasMin || cn < R.celulasMin) return null;
+  const erro = (dx, dy) => {
+    let soma = 0, cont = 0;
+    for (let y = M; y < n - M; y++) for (let x = M; x < n - M; x++) {
+      const b = novo[y * n + x], a = antigo[(y - dy) * n + (x - dx)];
+      if (a < L && b < L) continue;
+      soma += Math.abs(a - b); cont++;
+    }
+    return cont ? soma / cont : Infinity;
+  };
+  const e0 = erro(0, 0);
+  let melhor = { dx: 0, dy: 0, e: e0 };
+  for (let dy = -M; dy <= M; dy++) for (let dx = -M; dx <= M; dx++) {
+    const e = erro(dx, dy);
+    if (e < melhor.e) melhor = { dx, dy, e };
+  }
+  if (!Number.isFinite(e0) || !Number.isFinite(melhor.e)) return null;
+  const melhora = e0 > 0 ? 1 - melhor.e / e0 : 0;
+  if ((melhor.dx || melhor.dy) && melhora < R.melhoraMin) return null;
+  return { dx: melhor.dx, dy: melhor.dy, melhora };
+}
+
+/**
+ * Extrapolação: a cada passo de tempo, olha o ponto de onde a chuva viria (posição menos velocidade x tempo)
+ * no quadro mais recente. A primeira vez em que a vizinhança tem eco é a chegada estimada.
+ * @param {ArrayLike<number>} grade quadro mais recente, n x n
+ * @param {number} n
+ * @param {number} px coluna do local na grade
+ * @param {number} py linha do local na grade
+ * @param {{dx:number, dy:number}} desl deslocamento em células por REGRAS.radar.intervaloMin
+ * @returns {number|null} minutos até a chegada (0 = já sobre o local), ou null se nada chega no horizonte
+ */
+export function chegadaChuva(grade, n, px, py, desl) {
+  return percorrerRadar(grade, n, px, py, desl).chega;
+}
+
+/**
+ * Por quantos minutos o radar garante o local sem chuva, a partir do quadro mais recente.
+ * Com movimento medido: até a chegada extrapolada (ou o horizonte inteiro, se nada chega).
+ * Sem movimento (pouco eco para medir): distância até a célula com eco mais próxima, percorrida a
+ * REGRAS.radar.velMaxKmh. Com eco sobre o local, 0.
+ * @param {Float32Array} grade fração de eco por célula (n x n)
+ * @param {{dx:number, dy:number}|null} desl deslocamento em células por REGRAS.radar.intervaloMin, ou null
+ * @param {number} kmCelula tamanho da célula em km
+ * @returns {number|null} minutos (0 a REGRAS.radar.horizonteMin), ou null se a área conhecida não basta
+ */
+export function secoPeloRadar(grade, n, px, py, desl, kmCelula) {
+  const R = REGRAS.radar;
+  if (desl) {
+    const r = percorrerRadar(grade, n, px, py, desl);
+    if (r.chega !== null) return r.chega;
+    if (r.secoAte !== null && r.secoAte >= R.horizonteMin) return R.horizonteMin;
+  }
+  // sem movimento confiável (ou a trajetória saiu da grade): cota pela chuva mais próxima
+  let d2 = Infinity;
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (grade[y * n + x] >= R.ecoMin) d2 = Math.min(d2, (x - px) ** 2 + (y - py) ** 2);
+  const bordaKm = Math.min(px, py, n - 1 - px, n - 1 - py) * kmCelula; // além da grade não se sabe
+  const distKm = Math.min(Math.sqrt(d2) * kmCelula, bordaKm);
+  const min = Math.floor((distKm / R.velMaxKmh) * 60 / R.passoMin) * R.passoMin;
+  return Math.max(0, Math.min(R.horizonteMin, min));
+}
+
+// Caminha de trás para a frente pela trajetória extrapolada: o eco que estará no local daqui a t minutos
+// está hoje em (px, py) - v·t. chega = primeiro t com eco; secoAte = último t verificado sem eco.
+function percorrerRadar(grade, n, px, py, desl) {
+  const R = REGRAS.radar;
+  const vx = desl.dx / R.intervaloMin, vy = desl.dy / R.intervaloMin;
+  const temEco = (cx, cy) => {
+    let soma = 0, cont = 0;
+    for (let y = Math.round(cy) - R.raioCelulas; y <= Math.round(cy) + R.raioCelulas; y++) {
+      for (let x = Math.round(cx) - R.raioCelulas; x <= Math.round(cx) + R.raioCelulas; x++) {
+        if (x < 0 || y < 0 || x >= n || y >= n) return null; // saiu da área conhecida: não afirma nada
+        soma += grade[y * n + x]; cont++;
+      }
+    }
+    return soma / cont >= R.ecoMin;
+  };
+  let secoAte = null;
+  for (let t = 0; t <= R.horizonteMin; t += R.passoMin) {
+    const r = temEco(px - vx * t, py - vy * t);
+    if (r === null) return { chega: null, secoAte };
+    if (r) return { chega: t, secoAte };
+    secoAte = t;
+  }
+  return { chega: null, secoAte };
+}
+
+// ---------- radar de tempestade ----------
+
+/**
+ * Classe de um núcleo pela refletividade máxima (limiares em REGRAS.tempestade.dbz).
+ * @returns {'severa'|'tempestade'|'forte'|null}
+ */
+export function classeNucleo(dbz) {
+  const D = REGRAS.tempestade.dbz;
+  return !valido(dbz) ? null : dbz >= D.severa ? 'severa' : dbz >= D.tempestade ? 'tempestade' : dbz >= D.forte ? 'forte' : null;
+}
+
+/**
+ * Núcleos de chuva forte e de tempestade no radar em volta do local, com posição, movimento, tendência e chegada.
+ * Agrupa as células com refletividade de pelo menos REGRAS.tempestade.dbz.forte em núcleos (vizinhança de 8),
+ * descarta os menores que areaMinKm2 (salvo acima de 50 dBZ) e os além de raioKm.
+ *
+ * Movimento: cada célula do núcleo segue a velocidade medida dos ecos (a mesma da "chuva chegando").
+ * - chegaMin: primeiro instante em que alguma célula passa a até localKm do local, dentro de horizonteMin;
+ * - passaKm e passaMin: a menor distância a que o núcleo passa do local e quando, dentro de horizonteMin
+ *   (para dizer "vindo nesta direção, passa a 30 km" quando ele não chega a atingir o local);
+ * - tendencia: 'sobre' (a até localKm), 'chegando' (tem chegaMin), 'aproximando' (não atinge, mas passa a até
+ *   pertoKm e mais perto do que está agora), 'afastando' ou 'passando' (ao largo).
+ * Sem velocidade medida, não há chegada nem tendência, só posição.
+ *
+ * Evolução: com a grade de `anterior` (quadro de `anterior.min` minutos antes), compara a refletividade máxima do
+ * núcleo com a máxima em volta de onde ele estava (posição de agora recuada pelo movimento medido; sem movimento,
+ * a mesma posição): 'nova' (não havia chuva forte ali), 'intensificando', 'enfraquecendo' (diferença de pelo
+ * menos evolucaoDbz) ou 'estavel'. Sem `anterior`, null.
+ * @param {{dbz:ArrayLike<number>, n:number, px:number, py:number, kmCelula:number,
+ *   vel?:{lesteKmh:number, sulKmh:number}|null, anterior?:{dbz:ArrayLike<number>, min:number}|null}} g
+ *   dbz: refletividade máxima por célula (n x n, linha 0 ao norte; -128 sem eco); px/py: célula do local;
+ *   vel: movimento dos ecos em km/h (leste e sul positivos) ou null
+ * @returns {Array<{dbz:number, classe:string, distanciaKm:number, rumo:number, areaKm2:number, leste:number, sul:number,
+ *   chegaMin:number|null, passaKm:number|null, passaMin:number|null,
+ *   tendencia:'chegando'|'aproximando'|'afastando'|'passando'|'sobre'|null,
+ *   evolucao:'nova'|'intensificando'|'enfraquecendo'|'estavel'|null}>}
+ *   do mais relevante ao menos: sobre o local, chegando (o que chega antes), aproximando, e então o mais perto;
+ *   leste/sul: centro do núcleo em km a partir do local
+ */
+export function celulasTempestade({ dbz, n, px, py, kmCelula, vel = null, anterior = null }) {
+  const T = REGRAS.tempestade, min = T.dbz.forte;
+  const visto = new Uint8Array(n * n), saida = [];
+  const vKmh = vel ? Math.hypot(vel.lesteKmh, vel.sulKmh) : 0;
+  const movendo = vKmh > 1;
+  const ux = movendo ? vel.lesteKmh / vKmh : 0, uy = movendo ? vel.sulKmh / vKmh : 0;
+  for (let k0 = 0; k0 < n * n; k0++) {
+    if (visto[k0] || !(dbz[k0] >= min)) continue;
+    const pilha = [k0], celulas = [];
+    visto[k0] = 1;
+    while (pilha.length) {
+      const k = pilha.pop(), x = k % n, y = (k - x) / n;
+      celulas.push(k);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy, kk = yy * n + xx;
+        if (xx < 0 || yy < 0 || xx >= n || yy >= n || visto[kk] || !(dbz[kk] >= min)) continue;
+        visto[kk] = 1; pilha.push(kk);
+      }
+    }
+    let maxDbz = -Infinity, dMin = Infinity, cx = 0, cy = 0, peso = 0, chega = null, passaKm = null, passaMin = null;
+    for (const k of celulas) {
+      const x = k % n, y = (k - x) / n, v = dbz[k];
+      maxDbz = Math.max(maxDbz, v);
+      // posição em km relativa ao local (leste e sul positivos)
+      const ex = (x - px) * kmCelula, sy = (y - py) * kmCelula, d = Math.hypot(ex, sy);
+      dMin = Math.min(dMin, d);
+      const w = 10 ** (v / 10); cx += ex * w; cy += sy * w; peso += w; // centro pela refletividade (Z linear)
+      if (d <= T.localKm) chega = 0;
+      if (!movendo) continue;
+      // trajetória da célula: `ao` = km que faltam até o ponto mais próximo do local; `lado` = distância nesse ponto
+      const ao = -(ex * ux + sy * uy), lado = Math.abs(ex * uy - sy * ux);
+      if (ao <= 0) continue; // já passou do ponto mais próximo: só se afasta
+      const tPerto = (ao / vKmh) * 60;
+      if (tPerto <= T.horizonteMin && (passaKm === null || lado < passaKm)) { passaKm = lado; passaMin = tPerto; }
+      if (chega !== 0 && lado <= T.localKm) {
+        const t = ((ao - Math.sqrt(T.localKm ** 2 - lado ** 2)) / vKmh) * 60;
+        if (t <= T.horizonteMin && (chega === null || t < chega)) chega = t;
+      }
+    }
+    const areaKm2 = celulas.length * kmCelula ** 2;
+    if (dMin > T.raioKm || (areaKm2 < T.areaMinKm2 && maxDbz < 50)) continue;
+    cx /= peso; cy /= peso;
+    const rumo = (Math.atan2(cx, -cy) * 180 / Math.PI + 360) % 360; // de onde o local vê o núcleo (0 = norte)
+    let tendencia = null;
+    if (dMin <= T.localKm) tendencia = 'sobre';
+    else if (movendo) {
+      const aprox = -(cx * ux + cy * uy) / Math.hypot(cx, cy); // cosseno entre o movimento e a direção ao local
+      tendencia = chega !== null ? 'chegando'
+        : passaKm !== null && passaKm <= T.pertoKm && passaKm < dMin - T.localKm ? 'aproximando'
+          : aprox < -0.3 ? 'afastando' : 'passando';
+    }
+    // Evolução: máximo do quadro anterior em volta de onde o núcleo estava.
+    let evolucao = null;
+    if (anterior?.dbz && anterior.min > 0) {
+      const h = anterior.min / 60;
+      const ax = px + (cx - (movendo ? vel.lesteKmh * h : 0)) / kmCelula, ay = py + (cy - (movendo ? vel.sulKmh * h : 0)) / kmCelula;
+      const r = Math.ceil((Math.sqrt(areaKm2 / Math.PI) + T.evolucaoBuscaKm) / kmCelula);
+      let antes = -Infinity, dentro = 0;
+      for (let y = Math.round(ay) - r; y <= Math.round(ay) + r; y++) for (let x = Math.round(ax) - r; x <= Math.round(ax) + r; x++) {
+        if (x < 0 || y < 0 || x >= n || y >= n) continue;
+        dentro++;
+        if (anterior.dbz[y * n + x] > antes) antes = anterior.dbz[y * n + x];
+      }
+      if (dentro) evolucao = antes < min ? 'nova' : maxDbz - antes >= T.evolucaoDbz ? 'intensificando' : antes - maxDbz >= T.evolucaoDbz ? 'enfraquecendo' : 'estavel';
+    }
+    const semChegada = chega === null && tendencia !== 'sobre';
+    saida.push({ dbz: maxDbz, classe: classeNucleo(maxDbz), distanciaKm: dMin, rumo, areaKm2, leste: cx, sul: cy,
+      chegaMin: chega === null ? null : Math.round(chega),
+      passaKm: semChegada && passaKm !== null ? passaKm : null, passaMin: semChegada && passaMin !== null ? Math.round(passaMin) : null,
+      tendencia, evolucao });
+  }
+  const ordem = (c) => (c.tendencia === 'sobre' ? 0 : c.chegaMin !== null ? 1 : c.tendencia === 'aproximando' ? 2 : 3);
+  return saida.sort((a, b) => ordem(a) - ordem(b) || (a.chegaMin ?? 0) - (b.chegaMin ?? 0) || a.distanciaKm - b.distanciaKm);
+}
+
+// ---------- risco de temporal ----------
+
+/**
+ * Risco de temporal por pontos objetivos (limites em REGRAS.temporal). Com aviso de tempestade do INMET em
+ * vigor, o nível é o do aviso (perigo potencial = moderado; perigo ou grande perigo = alto). Só é avaliado quando a previsão
+ * principal tem chuva (possível ou provável), quando está chovendo ou chegando chuva, ou quando há
+ * aviso de tempestade do INMET; fora disso devolve null, para não contradizer a previsão sem chuva.
+ * @param {{prob?:number|null, chovendo?:boolean, chegando?:boolean, cape?:number|null, chuvaHora?:number|null,
+ *   rajada?:number|null, d3Pressao?:number|null, aviso?:string|null, nucleoRadar?:number|null}} e
+ *   nucleoRadar: dBZ do núcleo de tempestade do radar sobre o local ou chegando (celulasTempestade). Um núcleo de
+ *   tempestade leva o nível a pelo menos moderado; um de tempestade forte, a alto (o radar vê o que já existe).
+ * @returns {{nivel:'baixo'|'moderado'|'alto', pontos:number, motivos:string[]}|null}
+ */
+export function riscoTemporal({ prob = null, chovendo = false, chegando = false, cape = null, chuvaHora = null, rajada = null, d3Pressao = null, aviso = null, nucleoRadar = null } = {}) {
+  const T = REGRAS.temporal;
+  const nivelAviso = aviso ? T.aviso[String(aviso).trim().toLowerCase()] ?? 'moderado' : null;
+  const classeRadar = classeNucleo(nucleoRadar);
+  const radar = classeRadar === 'severa' ? 'alto' : classeRadar === 'tempestade' ? 'moderado' : null;
+  const chuva = chovendo || chegando || !!radar || (valido(prob) && prob >= REGRAS.ocorrencia.possivel);
+  if (!chuva && !nivelAviso) return null;
+  let pontos = 0;
+  const motivos = [];
+  const faixa = (v, [a, b], nome, un) => {
+    if (!valido(v) || v < a) return;
+    pontos += v >= b ? 2 : 1;
+    motivos.push(`${nome} ${v >= b ? 'muito ' : ''}${nome === 'energia para tempestades' ? 'alta' : 'forte'} (${Math.round(v)} ${un})`);
+  };
+  faixa(cape, T.cape, 'energia para tempestades', 'J/kg');
+  faixa(chuvaHora, T.chuvaHoraMm, 'chuva', 'mm/h');
+  faixa(rajada, T.rajada, 'rajadas', 'km/h');
+  if (valido(d3Pressao) && d3Pressao < -T.quedaPressao3h) { pontos += 1; motivos.push('pressão caindo rápido'); }
+  let nivel = pontos >= T.niveis.alto ? 'alto' : pontos >= T.niveis.moderado ? 'moderado' : 'baixo';
+  const ordem = ['baixo', 'moderado', 'alto'];
+  if (radar) {
+    if (ordem.indexOf(radar) > ordem.indexOf(nivel)) nivel = radar;
+    motivos.unshift(`${classeRadar === 'severa' ? 'tempestade forte' : 'tempestade'} no radar sobre o local ou a caminho (${Math.round(nucleoRadar)} dBZ)`);
+  }
+  // o aviso oficial prevalece; o radar só pode subir o nível, nunca baixar o do aviso
+  if (nivelAviso) { if (!radar || ordem.indexOf(nivelAviso) >= ordem.indexOf(nivel)) nivel = nivelAviso; motivos.unshift(`aviso de tempestade do INMET em vigor (${String(aviso).toLowerCase()})`); }
+  return { nivel, pontos, motivos };
+}
+
+/**
+ * Sinais de granizo no dia (regras e fontes em REGRAS.granizo). Não é previsão própria de granizo: junta só
+ * o que as fontes dizem. Sem sinal, null.
+ * @param {{avisos?:object[], codigosUkmo?:number[], cape?:number|null, congelamento?:number|null, nivelTemporal?:string|null}} d
+ *   avisos: avisos do INMET do local válidos no dia; codigosUkmo: códigos de tempo horários do UKMO no dia;
+ *   cape: máximo do dia; congelamento: menor nível de congelamento (m) nas horas de CAPE alto; nivelTemporal: riscoTemporal().nivel
+ * @returns {{fonte:'inmet'|'modelo'|'ambiente', texto:string}|null}
+ */
+export function sinaisGranizo({ avisos = [], codigosUkmo = [], cape = null, congelamento = null, nivelTemporal = null } = {}) {
+  const G = REGRAS.granizo;
+  const cita = (a) => /granizo/i.test([a.titulo, a.descricao, ...(a.riscos || [])].join(' '));
+  const aviso = avisos.find(cita);
+  if (aviso) return { fonte: 'inmet', texto: `O aviso de ${String(aviso.titulo || 'tempestade').toLowerCase()} do INMET cita queda de granizo.` };
+  if (codigosUkmo.some((c) => G.codigos.includes(c))) return { fonte: 'modelo', texto: 'O modelo do Met Office (UKMO), que prevê granizo diretamente, indica trovoada com granizo.' };
+  if ((nivelTemporal === 'moderado' || nivelTemporal === 'alto') && valido(cape) && cape >= G.cape && valido(congelamento) && congelamento <= G.congelamentoMaxM) {
+    return { fonte: 'ambiente', texto: `Energia para tempestades alta (${Math.round(cape)} J/kg) e nível de congelamento baixo (${(congelamento / 1000).toFixed(1).replace('.', ',')} km).` };
+  }
+  return null;
+}
+
+// ------------------------------------------------------------------ El Niño
+
+const CENTRO_TRIMESTRE = { DJF: 1, JFM: 2, FMA: 3, MAM: 4, AMJ: 5, MJJ: 6, JJA: 7, JAS: 8, ASO: 9, SON: 10, OND: 11, NDJ: 12 };
+const FORCAS_EL_NINO = ['fraco', 'moderado', 'forte', 'muito forte'];
+const CHAVES_FORCA = { elNino: ['fraco', 'moderado', 'forte', 'muitoForte'], laNina: ['fraca', 'moderada', 'forte', 'muitoForte'] };
+
+/** Mês central (1 a 12) de um trimestre da NOAA: OND → 11. */
+export const mesCentralTrimestre = (tri) => CENTRO_TRIMESTRE[tri] ?? null;
+
+/**
+ * Fase e força para um desvio de temperatura do mar (°C) no centro do Pacífico.
+ * @returns {{fase:'elNino'|'laNina'|'neutro', nivel:number, forca:string|null}|null} nivel 0 (neutro) a 4 (muito forte)
+ */
+export function forcaEnso(anom) {
+  if (!Number.isFinite(anom)) return null;
+  const x = Math.abs(anom), E = REGRAS.enso;
+  if (x < E.limiar) return { fase: 'neutro', nivel: 0, forca: null };
+  const nivel = 1 + E.forcas.filter((l) => x >= l).length;
+  return { fase: anom > 0 ? 'elNino' : 'laNina', nivel, forca: FORCAS_EL_NINO[nivel - 1] };
+}
+
+/**
+ * Situação do Pacífico em uma leitura só, usada por todos os blocos da aba El Niño (nenhum bloco classifica por conta).
+ * - Agora: média das últimas REGRAS.enso.semanasAgora semanas do Niño 3.4 relativo (NOAA). A média de 3 meses
+ *   (RONI) é o critério oficial, mas chega com dois meses de atraso; ela entra quando não há semana recente.
+ * - Evolução: para cada mês à frente, a fase mais provável do trimestre centrado nele e, sendo El Niño ou
+ *   La Niña, a força mais provável (tabelas oficiais da NOAA). Para na primeira quebra da sequência mensal.
+ * @param {object} partes partes de dados/enso.json (relativoSemanal, roni, oni, probCpc, forcaCpc)
+ * @param {number} agoraMs
+ * @returns {{fase, nivel, forca, anom, base:'semanas'|'trimestre', ate:number|null, trimestre:object|null,
+ *   evolucao:{mes:number, ano:number, fase:string, nivel:number, forca:string|null}[],
+ *   enfraquece:{mes:number, ano:number}|null, termina:{mes:number, ano:number}|null}|null}
+ */
+export function situacaoEnso(partes, agoraMs) {
+  const E = REGRAS.enso, P = partes || {};
+  const semanas = (P.relativoSemanal?.dados || []).filter((r) => Number.isFinite(r.n34)).slice(-E.semanasAgora);
+  const trimestres = P.roni?.dados?.length ? P.roni.dados : P.oni?.dados || [];
+  const tri = trimestres.at(-1) || null;
+  let anom = null, base = null, ate = null;
+  if (semanas.length === E.semanasAgora && agoraMs - semanas.at(-1).ms <= E.semanaMaxDias * 86400000) {
+    anom = semanas.reduce((s, r) => s + r.n34, 0) / semanas.length; base = 'semanas'; ate = semanas.at(-1).ms;
+  } else if (Number.isFinite(tri?.anom)) { anom = tri.anom; base = 'trimestre'; }
+  const agora = forcaEnso(anom);
+  if (!agora) return null;
+
+  const hoje = new Date(agoraMs).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const ano = Number(hoje.slice(0, 4)), mes = Number(hoje.slice(5, 7));
+  const probs = P.probCpc?.dados || [], forcas = P.forcaCpc?.dados || [];
+  const evolucao = [];
+  const i0 = probs.findIndex((x) => CENTRO_TRIMESTRE[x.tri] === mes);
+  for (let k = 0; i0 >= 0 && i0 + k < probs.length; k++) {
+    const pr = probs[i0 + k], m = ((mes - 1 + k) % 12) + 1, a = ano + Math.floor((mes - 1 + k) / 12);
+    if (CENTRO_TRIMESTRE[pr.tri] !== m) break; // tabela fora da sequência mensal: para aqui, sem adivinhar
+    const fase = pr.elNino >= pr.neutro && pr.elNino >= pr.laNina ? 'elNino' : pr.laNina > pr.neutro ? 'laNina' : 'neutro';
+    let nivel = 0;
+    if (fase !== 'neutro') {
+      const f = forcas.find((x) => x.tri === pr.tri)?.[fase];
+      const chances = CHAVES_FORCA[fase].map((c) => f?.[c] ?? 0);
+      nivel = f ? 1 + chances.indexOf(Math.max(...chances)) : null; // sem a tabela de força: fase sem força
+    }
+    evolucao.push({ mes: m, ano: a, fase, nivel, forca: nivel ? FORCAS_EL_NINO[nivel - 1] : null });
+  }
+  // Marcos do evento em curso: primeiro mês previsto mais fraco que agora e primeiro mês fora da fase atual.
+  let enfraquece = null, termina = null;
+  if (agora.fase !== 'neutro') {
+    const fim = evolucao.find((e) => e.fase !== agora.fase);
+    const menor = evolucao.find((e) => e.fase === agora.fase && e.nivel !== null && e.nivel < agora.nivel);
+    termina = fim ? { mes: fim.mes, ano: fim.ano } : null;
+    enfraquece = menor && (!fim || evolucao.indexOf(menor) < evolucao.indexOf(fim)) ? { mes: menor.mes, ano: menor.ano } : null;
+  }
+  return { ...agora, anom, base, ate, trimestre: tri, evolucao, enfraquece, termina };
+}
+
+/**
+ * Época em que o El Niño costuma aumentar a chuva no RS (REGRAS.enso.epocasRs), contada do ano em que começou.
+ * @param {number} anoInicio ano em que o El Niño atual começou
+ * @param {number} agoraMs
+ * @returns {{agora:boolean, proxima:{meses:number[], ano:number}|null}} proxima só quando falta até epocaAntecedenciaDias
+ */
+export function epocaChuvaRs(anoInicio, agoraMs) {
+  const E = REGRAS.enso;
+  const hoje = new Date(agoraMs).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const ano = Number(hoje.slice(0, 4)), mes = Number(hoje.slice(5, 7));
+  const epocas = E.epocasRs.map((e) => ({ meses: e.meses, ano: anoInicio + e.ano }));
+  const agora = epocas.some((e) => e.ano === ano && e.meses.includes(mes));
+  const proxima = agora ? null : epocas.find((e) => {
+    const falta = (Date.UTC(e.ano, e.meses[0] - 1, 1) - agoraMs) / 86400000;
+    return falta > 0 && falta <= E.epocaAntecedenciaDias;
+  }) || null;
+  return { agora, proxima };
+}
+
+const AVISO_DE_CHUVA = /chuva|tempestade|temporal|vendaval|granizo|alagamento|inunda|enxurrada|deslizamento|ciclone/i;
+/**
+ * Aviso do INMET que interessa à aba El Niño: de chuva, vento ou temporal, ainda válido e que começa em até
+ * REGRAS.enso.janelaAvisoDias dias. Datas "AAAA-MM-DD HH:MM" no horário de Brasília; sem data legível, não entra.
+ */
+export function avisoProximoDeChuva(aviso, agoraMs) {
+  const ms = (s) => (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(s || '')) ? Date.parse(`${s.slice(0, 10)}T${s.slice(11, 16)}:00-03:00`) : NaN);
+  const ini = ms(aviso?.inicio), fim = ms(aviso?.fim);
+  if (!Number.isFinite(ini) || !Number.isFinite(fim)) return false;
+  return AVISO_DE_CHUVA.test(aviso.titulo || '') && fim >= agoraMs && ini <= agoraMs + REGRAS.enso.janelaAvisoDias * 86400000;
+}
+
+/**
+ * Resposta única da aba El Niño: "devo me preocupar?". Parte só de dados já mostrados em outras telas
+ * (dias de risco da Semana e avisos do INMET), para nunca contradizê-las. O aviso oficial prevalece.
+ * @param {{p:number}[][]} riscosPorDia riscos de cada dia de risco dentro da janela
+ * @param {number} avisos quantidade de avisos do INMET de chuva próximos, válidos para o local
+ * @returns {'calmo'|'atento'|'alerta'}
+ */
+export function nivelPreocupacaoEnso(riscosPorDia, avisos) {
+  if (avisos > 0 || riscosPorDia.some((rs) => rs.some((r) => r.p >= REGRAS.ocorrencia.provavel))) return 'alerta';
+  return riscosPorDia.length ? 'atento' : 'calmo';
+}

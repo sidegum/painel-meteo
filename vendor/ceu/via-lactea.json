@@ -1,0 +1,141 @@
+{
+ "fonte": "Modelo calculado a partir de Reid et al. 2019 (braços, R0), Wegg et al. 2015 (barra), Bland-Hawthorn & Gerhard 2016 (disco) e Bennett & Bovy 2019 (altura do Sol)",
+ "R0": 8.15,
+ "zSol": 0.0208,
+ "metade": 20.0,
+ "barra": {
+  "semieixo": 5.0,
+  "angulo": 28.0
+ },
+ "imagem": {
+  "lado": 4096,
+  "nota": "vista do polo norte galáctico; colunas = X da cena (= Yg, para l = 90° no Sol), linhas = Z da cena (= Xg; Sol em Z = -R0, perto do topo)"
+ },
+ "particulas": {
+  "n": 200000,
+  "nPoeira": 30000,
+  "formato": "'MWG2', n, nPoeira (uint32); x, y, z int16[n] (x, z ×20/32767 kpc; y ×4/32767 kpc); cor uint8[n×3]; brilho uint8[n]; diâmetro uint8[n] (×10 pc); poeira x, y, z int16[nPoeira]"
+ },
+ "bracos": [
+  {
+   "chave": "3kpc-perto",
+   "nome": "Braço de 3 kpc (próximo)",
+   "x": 1.002,
+   "z": -3.382,
+   "medido": [
+    15,
+    18
+   ],
+   "betaDobra": 15,
+   "rDobra": 3.52,
+   "psi": [
+    -4.2,
+    -4.2
+   ],
+   "largura": 0.18
+  },
+  {
+   "chave": "norma",
+   "nome": "Braço de Norma",
+   "x": 1.748,
+   "z": -3.926,
+   "medido": [
+    -6,
+    54
+   ],
+   "betaDobra": 18,
+   "rDobra": 4.46,
+   "psi": [
+    -1.0,
+    19.5
+   ],
+   "largura": 0.14
+  },
+  {
+   "chave": "escudo",
+   "nome": "Braço Escudo-Centauro",
+   "x": 3.471,
+   "z": -2.712,
+   "medido": [
+    0,
+    104
+   ],
+   "betaDobra": 23,
+   "rDobra": 4.91,
+   "psi": [
+    14.1,
+    12.1
+   ],
+   "largura": 0.23
+  },
+  {
+   "chave": "sagitario",
+   "nome": "Braço Sagitário-Carina",
+   "x": 4.557,
+   "z": -3.892,
+   "medido": [
+    2,
+    97
+   ],
+   "betaDobra": 24,
+   "rDobra": 6.04,
+   "psi": [
+    17.1,
+    1.0
+   ],
+   "largura": 0.27
+  },
+  {
+   "chave": "local",
+   "nome": "Braço Local (Órion)",
+   "x": 1.832,
+   "z": -7.936,
+   "medido": [
+    -8,
+    34
+   ],
+   "betaDobra": 9,
+   "rDobra": 8.26,
+   "psi": [
+    11.4,
+    11.4
+   ],
+   "largura": 0.31
+  },
+  {
+   "chave": "perseu",
+   "nome": "Braço de Perseu",
+   "x": 6.279,
+   "z": -6.064,
+   "medido": [
+    -23,
+    115
+   ],
+   "betaDobra": 40,
+   "rDobra": 8.87,
+   "psi": [
+    10.3,
+    8.7
+   ],
+   "largura": 0.35
+  },
+  {
+   "chave": "externo",
+   "nome": "Braço Externo",
+   "x": 5.499,
+   "z": -10.563,
+   "medido": [
+    -16,
+    71
+   ],
+   "betaDobra": 18,
+   "rDobra": 12.24,
+   "psi": [
+    3.0,
+    9.4
+   ],
+   "largura": 0.65
+  }
+ ],
+ "semente": 20191113
+}

@@ -1,0 +1,3116 @@
+// Painel Meteorológico Pessoal: aplicação principal.
+import { CONFIG } from './config.js';
+import {
+  REGRAS, MODELOS, valido, mediana, minimo, maximo, quantil, partesLocais, distanciaKm, arredondaCoord, direcaoTexto,
+  indicesDoDia, resumoModeloDia, membrosDia, avaliarDia, probLimites, limitesCoerentes, horasProvaveisDeChuva, fraseDoDia,
+  horizonteDivergencia, pesosModelos, palavraOcorrencia, correcaoTemperatura, consensoHorario, escolherFonte, leituraValida, ancorarTemperatura, graficoInicial, periodoDoDia, classeRajada,
+  condicaoCeu, respostaChuva, variacaoSerie, classeTendenciaPressao, avaliarPressao, leituraPressao, riscoTemporal,
+  calibrarPrevisao, calibrarEnsemble, calibracaoAplicavel, pesosHistoricos, viesHistorico, sensacaoTermica, pressaoVapor, sinaisGranizo,
+  situacaoEnso, epocaChuvaRs, avisoProximoDeChuva, nivelPreocupacaoEnso, mesCentralTrimestre,
+} from './analise.js';
+import {
+  buscarPrevisao, buscarEnsemble, buscarObservacoes, buscarAlertas, buscarEnso, buscarAcerto, buscarCalibracao,
+  salvarCache, lerCache, apagarCache, workerConfigurado, MODELOS_ENSEMBLE, buscarAlertasDireto, buscarObservacoesDireto, buscarChuvaRadar, buscarChegadaChuva,
+} from './dados.js';
+import { chaveLocal } from './cidades.js';
+import { criarLocais } from './locais.js';
+import { el, svg, fmt, setaVento, ausente, bus, secao, mostrarInfo, prefs, linkExterno, seletor, cor, corRgb } from './ui.js';
+import { criarFaixa } from './faixa.js';
+import { desenharCeu } from './fundo-ceu.js';
+import { criarGrafico, limparGraficos, noitesDe, dataNoFuso } from './graficos.js';
+
+const VERSAO = '1.16.0';
+const $ = (s) => document.querySelector(s);
+
+const estado = {
+  local: null, aba: 'hoje', diaAberto: null,
+  prev: null, prevEm: null, ens: null, ensEm: null, ensErros: [],
+  obs: null, obsEm: null, alertas: null, alertasEm: null, enso: null, ensoEm: null, acerto: {}, acertoEm: null,
+  // séries como vieram da Open-Meteo; estado.prev e estado.ens são as versões calibradas (recalibrar)
+  prevBruta: null, ensBruto: null, calib: null, calibEm: null,
+  erros: {}, cacheAntigo: false, faixas: [],
+};
+
+// Estações de verificação: as mesmas do Worker (coordenadas públicas das estações).
+const VERIFICACAO = [
+  { id: 'A884', nome: 'Campo Bom (INMET)', lat: -29.674, lon: -51.064, chuva: true },
+  { id: 'A801', nome: 'Porto Alegre Jardim Botânico (INMET)', lat: -30.054, lon: -51.175, chuva: true },
+  { id: 'SBCO', nome: 'Canoas (METAR)', lat: -29.945, lon: -51.144, chuva: false },
+  { id: 'SBPA', nome: 'Porto Alegre aeroporto (METAR)', lat: -29.994, lon: -51.171, chuva: false },
+];
+
+// ------------------------------------------------------------------ início
+
+window.addEventListener('DOMContentLoaded', iniciar);
+
+async function iniciar() {
+  aplicarTema();
+  $('#versao').textContent = `Versão ${VERSAO}`;
+  configurarNavegacao();
+  configurarLocal();
+  configurarTema();
+  configurarRodape();
+  configurarPuxar();
+  configurarCabecalho();
+  document.body.dataset.aba = estado.aba || 'hoje';
+
+  estado.local = prefs.ler('local', null);
+  // 1. mostra o que houver em cache imediatamente
+  const c = await lerCache('previsao');
+  if (c?.dados && estado.local) {
+    estado.prevBruta = reidratar(c.dados); estado.prevEm = c.salvoEm; estado.cacheAntigo = true;
+    const e = await lerCache('ensemble'); if (e?.dados) { estado.ensBruto = e.dados; estado.ensEm = e.salvoEm; }
+    const k = await lerCache('calibracao'); if (k?.dados) { estado.calib = k.dados; estado.calibEm = k.salvoEm; }
+    const o = await lerCache('observacoes'); if (o?.dados) { estado.obs = o.dados; estado.obsEm = o.salvoEm; }
+    recalibrar();
+    renderTudo();
+  } else {
+    mostrarCarregando();
+  }
+  // 2. localização: sempre a posição atual ao abrir o app. Uma cidade escolhida vale só até fechar o app.
+  // 3. dados novos já com o último local salvo, em paralelo com o GPS; se a posição mudar, busca de novo
+  let escolhaDaSessao = false;
+  try { escolhaDaSessao = sessionStorage.getItem('localEscolhido') === '1'; } catch {}
+  if (escolhaDaSessao && estado.local?.origem === 'cidade') { atualizarCabecalho(); await atualizar({ forcar: true }); }
+  else {
+    const antes = estado.local ? { lat: arredondaCoord(estado.local.lat), lon: arredondaCoord(estado.local.lon) } : null;
+    const primeira = antes ? atualizar({ forcar: true }) : Promise.resolve();
+    await localizarSozinho();
+    await primeira;
+    const agora = { lat: arredondaCoord(estado.local.lat), lon: arredondaCoord(estado.local.lon) };
+    if (!antes || antes.lat !== agora.lat || antes.lon !== agora.lon) await atualizar({ forcar: true, local: !!antes });
+  }
+  agendar();
+  setTimeout(() => ocioso(preCarregarLocais), 4000); // abas de cidade prontas depois da primeira tela
+  if ('serviceWorker' in navigator) {
+    // versão nova publicada: recarrega uma vez quando o novo service worker assume
+    const tinha = !!navigator.serviceWorker.controller;
+    let recarregou = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (tinha && !recarregou) { recarregou = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((r) => r.update()).catch(() => {});
+  }
+}
+
+function reidratar(p) { return p; }
+
+function mostrarCarregando() {
+  const alvo = $('#hoje-primeira');
+  alvo.replaceChildren(el('p', { class: 'frase', text: 'Buscando a previsão…' }),
+    el('p', { class: 'nota', text: 'Primeiro a resposta do dia; gráficos e mapa carregam depois.' }));
+}
+
+// ------------------------------------------------------------------ localização
+
+function localizarGps(silencioso, recente = false) {
+  return new Promise((ok0) => {
+    // No iPhone (app na tela inicial), o GPS às vezes não chama nenhum dos retornos, nem o de tempo esgotado.
+    // Esta trava encerra a espera em 12 s mantendo o último local, para o botão nunca ficar girando.
+    let feito = false;
+    const ok = () => { if (!feito) { feito = true; clearTimeout(trava); ok0(); } };
+    const trava = setTimeout(() => { if (!feito) usarPadrao('GPS demorou demais.'); }, 12000);
+    const usarPadrao = (motivo) => {
+      if (feito) return;
+      // sem GPS: o último local salvo (já arredondado); se não houver, o centro de Campo Bom
+      if (estado.local && estado.local.origem !== 'padrao') {
+        estado.avisoGps = `${motivo} Mostrando o último local usado (${estado.local.nome}); toque no nome do local para trocar.`;
+        atualizarCabecalho(); ok(); return;
+      }
+      definirLocal({ ...CONFIG.padrao, origem: 'padrao' });
+      estado.avisoGps = `${motivo} Usando o centro de Campo Bom; toque no nome do local para buscar outra cidade.`;
+      atualizarCabecalho();
+      ok();
+    };
+    if (!('geolocation' in navigator)) return usarPadrao('GPS não disponível neste navegador.');
+    navigator.geolocation.getCurrentPosition((pos) => {
+      if (feito) return;
+      // A coordenada exata fica só em memória, para distâncias no aparelho.
+      estado.localExato = { lat: pos.coords.latitude, lon: pos.coords.longitude, precisao: pos.coords.accuracy };
+      estado.avisoGps = null;
+      definirLocal({ nome: 'Sua localização', regiao: `GPS, precisão de ${Math.round(pos.coords.accuracy)} m`, lat: pos.coords.latitude, lon: pos.coords.longitude, origem: 'gps' });
+      ok();
+    }, (err) => {
+      const m = { 1: 'Permissão de localização negada.', 2: 'GPS sem sinal.', 3: 'GPS demorou demais.' }[err.code] || 'GPS falhou.';
+      usarPadrao(m);
+    }, { enableHighAccuracy: false, timeout: 9000, maximumAge: recente ? 0 : 2 * 60000 });
+  });
+}
+
+/**
+ * Estado da permissão de localização sem abrir o pedido: 'granted', 'denied', 'prompt' ou null (navegador sem a API).
+ * Teto de 1 s para a abertura nunca esperar o navegador.
+ */
+async function permissaoGps() {
+  try {
+    const consulta = navigator.permissions.query({ name: 'geolocation' }).then((p) => p.state);
+    return await Promise.race([consulta, new Promise((ok) => setTimeout(() => ok(null), 1000))]);
+  } catch { return null; }
+}
+
+/**
+ * GPS automático (abrir o app, voltar a ele, rodada de 10 min): só roda quando a permissão já está concedida.
+ * Sem ela, cada chamada abre o pedido de novo (no iPhone, com o app na tela inicial, a cada abertura); então vale
+ * o último local salvo, e a posição atual fica para a linha "Sua localização atual" da janela de locais.
+ * Na primeiríssima abertura, sem nenhum local salvo, o pedido aparece uma vez.
+ */
+async function localizarSozinho() {
+  if (estado.local && await permissaoGps() !== 'granted') return;
+  return localizarGps(true, true);
+}
+
+function definirLocal(l) {
+  const mudou = !estado.local || chaveLocal(estado.local) !== chaveLocal(l);
+  // salva só no aparelho e já arredondado: a posição exata não é persistida
+  estado.local = { ...l, lat: l.lat, lon: l.lon };
+  prefs.gravar('local', { id: l.id ?? null, nome: l.nome, regiao: l.regiao, origem: l.origem, lat: arredondaCoord(l.lat), lon: arredondaCoord(l.lon) });
+  if (l.origem === 'gps') lembrarGps(l);
+  else estado.localExato = null;
+  atualizarCabecalho();
+  return mudou;
+}
+
+// Último ponto do GPS (arredondado): a aba "Aqui" volta a ele na hora, com os dados salvos, enquanto o GPS responde.
+// O dado salvo do ponto anterior é apagado quando o ponto muda (salvo se for de uma favorita).
+function lembrarGps(l) {
+  const novo = { lat: arredondaCoord(l.lat), lon: arredondaCoord(l.lon) };
+  const antigo = prefs.ler('ultimoGps', null);
+  if (antigo && chaveLocal(antigo) !== chaveLocal(novo) && !locais?.ehFavorita(antigo)) apagarInstantaneo(antigo);
+  prefs.gravar('ultimoGps', novo);
+}
+
+const pontoExato = () => estado.localExato || estado.local;
+// Nome do local no meio de uma frase: a posição do GPS vira "o seu local" (o rótulo "Sua localização" é do topo).
+const localNaFrase = () => (estado.local?.origem === 'gps' || !estado.local?.nome ? 'o seu local' : estado.local.nome);
+
+// Cidade escolhida à mão vale só nesta sessão; ao abrir o app de novo, volta para a posição atual.
+function marcarEscolha(sim) { try { if (sim) sessionStorage.setItem('localEscolhido', '1'); else sessionStorage.removeItem('localEscolhido'); } catch {} }
+
+let locais = null;
+
+function configurarLocal() {
+  locais = criarLocais({
+    atual: () => estado.local,
+    escolherCidade: (c) => { marcarEscolha(true); trocarLocal({ id: c.id ?? null, nome: c.nome, regiao: c.regiao, lat: c.lat, lon: c.lon, origem: 'cidade' }); },
+    usarGps: usarLocalizacaoAtual,
+    aoMudarFavoritas: (favoritas, removida) => {
+      if (!removida) { guardarInstantaneoAtual(); ocioso(preCarregarLocais); return; }
+      // a cidade tirada perde os dados salvos, salvo se for também o último ponto do GPS
+      const gps = prefs.ler('ultimoGps', null);
+      if (!gps || chaveLocal(gps) !== chaveLocal(removida)) apagarInstantaneo(removida);
+    },
+  });
+  $('#btn-local').addEventListener('click', () => locais.abrir());
+}
+
+/**
+ * Troca o local da tela (aba de cidade, favorita, recente ou resultado da busca). Os dados do local anterior saem
+ * na hora: entram os dados salvos do novo local (instantâneo) ou, sem eles, a tela fica esmaecida até a previsão chegar.
+ * @param {object} l local com nome, regiao, lat, lon, origem e id opcional (GeoNames)
+ */
+async function trocarLocal(l) {
+  definirLocal(l);
+  await carregarInstantaneo();
+  atualizar({ forcar: true });
+}
+
+/**
+ * Volta para a posição do aparelho: mostra na hora o último ponto do GPS e confirma a posição; se ela mudou, troca
+ * os dados de novo. A aba "Aqui" (pedir = false) reaproveita o ponto já obtido e só consulta o GPS com a permissão
+ * concedida, para o pedido do sistema não reaparecer a cada troca de aba; a linha "Sua localização atual" da janela de
+ * locais (pedir = true) consulta o GPS sempre.
+ * @param {{pedir?: boolean}} [op]
+ */
+async function usarLocalizacaoAtual({ pedir = false } = {}) {
+  marcarEscolha(false);
+  const ultimo = prefs.ler('ultimoGps', null);
+  if (ultimo && Number.isFinite(ultimo.lat) && Number.isFinite(ultimo.lon)) {
+    definirLocal({ nome: 'Sua localização', regiao: 'GPS', lat: ultimo.lat, lon: ultimo.lon, origem: 'gps' });
+    await carregarInstantaneo();
+  }
+  const antes = estado.local ? chaveLocal(estado.local) : null;
+  const pedido = ultimo ? atualizar({ forcar: true }) : Promise.resolve();
+  await (pedir || !ultimo ? localizarGps(false) : localizarSozinho());
+  await pedido;
+  if (chaveLocal(estado.local) !== antes || !ultimo) { await carregarInstantaneo(); await atualizar({ forcar: true }); }
+}
+
+// ------------------------------------------------------------------ dados salvos por local (instantâneos)
+// Previsão e cenários das favoritas e do último ponto do GPS ficam no Cache Storage com a chave do local
+// (coordenada arredondada, chaveLocal). Trocar de aba mostra esses dados na hora, com o aviso de dados salvos,
+// enquanto a busca nova sai. preCarregarLocais os renova em segundo plano.
+
+const chaveInstantaneo = (tipo, l) => `${tipo}@${chaveLocal(l)}`;
+const guardaInstantaneo = (l) => !!l && (l.origem === 'gps' || !!locais?.ehFavorita(l));
+
+function apagarInstantaneo(l) { apagarCache(chaveInstantaneo('previsao', l)); apagarCache(chaveInstantaneo('ensemble', l)); }
+
+function guardarInstantaneoAtual() {
+  if (!guardaInstantaneo(estado.local)) return;
+  if (estado.prevBruta && !estado.cacheAntigo) salvarCache(chaveInstantaneo('previsao', estado.local), estado.prevBruta);
+  if (estado.ensBruto) salvarCache(chaveInstantaneo('ensemble', estado.local), estado.ensBruto);
+}
+
+/**
+ * Põe na tela os dados salvos do local atual, sem misturar com os do local anterior: medições, radar e cenários
+ * do outro local são descartados; a previsão vem do instantâneo (até CONFIG.locais.idadeMaxSalvoH) ou fica vazia,
+ * com a tela esmaecida (main[aria-busy]) até renderTudo receber a previsão nova.
+ */
+async function carregarInstantaneo() {
+  const chave = chaveLocal(estado.local);
+  delete estado.erros.previsao;
+  Object.assign(estado, { obs: null, obsEm: null, radarAgora: null, radarAgoraEm: null, chegada: null, chegadaEm: null, ens: null, ensBruto: null, ensEm: null, ancoragem: null });
+  const [p, e] = await Promise.all([lerCache(`previsao@${chave}`), lerCache(`ensemble@${chave}`)]);
+  if (chaveLocal(estado.local) !== chave) return; // outra troca começou enquanto lia
+  const recente = (c) => c?.dados && Date.now() - c.salvoEm < CONFIG.locais.idadeMaxSalvoH * 3600000;
+  if (recente(p)) {
+    Object.assign(estado, { prevBruta: p.dados, prevEm: p.salvoEm, cacheAntigo: true });
+    if (recente(e)) Object.assign(estado, { ensBruto: e.dados, ensEm: e.salvoEm });
+    recalibrar();
+    renderTudo();
+  } else {
+    Object.assign(estado, { prevBruta: null, prev: null, prevEm: null, trocando: true });
+    $('#conteudo').setAttribute('aria-busy', 'true');
+    $('#agora').replaceChildren(); // a temperatura do topo era do local anterior
+    atualizarCabecalho();
+  }
+}
+
+/**
+ * Renova em segundo plano a previsão e os cenários de cada favorita fora de uso cujo dado salvo passou de
+ * CONFIG.locais.preCarregar*Min. Uma favorita por vez, só com a tela visível e com internet; falhas são ignoradas
+ * (a troca de aba ainda funciona, só sem a resposta instantânea).
+ */
+let preCarregando = false;
+async function preCarregarLocais() {
+  if (preCarregando || !locais || estado.apagado || document.hidden || navigator.onLine === false) return;
+  preCarregando = true;
+  const venceu = (c, min) => !c?.dados || Date.now() - c.salvoEm > min * 60000;
+  try {
+    for (const f of locais.favoritas()) {
+      if (estado.apagado || document.hidden) break;
+      if (estado.local && chaveLocal(f) === chaveLocal(estado.local)) continue;
+      const [p, e] = await Promise.all([lerCache(chaveInstantaneo('previsao', f)), lerCache(chaveInstantaneo('ensemble', f))]);
+      if (venceu(p, CONFIG.locais.preCarregarPrevisaoMin)) {
+        const pv = await buscarPrevisao(f.lat, f.lon).catch(() => null);
+        if (pv && locais.ehFavorita(f)) await salvarCache(chaveInstantaneo('previsao', f), pv);
+      }
+      if (venceu(e, CONFIG.locais.preCarregarCenariosMin)) {
+        const r = await buscarEnsemble(f.lat, f.lon).catch(() => null);
+        if (r?.ens && locais.ehFavorita(f)) await salvarCache(chaveInstantaneo('ensemble', f), r.ens);
+      }
+    }
+  } finally { preCarregando = false; }
+}
+
+// ------------------------------------------------------------------ atualização
+
+let atualizando = false, atualizandoDesde = 0;
+/**
+ * Busca as fontes vencidas (CONFIG.intervalos) em paralelo e redesenha quando chegam.
+ * Retorna quando a previsão chega (ou quando todas terminam, com teto de 30 s), para o botão parar de girar.
+ * @param {{forcar?:boolean, local?:boolean, agora?:boolean}} [op] forcar/local ignoram a validade;
+ *   local também descarta dados do local anterior; agora força medições e radar.
+ */
+async function atualizar({ forcar = false, local = false, agora = false } = {}) {
+  if (!estado.local || estado.apagado) return;
+  if (atualizando && Date.now() - atualizandoDesde > 40000) atualizando = false; // busca presa (app suspenso no meio): recomeça
+  // Uma busca automática não repete outra em andamento; a pedida pelo botão sempre sai na hora, sem esperar.
+  if (atualizando && !forcar && !agora) return;
+  atualizando = true; atualizandoDesde = Date.now();
+  $('#btn-atualizar').setAttribute('aria-busy', 'true');
+  $('#btn-atualizar').setAttribute('aria-label', 'Atualizando');
+  const venceu = (em, min) => forcar || local || !em || Date.now() - em > min * 60000;
+  const I = CONFIG.intervalos;
+  const { lat, lon } = estado.local;
+  // Respostas que chegam depois de uma troca de local são descartadas: nunca misturam dois locais na tela.
+  const chave = chaveLocal(estado.local);
+  const aqui = () => !!estado.local && chaveLocal(estado.local) === chave;
+  try {
+    // Todas as fontes saem ao mesmo tempo; a primeira tela é desenhada assim que a previsão chega.
+    if (local) { estado.ens = null; estado.ensBruto = null; estado.obs = null; estado.alertas = null; }
+    const tarefas = [];
+    let principal = Promise.resolve();
+    if (venceu(estado.prevEm, I.previsao)) tarefas.push(principal = buscarPrevisao(lat, lon)
+      .then((pv) => {
+        if (!aqui()) return;
+        estado.prevBruta = pv; estado.prevEm = Date.now(); estado.cacheAntigo = false; delete estado.erros.previsao;
+        salvarCache('previsao', pv);
+        if (guardaInstantaneo(estado.local)) salvarCache(chaveInstantaneo('previsao', estado.local), pv);
+        recalibrar();
+      })
+      .catch((e) => { if (aqui()) estado.erros.previsao = e.message; })
+      .then(() => { if (aqui()) renderTudo(); }));
+    if (venceu(estado.ensEm, I.cenarios)) tarefas.push(buscarEnsemble(lat, lon).then(({ ens, erros }) => {
+      if (!aqui()) return;
+      estado.ensErros = erros;
+      if (ens) {
+        estado.ensBruto = ens; estado.ensEm = Date.now(); salvarCache('ensemble', ens); delete estado.erros.ensemble;
+        if (guardaInstantaneo(estado.local)) salvarCache(chaveInstantaneo('ensemble', estado.local), ens);
+        recalibrar();
+      }
+      else estado.erros.ensemble = erros.join('; ') || 'sem dados';
+    }));
+    const w = workerConfigurado();
+    // Medições: Worker (INMET + METAR); sem ele, só a última leitura do INMET de Campo Bom direto.
+    if (agora || venceu(estado.obsEm, I.medicoes)) tarefas.push((w ? buscarObservacoes(lat, lon).catch(() => buscarObservacoesDireto()) : buscarObservacoesDireto())
+      .then((o) => { if (!aqui()) return; estado.obs = o; estado.obsEm = Date.now(); salvarCache('observacoes', o); delete estado.erros.medicoes; recalibrar(); })
+      .catch((e) => { if (aqui()) estado.erros.medicoes = e.message; }));
+    // Alertas: Worker (resposta enxuta) ou INMET direto. Falha vira "Alertas indisponíveis".
+    if (venceu(estado.alertasEm, I.alertas)) tarefas.push((w ? buscarAlertas().catch(() => buscarAlertasDireto()) : buscarAlertasDireto())
+      .then((a) => { estado.alertas = a; estado.alertasEm = Date.now(); delete estado.erros.alertas; })
+      .catch((e) => { estado.alertas = null; estado.erros.alertas = e.message; }));
+    // Radar sobre o ponto: diz se está chovendo agora, mesmo entre as leituras horárias da estação.
+    if (agora || venceu(estado.radarAgoraEm, 5)) tarefas.push(buscarChuvaRadar(lat, lon)
+      .then((r) => { if (aqui()) { estado.radarAgora = r; estado.radarAgoraEm = Date.now(); } })
+      .catch(() => { if (aqui()) estado.radarAgora = null; }));
+    // Chuva chegando: movimento dos ecos do radar extrapolado até o local (mesma cadência do radar).
+    if (agora || venceu(estado.chegadaEm, 5)) tarefas.push(buscarChegadaChuva(lat, lon)
+      .then((c) => { if (aqui()) { estado.chegada = c; estado.chegadaEm = Date.now(); } })
+      .catch(() => { if (aqui()) estado.chegada = null; }));
+    // El Niño: arquivo do robô do GitHub ou Worker; no botão atualizar, busca de novo também
+    if (venceu(estado.ensoEm, I.enso)) tarefas.push(buscarEnso()
+      .then((e) => { estado.enso = e; estado.ensoEm = Date.now(); salvarCache('enso', e); delete estado.erros.enso; })
+      .catch((e) => { estado.erros.enso = e.message; }));
+    if (w && venceu(estado.acertoEm, I.acerto)) tarefas.push(Promise.all(VERIFICACAO.map((v) => buscarAcerto(v.id).then((a) => { estado.acerto[v.id] = a; }).catch(() => {}))).then(() => { estado.acertoEm = Date.now(); recalibrar(); }));
+    // Calibração com o histórico: arquivo mensal do robô do GitHub; sem ele, o painel segue sem correção histórica.
+    if (venceu(estado.calibEm, I.acerto)) tarefas.push(buscarCalibracao()
+      .then((k) => { estado.calib = k; estado.calibEm = Date.now(); salvarCache('calibracao', k); delete estado.erros.calibracao; recalibrar(); })
+      .catch((e) => { estado.erros.calibracao = e.message; }));
+    // O botão para de girar quando a previsão chega. As outras fontes (medições, alertas, radar, El Niño)
+    // continuam chegando e redesenham a tela sozinhas, com teto de 30 s: uma fonte lenta não segura o botão.
+    const resto = Promise.race([Promise.all(tarefas), new Promise((r) => setTimeout(r, 30000))])
+      .then(() => { if (tarefas.length && estado.prev) renderTudo(); })
+      .finally(() => { atualizando = false; atualizarCabecalho(); });
+    await Promise.race([principal, resto]);
+  } catch {
+    atualizando = false;
+  } finally {
+    if (!tudoRodando) { $('#btn-atualizar').removeAttribute('aria-busy'); $('#btn-atualizar').setAttribute('aria-label', 'Atualizar'); }
+    atualizarCabecalho();
+  }
+}
+
+function agendar() {
+  // Os dados são buscados ao abrir o app, ao voltar para ele (inclusive pelo atalho na tela inicial), no botão
+  // atualizar e, com a tela aberta e visível, a cada CONFIG.atualizarTelaAbertaMin minutos sem atualização.
+  // O relógio de 60 s reescreve o "Atualizado às..." do topo e confere se a última rodada já venceu.
+  // Não há busca com a página escondida nem automática ao reconectar.
+  setInterval(() => {
+    atualizarCabecalho();
+    if (estado.prev) renderAgora(); // temperatura de agora avança a cada minuto (temperaturaAgora)
+    const venceu = Date.now() - ultimaRodada >= CONFIG.atualizarTelaAbertaMin * 60000;
+    if (venceu && !document.hidden && navigator.onLine !== false) atualizarTudo();
+  }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizarTudo(); });
+  // página restaurada do cache de navegação (voltar/avançar ou reabrir a aba)
+  window.addEventListener('pageshow', (e) => { if (e.persisted) atualizarTudo(); });
+  window.addEventListener('online', () => avisar('Conexão de volta. Toque em atualizar para buscar os dados novos.'));
+  window.addEventListener('offline', () => avisar('Sem conexão. Mostrando os últimos dados salvos, que podem estar desatualizados.', true));
+  $('#btn-atualizar').addEventListener('click', () => atualizarTudo());
+}
+
+// Atualiza tudo, sem exceção: posição atual (salvo cidade escolhida nesta sessão), previsão, cenários,
+// medições, radar, alertas, El Niño, acerto dos modelos, mapa e a própria versão do app.
+// ultimaRodada: início da última rodada (ou da abertura do app), base da atualização a cada 10 min com a tela aberta.
+let tudoRodando = false, tudoDesde = 0, ultimaRodada = Date.now(), rodada = 0;
+async function atualizarTudo() {
+  // Já está atualizando tudo: o giro do botão mostra isso. Mas se a rodada passou de 45 s (o iPhone
+  // suspende o app no meio e as esperas nunca terminam), ela é abandonada e uma nova começa.
+  if (tudoRodando && Date.now() - tudoDesde < 45000) return;
+  const minha = ++rodada;
+  tudoRodando = true; tudoDesde = ultimaRodada = Date.now();
+  const vigia = setTimeout(() => { if (rodada === minha) pararGiro(); }, 50000);
+  const btn = $('#btn-atualizar');
+  btn.setAttribute('aria-busy', 'true'); btn.setAttribute('aria-label', 'Atualizando');
+  try {
+    let escolha = false;
+    try { escolha = sessionStorage.getItem('localEscolhido') === '1'; } catch {}
+    const chave = () => (estado.local ? `${arredondaCoord(estado.local.lat)},${arredondaCoord(estado.local.lon)}` : null);
+    const antes = chave();
+    // GPS e busca começam juntos: os dados chegam sem esperar o GPS; se a posição mudou, busca de novo.
+    const gps = escolha && estado.local?.origem === 'cidade' ? Promise.resolve() : localizarSozinho();
+    await atualizar({ forcar: true });
+    await gps;
+    if (chave() !== antes) await atualizar({ forcar: true, local: true });
+  } finally {
+    clearTimeout(vigia);
+    if (rodada === minha) pararGiro();
+    ocioso(preCarregarLocais);
+    navigator.serviceWorker?.getRegistration?.().then((r) => r?.update()).catch(() => {});
+  }
+}
+
+function pararGiro() {
+  tudoRodando = false;
+  const btn = $('#btn-atualizar');
+  btn.removeAttribute('aria-busy'); btn.setAttribute('aria-label', 'Atualizar');
+  atualizarCabecalho();
+}
+
+function atualizarCabecalho() {
+  if (estado.local) {
+    $('#local-nome').textContent = estado.local.nome;
+    $('#btn-local').setAttribute('aria-label', `Local: ${estado.local.nome}. Toque para trocar.`);
+  }
+  const h = $('#local-hora');
+  locais?.renderAbas();
+  if (!estado.prevEm) { h.textContent = estado.trocando ? 'buscando a previsão…' : 'sem dados ainda'; return; }
+  const atraso = Date.now() - estado.prevEm > 45 * 60000;
+  h.textContent = `Atualizado às ${fmt.horaMin(estado.prevEm, estado.prev?.offset ?? -10800)}${atraso ? ', desatualizado' : ''}`;
+  h.classList.toggle('atrasado', atraso);
+  renderAgora();
+  const msgs = [];
+  if (!navigator.onLine) msgs.push('Sem conexão: dados salvos podem estar desatualizados.');
+  else if (estado.cacheAntigo) msgs.push('Mostrando dados salvos enquanto atualiza.');
+  if (estado.erros.previsao) msgs.push(`Previsão não atualizou (${estado.erros.previsao}).`);
+  if (estado.avisoGps && estado.local?.origem !== 'cidade') msgs.push(estado.avisoGps);
+  if (msgs.length) avisar(msgs.join(' '), Boolean(estado.erros.previsao) || !navigator.onLine);
+  else avisar('', false);
+}
+
+/**
+ * Sensação térmica de agora, uma só para todas as telas. Medida: calculada pela mesma fórmula da sensação
+ * prevista (sensacaoTermica, padrão NWS) com a temperatura mostrada em "Agora" (estação mais próxima, até
+ * 25 km) e a umidade (ou o ponto de orvalho) e o vento da mesma estação e da mesma leitura. O vento só pesa
+ * no frio: acima de 15 °C, falta de vento não impede a conta. A sensação que o INMET publica não é usada
+ * (fórmula não documentada, dava 2 a 3 °C a mais em noites úmidas). Sem medição, a sensação prevista para
+ * esta hora (já calibrada e ancorada na medição).
+ * @returns {{valor:number, medida:boolean, title:string}|null}
+ */
+/**
+ * Temperatura de agora em tempo real. A estação (a até 25 km, leitura de até 2 h) publica com 40 a 70 min de
+ * atraso; por isso o valor parte da leitura e segue a previsão até este minuto, com a mesma regra da ancoragem
+ * do gráfico (ancorarTemperatura): previsão do minuto (interpolada entre as horas) + diferença medida na leitura,
+ * que cai linearmente a zero em REGRAS.ancoragem.horas. No instante da leitura o valor é a própria medição.
+ * Sem ancoragem válida (diferença grande demais com a previsão), fica a leitura pura.
+ * @returns {{valor:number, med:object, ajuste:number}|null} med: leitura escolhida; ajuste: °C somados à leitura
+ */
+function temperaturaAgora() {
+  const pt = pontoExato(), agora = Date.now();
+  if (!estado.obs || !pt) return null;
+  const med = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, agora, REGRAS.ancoragem.idadeMaxMin).escolhida;
+  if (!med || med.distancia > REGRAS.ancoragem.distanciaKm) return null;
+  const p = estado.prevSemAncora, anc = estado.ancoragem;
+  if (!p || !anc || anc.medida.ms !== med.ms || agora <= med.ms) return { valor: med.valor, med, ajuste: 0 };
+  const curva = (ms) => {
+    const k = p.horas.findIndex((h, i) => h <= ms && p.horas[i + 1] > ms);
+    if (k < 0) return null;
+    const a = tempHora(p, 'temperature_2m', k, modelosAtivos()), b = tempHora(p, 'temperature_2m', k + 1, modelosAtivos());
+    return valido(a) && valido(b) ? a + (b - a) * (ms - p.horas[k]) / (p.horas[k + 1] - p.horas[k]) : null;
+  };
+  const naLeitura = curva(med.ms), agoraPrev = curva(agora);
+  if (!valido(naLeitura) || !valido(agoraPrev)) return { valor: med.valor, med, ajuste: 0 };
+  const peso = Math.max(0, 1 - (agora - med.ms) / (REGRAS.ancoragem.horas * 3600000));
+  const valor = agoraPrev + (med.valor - naLeitura) * peso;
+  return { valor, med, ajuste: valor - med.valor };
+}
+
+/**
+ * Sensação de agora: fórmula do NWS com a temperatura de agora (temperaturaAgora) e o vapor e o vento da mesma leitura.
+ * @param {boolean} [daLeitura] true: com a temperatura da própria leitura (bloco "Medições agora", que mostra a leitura)
+ */
+function sensacaoAgora(daLeitura = false) {
+  const ta0 = temperaturaAgora();
+  const ta = ta0 && daLeitura ? { ...ta0, valor: ta0.med.valor, ajuste: 0 } : ta0;
+  if (ta) {
+    const t = ta.med, l = t.fonte.leituras;
+    const mesma = (k) => (l?.[k] && l[k].ms === t.ms && leituraValida(k, l[k].valor) ? l[k].valor : null);
+    // vapor d'água da leitura (umidade ou orvalho), mantido; só a temperatura avança até agora
+    const ur = mesma('umidade'), orv = mesma('orvalho'), vento = mesma('vento');
+    const e = valido(ur) ? (ur / 100) * pressaoVapor(t.valor) : valido(orv) ? pressaoVapor(Math.min(orv, t.valor)) : null;
+    const v = valido(e) || ta.valor >= 15 ? sensacaoTermica(ta.valor, e, valido(vento) ? vento : ta.valor >= 15 ? 0 : null) : null;
+    if (valido(v)) return { valor: v, medida: true, title: `Calculada com temperatura, umidade e vento de ${t.fonte.nome} (leitura ${fmt.idade(t.ms)})${ta.ajuste ? ', com a temperatura levada até agora' : ''}` };
+  }
+  const p = estado.prev, agora = Date.now();
+  const i = p ? p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000) : -1;
+  const v = i < 0 ? null : tempHora(p, 'apparent_temperature', i, modelosAtivos());
+  return valido(v) ? { valor: v, medida: false, title: 'Prevista para esta hora' } : null;
+}
+
+// "sensação 28°" ao lado da temperatura de agora; some sem dado.
+function sensacaoResumo() {
+  const s = sensacaoAgora();
+  return s ? el('span', { class: 'sens-agora', title: s.title }, 'sensação ', el('b', { text: fmt.c(s.valor) })) : null;
+}
+
+// Temperatura agora: medição da estação mais próxima (até 25 km e 2 h); sem ela, a previsão para esta hora.
+// No resumo de hoje, ao lado, a sensação térmica de agora (sensacaoAgora), em destaque.
+function renderAgora() {
+  const alvo = $('#agora');
+  const noResumo = document.getElementById('agora-hoje');
+  const p = estado.prev;
+  const ta = temperaturaAgora();
+  if (ta) {
+    const med = ta.med;
+    alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(ta.valor) }));
+    alvo.title = `${nomeEstacao(med.fonte)} · ${fmt.horaMin(med.ms, p?.offset ?? -10800)}: ${fmt.c1(med.valor)} medidos a ${fmt.n(med.distancia, 0)} km`
+      + (Math.abs(ta.ajuste) >= 0.05 ? `, ${ta.ajuste > 0 ? '+' : '−'}${fmt.n(Math.abs(ta.ajuste), 1)} °C pela variação prevista até agora` : '');
+    alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(ta.valor)}. ${alvo.title}`);
+    if (noResumo) { noResumo.replaceChildren(el('b', { text: fmt.c(ta.valor) }), el('span', { class: 'rot-agora', text: 'agora' }), sensacaoResumo()); noResumo.title = alvo.title; }
+    return;
+  }
+  if (!p) { alvo.replaceChildren(); return; }
+  const { pesos } = pesosAtuais();
+  const mods = modelosAtivos();
+  // valor "current" dos modelos (intervalo de 15 min); se faltar, a hora cheia mais recente
+  let v = valido(p.atual?.temp?.[MODELO_TEMP]) ? p.atual.temp[MODELO_TEMP] : mediana(mods.map((m) => p.atual?.temp?.[m]), mods.map((m) => pesos[m] ?? 1));
+  if (!valido(v)) v = p.atual?.geral ?? null;
+  if (!valido(v)) {
+    let i = -1;
+    for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= Date.now()) i = k;
+    v = i < 0 ? null : tempHora(p, 'temperature_2m', i, mods);
+  }
+  alvo.replaceChildren(el('span', { class: 'rot-agora', text: 'Agora' }), el('b', { text: fmt.c(v) ?? '–' }));
+  alvo.title = 'Sem medição recente perto daqui; valor previsto pelos modelos para esta hora.';
+  alvo.setAttribute('aria-label', `Temperatura agora ${fmt.c(v) ?? 'sem dado'}, prevista`);
+  if (noResumo) { noResumo.replaceChildren(el('b', { text: fmt.c(v) ?? '–' }), el('span', { class: 'rot-agora', text: 'agora (prevista)' }), sensacaoResumo()); noResumo.title = alvo.title; }
+}
+
+// No topo, a temperatura só aparece quando a de hoje (no resumo) não está visível.
+let obsAgora = null;
+function observarAgora() {
+  const alvo = document.getElementById('agora-hoje');
+  if (obsAgora) obsAgora.disconnect();
+  if (!alvo || !('IntersectionObserver' in window)) return;
+  obsAgora = new IntersectionObserver(([e]) => { $('#agora').classList.toggle('oculto', e.isIntersecting && estado.aba === 'hoje'); }, { threshold: 0.5 });
+  obsAgora.observe(alvo);
+}
+
+function avisar(texto, erro) {
+  const e = $('#estado');
+  e.textContent = texto;
+  e.classList.toggle('erro', !!erro);
+}
+
+// ------------------------------------------------------------------ análise por dia
+
+function modelosAtivos() { return Object.keys(MODELOS).filter((m) => estado.prev?.modelos[m]); }
+
+function estacaoAcerto() {
+  const p = pontoExato();
+  return VERIFICACAO.filter((v) => v.chuva && estado.acerto[v.id]?.dias)
+    .sort((a, b) => distanciaKm(p.lat, p.lon, a.lat, a.lon) - distanciaKm(p.lat, p.lon, b.lat, b.lon))
+    .map((v) => estado.acerto[v.id])[0] || null;
+}
+
+// O que o painel aprendeu só vale perto da estação onde aprendeu (até 50 km).
+function aprendizadoLocal() {
+  const a = estacaoAcerto();
+  if (!a?.porModelo || !a.estacao) return null;
+  const p = pontoExato();
+  return distanciaKm(p.lat, p.lon, a.estacao.lat, a.estacao.lon) <= REGRAS.acerto.distanciaMaxKm ? a : null;
+}
+
+function pesosAtuais() {
+  const a = aprendizadoLocal()?.porModelo;
+  const mapa = {};
+  if (a) for (const m of Object.keys(a)) {
+    const l1 = a[m]?.[1] || {};
+    mapa[m] = { dias: Math.max(l1.amostrasChuva ?? 0, l1.amostrasTmax ?? 0), maeChuva: l1.maeChuva, maeTmax: l1.maeTmax };
+  }
+  return pesosModelos(a ? mapa : null, modelosAtivos(), calibracaoLocal() ? pesosHistoricos(estado.calib) : null);
+}
+
+// Calibração com o histórico: só vale perto da estação onde foi medida (até 50 km).
+function calibracaoLocal() {
+  const p = estado.prevBruta || estado.prev;
+  return estado.calib && p && calibracaoAplicavel(estado.calib, p.lat, p.lon) ? estado.calib : null;
+}
+
+/**
+ * Fonte única dos valores exibidos (inclui a ancoragem da temperatura na medição de agora): recalcula estado.prev e estado.ens a partir das séries brutas sempre que
+ * chega previsão, cenários, calibração ou aprendizado novo. Todas as telas leem estado.prev/estado.ens, então
+ * herdam a mesma correção (temperatura, rajada e vento), sem ajustes separados por tela.
+ */
+// Última temperatura medida perto do ponto (estação mais próxima com leitura válida), ou null.
+function temperaturaMedida(idadeMaxMin, distanciaMaxKm) {
+  const pt = pontoExato();
+  if (!estado.obs || !pt) return null;
+  const c = escolherFonte(fontesNormalizadas(), 'temperatura', pt.lat, pt.lon, Date.now(), idadeMaxMin).escolhida;
+  return c && c.distancia <= distanciaMaxKm ? { valor: c.valor, ms: c.ms, fonte: c.fonte.nome } : null;
+}
+
+function recalibrar() {
+  const bruta = estado.prevBruta;
+  if (!bruta) return;
+  const calib = calibracaoLocal();
+  const apr = aprendizadoLocal()?.porModelo || null;
+  const ref = estado.prevEm || Date.now();
+  estado.prev = calibrarPrevisao(bruta, { calib, aprendizado: apr, refMs: ref });
+  estado.prevSemAncora = estado.prev; // usada por temperaturaAgora, que aplica a ancoragem no minuto exato
+  // próximas horas ancoradas na temperatura medida agora (some em REGRAS.ancoragem.horas)
+  const medida = temperaturaMedida(REGRAS.ancoragem.idadeMaxMin, REGRAS.ancoragem.distanciaKm);
+  const anc = medida ? ancorarTemperatura(estado.prev, medida, MODELO_TEMP, Date.now()) : null;
+  if (anc) estado.prev = anc.prev;
+  estado.ancoragem = anc && anc.delta !== null ? { delta: anc.delta, medida } : null; // delta 0: previsão já igual à medição
+  estado.ens = estado.ensBruto ? calibrarEnsemble(estado.ensBruto, calib, ref, bruta.offset) : null;
+  cacheDias.clear();
+}
+
+function acertoCtx(diaIndice) {
+  const a = estacaoAcerto();
+  if (!a?.porModelo) return null;
+  const lead = Math.min(5, Math.max(1, diaIndice + 1));
+  const taxas = Object.values(a.porModelo).map((m) => m?.[lead]?.taxaChuva);
+  const amostras = maximo(Object.values(a.porModelo).map((m) => m?.[lead]?.amostrasChuva));
+  const p = pontoExato();
+  return { dias: amostras || 0, taxaChuva: mediana(taxas), distanciaKm: distanciaKm(p.lat, p.lon, a.estacao.lat, a.estacao.lon) };
+}
+
+function datas() {
+  const p = estado.prev;
+  const hoje = partesLocais(Date.now(), p.offset).data;
+  return p.diario.datas.filter((d) => d >= hoje);
+}
+
+const cacheDias = new Map();
+/**
+ * Análise de um dia: resumos por modelo, cenários, avaliarDia, janela provável de chuva, pico de rajada
+ * (direção por média vetorial), mínima e máxima pelo ECMWF com correção de viés e limites da Semana.
+ * Memorizada em cacheDias pela data e pelos instantes de atualização de cada fonte.
+ * @param {string} data "AAAA-MM-DD" local
+ * @param {number} diaIndice 0 = hoje
+ * @param {boolean} desdeAgora considerar só as horas restantes
+ */
+function analisarDia(data, diaIndice, desdeAgora) {
+  const chave = `${data}|${desdeAgora}|${estado.prevEm}|${estado.ensEm}|${estado.obsEm}|${estado.acertoEm}|${estado.chegadaEm}|${estado.radarAgoraEm}|${estado.calibEm}`;
+  if (cacheDias.has(chave)) return cacheDias.get(chave);
+  const p = estado.prev, mods = modelosAtivos();
+  // Hoje, com o radar seco e nada chegando, as horas cobertas pelo radar saem da conta do dia:
+  // o veredito passa a valer para o que resta depois delas (os modelos ainda não viram a chuva parar).
+  const seco = desdeAgora && diaIndice === 0 ? secoAgora() : null;
+  let inicio = desdeAgora ? Date.now() : -Infinity;
+  const idxTodo = indicesDoDia(p.horas, data, p.offset);
+  if (seco && indicesDoDia(p.horas, data, p.offset, seco.ateMs).length) inicio = seco.ateMs;
+  const idx = indicesDoDia(p.horas, data, p.offset, inicio);
+  const idxAgora = desdeAgora ? indicesDoDia(p.horas, data, p.offset, Date.now()) : idxTodo; // gráficos: sempre da hora atual
+  const usar = idx.length ? idx : idxTodo;
+  const { pesos, ajustado } = pesosAtuais();
+  const resumos = mods.map((m) => resumoModeloDia(p, m, usar));
+  // A temperatura já vem corrigida nas séries horárias (recalibrar: histórico + aprendizado recente).
+  const apr = aprendizadoLocal();
+  const resumosTodo = mods.map((m) => resumoModeloDia(p, m, idxTodo));
+  const membros = membrosDia(estado.ens, data, p.offset, inicio);
+  const medAgora = diaIndice === 0 ? medicaoChuvaAgora() : null;
+  const av = avaliarDia(resumos, membros, { diaIndice, acerto: acertoCtx(diaIndice), pesos, medicaoAgora: medAgora, calibracao: apr?.calibracao, chegando: diaIndice === 0 && !!chegandoAgora() });
+  const horasChuva = horasProvaveisDeChuva(p, usar, mods);
+  // rajada: pico da mediana horária entre modelos, com horário e direção
+  const cons = consensoHorario(p, 'wind_gusts_10m', mods);
+  let pico = null;
+  for (const i of usar) if (valido(cons.med[i]) && (!pico || cons.med[i] > cons.med[pico])) pico = i;
+  const dirPico = pico === null ? null : direcaoMedia(mods.map((m) => p.modelos[m].vars.wind_direction_10m?.[pico]));
+  const r = {
+    data, diaIndice, idx: usar, idxAgora, idxTodo, resumos, membros, av, horasChuva, pesosAjustados: ajustado,
+    frase: fraseDoDia(av, horasChuva.janela, p.offset),
+    // mínima e máxima: ECMWF (padrão europeu), corrigido pelo aprendizado; sem ECMWF, mediana ponderada
+    tmin: valido(resumosTodo.find((x) => x.modelo === MODELO_TEMP)?.tmin) ? resumosTodo.find((x) => x.modelo === MODELO_TEMP).tmin : mediana(resumosTodo.map((x) => x.tmin), resumosTodo.map((x) => pesos[x.modelo] ?? 1)),
+    tmax: valido(resumosTodo.find((x) => x.modelo === MODELO_TEMP)?.tmax) ? resumosTodo.find((x) => x.modelo === MODELO_TEMP).tmax : mediana(resumosTodo.map((x) => x.tmax), resumosTodo.map((x) => pesos[x.modelo] ?? 1)),
+    // sensação máxima do dia: maior sensação prevista hora a hora (série calibrada e ancorada, a mesma do gráfico)
+    sensMax: maximo(idxTodo.map((i) => tempHora(p, 'apparent_temperature', i, mods))),
+    tminFaixa: [minimo(resumosTodo.map((x) => x.tmin)), maximo(resumosTodo.map((x) => x.tmin))],
+    tmaxFaixa: [minimo(resumosTodo.map((x) => x.tmax)), maximo(resumosTodo.map((x) => x.tmax))],
+    rajadaPico: pico === null ? null : { ms: p.horas[pico], valor: cons.med[pico], dir: dirPico },
+    limites: limitesCoerentes(probLimites(resumos, membros), av.prob),
+    modelosComDado: resumos.filter((x) => x.chuva !== null).map((x) => x.modelo),
+  };
+  cacheDias.set(chave, r);
+  if (cacheDias.size > 60) cacheDias.delete(cacheDias.keys().next().value);
+  return r;
+}
+
+function direcaoMedia(graus) {
+  let x = 0, y = 0, n = 0;
+  for (const g of graus) if (valido(g)) { x += Math.sin(g * Math.PI / 180); y += Math.cos(g * Math.PI / 180); n++; }
+  return n ? (Math.atan2(x, y) * 180 / Math.PI + 360) % 360 : null;
+}
+
+/**
+ * Céu do dia pelos modelos: cobertura média das horas (de dia, se houver) e chance de chuva do veredito.
+ * @returns {ReturnType<typeof condicaoCeu>}
+ */
+function ceuDoDia(a) {
+  const p = estado.prev, mods = modelosAtivos();
+  const nuv = consensoHorario(p, 'cloud_cover', mods).med, dia = consensoHorario(p, 'is_day', mods).med;
+  return condicaoCeu(a.idx.map((i) => nuv[i]), a.idx.map((i) => (valido(dia[i]) ? Math.round(dia[i]) : null)), a.av.prob);
+}
+
+/**
+ * Céu de agora, com medição real quando houver: cobertura de nuvens do METAR mais recente (até
+ * REGRAS.ceuMedido.distanciaKm e REGRAS.ceuMedido.idadeMin); sem METAR, a cobertura dos modelos na hora atual.
+ * A chuva vem só do que se mede agora (radar ou estação): previsão de chuva fica na linha "Vai chover", não no céu.
+ * @returns {(ReturnType<typeof condicaoCeu> & {origem:string})|null}
+ */
+function ceuAgora() {
+  const p = estado.prev, mods = modelosAtivos(), agora = Date.now(), pt = pontoExato();
+  const i = p.horas.findIndex((ms) => agora >= ms && agora < ms + 3600000);
+  const dia = i < 0 ? null : consensoHorario(p, 'is_day', mods).med[i];
+  // entre os METAR válidos dentro da distância, o boletim mais recente (o céu muda mais rápido que a distância pesa)
+  const { escolhida, outras } = escolherFonte(fontesNormalizadas(), 'nuvens', pt.lat, pt.lon, agora, REGRAS.ceuMedido.idadeMin);
+  const medido = [escolhida, ...outras].filter((c) => c?.ok && c.distancia <= REGRAS.ceuMedido.distanciaKm).sort((x, y) => y.ms - x.ms)[0] || null;
+  const modelo = (v) => (i < 0 ? null : consensoHorario(p, v, mods).med[i]);
+  // O METAR só informa nuvens até alguns km de altura (CAVOK e NSC não dizem nada acima de 1.500 m). As nuvens
+  // médias e altas vêm dos modelos, e vale a maior cobertura: sem isso, um céu de nuvens altas virava "Ensolarado".
+  const acima = medido ? maximo([modelo('cloud_cover_mid'), modelo('cloud_cover_high')].filter(valido)) : null;
+  const cobertura = medido ? Math.max(medido.valor, valido(acima) ? acima : 0) : modelo('cloud_cover');
+  const ceu = condicaoCeu([cobertura], [valido(dia) ? Math.round(dia) : null], null);
+  if (!ceu) return null;
+  const origem = !medido ? 'nuvens pela previsão para esta hora'
+    : valido(acima) && acima > medido.valor ? `nuvens baixas medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}; médias e altas pela previsão`
+      : `nuvens medidas em ${medido.fonte.nome}, ${fmt.idade(medido.ms)}`;
+  return { ...ceu, origem };
+}
+
+// ------------------------------------------------------------------ medições
+
+function fontesNormalizadas() {
+  // Converte a série de cada estação em "última leitura válida por variável".
+  const out = [];
+  for (const f of estado.obs?.fontes || []) {
+    const leituras = {};
+    const vars = ['temperatura', 'umidade', 'orvalho', 'pressao', 'vento', 'rajada', 'direcao', 'chuva', 'sensacao', 'nuvens'];
+    for (const v of vars) {
+      for (let k = f.serie.length - 1; k >= 0; k--) {
+        const ponto = f.serie[k];
+        if (ponto[v] !== null && ponto[v] !== undefined) { leituras[v] = { valor: ponto[v], ms: ponto.ms }; break; }
+      }
+    }
+    // Acumulados de chuva: completo (90% das horas) ou, com pelo menos metade das horas, a soma das horas
+    // registradas como mínimo garantido (parcial). Menos que isso fica sem valor: nunca vira zero por falta de dado.
+    if (f.acumulados) for (const [k, a] of Object.entries(f.acumulados)) {
+      const ultimo = f.serie.length ? f.serie[f.serie.length - 1].ms : null;
+      if (!ultimo) continue;
+      if (valido(a.valor)) leituras['chuva_' + k] = { valor: a.valor, ms: ultimo };
+      else if (valido(a.soma) && a.esperado > 1 && a.horas >= a.esperado * 0.5) leituras['chuva_' + k] = { valor: a.soma, ms: ultimo, parcial: { horas: a.horas, esperado: a.esperado } };
+    }
+    out.push({ ...f, leituras });
+  }
+  return out;
+}
+
+// Chuva agora, só com dado real. O radar (quadro de até 20 min) diz o que acontece agora; a estação
+// (a até 25 km) mede o acumulado da hora que já passou e chega com atraso de 1 h ou mais. Por isso a
+// estação só conta sozinha quando não há radar recente, ou quando a leitura dela tem até 20 min.
+// Assim, quando a chuva para, o radar seco tira o "Chovendo agora" sem esperar a estação.
+function medicaoChuvaAgora() {
+  const p = pontoExato(), agora = Date.now();
+  const fontes = fontesNormalizadas();
+  const e = escolherFonte(fontes, 'chuva_h1', p.lat, p.lon, agora, 90).escolhida || escolherFonte(fontes, 'chuva', p.lat, p.lon, agora, 90).escolhida;
+  const est = e && e.distancia <= 25 ? e : null;
+  const r = estado.radarAgora && agora - estado.radarAgora.ms <= 20 * 60000 ? estado.radarAgora : null;
+  if (!est && !r) return null;
+  const estacaoValida = est && (!r || agora - est.ms <= 20 * 60000);
+  const chovendoEst = estacaoValida ? est.valor >= REGRAS.chuvaHoraMm : false;
+  const chovendoRadar = r ? r.chuva : false;
+  return { chovendo: chovendoEst || chovendoRadar, estacao: estacaoValida ? est : null, radar: r };
+}
+
+/**
+ * Janela sem chuva garantida pelo radar: sem eco sobre o local agora e nada chegando por pelo menos
+ * REGRAS.radar.secoMinimoMin (secoPeloRadar). Nessas horas o radar manda; depois delas, os modelos.
+ * @returns {{ateMs:number}|null}
+ */
+function secoAgora() {
+  const c = estado.chegada, agora = Date.now();
+  if (!c || !valido(c.secoMin) || agora - c.ms > 30 * 60000) return null;
+  if (c.secoMin < REGRAS.radar.secoMinimoMin || medicaoChuvaAgora()?.chovendo !== false) return null;
+  const ateMs = c.ms + c.secoMin * 60000;
+  return ateMs > agora ? { ateMs } : null;
+}
+
+/**
+ * Chuva chegando pelo radar, válida agora: quadro de até 30 min, chegada ainda por vir (ou há menos de 10 min)
+ * e sem chuva medida no local (chovendo, a tela já diz "Chovendo agora").
+ * @returns {{minutos:number, chegaMs:number, kmh:number|null, vemDe:string|null}|null}
+ */
+function chegandoAgora() {
+  const c = estado.chegada, agora = Date.now();
+  if (!c || !valido(c.chegaMs) || !(c.minutos > 0) || agora - c.ms > 30 * 60000 || c.chegaMs < agora - 10 * 60000) return null;
+  return medicaoChuvaAgora()?.chovendo ? null : c;
+}
+
+// ------------------------------------------------------------------ render geral
+
+function renderTudo() {
+  if (estado.trocando) {
+    if (!estado.prev && !estado.erros.previsao) return; // troca de local: a previsão nova ainda não chegou
+    estado.trocando = false;
+    $('#conteudo').removeAttribute('aria-busy');
+    // sem previsão do local novo, nada do local anterior pode ficar nas outras abas
+    if (!estado.prev) for (const id of ['#hoje-detalhes', '#amanha-primeira', '#amanha-detalhes', '#semana-conteudo', '#dia-primeira', '#dia-detalhes', '#modelos-conteudo']) $(id).replaceChildren();
+  }
+  renderAvisos({ semAlertaEnso: true }); // rápido, antes da primeira tela; o aviso do El Niño entra quando a aba El Niño é montada na fila
+  if (!estado.prev) { renderSemPrevisao(); return; }
+  for (const f of estado.faixas) f.destruir();
+  estado.faixas = [];
+  limparGraficos();
+  delete $('#elnino-conteudo').dataset.desenhadoEm; // os gráficos do El Niño também foram apagados: redesenha na fila
+  const ds = datas();
+  renderPrimeira($('#hoje-primeira'), ds[0], 0, true);
+  renderAgora(); observarAgora();
+  if (ds[1]) renderPrimeira($('#amanha-primeira'), ds[1], 1, false);
+  // Detalhes de todas as abas depois da primeira tela, uma aba por vez em momentos ociosos:
+  // tudo fica pronto antes de ser aberto, sem uma tarefa longa que trave toque e rolagem.
+  const tarefas = { dia: estado.diaAberto ? renderDia : null, hoje: renderHojeDetalhes, amanha: () => ds[1] && renderAmanhaDetalhes(ds[1]), semana: renderSemana, modelos: renderModelos, elnino: renderElNino };
+  filaRender.pendentes = new Map([estado.aba, 'hoje', 'amanha', 'semana', 'modelos', 'elnino', 'dia'].filter((n) => tarefas[n]).map((n) => [n, [tarefas[n]]]));
+  const geracao = ++filaRender.geracao;
+  const passo = () => {
+    if (geracao !== filaRender.geracao) return; // uma atualização mais nova assumiu a fila
+    const proxima = filaRender.pendentes.keys().next().value;
+    if (!proxima) { preCarregarGlobo(); return; }
+    rodarEtapa(proxima);
+    ocioso(passo);
+  };
+  ocioso(passo);
+  atualizarCabecalho();
+}
+
+/**
+ * Fila de desenho das abas. Cada aba é uma lista de etapas curtas: a primeira monta a estrutura da aba e
+ * registra as partes pesadas (gráficos, tabelas grandes, mapa) com `depois`. A fila roda uma etapa por momento
+ * ocioso, então nenhuma tarefa segura o toque ou a rolagem por mais de um quadro longo.
+ */
+const filaRender = { geracao: 0, pendentes: new Map(), atual: null };
+
+// Último gesto da pessoa (toque, rolagem, roda do mouse, tecla): a fila espera o gesto terminar antes de trabalhar.
+let ultimoGesto = 0;
+for (const tipo of ['touchstart', 'touchmove', 'wheel', 'scroll', 'pointerdown', 'keydown']) {
+  window.addEventListener(tipo, () => { ultimoGesto = performance.now(); }, { passive: true, capture: true });
+}
+
+/**
+ * Roda `fn` num momento ocioso. Durante um gesto, espera ele terminar (no máximo `ESPERA_GESTO_MS`, para a tela
+ * não ficar com partes em branco). O Safari do iPhone não tem requestIdleCallback: lá a tarefa roda depois de
+ * um quadro pintado, para nunca cair no meio de uma animação.
+ */
+const ESPERA_GESTO_MS = 800;
+function ocioso(fn) {
+  const desde = performance.now();
+  const rodar = () => {
+    const t = performance.now();
+    if (t - ultimoGesto < 200 && t - desde < ESPERA_GESTO_MS) { setTimeout(rodar, 100); return; }
+    fn();
+  };
+  if (window.requestIdleCallback) requestIdleCallback(rodar, { timeout: 1500 });
+  else requestAnimationFrame(() => setTimeout(rodar, 0));
+}
+
+/**
+ * Registra uma parte pesada da aba que está sendo desenhada. Dentro da fila, vira a etapa seguinte dessa aba;
+ * fora dela (aba aberta antes da vez, dia aberto pelo toque), roda na hora.
+ * @param {() => void} fn
+ */
+function depois(fn) {
+  if (filaRender.atual) filaRender.atual.push(fn); else fn();
+}
+
+/** Roda a próxima etapa da aba na fila. Etapas registradas por `depois` entram logo depois dela, na ordem. */
+function rodarEtapa(aba) {
+  const etapas = filaRender.pendentes.get(aba);
+  if (!etapas) return;
+  const fn = etapas.shift();
+  const novas = [];
+  filaRender.atual = novas;
+  try { fn?.(); } finally { filaRender.atual = null; }
+  etapas.unshift(...novas);
+  if (!etapas.length) filaRender.pendentes.delete(aba);
+}
+
+// Desenha agora tudo o que falta da aba (chamada quando a pessoa abre a aba antes da vez dela na fila).
+function renderPendente(aba) {
+  if (!filaRender.pendentes.has(aba)) return;
+  const y = window.scrollY;
+  while (filaRender.pendentes.has(aba)) rodarEtapa(aba);
+  if (aba === estado.aba) window.scrollTo(0, y); // evita que a tela pule
+}
+
+// Baixa e prepara o código do Globo sem executá-lo, para a aba abrir sem espera.
+let globoPreCarregado = false;
+function preCarregarGlobo() {
+  if (globoPreCarregado || navigator.connection?.saveData) return;
+  globoPreCarregado = true;
+  for (const m of ['./globo.js', './globo-espaco.js']) document.head.append(el('link', { rel: 'modulepreload', href: new URL(m, import.meta.url).href }));
+}
+
+function renderSemPrevisao() {
+  const msg = estado.erros.previsao || 'sem dados';
+  $('#hoje-primeira').replaceChildren(el('p', { class: 'frase', text: 'Previsão indisponível' }),
+    el('p', {}, `Não foi possível buscar a previsão (${msg}) e não há dados salvos neste aparelho. Verifique a conexão e toque em Atualizar.`),
+    el('p', { class: 'nota' }, 'Em situação de risco, siga a Defesa Civil RS (199) e os avisos do INMET.'));
+}
+
+// ------------------------------------------------------------------ primeira tela (Hoje e Amanhã)
+
+function renderPrimeira(alvo, data, diaIndice, desdeAgora) {
+  for (const t of alvo.querySelectorAll('canvas.ceu-fundo')) observadorCeu?.unobserve(t);
+  const p = estado.prev;
+  const a = analisarDia(data, diaIndice, desdeAgora);
+  const av = a.av;
+  const dataMs = p.horas[a.idxTodo[0]] ?? Date.now();
+  const nomeDia = fmt.diaSemana(dataMs, p.offset);
+  const quando = diaIndice === 0 ? `Hoje, ${nomeDia} ${fmt.dataCurta(dataMs, p.offset)}`
+    : diaIndice === 1 ? `Amanhã, ${nomeDia} ${fmt.dataCurta(dataMs, p.offset)}`
+      : `${nomeDia[0].toUpperCase()}${nomeDia.slice(1)}, ${fmt.dataCurta(dataMs, p.offset)}`;
+
+  // céu: hoje é o céu de agora (ao lado da temperatura de agora); amanhã, o resumo do dia pelos modelos
+  const ceu = diaIndice === 0 ? ceuAgora() : ceuDoDia(a);
+  const mods = modelosAtivos();
+
+  // chuva: resposta curta, chance, volume e horário
+  const agoraChuva = diaIndice === 0 ? medicaoChuvaAgora() : null;
+  const chovendo = !!agoraChuva?.chovendo;
+  const chegando = diaIndice === 0 && !chovendo ? chegandoAgora() : null;
+  const resp = chovendo ? 'Chovendo agora' : chegando ? 'Chuva chegando' : respostaChuva(av.prob);
+  const resto = chovendo ? chuvaRestante() : null;
+  if (chovendo && ceu) { ceu.chuva = 'provavel'; ceu.texto = ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'Pancadas de chuva' : 'Chuva'; }
+  const temChuva = av.prob !== null && av.prob >= REGRAS.ocorrencia.poucoProvavel;
+  const detalhe = [];
+  // Chovendo: só a estimativa de quanto ainda cai e quando para. A origem (estação ou radar) fica no toque longo.
+  const textoResto = !resto ? null : resto.fraca ? 'chuva fraca, deve passar logo'
+    : `≈ ${fmt.mm(resto.mm)} ${resto.maisDe12h ? 'até pelo menos' : 'até'} ${fmt.hora(resto.ate, p.offset)}`;
+  const origemAgora = chovendo ? (agoraChuva.estacao?.valor >= REGRAS.chuvaHoraMm ? `medido pela estação ${agoraChuva.estacao.fonte.nome}` : 'visto pelo radar') : '';
+  if (!chovendo && temChuva && av.volume) detalhe.push(`cerca de ${fmt.mm(av.volume.mediana)}${av.volumeIncerto ? ` (provável entre ${fmt.n(av.volume.min, 0)} e ${fmt.n(av.volume.max, 0)} mm)` : ''}`);
+  if (chegando) detalhe.unshift(`deve começar por volta das ${fmt.horaMin(chegando.chegaMs, p.offset)}${chegando.vemDe ? `, vinda do ${DIRECOES[chegando.vemDe] || chegando.vemDe}` : ''} (radar)`);
+  const jan = a.horasChuva.janela;
+  if (!chovendo && !chegando && temChuva && jan) detalhe.push(`mais provável ${fmt.hora(jan.ini, p.offset)} a ${fmt.hora(jan.fim + 3600000, p.offset)}`);
+
+  const botaoConf = el('button', { type: 'button', class: 'confianca', 'data-n': av.confianca.geral, onclick: () => explicarConfianca(a) },
+    el('span', { class: 'nivel', 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), `Confiança ${av.confianca.geral}`);
+  // Risco de temporal (moderado ou alto): um cartão só, com a fonte (INMET quando há aviso de tempestade)
+  // e os horários dos avisos do local ao tocar. Os avisos do INMET em si ficam na aba Avisos (menu Ver mais).
+  const risco = avaliarRisco(a, chovendo, !!chegando);
+  const fundo = fundoDoResumo({ ceu, chovendo, chegando: !!chegando, risco, diaIndice, rajada: av.rajada?.mediana ?? a.rajadaPico?.valor });
+  const telaCeu = el('canvas', { class: 'ceu-fundo', 'aria-hidden': 'true' });
+  pintarCeu(telaCeu, {
+    cobertura: ceu?.cobertura ?? null, fase: faseDoCeu(ceu, diaIndice, data),
+    chuva: fundo === 'chuva', temporal: fundo === 'temporal', vento: fundo === 'vento', semente: Number(data.replaceAll('-', '')) % 100000,
+  });
+  const resumo = el('div', { class: 'resumo', 'data-fundo': fundo, 'data-ceu': ceu?.nivel || 'sem', 'data-chuva': ceu?.chuva || (temChuva ? 'pouca' : 'nao') },
+    telaCeu,
+    el('div', { class: 'resumo-topo' }, el('p', { class: 'resumo-quando', text: quando }), botaoConf),
+    diaIndice === 0 ? el('div', { class: 'resumo-agora', id: 'agora-hoje', 'aria-hidden': 'true' }) : null,
+    el('div', { class: 'resumo-ceu' },
+      iconeCeu(ceu),
+      el('span', { class: 'cond', title: ceu?.origem || null }, ceu ? ceu.texto : ausente('céu sem dado'))),
+    el('div', { class: 'resumo-temp' },
+      el('span', { class: 'bloco-t min' }, el('small', { text: 'mínima' }), el('b', { class: 'tmin', text: fmt.c(a.tmin) ?? '–' })),
+      el('span', { class: 'bloco-t max' }, el('small', { text: 'máxima' }), el('b', { class: 'tmax', text: fmt.c(a.tmax) ?? '–' }),
+        valido(a.sensMax) && Math.abs(Math.round(a.sensMax) - Math.round(a.tmax)) >= 2 ? el('small', { class: 'sens-max', text: `sensação ${fmt.c(a.sensMax)}` }) : null),
+      el('span', { class: 'bloco-t chuva' }, el('small', { text: 'chuva' }), el('b', { text: chovendo ? 'agora' : (av.prob === null ? '–' : fmt.pct(av.prob)) })),
+      blocoRajada(a, av, p)),
+    el('div', { class: 'resumo-chuva' + (chovendo ? ' chovendo' : '') },
+      el('strong', chovendo ? { title: `Chuva ${origemAgora}. Estimativa: mediana dos modelos hora a hora.` } : {}, resp || 'Chuva sem dado'),
+      el('span', { class: 'det' + (chovendo ? ' resto' : ''), text: (chovendo ? textoResto : detalhe.join(' · ')) || ' ' })));
+
+  const filhos = [resumo];
+  // Cartão de risco de temporal só com risco moderado ou alto (em Hoje, o radar já entra no risco). O radar de
+  // tempestade em si fica nos detalhes de Hoje, logo acima do mapa (secaoTempestade).
+  if (risco && risco.nivel !== 'baixo') filhos.push(cartaoTemporal(risco));
+
+  // Gráfico: chance de chuva hora a hora (padrão) ou Faixa do Céu
+  // só as horas deste dia: hoje, da hora atual até 23h; amanhã, de 0h a 23h
+  const ini = p.horas[(desdeAgora && a.idxAgora.length ? a.idxAgora : a.idxTodo)[0]];
+  const fim = p.horas[a.idxTodo[a.idxTodo.length - 1]] + 3600000;
+  const caixa = el('div', { class: 'grafico-primeira' });
+  // Gráfico inicial pela regra graficoInicial (Chuva a partir de REGRAS.ocorrencia.poucoProvavel, senão Temperatura).
+  // A escolha feita à mão vale até fechar o app, só para este dia e este local (chave local|data): ao trocar de
+  // cidade ou virar o dia, o gráfico volta ao padrão da regra.
+  estado.modoGrafico ||= {};
+  const chaveModo = `${estado.local ? chaveLocal(estado.local) : ''}|${data}`;
+  let modo = estado.modoGrafico[chaveModo] || graficoInicial(av.prob, chovendo || !!chegando);
+  const botoes = el('div', { class: 'troca', role: 'group', 'aria-label': 'Gráfico' });
+  const iniDia = p.horas[a.idxTodo[0]];
+  const desenharModo = () => {
+    // hoje: escolher entre as horas que faltam e o dia todo (a escolha fica salva no aparelho)
+    const todas = desdeAgora && prefs.ler('horasTodas', false);
+    const iniUsado = todas ? iniDia : ini;
+    botoes.replaceChildren(el('span', { class: 'troca-modo' }, ...[['chance', 'Chuva'], ['temp', 'Temperatura'], ['ceu', 'Céu']].map(([k, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(modo === k), onclick: () => { modo = k; estado.modoGrafico[chaveModo] = k; desenharModo(); } }, nome))),
+    desdeAgora ? el('span', { class: 'troca-horas' }, ...[[false, 'Restantes'], [true, 'Dia todo']].map(([v, nome]) =>
+      el('button', { type: 'button', 'aria-pressed': String(todas === v), onclick: () => { prefs.gravar('horasTodas', v); desenharModo(); } }, nome))) : '');
+    caixa.replaceChildren();
+    if (modo === 'chance') caixa.append(graficoChance(iniUsado, fim));
+    else if (modo === 'temp') caixa.append(graficoTemperatura(iniUsado, fim));
+    else estado.faixas.push(criarFaixa(caixa, { prev: p, modelos: mods, iniMs: iniUsado, fimMs: fim, id: 'faixa-' + diaIndice,
+      chance: (ms) => { const c = chanceHora(ms); return valido(c.p) ? c.p * 100 : null; } }));
+  };
+  filhos.push(botoes, caixa);
+  alvo.replaceChildren(...filhos);
+  desenharModo();
+}
+
+/**
+ * Rajada máxima do dia no resumo, ao lado de mínima, máxima e chuva: valor do consenso (mediana dos modelos,
+ * a mesma da Semana) e, embaixo, de onde vem e a hora do pico.
+ */
+function blocoRajada(a, av, p) {
+  const rp = a.rajadaPico, v = av.rajada?.mediana ?? rp?.valor;
+  const classe = classeRajada(v);
+  return el('span', { class: 'bloco-t rajada' + (classe ? ` r-${classe.replace(' ', '-')}` : '') },
+    el('small', { text: 'rajada' }),
+    el('b', {}, valido(v) ? String(Math.round(v)) : '–', valido(v) ? el('i', { text: ' km/h' }) : null),
+    rp ? el('small', { class: 'raj-det' }, `${direcaoTexto(rp.dir) || ''} `, setaVento(rp.dir), ` ${fmt.hora(rp.ms, p.offset)}`) : null);
+}
+
+/**
+ * Fundo do bloco principal conforme o tempo, com os mesmos dados que o bloco mostra (nada novo é inferido):
+ * temporal (cartão de risco moderado ou alto; hoje, só com chuva agora ou chegando, porque o quadro mostra o céu
+ * de agora) > chuva (chovendo ou chegando agora; nos outros dias, chuva provável) > vento (rajada forte ou muito forte, REGRAS.rajadaClasses) > céu (noite, sol, sol com nuvens, nublado).
+ * @returns {'temporal'|'chuva'|'vento'|'sol'|'sol-nuvens'|'nublado'|'noite'|'noite-nuvens'|'sem'}
+ */
+function fundoDoResumo({ ceu, chovendo, chegando, risco, diaIndice, rajada }) {
+  // hoje o quadro mostra o céu de agora: o temporal só pinta o fundo quando a chuva já está aqui ou chegando
+  const chuvaAgora = chovendo || chegando;
+  if (risco && risco.nivel !== 'baixo' && (diaIndice > 0 || chuvaAgora)) return 'temporal';
+  if (chuvaAgora || (diaIndice > 0 && ceu?.chuva === 'provavel')) return 'chuva';
+  if (['fortes', 'muito fortes'].includes(classeRajada(rajada))) return 'vento';
+  if (!ceu) return 'sem';
+  if (ceu.noite) return ceu.nivel === 'limpo' || ceu.nivel === 'poucas' ? 'noite' : 'noite-nuvens';
+  return ceu.nivel === 'limpo' ? 'sol' : ceu.nivel === 'nublado' ? 'nublado' : 'sol-nuvens';
+}
+
+// Fase do céu desenhado: noite pela condição mostrada; hoje, "sol baixo" da hora antes do pôr do sol até
+// 15 min depois e de 15 min antes do nascer até 1 h depois. Nos outros dias, o céu do dia.
+function faseDoCeu(ceu, diaIndice, data) {
+  if (ceu?.noite) return 'noite';
+  if (diaIndice !== 0) return 'dia';
+  const d = estado.prev.diario, k = d.datas.indexOf(data), agora = Date.now(), min = 60000;
+  const nascer = d.nascer[k], por = d.por[k];
+  if ((valido(por) && agora >= por - 60 * min && agora <= por + 15 * min) || (valido(nascer) && agora >= nascer - 15 * min && agora <= nascer + 60 * min)) return 'baixo';
+  return 'dia';
+}
+
+// O céu é desenhado quando o bloco ganha tamanho e de novo só se a largura ou a altura mudar
+// (aba escondida tem tamanho zero; ao aparecer, o observador desenha).
+const ceusDesenhados = new WeakMap();
+const observadorCeu = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entradas) => {
+  for (const e of entradas) {
+    const tela = e.target, info = ceusDesenhados.get(tela);
+    const w = Math.round(e.contentRect.width), h = Math.round(e.contentRect.height);
+    if (!info || !w || !h || (info.w === w && info.h === h)) continue;
+    info.w = w; info.h = h;
+    desenharCeu(tela, info.c);
+  }
+});
+function pintarCeu(tela, c) {
+  ceusDesenhados.set(tela, { c, w: 0, h: 0 });
+  observadorCeu?.observe(tela);
+}
+
+// Quanto ainda deve chover: soma a mediana ponderada dos modelos a partir de agora (só o que falta da hora
+// atual) até a primeira hora com menos de 0,1 mm e chance abaixo de 30%. Recalculado a cada atualização.
+function chuvaRestante() {
+  const p = estado.prev, mods = modelosAtivos();
+  const { pesos } = pesosAtuais();
+  const agora = Date.now();
+  let i0 = -1;
+  for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= agora) i0 = k;
+  if (i0 < 0) return null;
+  // Soma o episódio atual: para na primeira hora seguinte em que a mediana dos modelos fica abaixo de 0,1 mm.
+  // Janela máxima de 12 h, para não somar chuvas de outro sistema.
+  let mm = 0, fim = null;
+  for (let i = i0; i < p.horas.length && i < i0 + 12; i++) {
+    const v = mediana(mods.map((m) => p.modelos[m].vars.precipitation?.[i]), mods.map((m) => pesos[m] ?? 1));
+    if (i > i0 && (!valido(v) || v < 0.1)) break;
+    const frac = i === i0 ? Math.max(0, (p.horas[i] + 3600000 - agora) / 3600000) : 1;
+    if (valido(v)) mm += v * frac;
+    fim = p.horas[i] + 3600000;
+  }
+  if (fim === null) return null;
+  // Chovendo, mas os modelos não mostram volume: chuva fraca, sem prazo confiável.
+  if (mm < 0.2) return { fraca: true };
+  return { mm, ate: fim, maisDe12h: fim >= p.horas[i0] + 12 * 3600000 };
+}
+
+// Chance de chuva por hora: fração dos cenários do ensemble com pelo menos REGRAS.chuvaHoraMm (0,2 mm) na hora.
+// Sem ensemble, mediana da probabilidade dos modelos que a publicam. Sem dado, a barra fica vazia.
+function chanceHoraria(ms) {
+  const fontes = Object.values(estado.ens || {});
+  let total = 0, comChuva = 0;
+  for (const e of fontes) {
+    const i = e.horas.indexOf(ms);
+    if (i < 0) continue;
+    for (const m of e.membros.precipitation || []) { if (valido(m[i])) { total++; if (m[i] >= REGRAS.chuvaHoraMm) comChuva++; } }
+  }
+  if (total >= 10) return { p: comChuva / total, origem: 'cenários' };
+  const p = estado.prev, i = p.horas.indexOf(ms);
+  const v = i < 0 ? null : mediana(modelosAtivos().map((m) => p.modelos[m].vars.precipitation_probability?.[i]));
+  return valido(v) ? { p: v / 100, origem: 'modelos' } : { p: null, origem: null };
+}
+
+/**
+ * A chance de uma hora nunca passa a chance do dia (a principal, calibrada): a do dia conta cenários com 1 mm ou
+ * mais no total e passa pela calibração local, a da hora conta 0,2 mm na hora, e sem este teto uma noite podia
+ * mostrar 23% com o dia em 12%. O teto vale só para a estimativa dos modelos; chuva medida ou vista no radar
+ * entra depois, e o veredito do dia já sobe junto nesses casos (avaliarDia, ctx.chegando).
+ */
+function tetoDoDia(c, ms) {
+  if (!valido(c.p) || !estado.prev) return c;
+  const data = partesLocais(ms, estado.prev.offset).data, k = datas().indexOf(data);
+  if (k < 0) return c;
+  const prob = analisarDia(data, k, k === 0).av.prob;
+  return valido(prob) && c.p > prob ? { ...c, p: prob } : c;
+}
+
+/**
+ * O que se mede agora e vale para as próximas horas: chovendo (estação ou radar), chuva chegando pelo radar
+ * ou janela seca garantida pelo radar. Calculado uma vez e passado a chanceHora.
+ */
+function situacaoAgora() {
+  const m = medicaoChuvaAgora();
+  const chovendo = !!m?.chovendo;
+  return { chovendo, chegando: chovendo ? null : chegandoAgora(), seco: chovendo ? null : secoAgora() };
+}
+
+/**
+ * Chance de chuva de uma hora como todas as telas mostram: a dos modelos (chanceHoraria), corrigida pelo
+ * que se mede agora, nesta ordem: chovendo agora (hora atual vira 100%, medido); chuva chegando pelo radar
+ * (a hora da chegada e a seguinte ficam com no mínimo REGRAS.radar.probChegando); radar seco (horas inteiras
+ * dentro da janela seca ficam com no máximo REGRAS.radar.probSeco). É o mesmo critério do veredito do dia.
+ * @returns {{p:number|null, origem:string|null, medido?:boolean}}
+ */
+function chanceHora(ms, sit = situacaoAgora()) {
+  const c = tetoDoDia(chanceHoraria(ms), ms), agora = Date.now(), R = REGRAS.radar;
+  if (sit.chovendo && agora >= ms && agora < ms + 3600000) return { p: 1, origem: 'medido', medido: true };
+  if (sit.chegando && ms + 3600000 > sit.chegando.chegaMs && ms < sit.chegando.chegaMs + 2 * 3600000 && !(c.p >= R.probChegando)) return { p: R.probChegando, origem: 'radar' };
+  if (sit.seco && ms + 3600000 <= sit.seco.ateMs && ms + 3600000 > agora && !(c.p <= R.probSeco)) return { p: R.probSeco, origem: 'radar seco' };
+  return c;
+}
+
+const TETO_CHANCE = 115; // topo do eixo da chance de chuva, em %
+function graficoChance(iniMs, fimMs) {
+  const p = estado.prev, mods = modelosAtivos();
+  const mm = consensoHorario(p, 'precipitation', mods).med;
+  const pontos = [];
+  const sit = situacaoAgora();
+  p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, mm: mm[i], ...chanceHora(ms, sit) }); });
+  const validos = pontos.filter((x) => valido(x.p));
+  const origem = validos.some((x) => x.origem === 'cenários') ? 'cenários do ensemble' : 'probabilidade dos modelos';
+  const atual = pontos.find((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
+  // Escala vertical de 0 a TETO_CHANCE (115%): a folga acima de 100% evita que barras cheias encostem no topo.
+  // Marcas a cada 20%. pos() converte uma chance (0 a 1) em altura percentual dentro da área do gráfico.
+  const pos = (p) => (p * 100 / TETO_CHANCE) * 100;
+  return barrasComEixo({
+    pontos, classe: 'chuva', titulo: `Previsão: ${origem}`, nome: 'Chance de chuva por hora',
+    pct: (x) => (valido(x.p) ? pos(x.p) : null), medido: (x) => x.medido,
+    ticks: [0, 20, 40, 60, 80, 100].map((v) => [pos(v / 100), `${v}%`]),
+    agoraPct: atual && valido(atual.p) ? pos(atual.p) : null,
+    inicial: sit.chovendo ? 'Chovendo agora.' : '\u00a0', // a linha só ganha texto ao tocar num horário
+    detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${x.medido ? 'chovendo agora (medido)' : valido(x.p) ? fmt.pct(x.p) + ' de chance' + ({ radar: ' (chuva chegando pelo radar)', 'radar seco': ' (radar sem chuva por perto)' }[x.origem] || '') : 'sem dado'}${valido(x.mm) && x.origem !== 'radar seco' ? `, ${fmt.n(x.mm, 1)} mm previstos` : ''}`,
+  });
+}
+
+// Barras por hora com eixo vertical à esquerda e linha pontilhada na altura do valor da hora atual.
+// Nada de números sobre as barras: o valor exato aparece embaixo ao tocar num horário.
+/**
+ * Gráfico de barras por hora com eixo vertical rotulado, linhas-guia, linha tracejada no valor da hora atual
+ * e detalhe exato só ao tocar num horário. Alturas e marcas são percentuais da área (0 a 100).
+ * @param {object} o pontos, classe CSS, título, nome acessível, pct(ponto), medido(ponto), ticks [[pos, rótulo]],
+ *   agoraPct, texto inicial e detalhe(ponto)
+ * @returns {HTMLElement}
+ */
+function barrasComEixo({ pontos, classe, titulo, nome, pct, medido = () => false, ticks, agoraPct, inicial, detalhe }) {
+  const p = estado.prev;
+  const info = el('p', { class: 'chance-info', 'aria-live': 'polite', text: inicial });
+  let sel = null;
+  const area = el('div', { class: 'gb-area' },
+    ...ticks.map(([v]) => el('i', { class: 'gb-guia', 'aria-hidden': 'true', style: { bottom: `${v}%` } })),
+    valido(agoraPct) ? el('i', { class: 'gb-agora', 'aria-hidden': 'true', style: { bottom: `${Math.min(100, Math.max(0, agoraPct))}%` } }) : null,
+    ...pontos.map((x) => {
+      const agora = Date.now() >= x.ms && Date.now() < x.ms + 3600000;
+      const v = pct(x);
+      const b = el('button', { type: 'button', class: 'gb-barra' + (agora ? ' gb-atual' : ''), 'aria-label': detalhe(x) },
+        el('i', { class: valido(v) ? (medido(x) ? 'medido' : '') : 'sem', style: { height: valido(v) ? `${Math.max(2, Math.min(100, v))}%` : '100%' } }));
+      b.onclick = () => { sel?.classList.remove('sel'); sel = b; b.classList.add('sel'); info.textContent = detalhe(x); };
+      return b;
+    }));
+  const eixoY = el('div', { class: 'gb-y', 'aria-hidden': 'true' }, ...ticks.map(([v, t]) => el('span', { text: t, style: { bottom: `${v}%` } })));
+  const eixoX = el('div', { class: 'gb-x', 'aria-hidden': 'true' },
+    ...pontos.map((x) => { const h = partesLocais(x.ms, p.offset).hora; return el('span', { text: h % 3 === 0 ? (h === 0 ? fmt.diaSemana(x.ms, p.offset) : `${h}h`) : '' }); }));
+  return el('div', { class: `grafbarras ${classe}`, title: titulo, role: 'group', 'aria-label': `${nome}. ${inicial}` },
+    el('div', { class: 'gb-corpo' }, eixoY, area), el('div', { class: 'gb-rodape' }, el('span'), eixoX), info);
+}
+
+// Temperatura por hora: ECMWF, com o mesmo formato do gráfico de chuva.
+// O eixo vai de pouco abaixo da mínima a pouco acima da máxima do período, em passos redondos.
+function graficoTemperatura(iniMs, fimMs) {
+  const p = estado.prev, mods = modelosAtivos();
+  const t = serieTemp(p, 'temperature_2m', mods);
+  const st = serieTemp(p, 'apparent_temperature', mods);
+  const pontos = [];
+  p.horas.forEach((ms, i) => { if (ms >= iniMs && ms < fimMs) pontos.push({ ms, t: t[i], st: st[i] }); });
+  const vals = pontos.map((x) => x.t).filter(valido);
+  if (!vals.length) return el('p', { class: 'chance-info', text: 'Temperatura por hora sem dado.' });
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const passo = hi - lo > 12 ? 5 : hi - lo > 6 ? 3 : 2;
+  const base = Math.floor((lo - 1) / passo) * passo, topo = Math.max(Math.ceil((hi + 0.5) / passo) * passo, base + 2 * passo);
+  const pct = (v) => ((v - base) / (topo - base)) * 100;
+  const ticks = [];
+  for (let v = base; v <= topo + 1e-9; v += passo) ticks.push([pct(v), `${v}°`]);
+  const atual = pontos.find((x) => Date.now() >= x.ms && Date.now() < x.ms + 3600000);
+  return barrasComEixo({
+    pontos, classe: 'temp', titulo: 'Previsão Open-Meteo', nome: 'Temperatura por hora',
+    pct: (x) => (valido(x.t) ? pct(x.t) : null), ticks,
+    agoraPct: atual && valido(atual.t) ? pct(atual.t) : null,
+    inicial: '\u00a0',
+    detalhe: (x) => `${fmt.hora(x.ms, p.offset)}: ${valido(x.t) ? `${fmt.n(x.t, 1)} °C` : 'sem dado'}${valido(x.st) ? `, sensação de ${fmt.n(x.st, 0)} °C` : ''}`,
+  });
+}
+
+// Ícone de linha (SVG, sem emoji): sol ou lua, nuvem e gotas conforme o céu previsto.
+function iconeCeu(ceu) {
+  const s = svg('svg', { viewBox: '0 0 48 48', class: 'icone-ceu', 'aria-hidden': 'true' });
+  if (!ceu) { s.append(svg('circle', { cx: 24, cy: 24, r: 10, class: 'tr', 'stroke-dasharray': '3 4' })); return s; }
+  const astro = (cx, cy, r) => {
+    if (ceu.noite) return svg('path', { class: 'tr', d: `M${cx + r * 0.3} ${cy - r} a${r} ${r} 0 1 0 ${r * 0.7} ${r * 1.55} a${r * 0.8} ${r * 0.8} 0 0 1 ${-r * 0.7} ${-r * 1.55}z` });
+    const g = svg('g', { class: 'tr' });
+    g.append(svg('circle', { cx, cy, r }));
+    for (let k = 0; k < 8; k++) {
+      const ang = k * Math.PI / 4, r1 = r + 3, r2 = r + 6.5;
+      g.append(svg('line', { x1: (cx + r1 * Math.cos(ang)).toFixed(1), y1: (cy + r1 * Math.sin(ang)).toFixed(1), x2: (cx + r2 * Math.cos(ang)).toFixed(1), y2: (cy + r2 * Math.sin(ang)).toFixed(1) }));
+    }
+    return g;
+  };
+  const nuvem = (dx, dy, k) => svg('path', { class: 'tr nuvem', transform: `translate(${dx} ${dy}) scale(${k})`, d: 'M10 30 h24 a7 7 0 0 0 0-14 a10 10 0 0 0-19-2 a8 8 0 0 0-5 16z' });
+  const comChuva = !!ceu.chuva;
+  if (ceu.nivel === 'limpo' && !comChuva) s.append(astro(24, 24, 9));
+  else if (ceu.nivel === 'limpo' || ceu.nivel === 'poucas') { s.append(astro(17, 16, 7)); s.append(nuvem(8, comChuva ? 2 : 8, 0.95)); }
+  else if (ceu.nivel === 'parcial') { s.append(astro(15, 14, 6)); s.append(nuvem(5, comChuva ? 2 : 6, 1.05)); }
+  else s.append(nuvem(3, comChuva ? 0 : 4, 1.1));
+  if (comChuva) {
+    const n = ceu.chuva === 'provavel' ? 3 : 2;
+    for (let k = 0; k < n; k++) { const x = 16 + k * 8; s.append(svg('line', { class: 'gota', x1: x, y1: 37, x2: x - 3, y2: 44 })); }
+  }
+  return s;
+}
+
+/**
+ * Cartão "Risco X de temporal · Fonte". Fonte: INMET quando há aviso de tempestade para o local, senão Previsão.
+ * Ao tocar: horário de cada aviso do INMET do local (o mais grave primeiro), o motivo pela previsão e a orientação.
+ */
+function cartaoTemporal(risco) {
+  const avisos = risco.avisosDia ?? avisosOrdenados(); // só os avisos válidos no dia do cartão
+  const motivos = risco.motivos.filter((m) => !/aviso de tempestade do INMET/.test(m));
+  const abrir = () => mostrarInfo(`Risco ${risco.nivel} de temporal`,
+    risco.granizo ? el('p', {}, el('b', { text: 'Granizo possível. ' }), risco.granizo.texto) : null,
+    avisos.length ? el('ul', { class: 'lt-avisos' }, ...avisos.map((x) => el('li', {},
+      el('b', { text: `${x.titulo}${x.severidade ? ` (${x.severidade.toLowerCase()})` : ''}` }), el('br'), periodoAviso(x) || 'horário não informado'))) : null,
+    motivos.length ? el('p', { text: `Pela previsão: ${motivos.join('; ')}.` }) : null,
+    el('p', { text: 'Durante o temporal, fique longe de árvores e áreas abertas. Emergência: Defesa Civil, 199.' }),
+    avisos.length ? linkExterno('https://alertas2.inmet.gov.br/', 'Avisos no INMET') : null);
+  return el('button', { type: 'button', class: `linha-temporal ${risco.nivel}`, onclick: abrir },
+    svg('svg', { viewBox: '0 0 24 24', class: 'raio', 'aria-hidden': 'true' }, svg('path', { d: 'M13 2 4 14h7l-1 8 9-12h-7z' })),
+    el('span', { class: 'lt-txt' }, `Risco ${risco.nivel} de temporal${risco.granizo ? ' e granizo possível' : ''}`, el('small', { text: `· ${risco.aviso || risco.granizo?.fonte === 'inmet' ? 'INMET' : 'Previsão'}` })));
+}
+
+// ------------------------------------------------------------------ radar de tempestade (aba Hoje)
+
+const DIRECOES = { N: 'norte', NE: 'nordeste', L: 'leste', SE: 'sudeste', S: 'sul', SO: 'sudoeste', O: 'oeste', NO: 'noroeste' };
+const NOME_NUCLEO = { severa: 'Tempestade forte', tempestade: 'Tempestade', forte: 'Chuva forte' };
+const direcaoNome = (graus) => DIRECOES[direcaoTexto(graus)] || null;
+
+/**
+ * Leitura do radar de tempestade válida agora: quadro de até REGRAS.tempestade.idadeMaxMin minutos.
+ * principal: o núcleo que mais importa (sobre o local, chegando, ou o mais perto, com tempestade antes de chuva forte).
+ * @returns {{ms:number, nucleos:object[], principal:object|null, movimento:object|null, mapa:object}|null}
+ */
+function tempestadeAgora() {
+  const c = estado.chegada;
+  if (!c?.tempestades || !c.mapa || Date.now() - c.ms > REGRAS.tempestade.idadeMaxMin * 60000) return null;
+  const nucleos = c.tempestades;
+  const urgente = nucleos.find((x) => x.tendencia === 'sobre' || x.chegaMin !== null);
+  const principal = urgente || nucleos.find((x) => x.classe !== 'forte') || nucleos[0] || null;
+  return { ms: c.ms, nucleos, principal, movimento: c.movimento, mapa: c.mapa };
+}
+
+/** dBZ do núcleo de tempestade sobre o local ou chegando nas próximas 2 h (entra no risco de temporal de hoje). */
+function nucleoRadarHoje() {
+  const t = tempestadeAgora(), x = t?.nucleos.find((n) => n.classe !== 'forte' && (n.tendencia === 'sobre' || (n.chegaMin !== null && n.chegaMin <= REGRAS.radar.horizonteMin)));
+  return x ? x.dbz : null;
+}
+
+const NOME_EVOLUCAO = { nova: 'formou-se há pouco', intensificando: 'ganhando força', enfraquecendo: 'perdendo força', estavel: null };
+const kmRedondo = (km) => `${Math.max(5, Math.round(km / 5) * 5)} km`;
+
+/**
+ * Leitura de um núcleo em linguagem simples, para o veredito, a lista e o detalhe.
+ * titulo: frase completa; onde: posição ("60 km a oeste"); rumo: o que ele faz em relação ao local, com a hora
+ * estimada quando o movimento foi medido; evolucao: se ganha ou perde força (ou null).
+ * @returns {{titulo:string, sub:string, nome:string, onde:string, rumo:string, evolucao:string|null}}
+ */
+function fraseNucleo(x, offset, ms) {
+  const nome = NOME_NUCLEO[x.classe], dir = direcaoNome(x.rumo), km = kmRedondo(x.distanciaKm);
+  const hora = (min) => fmt.horaMin(ms + min * 60000, offset);
+  const onde = x.tendencia === 'sobre' ? 'sobre o local' : `${km}${dir ? ` a ${dir}` : ''}`;
+  const evolucao = NOME_EVOLUCAO[x.evolucao] ?? null;
+  if (x.tendencia === 'sobre') return { nome, onde, evolucao, rumo: 'sobre o local agora', titulo: `${nome} sobre o local agora`, sub: 'pelo radar' };
+  if (x.chegaMin !== null) return { nome, onde, evolucao, rumo: `vindo para cá · chega por volta das ${hora(x.chegaMin)}`,
+    titulo: `${nome} vindo para cá: chega por volta das ${hora(x.chegaMin)}`, sub: `a ${km}${dir ? `, vinda do ${dir}` : ''}` };
+  if (x.tendencia === 'aproximando') return { nome, onde, evolucao, rumo: `se aproximando · passa a ${kmRedondo(x.passaKm)} por volta das ${hora(x.passaMin)}`,
+    titulo: `${nome} se aproximando`, sub: `a ${km}${dir ? ` a ${dir}` : ''}; deve passar a ${kmRedondo(x.passaKm)} daqui por volta das ${hora(x.passaMin)}` };
+  const rumo = { afastando: 'se afastando', passando: 'passando ao largo' }[x.tendencia] || 'movimento ainda não medido';
+  return { nome, onde, evolucao, rumo, titulo: `${nome} a ${km}${dir ? ` a ${dir}` : ''}`, sub: rumo };
+}
+
+/**
+ * Risco de temporal de hoje e de amanhã pela previsão (avaliarRisco, o mesmo do cartão dos outros dias), com a
+ * janela de horas em que os sinais aparecem; com aviso do INMET, o período do aviso.
+ * @returns {{texto:string, nivel:'baixo'|'moderado'|'alto', dias:Array<{nome:string, risco:object|null, janela:string|null}>}}
+ */
+function riscoPrevisto(riscoHoje, dataHoje) {
+  const ds = datas(), T = REGRAS.temporal, p = estado.prev, mods = modelosAtivos();
+  const dias = [{ nome: 'hoje', risco: riscoHoje, a: analisarDia(dataHoje, 0, true) }];
+  if (ds[1]) { const a1 = analisarDia(ds[1], 1, false); dias.push({ nome: 'amanhã', risco: avaliarRisco(a1, false, false), a: a1 }); }
+  const cape = consensoHorario(p, 'cape', mods).med, chuva = consensoHorario(p, 'precipitation', mods).med, raj = consensoHorario(p, 'wind_gusts_10m', mods).med;
+  for (const d of dias) {
+    d.janela = null;
+    if (!d.risco || d.risco.nivel === 'baixo') continue;
+    const horas = d.a.idx.filter((i) => cape[i] >= T.cape[0] || chuva[i] >= T.chuvaHoraMm[0] || raj[i] >= T.rajada[0]);
+    if (horas.length) d.janela = `${fmt.hora(p.horas[horas[0]], p.offset)} às ${fmt.hora(p.horas[horas[horas.length - 1]] + 3600000, p.offset)}`;
+    else if (d.risco.aviso) d.janela = periodoAviso(d.risco.aviso);
+  }
+  const com = dias.filter((d) => d.risco && d.risco.nivel !== 'baixo');
+  const ordem = ['baixo', 'moderado', 'alto'];
+  const nivel = com.reduce((m, d) => (ordem.indexOf(d.risco.nivel) > ordem.indexOf(m) ? d.risco.nivel : m), 'baixo');
+  const texto = !com.length ? `Sem sinal de temporal ${dias.length > 1 ? 'hoje e amanhã' : 'hoje'}`
+    : com.map((d) => `Risco ${d.risco.nivel} ${d.nome}${d.janela ? `, ${d.janela.replace(/^hoje, /, '')}` : ''}`).join(' · ');
+  return { texto, nivel, dias };
+}
+
+/** Risco de temporal de hoje (o mesmo do cartão no alto da tela), para o radar de tempestade nos detalhes. */
+function riscoDeHoje() {
+  const chovendo = !!medicaoChuvaAgora()?.chovendo;
+  return avaliarRisco(analisarDia(datas()[0], 0, true), chovendo, !chovendo && !!chegandoAgora());
+}
+
+/**
+ * Seção "Radar de tempestade", logo acima do mapa em Hoje (pedido do Gustavo). De cima para baixo:
+ * 1. o veredito: o núcleo que mais importa agora (sobre o local, vindo para cá, se aproximando ou o mais perto);
+ * 2. o radar desenhado (REGRAS.tempestade.raioKm em volta do local), com cada núcleo numerado e a trajetória
+ *    prevista para a próxima hora;
+ * 3. a lista dos núcleos, com a mesma numeração: onde está, para onde vai, se vem para cá e quando, e se ganha
+ *    ou perde força;
+ * 4. o movimento geral da chuva e o risco de temporal previsto para hoje e amanhã (o mesmo dos cartões de risco);
+ * 5. a legenda das cores. O botão abre todos os núcleos, os motivos da previsão, os avisos e os limites do método.
+ */
+function secaoTempestade() {
+  const p = estado.prev, t = tempestadeAgora(), prev = riscoPrevisto(riscoDeHoje(), datas()[0]);
+  const R = REGRAS.tempestade;
+  const x = t?.principal;
+  const f = x ? fraseNucleo(x, p.offset, t.ms) : null;
+  const titulo = !t ? (estado.chegada === null && estado.chegadaEm ? 'Radar indisponível agora' : 'Radar sem leitura recente')
+    : f ? f.titulo : `Nenhuma tempestade até ${R.raioKm} km`;
+  const sub = !t ? 'A previsão abaixo continua valendo.' : f ? f.sub : 'Nenhum núcleo de chuva forte no radar.';
+  // cor da seção = nível do risco de hoje e amanhã (que já inclui o radar); tempestade no raio, longe, é no mínimo moderado
+  const nivel = prev.nivel === 'baixo' && x && x.classe !== 'forte' ? 'moderado' : prev.nivel;
+  const visiveis = t ? t.nucleos.slice(0, MAX_NUCLEOS_LISTA) : [];
+  const tela = el('canvas', { class: 'rt-tela', role: 'img', 'aria-label': `Radar em volta do local, ${R.raioKm} km. ${titulo}.`, width: 1, height: 1 });
+  const lista = visiveis.length ? el('ol', { class: 'rt-lista' }, ...visiveis.map((n, k) => {
+    const fn = fraseNucleo(n, p.offset, t.ms);
+    return el('li', { 'data-classe': n.classe, 'data-tendencia': n.tendencia || 'sem' },
+      el('span', { class: 'rt-num', text: String(k + 1) }),
+      el('span', { class: 'rt-item' },
+        el('b', { text: `${fn.nome} · ${fn.onde}` }),
+        el('span', { class: 'rt-rumo', text: fn.rumo[0].toUpperCase() + fn.rumo.slice(1) }),
+        fn.evolucao ? el('small', { text: fn.evolucao[0].toUpperCase() + fn.evolucao.slice(1) }) : null));
+  })) : null;
+  const restantes = t ? t.nucleos.length - visiveis.length : 0;
+  const m = t?.movimento;
+  const movimento = !t ? null : m && m.kmh >= 5 ? `A chuva se move para ${direcaoNome(m.paraGraus) || 'direção incerta'} a ${fmt.n(m.kmh, 0)} km/h`
+    : visiveis.length ? 'Movimento da chuva ainda não medido: sem hora de chegada' : null;
+  const abrir = () => detalheTempestade(t, prev);
+  tela.addEventListener('click', abrir);
+  const sec = secao('Radar de tempestade', null,
+    el('p', { class: 'rt-veredito' }, el('strong', { text: titulo }), el('span', { text: sub })),
+    el('div', { class: 'rt-corpo' },
+      tela,
+      el('div', { class: 'rt-lado' },
+        lista,
+        restantes > 0 ? el('p', { class: 'rt-mais', text: `Mais ${restantes} no raio de ${R.raioKm} km` }) : null,
+        movimento ? el('p', { class: 'rt-mov', text: movimento }) : null,
+        el('p', { class: 'rt-prev' + (prev.nivel !== 'baixo' ? ' com-risco' : ''), text: prev.texto }))),
+    el('p', { class: 'rt-leg', 'aria-hidden': 'true' },
+      ...[['chuva', 'chuva'], ['forte', 'chuva forte'], ['tempestade', 'tempestade'], ['severa', 'tempestade forte']].map(([k, nome]) => el('span', { class: 'rt-cor' }, el('i', { class: `rt-c-${k}` }), nome)),
+      visiveis.some((n) => n.tendencia && n.tendencia !== 'sobre') ? el('span', { class: 'rt-cor' }, el('i', { class: 'rt-c-rota' }), 'caminho na próxima hora') : null),
+    el('div', { class: 'rt-rodape' },
+      el('button', { type: 'button', class: 'botao-link', onclick: abrir }, 'Detalhes e como funciona'),
+      el('span', { class: 'fonte', text: t ? `RainViewer · ${fmt.horaMin(t.ms, p.offset)}` : 'RainViewer' })));
+  sec.classList.add('radar-t', 'largura-total');
+  sec.dataset.nivel = nivel;
+  // O desenho acompanha o tamanho da seção (girar o celular, redimensionar a janela, trocar de layout).
+  let larguraDesenhada = 0;
+  const desenhar = () => { const w = tela.clientWidth; if (tela.isConnected && w && w !== larguraDesenhada) { larguraDesenhada = w; desenharRadarTempestade(tela, t, visiveis); } };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(desenhar).observe(tela);
+  else requestAnimationFrame(desenhar);
+  return sec;
+}
+
+// Quantos núcleos a lista e o desenho numeram; os outros ficam no detalhe.
+const MAX_NUCLEOS_LISTA = 4;
+// Faixas do radar desenhado, pela refletividade mínima em dBZ (as mesmas de REGRAS.tempestade.dbz), cada uma com a
+// variável de cor do tema (app.css). Os núcleos numerados usam a cor da própria classe: --radar-forte, etc.
+const FAIXAS_DBZ = [[55, '--radar-severa'], [45, '--radar-tempestade'], [40, '--radar-forte'], [30, '--radar-moderada'], [10, '--radar-fraca']];
+
+/**
+ * Desenha o radar da seção: ecos de pelo menos 10 dBZ num círculo de REGRAS.tempestade.raioKm em volta do local
+ * (norte para cima), anéis de 50, 100 e 200 km com a distância escrita, pontos cardeais e o local no centro.
+ * Cada núcleo de `nucleos` ganha o número da lista e, com movimento medido, a trajetória da próxima hora: linha
+ * cheia quando vem para o local ou se aproxima, tracejada quando passa ao largo ou se afasta. Sem núcleos, uma
+ * seta no centro mostra o movimento geral da chuva.
+ * @param {HTMLCanvasElement} tela
+ * @param {object|null} t leitura de tempestadeAgora()
+ * @param {object[]} nucleos núcleos numerados, na ordem da lista
+ */
+function desenharRadarTempestade(tela, t, nucleos = []) {
+  const css = tela.clientWidth || 96, dpr = Math.min(3, window.devicePixelRatio || 1), lado = Math.round(css * dpr);
+  tela.width = lado; tela.height = lado;
+  const c = tela.getContext('2d'), meio = lado / 2, raioPx = meio - 1.5 * dpr, R = REGRAS.tempestade.raioKm, pxKm = raioPx / R;
+  const linha = cor('--linha'), fraco = cor('--fraco'), texto = cor('--texto'), fundo = cor('--sup2');
+  const faixas = FAIXAS_DBZ.map(([lim, nome]) => [lim, corRgb(nome)]);
+  const seta = (x0, y0, x1, y1, cor, largura, tracejada) => {
+    const a = Math.atan2(y1 - y0, x1 - x0), h = 6 * dpr;
+    c.strokeStyle = cor; c.fillStyle = cor; c.lineWidth = largura * dpr; c.setLineDash(tracejada ? [4 * dpr, 4 * dpr] : []);
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.setLineDash([]);
+    c.beginPath(); c.moveTo(x1, y1); c.lineTo(x1 - h * Math.cos(a - 0.45), y1 - h * Math.sin(a - 0.45)); c.lineTo(x1 - h * Math.cos(a + 0.45), y1 - h * Math.sin(a + 0.45)); c.closePath(); c.fill();
+  };
+  c.save(); c.beginPath(); c.arc(meio, meio, raioPx, 0, 2 * Math.PI); c.clip();
+  c.fillStyle = fundo; c.fillRect(0, 0, lado, lado);
+  if (t?.mapa) {
+    const { dbz, n, px, py, kmCelula } = t.mapa, r = Math.ceil(R / kmCelula), w = 2 * r + 1;
+    const img = new ImageData(w, w);
+    for (let j = 0; j < w; j++) for (let i = 0; i < w; i++) {
+      const x = Math.round(px) - r + i, y = Math.round(py) - r + j;
+      if (x < 0 || y < 0 || x >= n || y >= n) continue;
+      const v = dbz[y * n + x], faixa = faixas.find(([lim]) => v >= lim);
+      if (!faixa) continue;
+      img.data.set([...faixa[1], v >= 40 ? 255 : 170], (j * w + i) * 4);
+    }
+    const tmp = Object.assign(document.createElement('canvas'), { width: w, height: w });
+    tmp.getContext('2d').putImageData(img, 0, 0);
+    c.imageSmoothingEnabled = true;
+    const ladoKm = w * kmCelula * pxKm; // a imagem cobre w células centradas no local
+    c.drawImage(tmp, meio - ladoKm / 2, meio - ladoKm / 2, ladoKm, ladoKm);
+  }
+  c.strokeStyle = linha; c.lineWidth = dpr;
+  for (const km of [50, 100, 200]) { c.beginPath(); c.arc(meio, meio, km * pxKm, 0, 2 * Math.PI); c.stroke(); }
+  const m = t?.movimento, mov = m && m.kmh >= 5 ? { lx: Math.sin((m.paraGraus * Math.PI) / 180) * m.kmh, sy: -Math.cos((m.paraGraus * Math.PI) / 180) * m.kmh } : null;
+  // trajetórias da próxima hora, por baixo dos marcadores
+  if (mov) for (const n of nucleos) {
+    if (n.tendencia === 'sobre') continue;
+    const x0 = meio + n.leste * pxKm, y0 = meio + n.sul * pxKm;
+    const perto = n.tendencia === 'chegando' || n.tendencia === 'aproximando';
+    seta(x0, y0, x0 + mov.lx * pxKm, y0 + mov.sy * pxKm, perto ? texto : fraco, perto ? 2 : 1.4, !perto);
+  }
+  if (mov && !nucleos.length) seta(meio, meio, meio + (mov.lx / m.kmh) * raioPx * 0.4, meio + (mov.sy / m.kmh) * raioPx * 0.4, fraco, 1.6, false);
+  c.restore();
+  c.strokeStyle = linha; c.lineWidth = dpr; c.beginPath(); c.arc(meio, meio, raioPx, 0, 2 * Math.PI); c.stroke();
+  // o local
+  c.fillStyle = texto; c.beginPath(); c.arc(meio, meio, 3.2 * dpr, 0, 2 * Math.PI); c.fill();
+  c.strokeStyle = fundo; c.lineWidth = 1.5 * dpr; c.stroke();
+  // pontos cardeais e distância dos anéis
+  const fonte = (css >= 200 ? 11 : 10) * dpr;
+  c.font = `600 ${fonte}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = fraco;
+  c.fillText('N', meio, fonte); c.fillText('S', meio, lado - fonte); c.fillText('L', lado - fonte, meio); c.fillText('O', fonte, meio);
+  c.font = `${(css >= 200 ? 10 : 8.5) * dpr}px system-ui, sans-serif`;
+  for (const km of css >= 200 ? [50, 100, 200] : [100, 200]) { const r = km * pxKm * Math.SQRT1_2; c.fillText(`${km} km`, meio + r + 3 * dpr, meio + r - 6 * dpr); }
+  // marcadores numerados dos núcleos, por cima de tudo
+  const raioM = (css >= 200 ? 9 : 7.5) * dpr;
+  c.font = `700 ${(css >= 200 ? 11 : 9.5) * dpr}px system-ui, sans-serif`;
+  nucleos.forEach((n, k) => {
+    const d = Math.hypot(n.leste, n.sul), lim = R - raioM / pxKm, f = d > lim ? lim / d : 1; // marcador sempre dentro do círculo
+    const x = meio + n.leste * f * pxKm, y = meio + n.sul * f * pxKm;
+    c.beginPath(); c.arc(x, y, raioM, 0, 2 * Math.PI);
+    c.fillStyle = fundo; c.fill(); c.strokeStyle = cor(`--radar-${n.classe}`); c.lineWidth = 2 * dpr; c.stroke();
+    c.fillStyle = texto; c.fillText(String(k + 1), x, y + 0.5 * dpr);
+  });
+}
+
+/** Detalhe do radar de tempestade: núcleos, movimento, previsão, avisos e limites do método. */
+function detalheTempestade(t, prev) {
+  const p = estado.prev, D = REGRAS.tempestade.dbz;
+  const lista = t?.nucleos.slice(0, 8) || [];
+  const motivos = prev.dias.filter((d) => d.risco?.motivos?.length).map((d) => el('li', {}, el('b', { text: `${d.nome[0].toUpperCase()}${d.nome.slice(1)}: risco ${d.risco.nivel}. ` }), `${d.risco.motivos.join('; ')}.`));
+  const avisos = prev.dias.flatMap((d) => (d.risco?.avisosDia || []).filter((a) => /tempestade|granizo|vendaval/i.test(a.titulo || '')));
+  const unicos = [...new Map(avisos.map((a) => [idAviso(a), a])).values()];
+  mostrarInfo('Radar de tempestade',
+    el('h3', { text: t ? `Radar agora · ${fmt.horaMin(t.ms, p.offset)}` : 'Radar agora' }),
+    !t ? el('p', { text: 'Sem leitura recente do radar. A previsão abaixo continua valendo.' })
+      : lista.length ? el('ul', { class: 'tp-lista' }, ...lista.map((x) => {
+        const f = fraseNucleo(x, p.offset, t.ms);
+        return el('li', {}, el('b', { text: f.titulo }), el('br'), `${f.sub}${f.evolucao ? ` · ${f.evolucao}` : ''} · ${Math.round(x.dbz)} dBZ · área de ${fmt.n(x.areaKm2, 0)} km²`);
+      })) : el('p', { text: `Nenhum núcleo de chuva forte ou tempestade até ${REGRAS.tempestade.raioKm} km.` }),
+    t?.movimento ? el('p', { text: `Os ecos se movem para ${direcaoNome(t.movimento.paraGraus) || 'direção incerta'} a ${fmt.n(t.movimento.kmh, 0)} km/h (medido na última hora).` })
+      : t ? el('p', { text: 'Movimento dos ecos não medido agora (pouca chuva no radar ou medidas que não concordam): sem horário de chegada.' }) : null,
+    el('h3', { text: 'Previsão' }),
+    el('p', { text: `${prev.texto}.` }),
+    motivos.length ? el('ul', { class: 'tp-lista' }, ...motivos) : null,
+    unicos.length ? el('ul', { class: 'lt-avisos' }, ...unicos.map((x) => el('li', {}, el('b', { text: `${x.titulo}${x.severidade ? ` (${x.severidade.toLowerCase()})` : ''}` }), el('br'), periodoAviso(x) || 'horário não informado'))) : null,
+    el('details', {}, el('summary', { text: 'Como funciona' }),
+      el('p', { text: `O radar mede a refletividade da chuva em dBZ. A partir de ${D.forte} dBZ é chuva forte; de ${D.tempestade} dBZ, núcleo de tempestade, em geral com raios; de ${D.severa} dBZ, tempestade forte, com granizo possível. O desenho mostra ${REGRAS.tempestade.raioKm} km em volta do local, com o norte para cima e anéis de 50, 100 e 200 km. Cada núcleo tem o número da lista e uma seta com o caminho previsto para a próxima hora: cheia quando vem para cá ou se aproxima, tracejada quando passa ao largo.` }),
+      el('p', { text: `"Vindo para cá" é quando o caminho do núcleo passa a até ${REGRAS.tempestade.localKm} km do local nas próximas ${REGRAS.tempestade.horizonteMin / 60} horas. "Se aproximando" é quando ele não chega a atingir o local, mas passa a até ${REGRAS.tempestade.pertoKm} km. "Ganhando força" e "perdendo força" comparam o núcleo com o que havia no mesmo lugar 30 minutos antes (diferença de ${REGRAS.tempestade.evolucaoDbz} dBZ ou mais).` }),
+      el('p', { text: 'A chegada supõe que a tempestade mantém a direção e a velocidade da última hora. Tempestades nascem, crescem e somem em minutos, e o radar não vê raios nem confirma granizo: use como alerta antecipado, não como certeza.' }),
+      el('p', { class: 'nota', text: 'Radar: RainViewer (composição de radares, quadros de 10 min). Previsão: mediana dos modelos (energia para tempestades, chuva por hora e rajadas) e avisos do INMET.' })),
+    el('p', { text: 'Durante o temporal, fique longe de árvores, postes e áreas abertas. Emergência: Defesa Civil, 199.' }),
+    linkExterno(CONFIG.radarOficial, 'Radar oficial da Defesa Civil RS'));
+}
+
+// Avisos do INMET válidos para o local, do mais grave ao menos grave; na mesma gravidade, o que começa antes.
+function avisosOrdenados() {
+  const grau = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
+  return alertasDoLocal().sort((x, y) => grau(y) - grau(x) || String(x.inicio || '').localeCompare(String(y.inicio || '')));
+}
+
+const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function dentroPoligono(lat, lon, pol) {
+  let dentro = false;
+  for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) {
+    const [yi, xi] = pol[i], [yj, xj] = pol[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) dentro = !dentro;
+  }
+  return dentro;
+}
+function alertasDoLocal() {
+  const p = pontoExato();
+  const pertoDeCampoBom = distanciaKm(p.lat, p.lon, CONFIG.padrao.lat, CONFIG.padrao.lon) < 6 || semAcento(estado.local.nome) === 'campo bom';
+  const noRS = p.lat < -27 && p.lat > -34 && p.lon > -58 && p.lon < -49.5;
+  return (estado.alertas?.avisos || []).filter((a) => {
+    if (pertoDeCampoBom && a.municipioPadrao) return true; // lista oficial de municípios (código IBGE)
+    if (a.poligonos?.length) return a.poligonos.some((pol) => dentroPoligono(p.lat, p.lon, pol)); // teste feito no aparelho
+    if (estado.alertas?.semArea && noRS && /rio grande do sul|\bRS\b/i.test(`${a.titulo} ${a.descricao || ''}`)) { a.incerto = true; return true; }
+    return false;
+  });
+}
+// ------------------------------------------------------------------ Avisos (menu Ver mais)
+
+const GRAVES = ['perigo', 'grande perigo'];
+const severidadeDe = (a) => String(a.severidade || '').trim().toLowerCase();
+
+/** Cartão de um aviso: título, gravidade e período visíveis; descrição, riscos e orientações ao tocar. */
+function cartaoAviso(a) {
+  const sev = severidadeDe(a);
+  const detalhes = [a.descricao, ...(a.riscos || [])].filter(Boolean);
+  return el('article', { class: 'aviso-card' + (GRAVES.includes(sev) ? ' grave' : '') },
+    el('h2', { text: `${a.titulo}${sev ? ` (${sev})` : ''}` }),
+    el('p', { class: 'quando', text: periodoAviso(a) || 'Horário não informado pelo INMET' }),
+    a.incerto ? el('p', { class: 'nota', text: 'Aviso para parte do RS. Confira no INMET se inclui o seu município.' }) : null,
+    detalhes.length || a.instrucoes?.length ? el('details', {}, el('summary', { text: 'Riscos e orientações' }),
+      ...detalhes.map((t) => el('p', { text: t })),
+      ...(a.instrucoes || []).map((t) => el('p', { class: 'nota', text: t }))) : null);
+}
+
+// Ponto vermelho em "Ver mais": só para aviso do local que ainda não foi visto na aba Avisos. Os avisos vistos
+// ficam guardados neste aparelho (prefs 'avisosVistos', só os ainda ativos); um aviso novo faz o ponto voltar.
+// O aviso antecipado do El Niño (alertaEnsoLocal) conta como aviso: um id por dia e tipo de risco.
+const idAviso = (a) => String(a.id || `${a.titulo}|${a.inicio}|${a.fim}`);
+const idsAlertaEnso = (al) => (al?.ativo ? al.dias.map(({ a, riscos }) => `enso|${a.data}|${riscos.map((r) => r.tipo).join('+')}`) : []);
+// al undefined: aviso do El Niño ainda não calculado; mantém os que já estavam marcados como vistos.
+function marcarAvisosVistos(meus, al) {
+  const enso = al === undefined ? prefs.ler('avisosVistos', []).filter((id) => id.startsWith('enso|')) : idsAlertaEnso(al);
+  prefs.gravar('avisosVistos', [...meus.map(idAviso), ...enso]);
+}
+function marcarBotaoAvisos(meus, al) {
+  const vistos = new Set(prefs.ler('avisosVistos', []));
+  const extras = idsAlertaEnso(al);
+  const novos = meus.filter((a) => !vistos.has(idAviso(a))).length + extras.filter((id) => !vistos.has(id)).length;
+  const botao = $('#btn-mais'), item = $('#mais-avisos');
+  if (novos) botao.dataset.avisos = String(novos); else delete botao.dataset.avisos;
+  botao.setAttribute('aria-label', novos ? `Ver mais (${novos} ${novos > 1 ? 'avisos novos' : 'aviso novo'} para o local)` : 'Ver mais');
+  item.textContent = meus.length ? `${meus.length} ${meus.length > 1 ? 'avisos ativos' : 'aviso ativo'} para o local`
+    : extras.length ? 'Chuva ou vento forte previstos' : 'Avisos oficiais do INMET para o local';
+  item.parentElement.classList.toggle('com-aviso', novos > 0);
+}
+
+/**
+ * Aba Avisos: avisos do INMET válidos para o local (alertasDoLocal, do mais grave ao menos grave), os demais
+ * avisos do RS recolhidos e a orientação oficial. Também marca o botão "Ver mais" quando há aviso para o local.
+ */
+function renderAvisos({ semAlertaEnso = false } = {}) {
+  const alvo = $('#avisos-conteudo');
+  const meus = estado.alertas && !estado.alertas.indisponivel ? avisosOrdenados() : [];
+  const al = semAlertaEnso ? undefined : estado.prev ? alertaEnsoLocal() : null;
+  if (estado.aba === 'avisos') marcarAvisosVistos(meus, al);
+  marcarBotaoAvisos(meus, al);
+  const cartaoEnso = al?.ativo && al.dias.length ? el('article', { class: 'aviso-card painel-aviso' },
+    el('h2', { text: 'Atenção: chuva ou vento forte previstos' }),
+    linhasRiscoDias(al),
+    el('p', { class: 'nota', text: `Previsão do painel, não é aviso oficial. Com o El Niño ativo, fique de olho. Chuva forte: mais de ${REGRAS.enso.chuvaForteMm} mm no dia; rajada forte: mais de ${REGRAS.enso.rajadaForteKmh} km/h.` })) : null;
+  const fonte = estado.alertasEm ? el('p', { class: 'nota', text: `INMET · ${fmt.horaMin(estado.alertasEm, estado.prev?.offset ?? -10800)}` }) : null;
+  const oficial = el('p', { class: 'oficial', text: 'Este painel não é fonte oficial. Em situação de risco, siga a Defesa Civil (199) e o INMET.' });
+  const links = el('p', {}, linkExterno('https://alertas2.inmet.gov.br/', 'Avisos no site do INMET'), ' · ', linkExterno('https://www.defesacivil.rs.gov.br/', 'Defesa Civil RS'));
+  if (!estado.alertas) {
+    alvo.replaceChildren(el('p', { class: 'avisos-vazio', text: estado.erros.alertas ? 'Não foi possível consultar os avisos.' : 'Consultando os avisos…' }),
+      ...[estado.erros.alertas ? el('p', { text: 'Isso não significa que não há avisos. Confira no site do INMET.' }) : null, cartaoEnso, links, oficial].filter(Boolean));
+    return;
+  }
+  const outrosRS = estado.alertas.semArea ? [] : (estado.alertas.avisos || [])
+    .filter((a) => !meus.includes(a) && /\bRS\b|rio grande do sul/i.test(a.estados || ''));
+  alvo.replaceChildren(...[
+    meus.length ? null : el('p', { class: 'avisos-vazio', text: `Nenhum aviso do INMET para ${localNaFrase()} agora.` }),
+    ...meus.map(cartaoAviso),
+    fonte,
+    cartaoEnso,
+    outrosRS.length ? el('details', { class: 'avisos-outros' }, el('summary', { text: `Outros avisos no RS (${outrosRS.length})` }),
+      el('ul', {}, ...outrosRS.map((a) => el('li', { text: `${a.titulo}${a.severidade ? ` (${severidadeDe(a)})` : ''}: ${periodoAviso(a) || 'horário não informado'}` })))) : null,
+    links, oficial].filter(Boolean));
+}
+
+/**
+ * Explicação curta da confiança: o que o nível significa, os motivos objetivos que a reduziram
+ * (avaliarDia) e uma nota de que ela mede concordância entre previsões, não a chance de chover.
+ */
+function explicarConfianca(a) {
+  const c = a.av.confianca;
+  const sentido = {
+    alta: 'As previsões concordam entre si. A estimativa é segura.',
+    'média': 'As previsões concordam só em parte. A estimativa pode mudar.',
+    baixa: 'As previsões discordam. Trate esta estimativa como incerta.',
+  }[c.geral];
+  mostrarInfo(`Confiança ${c.geral}`,
+    el('p', { text: sentido }),
+    c.motivos.length ? el('p', { text: `Por quê: ${c.motivos.join('; ')}.` }) : null,
+    el('p', { class: 'nota', text: 'A confiança mede se os modelos concordam, não se vai chover. A regra completa está na aba Modelos.' }));
+}
+
+function regraConfianca() {
+  const R = REGRAS;
+  return el('div', { class: 'explica' },
+    el('p', {}, 'O que a confiança mede: se as fontes independentes concordam sobre a estimativa. Uma chance de 30% em que ECMWF e Met Office concordam é uma estimativa confiável. Cada dia começa com confiança alta e perde nível só por estes motivos, cada um contado uma vez:'),
+    el('ul', {},
+      el('li', { text: `os sistemas de cenários (ECMWF ENS, ECMWF AIFS ENS e Met Office) diferem mais de ${R.difSistemas[0] * 100} pontos na chance de chover (perde dois níveis acima de ${R.difSistemas[1] * 100});` }),
+      el('li', { text: 'com um só sistema de cenários: os modelos e os cenários apontam em direções opostas;' }),
+      el('li', { text: `sem cenários: os modelos discordam se vai chover mais de ${R.chuvaMinimaMm} mm;` }),
+      el('li', { text: 'rajadas: só quando podem ser moderadas ou mais fortes e as fontes variam muito;' }),
+      el('li', { text: `previsão para daqui a ${R.horizonteLongoDias} dias ou mais (dois níveis a partir de 7 dias);` }),
+      el('li', { text: `acerto local de chuva abaixo de ${R.acerto.taxaAcertoBaixa * 100}% nos últimos ${R.acerto.diasMinimos}+ dias;` }),
+      el('li', { text: 'hoje: chuva medida agora que a previsão não esperava.' })),
+    el('p', {}, 'Volume diferente entre modelos não rebaixa a confiança: o painel mostra a melhor estimativa (mediana dos cenários com chuva, ou mediana ponderada dos modelos) e a faixa provável.'),
+    el('p', { class: 'nota', text: 'Os limites ficam no objeto REGRAS, em js/analise.js.' }));
+}
+
+// Temperatura no padrão europeu: o ECMWF IFS (Centro Europeu) é a fonte principal da temperatura e da
+// mínima e máxima, com a correção de viés aprendida pelo painel. Se o ECMWF faltar numa hora, entra a
+// mediana ponderada dos outros modelos. Chuva e vento continuam pela combinação dos modelos.
+const MODELO_TEMP = 'ecmwf_ifs';
+function tempHora(p, variavel, i, mods) {
+  const v = p.modelos[MODELO_TEMP]?.vars[variavel]?.[i];
+  if (valido(v)) return v;
+  const { pesos } = pesosAtuais();
+  return mediana(mods.map((m) => p.modelos[m].vars[variavel]?.[i]), mods.map((m) => pesos[m] ?? 1));
+}
+const serieTemp = (p, variavel, mods) => p.horas.map((_, i) => tempHora(p, variavel, i, mods));
+
+// ------------------------------------------------------------------ Hoje: detalhes
+
+function renderHojeDetalhes() {
+  const alvo = $('#hoje-detalhes');
+  const p = estado.prev;
+  const filhos = [];
+  // Ordem: o que vem pela frente (horas e radar), o que se mede agora, e por fim os detalhes.
+  filhos.push(proximasHoras());
+  // O mapa já montado é reaproveitado quando nada do que ele mostra mudou (mesmo local, tema e estações) e o
+  // radar dele tem menos de 5 minutos: redesenhar a tela não refaz o Leaflet nem pede os quadros de novo.
+  const chaveMapa = [chaveLocal(estado.local), document.documentElement.getAttribute('data-tema') || '', (estado.obs?.fontes || []).map((f) => f.nome).join()].join('|');
+  const mapaReaproveitado = !!estado.mapa && estado.mapa.chave === chaveMapa && Date.now() - estado.mapa.em < 5 * 60000;
+  const mapa = mapaReaproveitado ? estado.mapa.secao : secao('Mapa', null);
+  mapa.classList.add('largura-total');
+  filhos.push(secaoTempestade(), mapa); // o radar de tempestade fica colado logo acima do mapa
+
+  filhos.push(instrumentos());
+  const pm = secao('Previsto x medido', null);
+  filhos.push(pm);
+  const met = secao('Hora a hora', null);
+  met.classList.add('largura-total');
+  filhos.push(met);
+  filhos.push(estadoFontes());
+  alvo.replaceChildren(...filhos);
+  // As partes pesadas entram em etapas próprias da fila, uma por momento ocioso.
+  depois(() => meteograma(met, Date.now() - 2 * 3600000, Date.now() + 48 * 3600000, 24, 'hoje'));
+  depois(() => previstoMedido(pm));
+  if (!mapaReaproveitado) depois(() => {
+    estado.desligarMapa?.(); estado.desligarMapa = null;
+    estado.mapa = { secao: mapa, chave: chaveMapa, em: Date.now() };
+    import('./mapa.js').then((m) => {
+      if (estado.mapa?.secao !== mapa) return; // uma atualização mais nova já trocou a seção
+      estado.desligarMapa = m.secaoMapa(mapa, estado); ocioso(() => m.preCarregarMapa(estado.local.lat, estado.local.lon));
+    }).catch(() => mapa.append(el('p', { class: 'nota', text: 'Mapa indisponível.' })));
+  });
+  void p;
+}
+
+function proximasHoras() {
+  const p = estado.prev, mods = modelosAtivos();
+  const agora = Date.now();
+  const lista = el('div', { class: 'horas', 'data-hscroll': '', role: 'list' });
+  const cons = (v) => consensoHorario(p, v, mods).med;
+  const sit = situacaoAgora();
+  const mm = cons('precipitation'), vento = cons('wind_speed_10m'), raj = cons('wind_gusts_10m'), dia = cons('is_day');
+  let n = 0;
+  for (let i = 0; i < p.horas.length && n < 24; i++) {
+    if (p.horas[i] + 3600000 <= agora) continue;
+    n++;
+    const ch = chanceHora(p.horas[i], sit);
+    const mmHora = ch.origem === 'radar seco' ? 0 : mm[i]; // radar sem chuva por perto: o volume dos modelos não vale
+    const altura = valido(mmHora) ? Math.max(1, Math.sqrt(Math.min(mmHora, 10) / 10) * 34) : 0;
+    lista.append(el('div', { class: 'hora' + (dia[i] === 0 ? ' noite' : ''), role: 'listitem' },
+      el('div', { class: 'h', text: fmt.hora(p.horas[i], p.offset) }),
+      el('div', { class: 'barra', 'aria-hidden': 'true' }, valido(mmHora) ? el('i', { style: { height: altura + 'px' } }) : ''),
+      el('div', { class: 'p', text: valido(ch.p) ? `${Math.round(ch.p * 100)}%` : '–' }),
+      el('div', { class: 'mm', text: valido(mmHora) ? fmt.mm(mmHora) : 'sem dado' }),
+      el('div', { class: 'v', text: valido(vento[i]) ? `${Math.round(vento[i])}` : '–' }),
+      el('div', { class: 'g', text: valido(raj[i]) ? `${Math.round(raj[i])}` : '–' })));
+  }
+  // A faixa não tem rótulos por linha: a legenda é necessária para ler os números.
+  const legenda = el('p', { class: 'legenda-horas' }, el('span', { class: 'p', text: 'chance' }), ' · ', el('span', { class: 'mm', text: 'chuva' }), ' · vento · ', el('span', { class: 'g', text: 'rajada' }), ' (km/h)');
+  const sec = secao('Próximas horas', null, legenda, lista);
+  sec.classList.add('largura-total'); // no computador, a faixa de horas usa a largura toda
+  return sec;
+}
+
+// Sensação medida: a mesma fórmula da prevista (js/analise.js, sensacaoTermica). Vapor pela umidade ou,
+// sem ela, pelo ponto de orvalho; sem vento, só acima de 15 °C (onde o vento não entra na conta).
+function sensacaoMedida(t, ur, orvalho, kmh) {
+  if (!valido(t)) return null;
+  const e = valido(ur) ? (ur / 100) * pressaoVapor(t) : valido(orvalho) ? pressaoVapor(Math.min(orvalho, t)) : null;
+  return sensacaoTermica(t, e, valido(kmh) ? kmh : t >= 15 ? 0 : null);
+}
+
+function instrumentos() {
+  const s = secao('Medições agora', ' ');
+  const sub = s.querySelector('.fonte');
+  if (!estado.obs) { s.append(el('p', { class: 'nota', text: estado.erros.medicoes ? 'Medições indisponíveis no momento.' : 'Carregando medições…' })); return s; }
+  const fontes = fontesNormalizadas();
+  const p = pontoExato();
+  const agora = Date.now();
+  const escolhas = {};
+  const pegar = (k) => (escolhas[k] ??= escolherFonte(fontes, k, p.lat, p.lon, agora, CONFIG.idadeMaxMedicaoMin));
+  const val = (k) => pegar(k).escolhida;
+
+  const t = val('temperatura'), u = val('umidade'), ve = val('vento');
+  const sa = sensacaoAgora(true);
+  const sens = sa?.medida ? sa.valor : null; // calculada com a própria leitura mostrada aqui (o topo leva a leitura até agora)
+  const saAgora = sensacaoAgora();
+  const pr = val('pressao');
+  const dir = val('direcao');
+
+  // estação principal: a que fornece a maior parte das leituras
+  const usadas = ['temperatura', 'umidade', 'vento', 'pressao', 'chuva_h1'].map((k) => val(k)).filter(Boolean);
+  const conta = {};
+  for (const c of usadas) conta[c.fonte.id] = (conta[c.fonte.id] || 0) + 1;
+  const principal = usadas.sort((x, y) => conta[y.fonte.id] - conta[x.fonte.id])[0];
+  if (principal) {
+    sub.textContent = `${nomeEstacao(principal.fonte)}, a ${fmt.n(principal.distancia, 0)} km · leitura ${fmt.idade(principal.ms)}`;
+  } else sub.textContent = 'Nenhuma estação com leitura recente por perto.';
+
+  const outra = (c) => (c && principal && c.fonte.id !== principal.fonte.id ? `${c.fonte.nome}, ${fmt.n(c.distancia, 0)} km` : null);
+  const bloco = (nome, c, texto, nota) => el('div', { class: 'med' + (texto === null ? ' vazio' : '') },
+    el('span', { class: 'med-nome', text: nome }),
+    el('b', { class: 'med-v', text: texto ?? '–' }),
+    (nota || outra(c)) ? el('span', { class: 'med-nota', text: nota || outra(c) }) : null);
+
+  const grade = el('div', { class: 'medicoes' },
+    bloco('Temperatura', t, t ? fmt.c1(t.valor) : null, (() => { // a leitura tem atraso: diz quanto deve estar agora (o mesmo valor do topo)
+      const ta = t ? temperaturaAgora() : null;
+      return ta && ta.med.ms === t.ms && Math.abs(ta.ajuste) >= 0.5 ? `agora cerca de ${fmt.c(ta.valor)}` : null;
+    })()),
+    bloco('Sensação', t, valido(sens) ? fmt.c1(sens) : null, saAgora?.medida && valido(sens) && Math.abs(saAgora.valor - sens) >= 0.5 ? `agora cerca de ${fmt.c(saAgora.valor)}` : null),
+    bloco('Umidade', u, u ? `${Math.round(u.valor)}%` : null),
+    bloco('Ponto de orvalho', val('orvalho'), val('orvalho') ? fmt.c1(val('orvalho').valor) : null),
+    bloco('Vento', ve, ve ? `${fmt.kmh(ve.valor)}${dir ? ' ' + direcaoTexto(dir.valor) : ''}` : null),
+    bloco('Rajada', val('rajada'), val('rajada') ? fmt.kmh(val('rajada').valor) : null));
+  const chuva = el('div', { class: 'medicoes chuvas' },
+    ...[['1 hora', 'chuva_h1'], ['24 h', 'chuva_h24'], ['72 h', 'chuva_h72'], ['7 dias', 'chuva_d7']]
+      .map(([n, k]) => {
+        const c = val(k) || (k === 'chuva_h1' ? val('chuva') : null);
+        const parcial = c?.fonte.leituras?.[k]?.parcial;
+        if (!c && k !== 'chuva_h1' && (estado.obs?.fontes || []).some((f) => f.acumulados?.[k.slice(6)]?.horas > 1)) return bloco(n, null, null, 'registro incompleto');
+        if (!parcial) return bloco(n, c, c ? fmt.mm(c.valor) : null);
+        // horas faltando no registro: a soma é um mínimo, nunca o total
+        const minimo = c.valor >= 1 ? Math.floor(c.valor) : Math.floor(c.valor * 10) / 10; // arredonda para baixo: segue sendo mínimo
+        return bloco(n, c, `≥ ${fmt.mm(minimo)}`, `faltam ${parcial.esperado - parcial.horas} h de registro`);
+      }));
+  s.append(painelPressao(pr), grade);
+  if ([...chuva.children].some((b) => !b.classList.contains('vazio'))) s.append(el('h3', { class: 'med-tit', text: 'Chuva medida' }), chuva);
+
+  // detalhes para quem quiser conferir: outras estações e avisos técnicos
+  const det = el('details', { class: 'med-det' }, el('summary', { text: 'Comparar estações' }));
+  const nomes = { temperatura: ['Temperatura', (v) => fmt.c1(v)], umidade: ['Umidade', (v) => `${Math.round(v)}%`], vento: ['Vento', (v) => fmt.kmh(v)], pressao: ['Pressão', (v) => fmt.hpa(v)], chuva_h1: ['Chuva na última hora', (v) => fmt.mm(v)] };
+  for (const [k, [n, fm]] of Object.entries(nomes)) {
+    const e = pegar(k);
+    const linhas = [e.escolhida && { ...e.escolhida, ok: true }, ...e.outras].filter(Boolean).slice(0, 6);
+    if (!linhas.length) continue;
+    det.append(el('p', { class: 'med-det-t', text: n }), el('ul', {}, ...linhas.map((o) => el('li', { text: `${o.fonte.nome} (${fmt.n(o.distancia, 0)} km): ${o.ok ? fm(o.valor) : o.motivo}, ${fmt.idade(o.ms)}` }))));
+  }
+  det.append(el('p', { class: 'nota', text: 'Leituras com mais de 3 horas, vazias ou fora da faixa física são descartadas. A medição nunca é trocada por previsão.' }));
+  s.append(det);
+  return s;
+}
+
+/**
+ * Dados de pressão para o painel e para o risco de temporal: leitura escolhida, séries medida e prevista
+ * (ancorada na medição), variações de 3 h e 24 h, variação prevista e menor pressão nas próximas 24 h.
+ * Ver docs/TECNICO.md, seção 3.10.
+ * @param {object|null} [pr] leitura de 'pressao' escolhida por escolherFonte (padrão: a estação mais próxima)
+ */
+function dadosPressao(pr = undefined) {
+  if (pr === undefined) {
+    const pt = pontoExato();
+    pr = escolherFonte(fontesNormalizadas(), 'pressao', pt.lat, pt.lon, Date.now(), CONFIG.idadeMaxMedicaoMin).escolhida;
+  }
+  const R = REGRAS.pressao, p = estado.prev, agora = Date.now();
+  const mods = modelosAtivos();
+  const prevHora = (i) => {
+    const v = p?.modelos[MODELO_TEMP]?.vars.pressure_msl?.[i];
+    return valido(v) ? v : mediana(mods.map((m) => p.modelos[m].vars.pressure_msl?.[i]));
+  };
+  let i0 = -1;
+  if (p) for (let k = 0; k < p.horas.length; k++) if (p.horas[k] <= agora) i0 = k;
+  const seriePrev = p ? p.horas.map((ms, i) => ({ ms, valor: prevHora(i) })) : [];
+
+  // medição: série da mesma estação da leitura escolhida
+  const serieMed = pr ? (estado.obs?.fontes.find((x) => x.id === pr.fonte.id)?.serie || [])
+    .filter((x) => valido(x.pressao)).map((x) => ({ ms: x.ms, valor: x.pressao })) : [];
+  let v3 = variacaoSerie(serieMed, 3, R.toleranciaMin.h3), v24 = variacaoSerie(serieMed, 24, R.toleranciaMin.h24);
+  let origemTend = 'medida';
+  if (!v3 && !v24 && i0 >= 0) {
+    const ate = seriePrev.slice(0, i0 + 1);
+    v3 = variacaoSerie(ate, 3, R.toleranciaMin.h3); v24 = variacaoSerie(ate, 24, R.toleranciaMin.h24);
+    origemTend = 'prevista';
+  }
+  const atual = pr ? pr.valor : (i0 >= 0 ? seriePrev[i0].valor : null);
+  // Ancoragem: a previsão é deslocada pela diferença entre a medição atual e o valor previsto para agora,
+  // para os valores previstos (menor pressão e gráfico) ficarem na mesma referência da estação.
+  // Variações não mudam com o deslocamento. Só com leitura de até 2 h.
+  const ancora = pr && i0 >= 0 && valido(seriePrev[i0].valor) && agora - pr.ms <= 2 * 3600000 ? pr.valor - seriePrev[i0].valor : 0;
+  if (ancora) for (const q of seriePrev) if (valido(q.valor)) q.valor += ancora;
+  // previsão: variação até daqui a N horas e menor valor nas próximas 24 h
+  let varPrev = null, minimo24 = null;
+  if (i0 >= 0) {
+    const iN = i0 + R.previsaoHoras;
+    if (iN < seriePrev.length && valido(seriePrev[i0].valor) && valido(seriePrev[iN].valor)) varPrev = seriePrev[iN].valor - seriePrev[i0].valor;
+    for (let k = i0 + 1; k <= i0 + 24 && k < seriePrev.length; k++) if (valido(seriePrev[k].valor) && (!minimo24 || seriePrev[k].valor < minimo24.valor)) minimo24 = seriePrev[k];
+  }
+  return { pr, p, agora, i0, seriePrev, serieMed, v3, v24, origemTend, atual, ancora, varPrev, minimo24 };
+}
+
+/**
+ * Risco de temporal do dia (riscoTemporal em analise.js), com os mesmos valores mostrados na tela:
+ * rajada do resumo do dia, maior chuva horária e maior CAPE (medianas entre modelos) nas horas do dia,
+ * queda de pressão de 3 h (só hoje) e aviso de tempestade do INMET válido para o local e a data.
+ */
+function avaliarRisco(a, chovendo, chegando) {
+  const p = estado.prev, mods = modelosAtivos();
+  const maxNoDia = (v) => maximo(a.idx.map((i) => consensoHorario(p, v, mods).med[i]));
+  const doDia = alertasDoLocal().filter((x) => (!x.inicio || x.inicio.slice(0, 10) <= a.data) && (!x.fim || x.fim.slice(0, 10) >= a.data));
+  const avisos = doDia.filter((x) => /tempestade|granizo|vendaval/i.test(x.titulo || ''));
+  const ordem = ['perigo potencial', 'perigo', 'grande perigo'];
+  const grau = (x) => ordem.indexOf(String(x.severidade || '').trim().toLowerCase());
+  const maisGrave = avisos.sort((x, y) => grau(y) - grau(x))[0] || null;
+  const aviso = maisGrave ? String(maisGrave.severidade || '').trim().toLowerCase() : null;
+  const r = riscoTemporal({
+    prob: a.av.prob, chovendo, chegando,
+    cape: maxNoDia('cape'), chuvaHora: maxNoDia('precipitation'),
+    rajada: a.av.rajada?.mediana ?? a.rajadaPico?.valor ?? null,
+    d3Pressao: a.diaIndice === 0 ? dadosPressao().v3?.delta ?? null : null,
+    aviso,
+    nucleoRadar: a.diaIndice === 0 ? nucleoRadarHoje() : null,
+  });
+  // granizo: aviso do INMET que o cita, código de granizo do UKMO ou ambiente favorável (REGRAS.granizo)
+  const capeH = consensoHorario(p, 'cape', mods).med;
+  // nível de congelamento: dos modelos da previsão quando houver; senão do GFS auxiliar (os três não o publicam)
+  const congModelos = consensoHorario(p, 'freezing_level_height', mods).med;
+  const congH = congModelos.some(valido) ? congModelos : p.auxiliar?.congelamento || [];
+  const horasCape = a.idx.filter((i) => valido(capeH[i]) && capeH[i] >= REGRAS.granizo.cape);
+  const ukmo = p.modelos.ukmo_global_deterministic_10km?.vars.weather_code;
+  const granizo = sinaisGranizo({
+    avisos: doDia, codigosUkmo: ukmo ? a.idx.map((i) => ukmo[i]).filter(valido) : [],
+    cape: maxNoDia('cape'), congelamento: minimo(horasCape.map((i) => congH[i]).filter(valido)), nivelTemporal: r?.nivel ?? null,
+  });
+  if (!r && !granizo) return null;
+  // granizo sempre vem com tempestade: o cartão aparece pelo menos como risco moderado
+  const base = r && r.nivel !== 'baixo' ? r : { nivel: 'moderado', pontos: r?.pontos ?? 0, motivos: r?.motivos ?? [] };
+  const grauAv = (x) => ['perigo potencial', 'perigo', 'grande perigo'].indexOf(String(x.severidade || '').trim().toLowerCase());
+  return { ...(granizo ? base : r), aviso: maisGrave, granizo, avisosDia: [...doDia].sort((x, y) => grauAv(y) - grauAv(x)) };
+}
+
+/**
+ * Período de um aviso do INMET ("AAAA-MM-DD HH:MM", horário de Brasília) em texto curto:
+ * "hoje, das 10:00 às 23:59" ou "08/11, das 00:00 às 23:59" num dia só; com as duas datas quando passa de um dia.
+ */
+function periodoAviso(av) {
+  const ok = (s) => /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(s || ''));
+  if (!ok(av?.inicio) || !ok(av?.fim)) return null;
+  const hoje = partesLocais(Date.now(), -10800).data;
+  const d = (s) => s.slice(0, 10), h = (s) => s.slice(11, 16), dm = (s) => `${s.slice(8, 10)}/${s.slice(5, 7)}`;
+  if (d(av.inicio) === d(av.fim)) return `${d(av.inicio) === hoje ? 'hoje' : dm(av.inicio)}, das ${h(av.inicio)} às ${h(av.fim)}`;
+  return `das ${h(av.inicio)} de ${dm(av.inicio)} às ${h(av.fim)} de ${dm(av.fim)}`;
+}
+
+/**
+ * Análise da pressão ao nível do mar, no topo do bloco "Medições agora".
+ * Medição: série da estação escolhida (INMET reduz a pressão da estação ao nível do mar; METAR informa SLP).
+ * Sem série medida, as tendências usam a previsão (ECMWF, ou mediana dos modelos) e isso é dito na tela.
+ * Previsão: variação nas próximas REGRAS.pressao.previsaoHoras horas e menor pressão nas próximas 24 h.
+ * O sinal de chuva vem de avaliarPressao (analise.js) e não altera a chance de chuva dos modelos.
+ * @param {object|null} pr leitura escolhida por escolherFonte para 'pressao'
+ * @returns {HTMLElement}
+ */
+function painelPressao(pr) {
+  const R = REGRAS.pressao;
+  const { p, agora, i0, seriePrev, serieMed, v3, v24, atual, varPrev, minimo24 } = dadosPressao(pr);
+  const cls = classeTendenciaPressao(v3?.delta);
+  const av = avaliarPressao({ atual, d3: v3?.delta, d24: v24?.delta, prev: varPrev });
+  const caixa = el('div', { class: 'pressao' });
+  const sinal = (d) => `${d > 0 ? '+' : ''}${fmt.n(d, 1)} hPa`;
+  // Cabeçalho objetivo: valor, tendência de 3 h e a conclusão em uma linha. O restante fica em "Ver detalhes".
+  caixa.append(el('div', { class: 'pr-topo' },
+    el('span', { class: 'med-nome', text: 'Pressão atmosférica' }),
+    el('b', { class: 'pr-v', text: valido(atual) ? fmt.hpa(atual) : '–' }),
+    cls ? el('span', { class: `pr-tend ${cls.sentido}`, text: `${cls.sentido === 'caindo' ? '▼' : cls.sentido === 'subindo' ? '▲' : '●'} ${cls.texto}${v3 ? ` (${sinal(v3.delta)} em 3 h)` : ''}` }) : null));
+  // A leitura parte da chance de chuva principal de hoje (a mesma da primeira tela), para nunca contradizê-la.
+  const hoje = datas()[0];
+  const lp = leituraPressao(av, p && hoje ? analisarDia(hoje, 0, true).av.prob : null);
+  if (lp) {
+    caixa.classList.add(`sinal-${lp.classe}`);
+    caixa.append(el('p', { class: 'pr-sinal' }, el('b', { text: lp.titulo + '. ' }), lp.texto));
+  }
+  const det = el('details', { class: 'med-det' }, el('summary', { text: 'Ver detalhes' }));
+  const linhas = [
+    ['Últimas 24 h', v24 ? sinal(v24.delta) : 'sem dado'],
+    [`Próximas ${R.previsaoHoras} h (previsão)`, valido(varPrev) ? sinal(varPrev) : 'sem dado'],
+    ['Menor nas próximas 24 h', minimo24 ? `${fmt.hpa(minimo24.valor)} às ${fmt.hora(minimo24.ms, p.offset)}` : 'sem dado'],
+  ];
+  det.append(el('dl', { class: 'pr-lista' }, ...linhas.flatMap(([a, b]) => [el('dt', { text: a }), el('dd', { text: b })])));
+  if (av?.motivos.length) det.append(el('p', { class: 'nota', text: `Pela pressão: ${av.motivos.join('; ')}.` }));
+  caixa.append(det);
+  // gráfico: últimas 24 h medidas e próximas 24 h previstas (desenhado ao abrir, quando o contêiner tem largura)
+  let desenhado = false;
+  det.addEventListener('toggle', () => {
+    if (!det.open || desenhado || !p || i0 < 0) return;
+    desenhado = true;
+    const ini = Math.max(0, i0 - 24), fim = Math.min(p.horas.length - 1, i0 + 24);
+    const x = p.horas.slice(ini, fim + 1);
+    const med = x.map((ms) => { if (ms > agora) return null; const o = serieMed.find((q) => Math.abs(q.ms - ms) <= 30 * 60000); return o ? o.valor : null; });
+    const prv = x.map((_, k) => seriePrev[ini + k].valor);
+    criarGrafico(det, { x, noites: noitesDe(p.diario, x[0], x[x.length - 1]), fuso: p.fuso, emitirHora: false, titulo: 'Pressão: 24 h medidas e 24 h previstas', altura: 140,
+      fonte: pr ? notaFonte(pr, p.offset) : notaPrevisao(p.offset),
+      series: [
+        { rotulo: 'previsto', valores: prv, corCss: '--texto', dash: [6, 4], largura: 1.5, formato: (v) => fmt.hpa(v) },
+        { rotulo: 'medido', valores: med, corCss: '--chuva', pontos: true, largura: 2.5, formato: (v) => fmt.hpa(v) },
+      ], eixos: [{ formato: (v) => `${v}`, tamanho: 48, rotulo: 'hPa' }] });
+    det.append(el('p', { class: 'nota', text: `Como é calculado: queda em 3 h soma 1 ponto (2 se rápida); queda de ${R.queda24hForte} hPa em 24 h, queda prevista de ${R.variacaoPrevForte} hPa em ${R.previsaoHoras} h e pressão abaixo de ${R.baixa} hPa somam 1 cada; subidas e pressão acima de ${R.alta} hPa tiram pontos. A conclusão sempre parte da chance de chuva do topo da tela.` }));
+  });
+  return caixa;
+}
+
+function textoWmo(c) {
+  const t = { 0: 'céu limpo', 1: 'predomínio de sol', 2: 'parcialmente nublado', 3: 'nublado', 45: 'nevoeiro', 48: 'nevoeiro com geada',
+    51: 'garoa fraca', 53: 'garoa', 55: 'garoa forte', 61: 'chuva fraca', 63: 'chuva moderada', 65: 'chuva forte', 66: 'chuva congelante', 67: 'chuva congelante forte',
+    80: 'pancadas fracas', 81: 'pancadas de chuva', 82: 'pancadas fortes', 95: 'trovoada', 96: 'trovoada com granizo', 99: 'trovoada com granizo forte' };
+  return t[c] || `código ${c}`;
+}
+
+// ------------------------------------------------------------------ meteograma
+
+const PAINEIS = {
+  chuva: 'Chuva', vento: 'Vento', temperatura: 'Temperatura', pressao: 'Pressão', umidade: 'Umidade', nuvens: 'Nuvens', cape: 'Instabilidade',
+};
+
+function meteograma(container, iniMs, fimMs, horasVisiveis, id) {
+  const p = estado.prev, mods = modelosAtivos();
+  const idx = []; p.horas.forEach((ms, i) => { if (ms >= iniMs && ms <= fimMs) idx.push(i); });
+  const x = idx.map((i) => p.horas[i]);
+  const C = (v) => { const c = consensoHorario(p, v, mods); return { med: idx.map((i) => c.med[i]), lo: idx.map((i) => c.lo[i]), hi: idx.map((i) => c.hi[i]) }; };
+  const disponivel = (v) => mods.some((m) => p.modelos[m].vars[v]);
+  // Um gráfico por vez, escolhido num seletor compacto (antes eram 7 botões sempre à vista).
+  const salvo = prefs.ler('paineis-v2', ['chuva'])[0];
+  let abertos = [PAINEIS[salvo] ? salvo : 'chuva'];
+  const chips = el('div', { class: 'paineis' });
+  const area = el('div');
+  container.append(chips, area);
+  const noites = noitesDe(p.diario, iniMs, fimMs);
+  const base = { x, noites, horasVisiveis, fuso: p.fuso, sync: 'meteo-' + id };
+
+  function desenhar() {
+    limparGraficos(area);
+    area.replaceChildren();
+    chips.replaceChildren(seletor('Gráfico', Object.entries(PAINEIS), abertos[0], (k) => { abertos = [k]; prefs.gravar('paineis-v2', abertos); desenhar(); }));
+    const fonte = notaPrevisao(p.offset);
+    if (abertos.includes('chuva')) {
+      // chance por hora como todas as telas mostram (chanceHora: cenários, teto do dia, radar e medição), nunca a
+      // precipitation_probability crua, que mostrava 15% com o dia em 0%
+      const ch = C('precipitation'), sit = situacaoAgora();
+      const pr = { med: idx.map((i) => { const c = chanceHora(p.horas[i], sit); return valido(c.p) ? c.p * 100 : null; }) };
+      let acc = 0, falhou = false; const acum = ch.med.map((v) => { if (!valido(v)) { falhou = true; return null; } if (falhou) return null; acc += v; return acc; });
+      criarGrafico(area, { ...base, titulo: 'Chuva por hora, acumulada e probabilidade', fonte,
+        series: [
+          { rotulo: 'mm/h', valores: ch.med, corCss: '--chuva', barras: true, escala: 'mm', formato: (v) => `${fmt.n(v, 1)} mm` },
+          { rotulo: 'acumulada', valores: acum, corCss: '--chuva', escala: 'acc', largura: 2, formato: (v) => `${fmt.n(v, 1)} mm` },
+          { rotulo: 'probabilidade', valores: pr.med, corCss: '--texto', escala: '%', dash: [5, 4], largura: 1.5, formato: (v) => `${Math.round(v)}%` },
+        ],
+        escalas: { mm: { range: (u, a, b) => [0, Math.max(2, b)] }, acc: { range: (u, a, b) => [0, Math.max(5, b)] }, '%': { range: [0, 100] } },
+        eixos: [{ escala: 'mm', formato: (v) => `${v}` , rotulo: 'mm/h' }, { escala: '%', lado: 1, grade: false, formato: (v) => `${v}%`, tamanho: 40 }] });
+    }
+    if (abertos.includes('vento')) {
+      const v = C('wind_speed_10m'), g = C('wind_gusts_10m');
+      const dirs = idx.map((i) => direcaoMedia(mods.map((m) => p.modelos[m].vars.wind_direction_10m?.[i])));
+      criarGrafico(area, { ...base, titulo: 'Vento médio, rajadas e direção', fonte, setas: dirs, altura: 190,
+        series: [
+          { rotulo: 'rajada mín.', valores: g.lo, corCss: '--rajada', faixa: true, semLegenda: true },
+          { rotulo: 'rajada máx.', valores: g.hi, corCss: '--rajada', faixa: true, semLegenda: true },
+          { rotulo: 'rajada', valores: g.med, corCss: '--rajada', largura: 2.5, formato: (x) => `${Math.round(x)} km/h` },
+          { rotulo: 'vento médio', valores: v.med, corCss: '--texto', largura: 1.5, formato: (x) => `${Math.round(x)} km/h` },
+        ],
+        bandas: [{ de: 1, ate: 0, corCss: '--rajada' }],
+        escalas: { y: { range: (u, a, b) => [0, Math.max(40, b + 10)] } }, eixos: [{ formato: (x) => `${x}`, rotulo: 'km/h' }] });
+    }
+    if (abertos.includes('temperatura')) {
+      criarGrafico(area, { ...base, titulo: 'Temperatura, sensação térmica e ponto de orvalho', fonte,
+        series: [
+          { rotulo: 'temperatura', valores: idx.map((i) => tempHora(p, 'temperature_2m', i, mods)), corCss: '--quente', largura: 2.5, formato: (v) => fmt.c1(v) },
+          { rotulo: 'sensação', valores: idx.map((i) => tempHora(p, 'apparent_temperature', i, mods)), corCss: '--quente', dash: [5, 4], largura: 1.5, formato: (v) => fmt.c1(v) },
+          { rotulo: 'orvalho', valores: C('dew_point_2m').med, corCss: '--fria', largura: 1.5, formato: (v) => fmt.c1(v) },
+        ], eixos: [{ formato: (v) => `${v}°` }] });
+    }
+    if (abertos.includes('pressao')) {
+      criarGrafico(area, { ...base, titulo: 'Pressão ao nível do mar', fonte, altura: 140,
+        series: [{ rotulo: 'pressão', valores: C('pressure_msl').med, corCss: '--texto', formato: (v) => fmt.hpa(v) }], eixos: [{ formato: (v) => `${v}`, tamanho: 48, rotulo: 'hPa' }] });
+    }
+    if (abertos.includes('umidade')) {
+      criarGrafico(area, { ...base, titulo: 'Umidade relativa', fonte, altura: 140,
+        series: [{ rotulo: 'umidade', valores: C('relative_humidity_2m').med, corCss: '--chuva', formato: (v) => `${Math.round(v)}%` }],
+        escalas: { y: { range: [0, 100] } }, eixos: [{ formato: (v) => `${v}%` }] });
+    }
+    if (abertos.includes('nuvens')) {
+      if (!disponivel('cloud_cover_low')) area.append(el('p', { class: 'nota', text: 'Nuvens por camada: nenhum modelo forneceu este dado.' }));
+      else criarGrafico(area, { ...base, titulo: 'Cobertura de nuvens por camada', fonte, altura: 150,
+        series: [
+          { rotulo: 'altas', valores: C('cloud_cover_high').med, corCss: '--nuvens-altas', largura: 1.5, formato: (v) => `${Math.round(v)}%` },
+          { rotulo: 'médias', valores: C('cloud_cover_mid').med, corCss: '--fria', largura: 1.5, formato: (v) => `${Math.round(v)}%` },
+          { rotulo: 'baixas', valores: C('cloud_cover_low').med, corCss: '--texto', largura: 2.5, formato: (v) => `${Math.round(v)}%` },
+        ], escalas: { y: { range: [0, 100] } }, eixos: [{ formato: (v) => `${v}%` }] });
+    }
+    if (abertos.includes('cape')) {
+      if (!disponivel('cape')) area.append(el('p', { class: 'nota', text: 'CAPE: nenhum modelo forneceu este dado.' }));
+      else {
+        criarGrafico(area, { ...base, titulo: 'CAPE (energia para nuvens de tempestade)', fonte, altura: 140,
+          series: [{ rotulo: 'CAPE', valores: C('cape').med, corCss: '--quente', formato: (v) => `${Math.round(v)} J/kg` }], eixos: [{ formato: (v) => `${v}`, tamanho: 48, rotulo: 'J/kg' }] });
+        area.append(el('p', { class: 'explica', text: 'CAPE mede quanta energia o ar tem para formar nuvens de tempestade. Abaixo de 500 J/kg é pouco; acima de 1.000 J/kg, se houver gatilho, podem surgir temporais. Não é previsão de raios nem garante tempestade.' }));
+      }
+    }
+    if (!abertos.length) area.append(el('p', { class: 'nota', text: 'Escolha um painel acima.' }));
+  }
+  desenhar();
+}
+
+// ------------------------------------------------------------------ previsto x medido
+
+function previstoMedido(s) {
+  const p = estado.prev;
+  const temSerie = (estado.obs?.fontes || []).some((f) => f.serie.length >= 3);
+  const placar = linhaPlacar();
+  // sem medições do dia, os gráficos não aparecem (nunca compara com previsão no lugar de medição);
+  // o placar, que vem do histórico, continua sozinho na seção
+  const soPlacar = () => { if (placar) s.append(placar); else s.remove(); };
+  if (!estado.obs || !temSerie) { soPlacar(); return; }
+  const hoje = datas()[0];
+  // só horas encerradas: a hora atual já recebe a ancoragem na medição e não serve para comparar
+  const idx = indicesDoDia(p.horas, hoje, p.offset).filter((i) => p.horas[i] + 3600000 <= Date.now());
+  if (idx.length < 2) { soPlacar(); return; }
+  const mods = modelosAtivos();
+  const pt = pontoExato();
+  const fontes = fontesNormalizadas();
+  const escolha = (v) => escolherFonte(fontes, v, pt.lat, pt.lon, Date.now(), CONFIG.idadeMaxMedicaoMin).escolhida;
+  const fT = escolha('temperatura'), fC = escolha('chuva'), fR = escolha('rajada') || escolha('vento');
+  const x = idx.map((i) => p.horas[i]);
+  const medidoEm = (fonte, v) => {
+    if (!fonte) return x.map(() => null);
+    const serie = estado.obs.fontes.find((f) => f.id === fonte.fonte.id)?.serie || [];
+    return x.map((ms) => { const o = serie.find((q) => Math.abs(q.ms - ms) <= 30 * 60000); return o && valido(o[v]) ? o[v] : null; });
+  };
+  const prevT = idx.map((i) => tempHora(p, 'temperature_2m', i, mods));
+  const medT = medidoEm(fT, 'temperatura');
+  criarGrafico(s, { x, noites: noitesDe(p.diario, x[0], x[x.length - 1]), fuso: p.fuso, sync: 'pm', emitirHora: false, titulo: 'Temperatura hoje', altura: 150,
+    fonte: fT ? notaFonte(fT, p.offset) : 'Sem medição de temperatura',
+    series: [
+      { rotulo: 'previsto', valores: prevT, corCss: '--quente', dash: [6, 4], largura: 1.5, formato: (v) => fmt.c1(v) },
+      { rotulo: 'medido', valores: medT, corCss: '--texto', pontos: true, largura: 2.5, formato: (v) => fmt.c1(v) },
+    ], eixos: [{ formato: (v) => `${v}°` }] });
+  // chuva acumulada
+  const prevC = []; let a = 0;
+  for (const i of idx) { const v = mediana(mods.map((m) => p.modelos[m].vars.precipitation?.[i])); a = valido(v) ? a + v : a; prevC.push(valido(v) ? a : null); }
+  const medCh = medidoEm(fC, 'chuva'); let b = 0, quebrou = false;
+  const medC = medCh.map((v) => { if (!valido(v)) { quebrou = true; return null; } if (quebrou) return null; b += v; return b; });
+  criarGrafico(s, { x, fuso: p.fuso, sync: 'pm', emitirHora: false, titulo: 'Chuva acumulada hoje', altura: 140,
+    fonte: fC ? notaFonte(fC, p.offset) : 'Sem medição de chuva perto',
+    series: [
+      { rotulo: 'previsto', valores: prevC, corCss: '--chuva', dash: [6, 4], largura: 1.5, formato: (v) => `${fmt.n(v, 1)} mm` },
+      { rotulo: 'medido', valores: medC, corCss: '--texto', pontos: true, largura: 2.5, formato: (v) => `${fmt.n(v, 1)} mm` },
+    ], escalas: { y: { range: (u, mi, ma) => [0, Math.max(5, ma)] } }, eixos: [{ formato: (v) => `${v}` , rotulo: 'mm' }] });
+  const prevG = idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.wind_gusts_10m?.[i])));
+  const medG = medidoEm(fR, fR?.fonte && escolha('rajada') ? 'rajada' : 'vento');
+  criarGrafico(s, { x, fuso: p.fuso, sync: 'pm', emitirHora: false, titulo: 'Rajadas hoje', altura: 140,
+    fonte: fR ? notaFonte(fR, p.offset) : 'Sem medição de vento',
+    series: [
+      { rotulo: 'previsto', valores: prevG, corCss: '--rajada', dash: [6, 4], largura: 1.5, formato: (v) => `${Math.round(v)} km/h` },
+      { rotulo: 'medido', valores: medG, corCss: '--texto', pontos: true, largura: 2.5, formato: (v) => `${Math.round(v)} km/h` },
+    ], escalas: { y: { range: (u, mi, ma) => [0, Math.max(40, ma + 5)] } }, eixos: [{ formato: (v) => `${v}`, rotulo: 'km/h' }] });
+  if (placar) s.append(placar);
+}
+
+/**
+ * Placar de acerto da previsão da véspera, calculado pelo GitHub Actions (dados/calibracao.json, campo placar):
+ * os últimos 30 dias com medição da estação. Uma linha "Acerto da véspera · chuva X% · máx. Y% · rajada Z%"
+ * com a fonte no formato "Fonte · Horário"; ao tocar, o detalhe com os critérios e o período completo.
+ * Só aparece perto da estação (calibracaoLocal), porque o placar mede o acerto ali.
+ */
+function linhaPlacar() {
+  const k = calibracaoLocal(), pl = k?.placar, u = pl?.ultimos;
+  if (!u?.dias) return null;
+  const pct = (x) => (valido(x?.pct) ? `${Math.round(x.pct * 100)}%` : '–');
+  const dataBr = (d) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : '');
+  const fonte = `${pl.fonte.replace(/^INMET\s+A884$/, 'INMET Campo Bom')} · até ${dataBr(u.fim)}`;
+  const linha = (nome, x, crit) => el('li', {}, el('b', { text: `${nome}: ${pct(x)}` }), ` dos dias ${crit}${valido(x?.erroMedio) ? ` (erro médio ${fmt.n(x.erroMedio, 1)})` : ''}`);
+  const bloco = (titulo, x) => [el('h3', { text: titulo }), el('ul', { class: 'lt-avisos' },
+    linha('Chuva', x.chuva, 'em que chover ou não chover foi previsto certo (1 mm ou mais)'),
+    linha('Máxima', x.tmax, `com erro de até ${pl.limites.tempC} °C`),
+    linha('Mínima', x.tmin, `com erro de até ${pl.limites.tempC} °C`),
+    x.rajada?.n ? linha('Rajada', x.rajada, `com erro de até ${pl.limites.rajadaKmh} km/h`) : null)];
+  const abrir = () => mostrarInfo('Acerto da véspera',
+    el('p', { text: 'Quanto a previsão feita no dia anterior acertou, comparada com a estação do INMET em Campo Bom. Chuva, temperatura e rajada já com a correção pelo histórico, medida em meses que a correção não viu.' }),
+    ...bloco(`Últimos ${u.dias} dias (${dataBr(u.ini)} a ${dataBr(u.fim)})`, u),
+    ...(pl.completo?.dias > u.dias ? bloco(`Todo o período (${pl.completo.dias} dias, desde ${dataBr(pl.completo.ini)}/${pl.completo.ini.slice(2, 4)})`, pl.completo) : []),
+    el('p', { class: 'nota', text: 'O arquivo do INMET chega com um ou dois meses de atraso; o placar é recalculado sozinho quando ele chega.' }));
+  // linha visível em linguagem simples; percentuais, critérios e erros ficam no detalhe
+  const de = (x) => `${x.acertos} de ${x.n} dias`;
+  const texto = `A previsão da véspera acertou a chuva em ${de(u.chuva)} e a temperatura máxima em ${de(u.tmax)}`;
+  return el('button', { type: 'button', class: 'linha-placar', onclick: abrir },
+    el('span', { class: 'lt-txt' }, texto, el('small', { text: fonte })));
+}
+
+// Nota de fonte dos gráficos, no formato "Fonte · Horário" (ex.: "INMET Campo Bom · 12:00").
+// `c` é a leitura escolhida por escolherFonte: o horário é o da última leitura usada daquela estação.
+function nomeEstacao(fonte) {
+  const nome = fonte.nome.replace(/\s*\((INMET|METAR)\)\s*$/i, '').toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase());
+  return `${fonte.tipo === 'inmet' ? 'INMET' : 'METAR'} ${nome}`;
+}
+function notaFonte(c, off) { return `${nomeEstacao(c.fonte)} · ${fmt.horaMin(c.ms, off)}`; }
+function notaPrevisao(off) { return `Open-Meteo · ${fmt.horaMin(estado.prevEm, off)}`; }
+
+// Fontes de dados, de forma enxuta: de onde vem cada dado e como é calculado, mais uma linha de situação.
+function estadoFontes() {
+  const w = workerConfigurado();
+  const falhas = [
+    ['previsão', !estado.erros.previsao && estado.prev],
+    ['cenários', !!estado.ens],
+    ['medições', estado.obs && !estado.erros.medicoes],
+    ['alertas', estado.alertas && !estado.alertas.indisponivel],
+  ].filter(([, ok]) => !ok).map(([n]) => n);
+  const itens = [
+    ['Temperatura', 'ECMWF, o modelo europeu, corrigido pelo que o painel aprende comparando com as estações.'],
+    ['Chuva e vento', 'Combinação do ECMWF, do AIFS e do Met Office, com mais peso para o que vem acertando mais.'],
+    ['Chance de chuva', 'Fração dos cenários dos modelos (ensemble) que mostram chuva em cada hora.'],
+    ['Medições', w ? 'Estações do INMET e dos aeroportos (METAR) mais próximas.' : 'Estação do INMET em Campo Bom.'],
+    ['Radar e alertas', 'RainViewer e avisos oficiais do INMET.'],
+  ];
+  return secao('Fontes de dados', falhas.length ? `Sem resposta agora: ${falhas.join(', ')}. O restante está atualizado.` : 'Todas as fontes responderam.',
+    el('ul', { class: 'fontes-lista' }, ...itens.map(([t, d]) => el('li', {}, el('b', { text: t + ': ' }), d))));
+}
+
+// ------------------------------------------------------------------ Amanhã: detalhes
+
+// Detalhes de um dia inteiro: Amanhã e qualquer dia aberto pela Semana (o mesmo painel; a imprecisão aparece na confiança).
+function renderAmanhaDetalhes(data) { renderDiaDetalhes($('#amanha-detalhes'), data, 1, 'amanha'); }
+
+function renderDiaDetalhes(alvo, data, diaIndice, id) {
+  const p = estado.prev, mods = modelosAtivos();
+  const a = analisarDia(data, diaIndice, false);
+  const filhos = [];
+  // períodos
+  const per = { madrugada: [], 'manhã': [], tarde: [], noite: [] };
+  for (const i of a.idxTodo) per[periodoDoDia(partesLocais(p.horas[i], p.offset).hora)].push(i);
+  const sit = situacaoAgora();
+  const caixas = Object.entries(per).map(([nome, idx]) => {
+    // mesma chance por hora do gráfico e da tabela de horas (cenários do ensemble), para nenhuma tela discordar da outra
+    const prob = maximo(idx.map((i) => { const c = chanceHora(p.horas[i], sit); return valido(c.p) ? c.p * 100 : null; }));
+    const mm = idx.reduce((s, i) => { const v = mediana(mods.map((m) => p.modelos[m].vars.precipitation?.[i])); return valido(v) ? s + v : s; }, 0);
+    const g = maximo(idx.map((i) => mediana(mods.map((m) => p.modelos[m].vars.wind_gusts_10m?.[i]))));
+    const t = idx.map((i) => tempHora(p, 'temperature_2m', i, mods));
+    return el('div', { class: 'periodo' }, el('h3', { text: nome[0].toUpperCase() + nome.slice(1) }),
+      el('div', { class: 'p', text: valido(prob) ? `${Math.round(prob)}% de chance` : 'chance sem dado' }),
+      el('div', { text: fmt.mm(mm) }),
+      el('div', { class: 'g', text: valido(g) ? `rajada ${Math.round(g)} km/h` : 'rajada sem dado' }),
+      el('div', {}, el('span', { class: 'tmin', text: fmt.c(minimo(t)) || '–' }), ' a ', el('span', { class: 'tmax', text: fmt.c(maximo(t)) || '–' })));
+  });
+  filhos.push(secao('Períodos', notaPrevisao(p.offset), el('div', { class: 'periodos' }, ...caixas)));
+  const met = secao('Hora a hora', null);
+  met.classList.add('largura-total');
+  filhos.push(met);
+  const k = p.diario.datas.indexOf(data);
+  filhos.push(secao('Sol e UV', null,
+    el('p', {}, `Nascer do sol ${fmt.horaMin(p.diario.nascer[k], p.offset)}, pôr do sol ${fmt.horaMin(p.diario.por[k], p.offset)}.`),
+    el('p', {}, 'Índice UV máximo: ', valido(p.diario.uvMax[k]) ? el('b', { text: `${fmt.n(p.diario.uvMax[k], 0)} (${textoUv(p.diario.uvMax[k])})` }) : ausente('sem dado'))));
+  filhos.push(secao('Confiança', null, el('ul', {}, ...(a.av.confianca.motivos.length ? a.av.confianca.motivos : ['modelos e cenários concordam']).map((m) => el('li', { text: m }))),
+    el('button', { type: 'button', class: 'chip', onclick: () => explicarConfianca(a) }, 'Como a confiança é calculada')));
+  alvo.replaceChildren(...filhos);
+  meteograma(met, p.horas[a.idxTodo[0]], p.horas[a.idxTodo[a.idxTodo.length - 1]], null, id);
+}
+
+// Sem ensemble, a fração de modelos acima do limite é concordância, não probabilidade: isso precisa ficar dito.
+function notaConcordancia(a) { return a && a.limites.origem !== 'cenários do ensemble' ? 'Sem cenários agora: mostra concordância, não probabilidade.' : null; }
+
+function textoUv(u) { return u < 3 ? 'baixo' : u < 6 ? 'moderado' : u < 8 ? 'alto' : u < 11 ? 'muito alto' : 'extremo'; }
+
+function tabelaLimites(dias) {
+  const p = estado.prev;
+  const L = REGRAS.limitesSemana;
+  const cab = el('tr', {}, el('th', { text: 'Dia' }), ...L.chuva.map((l) => el('th', { class: 'n', text: `>${l} mm` })), ...L.rajada.map((l) => el('th', { class: 'n', text: `>${l} km/h` })));
+  const linhas = dias.map((a) => el('tr', {}, el('td', { text: `${fmt.diaSemana(p.horas[a.idxTodo[0]], p.offset)} ${fmt.dataCurta(p.horas[a.idxTodo[0]], p.offset)}` }),
+    ...a.limites.chuva.map((c) => el('td', { class: 'p', text: valido(c.p) ? `${Math.round(c.p * 100)}%` : '–' })),
+    ...a.limites.rajada.map((c) => el('td', { class: 'g', text: valido(c.p) ? `${Math.round(c.p * 100)}%` : '–' }))));
+  return el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', { class: 'mini-tab' }, el('thead', {}, cab), el('tbody', {}, ...linhas)));
+}
+
+// ------------------------------------------------------------------ Dia (aberto pela Semana)
+
+// Tocar num dia da Semana abre o painel completo dele. Hoje e Amanhã vão para as próprias abas.
+function abrirDia(data) {
+  const k = datas().indexOf(data);
+  if (k === 0) return irPara('hoje');
+  if (k === 1) return irPara('amanha');
+  if (k < 0) return irPara('semana');
+  estado.diaAberto = data;
+  // Resposta no mesmo quadro do toque: primeiro o resumo do dia e a troca de aba; os detalhes (gráficos e
+  // tabelas, a parte pesada) entram logo depois de a tela ser pintada, se a pessoa ainda estiver nesse dia.
+  limparGraficos($('#aba-dia'));
+  $('#dia-detalhes').replaceChildren();
+  renderPrimeira($('#dia-primeira'), data, k, false);
+  irPara('dia');
+  requestAnimationFrame(() => setTimeout(() => {
+    if (estado.diaAberto === data && estado.prev) renderDiaDetalhes($('#dia-detalhes'), data, k, 'dia');
+  }, 0));
+}
+
+function renderDia() {
+  const k = datas().indexOf(estado.diaAberto);
+  if (k < 2) { estado.diaAberto = null; if (estado.aba === 'dia') irPara('semana'); return; } // o dia passou
+  limparGraficos($('#aba-dia')); // o dia anterior sai da memória antes de desenhar o novo
+  renderPrimeira($('#dia-primeira'), estado.diaAberto, k, false);
+  renderDiaDetalhes($('#dia-detalhes'), estado.diaAberto, k, 'dia');
+}
+
+// ------------------------------------------------------------------ Semana
+
+function renderSemana() {
+  const alvo = $('#semana-conteudo');
+  const p = estado.prev;
+  const ds = datas();
+  const dias = ds.slice(0, 7).map((d, k) => analisarDia(d, k, k === 0));
+  const extra = ds.slice(7).map((d, k) => analisarDia(d, k + 7, false)).filter((a) => a.modelosComDado.length);
+  const chovendoAgora = !!medicaoChuvaAgora()?.chovendo;
+  const restoAgora = chovendoAgora ? chuvaRestante() : null;
+  const item = (a, longe) => {
+    const ms = p.horas[a.idxTodo[0]];
+    const agoraHoje = a.diaIndice === 0 && chovendoAgora;
+    const cab = el('button', { type: 'button', class: 'cab', onclick: () => abrirDia(a.data) },
+      el('span', { class: 'dn' }, a.diaIndice === 0 ? 'Hoje' : fmt.diaSemana(ms, p.offset), el('small', { text: fmt.dataCurta(ms, p.offset) })),
+      el('span', { class: 'resumo', text: agoraHoje ? 'Chovendo agora' : a.frase }),
+      el('span', { class: 'nums' },
+        el('span', { class: 'p', text: agoraHoje ? `agora${restoAgora && !restoAgora.fraca ? ' ≈ ' + fmt.mm(restoAgora.mm) : ''}` : a.av.prob === null ? 'chuva –' : `${fmt.pct(a.av.prob)}${a.av.volume && a.av.prob >= 0.15 ? ' ' + fmt.mm(a.av.volume.mediana) : ''}` }),
+        el('span', { class: 'g', text: a.av.rajada ? `${Math.round(a.av.rajada.mediana)} km/h` : 'rajada –' }),
+        el('span', { class: 't' }, el('span', { class: 'tmin', text: fmt.c(a.tmin) || '–' }), '/', el('span', { class: 'tmax', text: fmt.c(a.tmax) || '–' }))),
+      el('span', { class: 'cf', text: `confiança ${a.av.confianca.geral}` }));
+    return el('li', { class: 'dia' + (longe ? ' longe' : '') }, cab);
+  };
+  const filhos = [el('ul', { class: 'dias largura-total' }, ...dias.map((a) => item(a)))];
+  if (extra.length) {
+    const det = el('details', { class: 'largura-total' }, el('summary', { class: 'chip', style: { display: 'inline-flex', 'align-items': 'center', margin: '10px 0' } }, `Mais ${extra.length} dias (confiança menor)`),
+      el('p', { class: 'nota', text: 'Depois do 7º dia, use só como tendência.' }),
+      el('ul', { class: 'dias' }, ...extra.map((a) => item(a, true))));
+    filhos.push(det);
+  }
+  // Semana só com o resumo de cada dia e a confiança (regra do Gustavo). Abaixo, duas tendências que servem
+  // em qualquer ocasião: temperatura e rajada. Tabelas de limites e faixas ficam na aba Modelos.
+  const x = dias.map((a) => p.horas[a.idxTodo[0]] + 12 * 3600000);
+  const fmtDia = (u, vals) => vals.map((v) => { const d = dataNoFuso(v, p.fuso); return ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()]; });
+  const gTemp = secao('Temperatura mínima e máxima', null);
+  const gRaj = secao('Rajada máxima', null);
+  filhos.push(gTemp, gRaj);
+  alvo.replaceChildren(...filhos);
+  // Os gráficos entram numa etapa própria da fila, para nenhuma etapa passar de um quadro longo.
+  depois(() => {
+    const base = { x, fuso: p.fuso, sync: 'semana', emitirHora: false, agora: false, formatoX: fmtDia, altura: 160 };
+    criarGrafico(gTemp, { ...base, series: [
+      { rotulo: 'mín baixa', valores: dias.map((a) => a.tminFaixa[0]), corCss: '--fria', faixa: true, semLegenda: true },
+      { rotulo: 'mín alta', valores: dias.map((a) => a.tminFaixa[1]), corCss: '--fria', faixa: true, semLegenda: true },
+      { rotulo: 'máx baixa', valores: dias.map((a) => a.tmaxFaixa[0]), corCss: '--quente', faixa: true, semLegenda: true },
+      { rotulo: 'máx alta', valores: dias.map((a) => a.tmaxFaixa[1]), corCss: '--quente', faixa: true, semLegenda: true },
+      { rotulo: 'mínima', valores: dias.map((a) => a.tmin), corCss: '--fria', pontos: false, largura: 2.5, formato: (v) => fmt.c(v) },
+      { rotulo: 'máxima', valores: dias.map((a) => a.tmax), corCss: '--quente', largura: 2.5, formato: (v) => fmt.c(v) },
+    ], bandas: [{ de: 1, ate: 0, corCss: '--fria' }, { de: 3, ate: 2, corCss: '--quente' }], eixos: [{ formato: (v) => `${v}°` }] });
+    criarGrafico(gRaj, { ...base, series: [
+      { rotulo: 'baixa', valores: dias.map((a) => a.av.rajada?.min ?? null), corCss: '--rajada', faixa: true, semLegenda: true },
+      { rotulo: 'alta', valores: dias.map((a) => a.av.rajada?.max ?? null), corCss: '--rajada', faixa: true, semLegenda: true },
+      { rotulo: 'rajada máxima', valores: dias.map((a) => a.av.rajada?.mediana ?? null), corCss: '--rajada', largura: 2.5, pontos: true, formato: (v) => `${Math.round(v)} km/h` },
+    ], bandas: [{ de: 1, ate: 0, corCss: '--rajada' }], escalas: { y: { range: (u, a, b) => [0, Math.max(60, b + 10)] } }, eixos: [{ formato: (v) => `${v}`, rotulo: 'km/h' }] });
+  });
+}
+
+function tabelaFaixas(dias) {
+  const p = estado.prev;
+  return el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', {},
+    el('thead', {}, el('tr', {}, el('th', { text: 'Dia' }), el('th', { class: 'n', text: 'Chuva' }), el('th', { class: 'n', text: 'Rajada' }), el('th', { class: 'n', text: 'Mín' }), el('th', { class: 'n', text: 'Máx' }))),
+    el('tbody', {}, ...dias.map((a) => el('tr', {},
+      el('td', { text: fmt.diaSemana(p.horas[a.idxTodo[0]], p.offset) }),
+      el('td', { class: 'n', text: a.av.prob !== null && a.av.prob < REGRAS.ocorrencia.poucoProvavel ? 'sem chuva' : a.av.volume ? (Math.round(a.av.volume.min) === Math.round(a.av.volume.max) ? `${fmt.n(a.av.volume.max, 0)} mm` : `${fmt.n(a.av.volume.min, 0)}–${fmt.n(a.av.volume.max, 0)} mm`) : '–' }),
+      el('td', { class: 'n', text: a.av.rajada ? `${Math.round(a.av.rajada.min)}–${Math.round(a.av.rajada.max)}` : '–' }),
+      el('td', { class: 'n', text: valido(a.tminFaixa[0]) ? `${Math.round(a.tminFaixa[0])}–${Math.round(a.tminFaixa[1])}°` : '–' }),
+      el('td', { class: 'n', text: valido(a.tmaxFaixa[0]) ? `${Math.round(a.tmaxFaixa[0])}–${Math.round(a.tmaxFaixa[1])}°` : '–' }))))),
+    el('p', { class: 'nota', text: 'Volume de chuva só nos casos em que chove mais de 1 mm.' }));
+}
+
+// ------------------------------------------------------------------ Modelos
+
+// "hoje", "amanhã" ou "qua 02/12": o dia da semana sozinho é ambíguo quando cai na semana seguinte.
+function quandoCurto(ms, offset) {
+  const ds = datas(), d = partesLocais(ms, offset).data, k = ds.indexOf(d);
+  return k === 0 ? 'hoje' : k === 1 ? 'amanhã' : `${fmt.diaSemana(ms, offset)} ${fmt.dataCurta(ms, offset)}`;
+}
+
+function renderModelos() {
+  const alvo = $('#modelos-conteudo');
+  const p = estado.prev, mods = modelosAtivos();
+  const ds = datas().slice(0, 7);
+  const dias = ds.map((d, k) => analisarDia(d, k, k === 0));
+  const filhos = [];
+  const div = horizonteDivergencia(p, mods);
+  filhos.push(el('p', { class: 'frase', style: { 'font-size': '22px', 'min-height': '0' }, text: div ? `Os modelos começam a divergir ${quandoCurto(div.ms, p.offset)} às ${fmt.hora(div.ms, p.offset)}` : 'Os modelos concordam nos próximos dias' }));
+  filhos.push(el('p', { class: 'nota', text: div ? `Motivo: ${div.motivo}. Antes disso, a previsão é mais confiável.` : 'Nenhum bloco de 6 h com diferença grande de chuva ou rajada.' }));
+  const ausencias = mods.map((m) => p.modelos[m].ausentes.length ? `${MODELOS[m].nome} não fornece: ${p.modelos[m].ausentes.map(nomeVar).join(', ')}` : null).filter(Boolean);
+  const faltam = Object.keys(MODELOS).filter((m) => !mods.includes(m));
+  // tabela lado a lado
+  const tab = el('div', { class: 'tabela-rolar largura-total', 'data-hscroll': '' }, el('table', {},
+    el('thead', {}, el('tr', {}, el('th', { text: 'Dia' }), ...mods.map((m) => el('th', { class: 'n', text: MODELOS[m].curto })))),
+    el('tbody', {}, ...dias.map((a) => el('tr', {}, el('td', { text: fmt.diaSemana(p.horas[a.idxTodo[0]], p.offset) }),
+      ...mods.map((m) => { const r = a.resumos.find((x) => x.modelo === m); return el('td', { class: 'n' },
+        el('div', { class: 'p', style: { color: 'var(--chuva-txt)' }, text: valido(r.chuva) ? fmt.mm(r.chuva) : '–' }),
+        el('div', { style: { color: 'var(--rajada-txt)' }, text: valido(r.rajada?.valor) ? `${Math.round(r.rajada.valor)} km/h` : '–' })); }))))));
+  filhos.push(secao('Chuva e rajada de cada modelo', 'Traço indica dado ausente, não zero.', tab,
+    ...ausencias.map((t) => el('p', { class: 'nota', text: t })), faltam.length ? el('p', { class: 'nota', text: `Sem dados agora: ${faltam.map((m) => MODELOS[m].nome).join(', ')}.` }) : null));
+  const gC = secao('Chuva acumulada por modelo', 'Faixa: cenários do ensemble (p10 a p90) e mediana.');
+  const gR = secao('Rajadas por modelo', 'Faixa: cenários do ensemble (p10 a p90).');
+  gC.classList.add('largura-total'); gR.classList.add('largura-total');
+  filhos.push(gC, gR);
+  // vindas da Semana (1.11.0): faixas entre modelos e chances por limite, coerentes com a chance do dia
+  filhos.push(secao('Faixa provável por dia', null, tabelaFaixas(dias)));
+  filhos.push(secao('Chance por limite', notaConcordancia(dias[0]), tabelaLimites(dias)));
+  const secAcerto = secao('Acerto de cada modelo', null);
+  filhos.push(secAcerto);
+  depois(() => secAcerto.append(tabelaAcerto()));
+  filhos.push(secao('Regra de confiança', null, regraConfianca()));
+  if (estado.ensErros?.length) filhos.push(el('p', { class: 'nota', text: `Ensemble: ${estado.ensErros.join('; ')}.` }));
+  alvo.replaceChildren(...filhos);
+  // Os gráficos (com o leque dos cenários, a conta mais cara da aba) entram numa etapa própria da fila.
+  depois(() => {
+    const ini = Date.now() - 3600000, fim = Date.now() + 7 * 86400000;
+    const idx = []; p.horas.forEach((ms, i) => { if (ms >= ini && ms <= fim) idx.push(i); });
+    const x = idx.map((i) => p.horas[i]);
+    const leque = (v, acumular) => {
+      if (!estado.ens) return null;
+      const membros = [];
+      for (const e of Object.values(estado.ens)) {
+        const pos = new Map(e.horas.map((ms, i) => [ms, i]));
+        for (const s of e.membros[v] || []) {
+          let a = 0, ok = true;
+          membros.push(x.map((ms) => { const i = pos.get(ms); const val = i === undefined ? null : s[i]; if (!valido(val)) { ok = false; return null; } if (acumular) { a += val; return ok ? a : null; } return val; }));
+        }
+      }
+      if (membros.length < 10) return null;
+      // Uma ordenação por hora serve aos três quantis (mesma interpolação de `quantil`, em js/analise.js).
+      const p10 = [], p50 = [], p90 = [];
+      const doOrdenado = (xs, qq) => { const pos = (xs.length - 1) * qq, lo = Math.floor(pos), hi = Math.ceil(pos); return xs[lo] + (xs[hi] - xs[lo]) * (pos - lo); };
+      for (let k = 0; k < x.length; k++) {
+        const xs = Float64Array.from(membros.map((m) => m[k]).filter(valido)).sort();
+        p10.push(xs.length ? doOrdenado(xs, 0.1) : null); p50.push(xs.length ? doOrdenado(xs, 0.5) : null); p90.push(xs.length ? doOrdenado(xs, 0.9) : null);
+      }
+      return { p10, p50, p90, n: membros.length };
+    };
+    const serieModelo = (m, v, acumular) => { let a = 0, quebra = false; return idx.map((i) => { const val = p.modelos[m].vars[v]?.[i]; if (!valido(val)) { quebra = acumular; return null; } if (quebra) return null; a += val; return acumular ? a : val; }); };
+    const base = { x, fuso: p.fuso, sync: 'modelos', emitirHora: false, altura: 200, horasVisiveis: 72, noites: noitesDe(p.diario, ini, fim) };
+    // um gráfico por etapa
+    for (const [caixa, v, acumular, unidade] of [[gC, 'precipitation', true, 'mm'], [gR, 'wind_gusts_10m', false, 'km/h']]) depois(() => {
+      const l = leque(v, acumular);
+      const series = [];
+      const bandas = [];
+      if (l) {
+        series.push({ rotulo: 'p10', valores: l.p10, corCss: '--cenarios', faixa: true, semLegenda: true }, { rotulo: 'p90', valores: l.p90, corCss: '--cenarios', faixa: true, semLegenda: true },
+          { rotulo: `mediana de ${l.n} cenários`, valores: l.p50, corCss: '--cenarios', largura: 2, dash: [2, 3], formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
+        bandas.push({ de: 1, ate: 0, corCss: '--cenarios' });
+      }
+      for (const m of mods) if (p.modelos[m].vars[v]) series.push({ rotulo: MODELOS[m].curto, valores: serieModelo(m, v, acumular), corCss: MODELOS[m].cor.slice(4, -1), largura: 2, formato: (z) => `${fmt.n(z, 0)} ${unidade}` });
+      if (!l) caixa.append(el('p', { class: 'nota', text: 'Leque de cenários indisponível: a Ensemble API não respondeu. Mostrando só os modelos.' }));
+      criarGrafico(caixa, { ...base, series, bandas, escalas: { y: { range: (u, a, b) => [0, Math.max(acumular ? 10 : 50, b)] } }, eixos: [{ formato: (z) => `${z}`, rotulo: unidade }] });
+    });
+  });
+}
+
+function nomeVar(v) {
+  return { precipitation_probability: 'probabilidade', wind_gusts_10m: 'rajadas', visibility: 'visibilidade', cape: 'CAPE', uv_index: 'UV', weather_code: 'código do tempo', freezing_level_height: 'nível de congelamento', cloud_cover_low: 'nuvens baixas', cloud_cover_mid: 'nuvens médias', cloud_cover_high: 'nuvens altas', precipitation: 'chuva', pressure_msl: 'pressão', is_day: 'dia/noite', apparent_temperature: 'sensação', dew_point_2m: 'orvalho', relative_humidity_2m: 'umidade' }[v] || v;
+}
+
+/**
+ * Acerto de cada modelo por estação de verificação, em até duas tabelas:
+ * 1. histórico importado (dados/calibracao.json): anos de previsões passadas x medições do INMET, com os erros
+ *    de temperatura e rajada já depois da correção (medidos fora da amostra), que é o que o painel mostra;
+ * 2. últimos dias registrados pelo servidor (Worker, /v1/acerto), quando houver.
+ */
+function tabelaAcerto() {
+  const blocos = [];
+  const pt = pontoExato();
+  const dataBr = (d) => `${d.slice(5, 7)}/${d.slice(2, 4)}`;
+  const cabecalho = el('thead', {}, el('tr', {}, el('th', { text: 'Previsão feita' }), el('th', { class: 'n', text: 'Acertou se chovia' }), el('th', { class: 'n', text: 'Erro na chuva' }), el('th', { class: 'n', text: 'Erro na rajada' }), el('th', { class: 'n', text: 'Erro na máxima' }), el('th', { class: 'n', text: 'Dias' })));
+  // À vista, só a previsão feita na véspera (uma linha por modelo); 2, 3 e 5 dias antes ficam num toque.
+  const tabelaDe = (linhas) => el('div', { class: 'tabela-rolar', 'data-hscroll': '' }, el('table', {}, cabecalho.cloneNode(true), el('tbody', {}, ...linhas)));
+  const tabela = (linhas) => {
+    const vespera = linhas.filter((l) => l.dataset.lead === '1'), resto = linhas.filter((l) => l.dataset.lead !== '1');
+    return el('div', {}, tabelaDe(vespera.length ? vespera : linhas),
+      vespera.length && resto.length ? el('details', {}, el('summary', { text: 'Previsões feitas 2, 3 e 5 dias antes' }), tabelaDe(resto)) : null);
+  };
+  const linha = (m, d, acerto, volume, rajada, tmax, n) => el('tr', { 'data-lead': String(d) }, el('td', { text: `${MODELOS[m].curto}, ${d === 1 ? 'na véspera' : `${d} dias antes`}` }),
+    el('td', { class: 'n', text: valido(acerto) ? `${Math.round(acerto * 100)}%` : '–' }),
+    el('td', { class: 'n', text: valido(volume) ? `${fmt.n(volume, 1)} mm` : '–' }),
+    el('td', { class: 'n', text: valido(rajada) ? `${fmt.n(rajada, 0)} km/h` : '–' }),
+    el('td', { class: 'n', text: valido(tmax) ? `${fmt.n(tmax, 1)}°` : '–' }),
+    el('td', { class: 'n', text: valido(n) ? `${n}` : '–' }));
+  // erro em uso no painel: depois da correção quando ela foi aprovada, senão o bruto
+  const erroUsado = (x) => (x ? (x.usar && x.origem !== 'curto prazo' ? x.maeDepois : x.origem === 'curto prazo' ? null : x.maeAntes) : null);
+
+  // estação mais próxima aberta; as outras num toque
+  const porDistancia = [...VERIFICACAO].sort((x, y) => distanciaKm(pt.lat, pt.lon, x.lat, x.lon) - distanciaKm(pt.lat, pt.lon, y.lat, y.lon));
+  const outras = [];
+  for (const v of porDistancia) {
+    if (v !== porDistancia[0] && !outras.length) outras.push(blocos.length);
+    const a = estado.acerto[v.id];
+    const k = estado.calib?.estacao?.id === v.id ? estado.calib : null;
+    const o = estado.calib?.outras?.[v.id];
+    blocos.push(el('h3', { text: `${v.nome}, ${fmt.n(distanciaKm(pt.lat, pt.lon, v.lat, v.lon), 0)} km` }));
+    if (!k && o) {
+      const linhas = [];
+      for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
+        const x = o.modelos?.[m]?.[d]; if (!x) continue;
+        linhas.push(linha(m, d, x.acertoChuva, x.maeChuva, x.maeRajada, x.maeTmax, x.n));
+      }
+      blocos.push(el('p', { class: 'fonte', text: `${v.chuva ? 'INMET' : 'METAR'} ${o.estacao.nome} · histórico de ${dataBr(o.periodo.ini)} a ${dataBr(o.periodo.fim)}` }));
+      if (!v.chuva) blocos.push(el('p', { class: 'nota', text: 'O aeroporto não mede a chuva, só temperatura e vento.' }));
+      if (linhas.length) blocos.push(tabela(linhas));
+    }
+    if (k) {
+      const linhas = [];
+      for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
+        const x = k.modelos?.[m]; if (!x?.chuva?.[d]) continue;
+        // chuva em uso no painel: corrigida (fora da amostra) quando a tabela de quantis foi aprovada
+        const q = x.chuvaQuantis?.usar ? x.chuvaQuantis.validacao?.porLead?.[d]?.depois : null;
+        // máxima em uso: a do método hora a hora quando ele foi aprovado, senão a do método diário
+        const h = k.temperaturaHoraria?.modelos?.[m]?.leads?.[d];
+        const tmax = h?.usar ? h.validacao?.tmax?.horaria?.mae : erroUsado(x.tmax?.[d]);
+        linhas.push(linha(m, d, q ? q.acerto : x.chuva[d].acerto, q ? q.mae : x.chuva[d].mae, erroUsado(x.rajada?.[d]), tmax, x.chuva[d].n));
+      }
+      blocos.push(el('p', { class: 'fonte', text: `INMET Campo Bom · histórico de ${dataBr(k.periodo.ini)} a ${dataBr(k.periodo.fim)}` }));
+      if (linhas.length) blocos.push(tabela(linhas));
+    }
+    if (a?.dias) {
+      const linhas = [];
+      for (const m of Object.keys(MODELOS)) for (const d of [1, 2, 3, 5]) {
+        const r = a.porModelo?.[m]?.[d]; if (!r) continue;
+        if (!r.amostrasChuva && !r.amostrasRajada && !r.amostrasTmax) continue;
+        linhas.push(linha(m, d, r.taxaChuva, r.maeChuva, r.maeRajada, r.maeTmax, Math.max(r.amostrasChuva, r.amostrasRajada, r.amostrasTmax)));
+      }
+      blocos.push(el('p', { class: 'fonte', text: `${v.chuva ? 'INMET' : 'METAR'} · últimos ${a.dias} dias, até ${a.periodo.fim.slice(8, 10)}/${a.periodo.fim.slice(5, 7)}` }));
+      if (linhas.length) blocos.push(tabela(linhas));
+    } else if (!k && !o) {
+      blocos.push(el('p', { class: 'nota', text: workerConfigurado() ? 'Sem histórico importado; os dias passam a contar a partir de amanhã.' : 'Sem histórico importado.' }));
+    }
+  }
+  if (outras.length) {
+    const resto = blocos.splice(outras[0]);
+    blocos.push(el('details', {}, el('summary', { text: 'Outras estações' }), ...resto));
+  }
+  blocos.push(el('p', { class: 'nota', text: '"Acertou se chovia" conta os dias em que o modelo disse que ia chover e choveu, ou disse que não ia e não choveu. Os erros mostram, em média, quanto o modelo errou para mais ou para menos: quanto menor, melhor. Em Campo Bom, chuva, temperatura e rajada já com a correção que o painel aplica.' }));
+  return el('div', {}, ...blocos);
+}
+
+// ------------------------------------------------------------------ El Niño
+// A aba responde a uma pergunta: "devo me preocupar?". Três leituras separadas, para ninguém confundir o
+// fenômeno com o tempo de cada dia: o Pacífico (o El Niño em si), o RS (a tendência da estação) e o local
+// (os próximos dias, com as mesmas chances da Semana e os avisos do INMET). Regras em REGRAS.enso (analise.js).
+
+const MESES_CURTOS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const MESES_LONGOS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const NOME_FASE = { elNino: 'El Niño', laNina: 'La Niña', neutro: 'Normal' };
+// Trimestres da NOAA (siglas em inglês) em meses em português: OND → out–dez.
+function trimestrePt(tri) {
+  const c = mesCentralTrimestre(tri);
+  return c ? `${MESES_CURTOS[(c + 10) % 12]}–${MESES_CURTOS[c % 12]}` : tri;
+}
+/** "muito forte" para o El Niño; no feminino para a La Niña ("fraca", "moderada"). */
+const forcaNoGenero = (s) => (s.fase === 'laNina' ? String(s.forca).replace(/o$/, 'a') : s.forca);
+const nomeSituacao = (s) => (s.fase === 'neutro' ? 'Sem El Niño nem La Niña' : `${NOME_FASE[s.fase]} ${forcaNoGenero(s)}`);
+const mesAno = (x, anoAtual) => (x.ano === anoAtual ? MESES_LONGOS[x.mes - 1] : `${MESES_LONGOS[x.mes - 1]} de ${x.ano}`);
+const situacaoAtual = () => (estado.enso?.partes ? situacaoEnso(estado.enso.partes, Date.now()) : null);
+
+let ensoCarregando = false;
+async function renderElNino() {
+  const alvo = $('#elnino-conteudo');
+  if (!estado.enso || Date.now() - estado.ensoEm > CONFIG.intervalos.enso * 60000) {
+    if (ensoCarregando) return;
+    ensoCarregando = true;
+    alvo.replaceChildren(el('p', { class: 'nota', text: 'Carregando dados oficiais…' }));
+    try { estado.enso = await buscarEnso(); estado.ensoEm = Date.now(); salvarCache('enso', estado.enso); }
+    catch (e) { const c = await lerCache('enso'); if (c) { estado.enso = c.dados; estado.ensoEm = c.salvoEm; } else { alvo.replaceChildren(el('p', { text: `Dados do El Niño indisponíveis (${e.message}).` })); ensoCarregando = false; return; } }
+    ensoCarregando = false;
+  }
+  // redesenha quando os dados do El Niño, a previsão ou os avisos do INMET mudam; renderTudo também força o redesenho
+  const chave = `${estado.ensoEm}|${estado.prevEm}|${estado.alertasEm}`;
+  if (alvo.dataset.desenhadoEm === chave && alvo.childElementCount) return; // nada mudou: só mostra
+  alvo.dataset.desenhadoEm = chave;
+  renderAvisos(); // o aviso antecipado do El Niño também aparece na aba Avisos
+  const E = estado.enso, P = E.partes || {};
+  limparGraficos(alvo);
+  const sit = situacaoAtual(), al = alertaEnsoLocal();
+  const indice = P.roni?.dados?.length ? P.roni.dados : P.oni?.dados;
+  // Tela aberta: a resposta, as três leituras, a evolução e as notícias. Histórico e dados técnicos ficam a um toque.
+  const filhos = [painelResumo(sit, al, E)];
+  if (sit?.evolucao.length > 1 && (sit.fase !== 'neutro' || sit.evolucao.some((e) => e.fase !== 'neutro'))) filhos.push(evolucaoEnso(sit, P));
+  if (P.noticias && sit?.fase === 'elNino') filhos.push(noticiasRs(P.noticias));
+  filhos.push(el('details', { class: 'enso-recolhido largura-total' }, el('summary', { text: 'Outros El Niños fortes e o que houve no RS' }), comparacaoHistorica(indice, sit)));
+  const gInd = secao('Temperatura do mar nos últimos 2 anos', null);
+  const gHist = secao('El Niño e La Niña desde 1950', null);
+  gInd.classList.add('largura-total'); gHist.classList.add('largura-total');
+  filhos.push(el('details', { class: 'enso-recolhido enso-tecnico largura-total' }, el('summary', { text: 'Dados técnicos (NOAA e IRI)' }),
+    ...dadosTecnicos(E, sit, gInd, gHist),
+    el('p', { class: 'nota', text: `Dados verificados ${fmt.idade(E.verificadoEm)} (${E.origem || 'Worker'}; o app confere de novo a cada 6 horas).` })));
+  alvo.replaceChildren(...filhos);
+  depois(() => graficosEnso(alvo, P, gInd, gHist)); // os dois gráficos entram numa etapa própria da fila
+}
+
+/**
+ * Aviso antecipado do El Niño para o local. Vale só com El Niño em curso (situacaoEnso).
+ * - dias: dias de risco que começam em até REGRAS.enso.janelaAvisoDias dias, com chance "possível" ou maior
+ *   (REGRAS.ocorrencia) de passar o limite de chuva forte ou de rajada forte. Mesmas chances e mesma
+ *   confiança da aba Semana (analisarDia).
+ * - inmet: avisos do INMET de chuva, vento ou temporal válidos para o local dentro da mesma janela; null quando
+ *   os avisos não puderam ser consultados (ausência de consulta não é ausência de aviso).
+ * - epoca: se estamos, ou estaremos em até um mês, na época em que o El Niño costuma aumentar a chuva no RS.
+ * @returns {{ativo:boolean, dias?:object[], inmet?:object[]|null, epoca?:object, nivel?:string}|null}
+ */
+function alertaEnsoLocal() {
+  const sit = situacaoAtual();
+  if (!sit) return null;
+  if (sit.fase !== 'elNino') return { ativo: false };
+  const R = REGRAS.enso, agora = Date.now();
+  const dias = [];
+  (estado.prev ? datas() : []).slice(0, R.janelaAvisoDias).forEach((d, k) => {
+    const a = analisarDia(d, k, k === 0);
+    const pc = a.limites?.chuva.find((l) => l.limite === R.chuvaForteMm)?.p;
+    const pr = a.limites?.rajada.find((l) => l.limite === R.rajadaForteKmh)?.p;
+    const riscos = [];
+    if (valido(pc) && pc >= REGRAS.ocorrencia.possivel) riscos.push({ tipo: 'chuva', p: pc });
+    if (valido(pr) && pr >= REGRAS.ocorrencia.possivel) riscos.push({ tipo: 'rajada', p: pr });
+    if (riscos.length) dias.push({ a, riscos });
+  });
+  const inmet = estado.alertas && !estado.alertas.indisponivel ? avisosOrdenados().filter((a) => avisoProximoDeChuva(a, agora)) : null;
+  const indice = estado.enso.partes.roni?.dados?.length ? estado.enso.partes.roni.dados : estado.enso.partes.oni?.dados || [];
+  const ev = eventosEnso(indice).at(-1);
+  const inicio = ev?.emCurso ? ev.ini.ano : Number(new Date(agora).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).slice(0, 4));
+  return { ativo: true, dias, inmet, epoca: epocaChuvaRs(inicio, agora), nivel: nivelPreocupacaoEnso(dias.map((d) => d.riscos), inmet?.length || 0) };
+}
+
+const quandoDia = (a) => {
+  const p = estado.prev, ms = p.horas[a.idxTodo[0]];
+  return a.diaIndice === 0 ? 'Hoje' : a.diaIndice === 1 ? 'Amanhã' : `${fmt.diaSemana(ms, p.offset)} ${fmt.dataCurta(ms, p.offset)}`;
+};
+// Uma linha por dia de risco: tocar abre o painel completo do dia.
+function linhasRiscoDias(al) {
+  const plural = { 'possível': 'possíveis', 'provável': 'prováveis' };
+  return el('ul', { class: 'alerta-dias' }, ...al.dias.slice(0, 5).map(({ a, riscos }) => {
+    const oque = riscos.map((r) => (r.tipo === 'chuva' ? `chuva forte ${palavraOcorrencia(r.p)}` : `rajadas fortes ${plural[palavraOcorrencia(r.p)]}`)).join(' e ');
+    return el('li', {}, el('button', { type: 'button', onclick: () => abrirDia(a.data) },
+      el('b', { text: quandoDia(a) }), el('span', { text: oque }), el('span', { class: 'cf', text: `confiança ${a.av.confianca.geral}` })));
+  }));
+}
+
+/**
+ * Resposta da aba em uma frase: junta o que acontece no Pacífico com o que está previsto para o local, para
+ * as duas coisas nunca parecerem contraditórias ("El Niño muito forte" e "sem chuva forte prevista").
+ */
+function vereditoEnso(sit, al) {
+  if (!sit) return { nivel: 'calmo', titulo: 'Situação do Pacífico indisponível agora', frase: 'Não foi possível ler o índice oficial da NOAA. Tente de novo mais tarde.' };
+  if (sit.fase === 'neutro') return { nivel: 'calmo', titulo: 'Sem El Niño no momento', frase: 'O Pacífico está na condição normal. Não há efeito do El Niño nem da La Niña para acompanhar agora.' };
+  if (sit.fase === 'laNina') return { nivel: 'calmo', titulo: `${nomeSituacao(sit)} no Pacífico`, frase: 'Com La Niña costuma chover menos que o normal no RS. Não é época de El Niño.' };
+  const onde = localNaFrase(), dias = REGRAS.enso.janelaAvisoDias, forca = `O El Niño está ${sit.forca}`;
+  if (!estado.prev) return { nivel: 'calmo', titulo: `${nomeSituacao(sit)} no Pacífico`, frase: `${forca}. A previsão para ${onde} ainda não carregou.` };
+  if (al.nivel === 'alerta') {
+    return { nivel: 'alerta', titulo: al.inmet?.length ? `Atenção: aviso do INMET para ${onde}` : `Atenção: chuva ou vento forte previstos`,
+      frase: `${forca} e há tempo severo previsto para ${onde} nos próximos ${dias} dias. Veja abaixo quando.` };
+  }
+  if (al.nivel === 'atento') return { nivel: 'atento', titulo: 'Fique atento nos próximos dias', frase: `${forca} e há chance de chuva ou vento forte em ${onde} nos próximos ${dias} dias. Veja abaixo quando.` };
+  return { nivel: 'calmo', titulo: 'Sem motivo para preocupação agora',
+    frase: `${forca} e deixa a estação mais chuvosa no RS, mas isso não quer dizer chuva forte todo dia: não há chuva forte nem vento forte previstos para ${onde} nos próximos ${dias} dias.` };
+}
+
+// Cartão "No Pacífico": o que é, com que força, quanto o mar aqueceu e até quando deve durar.
+function cartaoPacifico(sit) {
+  if (!sit) return null;
+  const anoAtual = Number(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).slice(0, 4));
+  const desvio = `O mar no centro do Pacífico está ${fmt.n(Math.abs(sit.anom), 1)} °C ${sit.anom >= 0 ? 'mais quente' : 'mais frio'} que o normal.`;
+  const quando = sit.fase === 'neutro' ? null
+    : [sit.enfraquece ? `Deve começar a enfraquecer em ${mesAno(sit.enfraquece, sit.termina?.ano ?? anoAtual)}` : null,
+      sit.termina ? `${sit.enfraquece ? 'e acabar' : 'Deve acabar'} por volta de ${mesAno(sit.termina, anoAtual)}` : null].filter(Boolean).join(' ');
+  const fonte = sit.base === 'semanas' ? `NOAA · 4 semanas até ${fmt.dataCurta(sit.ate, 0)}` : `NOAA · ${trimestrePt(sit.trimestre.seas)} de ${sit.trimestre.ano}`;
+  return el('div', { class: 'enso-cartao' },
+    el('h3', { text: 'No Pacífico' }),
+    el('p', { class: 'enso-destaque', text: sit.fase === 'neutro' ? 'Condição normal' : `${nomeSituacao(sit)}, acontecendo agora` }),
+    sit.fase === 'neutro' ? null : el('div', { class: 'enso-escala', role: 'img', 'aria-label': `Força: ${forcaNoGenero(sit)}, nível ${sit.nivel} de 4` },
+      ...[1, 2, 3, 4].map((n) => el('i', { class: n <= sit.nivel ? 'on' : null }))),
+    el('p', { text: desvio }),
+    quando ? el('p', { text: `${quando}.` }) : null,
+    el('p', { class: 'nota', text: fonte }));
+}
+
+// Padrão no RS: Fontana e Berlato (1997), séries de chuva de localidades do RS; resumo de impactos do CPTEC/INPE.
+const ENSO_RS_FONTES = [
+  ['https://enos.cptec.inpe.br/', 'CPTEC/INPE: El Niño e La Niña'],
+  ['https://www.scielo.br/j/ea/a/LyHVHKHzm67CwpvcWPKPwTm/', 'Estudo sobre as chuvas de abril e maio de 2024 no RS'],
+];
+// Cartão "No Rio Grande do Sul": a tendência da estação, dita como tendência. Só com El Niño em curso.
+function cartaoRs(al, E) {
+  if (!al?.ativo) return null;
+  const epoca = al.epoca.agora ? 'Estamos nessa época.' : al.epoca.proxima ? `A próxima época começa em ${MESES_LONGOS[al.epoca.proxima.meses[0] - 1]}.` : null;
+  return el('div', { class: 'enso-cartao' },
+    el('h3', { text: 'No Rio Grande do Sul' }),
+    el('p', { class: 'enso-destaque', text: 'Estação mais chuvosa que o normal' }),
+    el('p', { text: `Com El Niño costuma chover mais, principalmente em outubro e novembro e, no ano seguinte, de abril a junho.${epoca ? ` ${epoca}` : ''}` }),
+    el('p', { text: 'É uma tendência para a estação inteira. O dia a dia continua valendo pela previsão.' }),
+    el('details', { class: 'detalhe-toque' }, el('summary', { text: 'De onde vem isso' }),
+      el('p', { text: 'Padrão medido em décadas de dados de chuva no RS (Fontana e Berlato, 1997) e resumido pelo CPTEC/INPE. Nessas épocas aumenta o risco de cheias e de temporais. Cada El Niño é diferente: alguns trazem pouco efeito, e outros fatores também influenciam.' }),
+      el('ul', {}, ...ENSO_RS_FONTES.map(([u, t]) => el('li', {}, linkExterno(u, t)))),
+      E?.fontes?.inmet ? el('p', {}, linkExterno(E.fontes.inmet, 'Prognóstico do INMET')) : null));
+}
+
+// Cartão do local: os dias de risco e os avisos do INMET dentro da janela. Nada além da janela aparece.
+function cartaoLocal(al) {
+  if (!al?.ativo || !estado.prev) return null;
+  const R = REGRAS.enso, off = estado.prev.offset;
+  const filhos = [el('h3', { text: estado.local?.origem === 'gps' || !estado.local?.nome ? 'No seu local' : `Em ${estado.local.nome}` })];
+  // Com aviso oficial, ele abre o cartão e prevalece: o cartão nunca diz "sem chuva forte" ao lado de um aviso de chuva.
+  const avisos = al.inmet?.length ? el('ul', { class: 'alerta-dias' }, ...al.inmet.slice(0, 3).map((a) => el('li', {}, el('button', { type: 'button', onclick: () => irPara('avisos') },
+    el('b', { text: 'INMET' }), el('span', { text: `${a.titulo}${severidadeDe(a) ? ` (${severidadeDe(a)})` : ''}` }), el('span', { class: 'cf', text: periodoAviso(a) }))))) : null;
+  if (avisos) {
+    filhos.push(el('p', { class: 'enso-destaque', text: al.inmet.length > 1 ? 'Há avisos oficiais de tempo severo' : 'Há aviso oficial de tempo severo' }), avisos);
+    filhos.push(al.dias.length ? linhasRiscoDias(al) : el('p', { text: 'A previsão do painel não aponta chuva forte, mas vale o aviso oficial.' }));
+  } else {
+    filhos.push(al.dias.length ? el('p', { class: 'enso-destaque', text: 'Chuva ou vento forte na previsão' }) : el('p', { class: 'enso-destaque', text: `Sem chuva forte nem vento forte nos próximos ${R.janelaAvisoDias} dias` }));
+    if (al.dias.length) filhos.push(linhasRiscoDias(al));
+    filhos.push(el('p', { text: al.inmet === null ? 'Avisos do INMET indisponíveis agora.' : 'Nenhum aviso do INMET de chuva ou temporal para o local.' }));
+  }
+  filhos.push(el('p', { class: 'nota', text: `Previsão do painel · ${fmt.horaMin(estado.prevEm, off)}${estado.alertasEm && al.inmet ? ` · INMET · ${fmt.horaMin(estado.alertasEm, off)}` : ''}` }),
+    el('details', { class: 'detalhe-toque' }, el('summary', { text: 'O que conta como forte' }),
+      el('p', { text: `Chuva forte: mais de ${R.chuvaForteMm} mm no dia. Vento forte: rajadas acima de ${R.rajadaForteKmh} km/h. Um dia entra na lista quando a chance de passar disso é de ${fmt.pct(REGRAS.ocorrencia.possivel)} ou mais, a mesma conta da aba Semana.` }),
+      el('p', { text: `Só aparecem dias e avisos que começam em até ${R.janelaAvisoDias} dias: além disso a previsão muda demais para servir de aviso.` })));
+  return el('div', { class: 'enso-cartao' }, ...filhos);
+}
+
+/** Bloco principal: a resposta em destaque e as três leituras (Pacífico, RS e local), lado a lado no computador. */
+function painelResumo(sit, al, E) {
+  const v = vereditoEnso(sit, al);
+  const cartoes = [cartaoPacifico(sit), cartaoRs(al, E), cartaoLocal(al)].filter(Boolean);
+  return el('section', { class: 'enso-resumo largura-total' },
+    el('div', { class: 'enso-veredito', 'data-nivel': v.nivel }, el('h2', { text: v.titulo }), el('p', { text: v.frase })),
+    cartoes.length ? el('div', { class: 'enso-cartoes' }, ...cartoes) : null);
+}
+
+/**
+ * "Como deve evoluir": uma coluna por mês, com a altura pela força mais provável (previsão oficial da NOAA).
+ * Sem porcentagens: a chance de "estar em El Niño" não é chance de chuva e confundia a leitura.
+ */
+function evolucaoEnso(sit, P) {
+  const meses = sit.evolucao.slice(0, 7);
+  const descricao = meses.map((e) => `${MESES_LONGOS[e.mes - 1]}: ${e.fase === 'neutro' ? 'normal' : `${NOME_FASE[e.fase]} ${forcaNoGenero(e) ?? ''}`.trim()}`).join('; ');
+  const emitido = P.discussao?.dados?.emitido ? new Date(`${P.discussao.dados.emitido} UTC`) : null;
+  const rotulos = sit.fase === 'laNina' || meses.some((e) => e.fase === 'laNina') ? null : ['muito forte', 'forte', 'moderado', 'fraco'];
+  return secao('Como deve evoluir', null,
+    el('div', { class: 'enso-evolucao', role: 'img', 'aria-label': descricao },
+      rotulos ? el('div', { class: 'niveis', 'aria-hidden': 'true' }, ...rotulos.map((t) => el('span', { text: t }))) : null,
+      el('div', { class: 'colunas', 'aria-hidden': 'true' }, ...meses.map((e) => el('div', { class: `col ${e.fase}` },
+        el('i', { style: { height: `${(e.nivel ?? 1) * 25}%` } }), el('span', { text: MESES_CURTOS[e.mes - 1] }))))),
+    meses.some((e) => e.fase === 'neutro') ? el('p', { text: 'Mês sem barra: Pacífico de volta ao normal.' }) : null,
+    el('p', { class: 'nota', text: `NOAA · ${emitido && valido(emitido.getTime()) ? fmt.dataCurta(emitido.getTime(), 0) : 'previsão mensal'}` }));
+}
+
+// Notícias recentes do RS que citam o El Niño (Google Notícias, via Worker ou GitHub Actions): conteúdo de terceiros.
+function noticiasRs(parte) {
+  const lista = (parte.dados || []).filter((n) => Date.now() - n.ms < 45 * 86400000).slice(0, 4);
+  const itens = lista.length
+    ? el('ul', { class: 'noticias' }, ...lista.map((n) => el('li', {},
+      linkExterno(n.link, n.titulo),
+      el('span', { class: 'nota', text: `${n.veiculo || 'veículo não informado'} · ${new Date(n.ms).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}` }))))
+    : el('p', { class: 'nota', text: parte.ok ? 'Nenhuma notícia do RS citando o El Niño nos últimos 45 dias.' : 'Notícias indisponíveis agora.' });
+  return secao('Nas notícias do RS', null, itens,
+    el('p', { class: 'nota', text: 'Notícias de terceiros. O painel não confere o conteúdo.' }));
+}
+
+// ------------------------------------------------------------------ El Niño: histórico
+// Conteúdo fixo e verificável (estudos e registros oficiais), não notícias. Revisar a cada novo episódio forte.
+// Episódios: ano de início do El Niño e o que foi registrado no RS. Só fatos com registro oficial ou estudo publicado.
+const ENSO_RS_EPISODIOS = [
+  { ano: 1982, texto: 'Enchentes em sequência no Sul entre maio e julho de 1983, inclusive no rio Uruguai (Itaqui, São Borja, Uruguaiana).' },
+  { ano: 1997, texto: 'Um dos El Niños mais fortes do século XX, associado a enchentes no Sul do Brasil.' },
+  { ano: 2015, texto: 'Primavera muito chuvosa: o Guaíba chegou a 2,94 m em Porto Alegre em outubro de 2015.' },
+  { ano: 2023, texto: 'Setembro de 2023: enchente histórica no Vale do Taquari após um ciclone. Maio de 2024: maior desastre climático do RS, com o Guaíba em 5,35 m, acima do recorde de 1941. O El Niño foi um dos fatores, não o único.' },
+];
+
+/** Eventos de El Niño na série (ONI ou RONI): sequências com 0,5 °C ou mais; pico é o maior valor. */
+function eventosEnso(oni) {
+  const eventos = []; let atual = null;
+  for (const r of oni || []) {
+    if (r.anom >= REGRAS.enso.limiar) { if (!atual) atual = { ini: r, pico: r }; if (r.anom > atual.pico.anom) atual.pico = r; atual.fim = r; }
+    else if (atual) { eventos.push(atual); atual = null; }
+  }
+  if (atual) eventos.push({ ...atual, emCurso: true });
+  return eventos;
+}
+
+// Episódios fortes pela força do aquecimento (pico do índice) e o que houve no RS nos que têm registro.
+// O episódio em curso mostra o mesmo valor de "agora" do bloco principal (situacaoEnso), não o do último trimestre fechado.
+function comparacaoHistorica(oni, sit) {
+  if (!oni?.length) return el('p', { text: 'Índice indisponível.' });
+  const eventos = eventosEnso(oni);
+  // o episódio de um ano é o mais forte entre os que passam por ele (2015 cai no forte 2015–16, não no fraco 2014–15)
+  const doAno = (ano) => eventos.filter((e) => e.ini.ano <= ano && e.fim.ano >= ano).sort((a, b) => b.pico.anom - a.pico.anom)[0];
+  const linhas = new Map();
+  for (const e of eventos.filter((x) => x.pico.anom >= REGRAS.enso.forcas[1] || x.emCurso)) linhas.set(e, null);
+  for (const ep of ENSO_RS_EPISODIOS) { const e = doAno(ep.ano); if (e) linhas.set(e, ep.texto); }
+  const lista = [...linhas.entries()].sort((a, b) => b[0].ini.ano - a[0].ini.ano);
+  const agora = sit?.fase === 'elNino' ? sit.anom : null;
+  return el('div', {},
+    el('ul', { class: 'episodios' }, ...lista.map(([e, texto]) => el('li', { class: e.emCurso ? 'em-curso' : null },
+      el('div', { class: 'ep-cab' }, el('b', { text: e.emCurso ? `${e.ini.ano} (agora)` : `${e.ini.ano}–${e.fim.ano}` }),
+        el('span', { class: 'ep-pico', text: e.emCurso ? `agora +${fmt.n(agora ?? e.pico.anom, 1)} °C` : `pico +${fmt.n(e.pico.anom, 1)} °C` })),
+      texto ? el('p', { text: texto }) : null))),
+    el('p', { class: 'nota', text: 'Graus acima do normal no centro do Pacífico. Força parecida não garante impactos parecidos.' }));
+}
+
+// ------------------------------------------------------------------ El Niño: dados técnicos (recolhidos)
+
+/** Conteúdo de "Dados técnicos": painel de números, gráficos, glossário, probabilidades da NOAA, IRI e status oficial. */
+function dadosTecnicos(E, sit, gInd, gHist) {
+  const P = E.partes || {}, disc = P.discussao?.dados;
+  const avisoParte = (k) => (P[k]?.desatualizado ? el('p', { class: 'faixa-aviso erro', text: `A fonte mudou ou falhou (${P[k].erro}). Mostrando a última versão válida, de ${new Date(P[k].em).toLocaleDateString('pt-BR')}.` }) : null);
+  const iri = P.iri?.dados;
+  return [
+    painelEnso(P, disc, P.roni?.dados?.at(-1)), gInd, gHist,
+    secao('Como ler', null, el('ul', {},
+      el('li', { text: 'Índice oficial: quanto o mar no centro do Pacífico está acima ou abaixo do normal, descontado o aquecimento de todos os oceanos tropicais. É o que a NOAA, agência dos Estados Unidos, usa desde 2026 para declarar El Niño e La Niña.' }),
+      el('li', { text: 'Medida bruta (ou índice antigo): a mesma conta sem esse desconto. Fica mais alta porque inclui o aquecimento global.' }),
+      el('li', { text: 'Acima de +0,5 °C é El Niño; abaixo de −0,5 °C, La Niña. Força: fraco até 1 °C, moderado até 1,5, forte até 2, muito forte daí em diante.' }),
+      el('li', { text: `A força de "agora" no alto da tela é a média das últimas ${REGRAS.enso.semanasAgora} semanas do índice oficial${sit?.base === 'trimestre' ? ' (sem semana recente, vale a média de 3 meses)' : ''}. A média de 3 meses é o critério formal da NOAA, mas sai com dois meses de atraso.` }),
+      el('li', { text: 'A chance de El Niño da NOAA é a chance de o mar continuar aquecido naquele trimestre. Não é chance de chuva.' }))),
+    secao('Probabilidades oficiais da NOAA por trimestre', null, avisoParte('probCpc'), barrasProb(P.probCpc?.dados), el('p', {}, linkExterno(E.fontes?.cpcProb, 'Tabela oficial'))),
+    secao('Previsão baseada em modelos do IRI', null, avisoParte('iri'),
+      iri ? el('p', { class: 'nota', text: `Publicada em ${iri.publicado}.` }) : el('p', { text: 'Resumo do IRI indisponível.' }),
+      el('p', { class: 'nota', text: 'Os números por modelo do IRI só são publicados como imagens, então o painel mostra o link.' }),
+      el('p', {}, linkExterno(E.fontes?.iri, 'Ver a previsão do IRI'))),
+    secao('Status oficial da NOAA CPC', null, avisoParte('discussao'),
+      disc ? el('p', { text: traduzStatus(disc.status).replace(/\s*\(NOAA:.*\)$/, '') }) : el('p', { text: 'Não foi possível ler a discussão.' }),
+      disc ? el('p', { class: 'nota', text: `Publicado em ${disc.emitido || 'data não encontrada'}. Próxima atualização: ${disc.proxima || 'data não encontrada na fonte'}.` }) : null,
+      el('p', {}, linkExterno(E.fontes?.cpc, 'Ler a discussão completa (em inglês)'))),
+  ];
+}
+
+/** Gráficos de "Dados técnicos": índice semanal dos últimos 2 anos e índice trimestral desde 1950. */
+function graficosEnso(alvo, P, gInd, gHist) {
+  const fmtMes = (u, vals) => vals.map((v) => { const d = new Date(v * 1000); return `${d.getUTCMonth() + 1}/${String(d.getUTCFullYear()).slice(2)}`; });
+  const rel = P.relativoSemanal?.dados || [], conv = P.convencionalSemanal?.dados || [];
+  if (rel.length || conv.length) {
+    const tempos = [...new Set([...rel, ...conv].map((r) => r.ms))].sort((a, b) => a - b).slice(-104);
+    const mapa = (lista) => { const m = new Map(lista.map((r) => [r.ms, r.n34])); return tempos.map((t) => m.get(t) ?? null); };
+    criarGrafico(gInd, { x: tempos, agora: false, emitirHora: false, sync: 'enso', formatoX: fmtMes, altura: 180,
+      fonte: `NOAA · semana de ${fmt.dataCurta(tempos[tempos.length - 1], 0)}`,
+      series: [
+        { rotulo: 'índice oficial', valores: mapa(rel), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
+        { rotulo: 'medida bruta', valores: mapa(conv), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
+      ], eixos: [{ formato: (v) => `${v}` }] });
+  } else gInd.append(el('p', { text: 'Índices semanais indisponíveis.' }));
+  const oni = P.oni?.dados || [], roni = P.roni?.dados || [];
+  if (oni.length || roni.length) {
+    const ms = (r) => Date.UTC(r.ano, mesCentralTrimestre(r.seas) - 1, 15);
+    const tempos = [...new Set([...oni, ...roni].map(ms))].sort((a, b) => a - b);
+    const mapa = (lista) => { const m = new Map(lista.map((r) => [ms(r), r.anom])); return tempos.map((t) => m.get(t) ?? null); };
+    criarGrafico(gHist, { x: tempos, agora: false, emitirHora: false, sync: 'enso2', formatoX: (u, v) => v.map((s) => String(new Date(s * 1000).getUTCFullYear())), altura: 180,
+      fonte: `NOAA · ${[...oni, ...roni].sort((a, b) => ms(a) - ms(b)).map((r) => `${trimestrePt(r.seas)} de ${r.ano}`).pop()}`, horasVisiveis: 24 * 365 * 25, rolarFim: true,
+      series: [
+        { rotulo: 'índice antigo', valores: mapa(oni), corCss: '--fraco', largura: 1.5, dash: [5, 4], formato: (v) => `${fmt.n(v, 1)} °C` },
+        { rotulo: 'índice oficial', valores: mapa(roni), corCss: '--quente', largura: 2.5, formato: (v) => `${fmt.n(v, 1)} °C` },
+      ], eixos: [{ formato: (v) => `${v}` }] });
+  } else gHist.append(el('p', { text: 'Índice indisponível.' }));
+  // o gráfico desde 1950 nasce dentro de "Dados técnicos" fechado: ao abrir, mostra os anos mais recentes
+  alvo.querySelector('.enso-tecnico')?.addEventListener('toggle', (e) => {
+    if (e.target.open) requestAnimationFrame(() => { const r = gHist.querySelector('.rolar'); if (r) r.scrollLeft = r.scrollWidth; });
+  });
+}
+
+// Painel de números: cada um com a data e o tipo do dado. Não classifica a força: isso é de situacaoEnso.
+function painelEnso(P, disc, roniUlt) {
+  const sinal = (v) => (valido(v) ? `${v > 0 ? '+' : ''}${fmt.n(v, 1)} °C` : '–');
+  const dataSem = (ms) => new Date(ms).toLocaleDateString('pt-BR', { timeZone: 'UTC', day: 'numeric', month: 'short' });
+  const rel = P.relativoSemanal?.dados?.at(-1), conv = P.convencionalSemanal?.dados?.at(-1);
+  const dia = P.diario?.dados?.at(-1);
+  // trimestre atual (centrado no mês corrente), da NOAA CPC
+  const mesAgora = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', month: 'numeric' }));
+  const probs = P.probCpc?.dados || [], forcas = P.forcaCpc?.dados || [];
+  const prob = probs[Math.max(0, probs.findIndex((x) => mesCentralTrimestre(x.tri) === mesAgora))];
+  const NOME_F = { fraco: 'fraco', moderado: 'moderado', forte: 'forte', muitoForte: 'muito forte' };
+  const f = prob ? forcas.find((x) => x.tri === prob.tri)?.elNino : null;
+  const [kF, vF] = f ? Object.entries(f).sort((a, b) => b[1] - a[1])[0] : [];
+  const fAgora = vF > 0 ? { nome: NOME_F[kF], p: vF, forteOuMais: f.forte + f.muitoForte } : null;
+  const bloco = (rot, val, sub, marca, destaque) => el('div', { class: 'enso-bloco' + (destaque ? ' destaque' : '') },
+    el('small', { text: rot }), el('b', { text: val }), el('span', { class: 'sub', text: sub }), marca ? el('span', { class: 'marca ' + marca[0], text: marca[1] }) : null);
+  const filhos = [
+    el('p', { class: 'enso-status', text: disc ? traduzStatus(disc.status) : 'Status oficial indisponível' }),
+    el('div', { class: 'enso-grade' },
+      bloco('RONI, índice oficial', valido(roniUlt?.anom) ? `${roniUlt.anom > 0 ? '+' : ''}${fmt.n(roniUlt.anom, 2)} °C` : '–', roniUlt ? `trimestre ${roniUlt.seas} ${roniUlt.ano}` : 'indisponível', ['oficial', 'oficial'], true),
+      bloco('Niño 3.4 da semana', sinal(rel?.n34), rel ? `relativo, semana de ${dataSem(rel.ms)}` : 'indisponível', ['medido', 'medido']),
+      bloco('Chance de El Niño', prob ? `${prob.elNino}%` : '–', prob ? `trimestre ${prob.tri} (atual), NOAA` : 'indisponível', ['oficial', 'oficial'], true),
+      bloco('Força mais provável', fAgora ? fAgora.nome : '–', fAgora ? `${fAgora.p}% de chance; forte ou mais: ${fAgora.forteOuMais}%` : 'indisponível', ['oficial', 'oficial'], true),
+      dia ? bloco('Niño 3.4 de ontem', sinal(dia.anom), `${fmt.n(dia.sst, 1)} °C no mar, ${new Date(dia.data + 'T12:00:00Z').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`, ['previsao', 'estimativa']) : null),
+    probs.length ? el('p', { class: 'nota', text: 'Chance e força: previsão oficial da NOAA para a média de 3 meses, revista na 2ª quinta-feira de cada mês.' }) : null,
+    conv && (valido(conv.n12) || valido(conv.n4)) ? el('div', { class: 'enso-regioes' },
+      ...[['Niño 1+2', conv.n12, 'costa do Peru'], ['Niño 3', conv.n3, 'leste'], ['Niño 3.4', conv.n34, 'centro'], ['Niño 4', conv.n4, 'oeste']]
+        .map(([n, v, onde]) => el('div', {}, el('small', { text: n }), el('b', { text: sinal(v) }), el('span', { text: onde })))) : null,
+    conv ? el('p', { class: 'nota', text: 'Regiões: anomalia convencional da última semana (NOAA CPC, OISST).' }) : null,
+  ];
+  if (P.diario?.dados?.length > 7) {
+    const d = P.diario.dados.slice(-30);
+    filhos.push(el('div', { class: 'enso-diario', role: 'img', 'aria-label': 'Niño 3.4 diário estimado, últimos 30 dias' },
+      ...d.map((x) => el('i', { title: `${x.data}: ${sinal(x.anom)}`, style: { height: `${Math.max(2, Math.min(100, (Math.abs(x.anom) / 4) * 100))}%` }, class: x.anom >= 0 ? 'q' : 'f' }))));
+    filhos.push(el('p', { class: 'nota', text: 'Últimos 30 dias, estimativa diária: média da temperatura do mar da Open-Meteo Marine em 18 pontos da região Niño 3.4, menos a média 1991-2020 da NOAA. É a medida bruta, por isso fica acima do índice oficial; serve para acompanhar a tendência entre os boletins semanais.' }));
+  } else if (P.diario && !P.diario.ok) filhos.push(el('p', { class: 'nota', text: 'Estimativa diária indisponível nesta atualização.' }));
+  return el('section', { class: 'enso-painel largura-total' }, ...filhos);
+}
+
+function traduzStatus(s) {
+  const t = String(s).toLowerCase();
+  const partes = [];
+  if (t.includes('el niño watch') || t.includes('el nino watch')) partes.push('Vigilância de El Niño');
+  if (t.includes('el niño advisory') || t.includes('el nino advisory')) partes.push('El Niño em curso');
+  if (t.includes('la niña watch') || t.includes('la nina watch')) partes.push('Vigilância de La Niña');
+  if (t.includes('la niña advisory') || t.includes('la nina advisory')) partes.push('La Niña em curso');
+  if (t.includes('final')) partes.push('aviso final do evento');
+  if (t.includes('not active')) partes.push('Sem alerta ativo: condições neutras');
+  return partes.length ? `${partes.join(', ')} (NOAA: ${s})` : `NOAA: ${s}`;
+}
+
+function barrasProb(linhas) {
+  if (!linhas?.length) return el('p', { text: 'Tabela indisponível ou com formato inesperado.' });
+  return el('div', {}, el('p', { class: 'nota' }, el('span', { style: { color: 'var(--fria)' }, text: 'La Niña' }), ', neutro, ', el('span', { style: { color: 'var(--quente)' }, text: 'El Niño' })),
+    ...linhas.map((l) => el('div', { class: 'pbar', role: 'img', 'aria-label': `${l.tri}: La Niña ${l.laNina}%, neutro ${l.neutro}%, El Niño ${l.elNino}%` },
+      el('span', { text: trimestrePt(l.tri) }),
+      el('span', { class: 'trilho' },
+        el('i', { class: 'ln', style: { width: l.laNina + '%' }, text: l.laNina >= 12 ? `${l.laNina}` : '' }),
+        el('i', { class: 'ne', style: { width: l.neutro + '%' }, text: l.neutro >= 12 ? `${l.neutro}` : '' }),
+        el('i', { class: 'en', style: { width: l.elNino + '%' }, text: l.elNino >= 12 ? `${l.elNino}` : '' })))),
+    el('p', { class: 'nota', text: 'Números em %.' }));
+}
+
+// ------------------------------------------------------------------ navegação e gestos
+
+const ABAS = ['hoje', 'amanha', 'semana', 'dia', 'avisos', 'globo', 'elnino', 'modelos'];
+const ABAS_MAIS = ['avisos', 'globo', 'elnino', 'modelos']; // fora da barra, no menu "Ver mais"
+function irPara(aba, rolarTopo = true, direcao = 0) {
+  if (!ABAS.includes(aba)) return;
+  const mudou = estado.aba !== aba;
+  estado.aba = aba;
+  for (const s of document.querySelectorAll('.aba')) s.hidden = s.dataset.aba !== aba;
+  if (aba !== 'hoje') $('#agora').classList.remove('oculto'); else observarAgora();
+  document.querySelectorAll('.nav button, .mais-item').forEach((b) => {
+    const atual = b.dataset.ir ? b.dataset.ir === (aba === 'dia' ? 'semana' : aba) : ABAS_MAIS.includes(aba); // dia aberto marca Semana; abas do menu marcam "Ver mais"
+    if (atual) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  if (rolarTopo) window.scrollTo({ top: 0, behavior: 'instant' });
+  if (filaRender.pendentes.has(aba)) renderPendente(aba);
+  else if (aba === 'elnino' && estado.prev !== undefined) renderElNino();
+  if (aba === 'avisos') { const meus = estado.alertas && !estado.alertas.indisponivel ? avisosOrdenados() : []; const al = estado.prev ? alertaEnsoLocal() : null; marcarAvisosVistos(meus, al); marcarBotaoAvisos(meus, al); }
+  abrirOuFecharGlobo(aba);
+  cabecalho.aoMudarAba(aba);
+  // Entrada suave da aba (só transform e opacidade, que a placa de vídeo faz sem travar).
+  // Gráficos e faixas se ajustam sozinhos pelo ResizeObserver quando a aba aparece; nada é redesenhado à força.
+  if (mudou) {
+    const sec = $(`#aba-${aba}`);
+    sec.classList.remove('entra', 'entra-dir', 'entra-esq');
+    void sec.offsetWidth;
+    sec.classList.add(direcao > 0 ? 'entra-dir' : direcao < 0 ? 'entra-esq' : 'entra');
+  }
+}
+
+// O globo 3D (Three.js, texturas) só é baixado na primeira abertura da aba e para de animar ao sair dela.
+let globo = null;
+function abrirOuFecharGlobo(aba) {
+  if (aba === 'globo') {
+    const alvo = $('#globo-conteudo');
+    if (!globo) {
+      globo = import('./globo.js').catch((e) => { globo = null; alvo.replaceChildren(el('p', { class: 'nota', text: `O globo não carregou (${e?.message || 'falha de rede'}). Toque em Globo de novo para tentar outra vez.` })); return null; });
+    }
+    globo.then((m) => { if (m && estado.aba === 'globo') m.abrirGlobo(alvo, estado); });
+  } else if (globo) globo.then((m) => m?.fecharGlobo());
+}
+
+function configurarNavegacao() {
+  for (const b of document.querySelectorAll('.nav button[data-ir]')) b.addEventListener('click', () => irPara(b.dataset.ir));
+  const mais = $('#dlg-mais');
+  $('#btn-mais').addEventListener('click', () => mais.showModal());
+  for (const b of document.querySelectorAll('[data-voltar-mais]')) b.addEventListener('click', () => mais.showModal()); // caminho de volta das telas do menu
+  $('[data-voltar-semana]').addEventListener('click', () => irPara('semana'));
+  for (const b of mais.querySelectorAll('.mais-item')) b.addEventListener('click', () => { mais.close(); irPara(b.dataset.ir); });
+  // Deslizar entre Hoje, Amanhã e Semana. Para não trocar de aba sem querer, o gesto só vale quando:
+  // é um único dedo, rápido (até 450 ms), claramente horizontal (80 px ou mais, e 3 vezes mais que o vertical),
+  // a página não rolou no meio, não começou na borda da tela (gesto de voltar do sistema)
+  // e não começou em nada que role para os lados (horas, gráficos, tabelas, camadas, mapa).
+  let ini = null;
+  const main = $('#conteudo');
+  const rolaHorizontal = (alvo) => {
+    for (let n = alvo; n && n !== main; n = n.parentElement) {
+      if (n.matches?.('[data-hscroll], .mapa, .ceu, .globo, dialog, input, .rolar, .tabela-rolar, .camadas, .horas, .u-wrap')) return true;
+      if (n.scrollWidth > n.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(n).overflowX)) return true;
+    }
+    return false;
+  };
+  main.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    ini = e.touches.length === 1 && t.clientX > 24 && t.clientX < innerWidth - 24 && !rolaHorizontal(e.target)
+      ? { x: t.clientX, y: t.clientY, t: performance.now(), sy: window.scrollY } : null;
+  }, { passive: true });
+  main.addEventListener('touchmove', (e) => { if (ini && e.touches.length !== 1) ini = null; }, { passive: true });
+  main.addEventListener('touchcancel', () => { ini = null; }, { passive: true });
+  main.addEventListener('touchend', (e) => {
+    if (!ini) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - ini.x, dy = t.clientY - ini.y, dt = performance.now() - ini.t, rolou = Math.abs(window.scrollY - ini.sy) > 4;
+    ini = null;
+    if (rolou || dt > 450 || Math.abs(dx) < 80 || Math.abs(dx) < 3 * Math.abs(dy)) return;
+    if (estado.aba === 'dia') { // no dia aberto, deslizar passa para o dia seguinte ou anterior
+      const ds = datas(), j = ds.indexOf(estado.diaAberto) + (dx < 0 ? 1 : -1);
+      if (j >= 2 && j < ds.length) { estado.diaAberto = ds[j]; renderDia(); irPara('dia', true, dx < 0 ? 1 : -1); return; }
+      if (j === 1) { irPara('amanha', true, -1); return; }
+      return;
+    }
+    const trio = ['hoje', 'amanha', 'semana'];
+    const k = trio.indexOf(estado.aba);
+    if (k < 0) return;
+    const n = dx < 0 ? k + 1 : k - 1;
+    if (n >= 0 && n < trio.length) irPara(trio[n], true, dx < 0 ? 1 : -1);
+  }, { passive: true });
+}
+
+// Barra de cima recolhível: some ao rolar para baixo e, no Globo, depois de alguns segundos sem uso;
+// volta ao rolar para cima, ao trocar de aba ou pela alça, que também recolhe e mostra quando o usuário quiser.
+const cabecalho = { aoMudarAba() {} };
+function configurarCabecalho() {
+  const cab = $('#cabeca'), alca = $('#alca-cabeca'), raiz = document.documentElement;
+  const OCIOSO_GLOBO_MS = 4000;
+  let oculta = false, fixa = false, timer = 0, ultimoY = window.scrollY, quadro = 0;
+  const altura = () => (cab.hasAttribute('data-recolhida') ? null : cab.offsetHeight);
+  const medir = () => { const h = altura(); if (h) raiz.style.setProperty('--alt-cab', `${h}px`); if (!oculta && h) raiz.style.setProperty('--cab-vis', `${h}px`); };
+  new ResizeObserver(medir).observe(cab);
+  medir();
+  const avisarGlobo = () => { if (estado.aba === 'globo') requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); };
+  const aplicar = (v) => {
+    if (v === oculta) return;
+    oculta = v;
+    clearTimeout(timer);
+    cab.removeAttribute('data-recolhida');
+    if (v) cab.setAttribute('data-oculta', ''); else cab.removeAttribute('data-oculta');
+    document.body.dataset.cab = v ? 'oculta' : 'visivel';
+    raiz.style.setProperty('--cab-vis', v ? 'var(--safe-t)' : `${cab.offsetHeight}px`);
+    alca.setAttribute('aria-expanded', String(!v));
+    alca.setAttribute('aria-label', v ? 'Mostrar barra de cima' : 'Ocultar barra de cima');
+    if (!v) avisarGlobo();
+  };
+  // Depois de sair da tela, a barra perde a altura: só assim o Globo, que mede a barra, ocupa o espaço dela.
+  cab.addEventListener('transitionend', () => { if (oculta) { cab.setAttribute('data-recolhida', ''); avisarGlobo(); } });
+  const ocultar = () => { if (!document.querySelector('dialog[open]')) aplicar(true); };
+  const armarOcioso = () => { clearTimeout(timer); if (estado.aba === 'globo' && !fixa && !oculta) timer = setTimeout(ocultar, OCIOSO_GLOBO_MS); };
+  alca.addEventListener('click', () => { fixa = oculta; aplicar(!oculta); });
+  cab.addEventListener('pointerdown', armarOcioso, { passive: true });
+  window.addEventListener('scroll', () => {
+    if (quadro || estado.aba === 'globo') return; // no Globo a página não rola: a barra só muda pela alça ou pelo tempo
+    quadro = requestAnimationFrame(() => {
+      quadro = 0;
+      const y = window.scrollY, dy = y - ultimoY;
+      if (y < (cab.offsetHeight || 100)) aplicar(false);
+      else if (dy > 6) ocultar();
+      else if (dy < -6) aplicar(false);
+      if (Math.abs(dy) > 6 || y < 10) ultimoY = y;
+    });
+  }, { passive: true });
+  cabecalho.aoMudarAba = (aba) => { document.body.dataset.aba = aba; fixa = false; aplicar(false); armarOcioso(); };
+}
+
+function configurarPuxar() {
+  // Puxar para atualizar: o aviso flutua sobre a página (transform), sem empurrar o conteúdo,
+  // e só dispara com o dedo puxando claramente para baixo a partir do topo.
+  const ind = $('#puxar');
+  let y0 = null, x0 = 0, dy = 0;
+  const mostrar = (v) => { ind.style.transform = `translate(-50%, ${v}px)`; ind.style.opacity = v > 0 ? '1' : '0'; };
+  window.addEventListener('touchstart', (e) => {
+    y0 = window.scrollY <= 0 && e.touches.length === 1 && !e.target.closest('.mapa, .globo, dialog, .camadas, [data-hscroll]') ? e.touches[0].clientY : null;
+    x0 = e.touches[0]?.clientX ?? 0; dy = 0;
+  }, { passive: true });
+  window.addEventListener('touchmove', (e) => {
+    if (y0 === null) return;
+    if (e.touches.length !== 1 || window.scrollY > 0 || Math.abs(e.touches[0].clientX - x0) > 40) { y0 = null; mostrar(0); return; }
+    dy = e.touches[0].clientY - y0;
+    const v = dy > 20 ? Math.min(56, (dy - 20) / 2) : 0;
+    ind.textContent = dy > 110 ? 'Solte para atualizar' : 'Puxe para atualizar';
+    mostrar(v);
+  }, { passive: true });
+  const fim = () => {
+    if (y0 !== null && dy > 110 && window.scrollY <= 0) atualizarTudo();
+    y0 = null; dy = 0; mostrar(0);
+  };
+  window.addEventListener('touchend', fim, { passive: true });
+  window.addEventListener('touchcancel', () => { y0 = null; dy = 0; mostrar(0); }, { passive: true });
+}
+
+// ------------------------------------------------------------------ tema, rodapé, apagar dados
+
+/**
+ * Aplica o tema salvo (js/tema.js grava data-tema no <html>), acerta a cor da barra do navegador e marca a opção
+ * em uso no seletor de "Ver mais". As cores de cada tema ficam no começo do app.css.
+ */
+function aplicarTema() {
+  window.temaDoApp.aplicar();
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', cor('--fundo'));
+  const pref = window.temaDoApp.preferencia();
+  for (const b of document.querySelectorAll('#troca-tema button')) b.setAttribute('aria-pressed', String(b.dataset.tema === pref));
+}
+
+/** Seletor de tema em "Ver mais": Automático (segue o aparelho), Claro ou Escuro. Tudo o que é desenhado é refeito. */
+function configurarTema() {
+  const trocar = () => { aplicarTema(); renderTudo(); };
+  for (const b of document.querySelectorAll('#troca-tema button')) b.addEventListener('click', () => { prefs.gravar('tema', b.dataset.tema); trocar(); });
+  window.temaDoApp.aoMudarNoAparelho(trocar);
+}
+
+function configurarRodape() {
+  $('#btn-apagar').addEventListener('click', async () => {
+    if (!confirm('Apagar localização, preferências e dados salvos deste aparelho? O app vai recarregar.')) return;
+    estado.apagado = true; // para atualizações e gravações
+    try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch {}
+    try { for (const k of await caches.keys()) await caches.delete(k); } catch {}
+    try { localStorage.clear(); sessionStorage.clear(); } catch {}
+    $('#conteudo').replaceChildren(el('section', { class: 'detalhes' }, el('p', { class: 'frase', text: 'Dados deste aparelho apagados' }),
+      el('p', { text: 'Localização, preferências e dados salvos foram removidos. Ao abrir de novo, o app vai pedir a localização outra vez.' }),
+      el('button', { type: 'button', class: 'largo', onclick: () => location.reload() }, 'Abrir de novo')));
+  });
+}
+
+// expõe só para testes automatizados
+window.__painel = { estado, REGRAS, irPara, renderTudo };
+void bus; void classeRajada; void MODELOS_ENSEMBLE;

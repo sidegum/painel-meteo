@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="pt-BR" data-visual="a">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org https://tilecache.rainviewer.com; font-src 'self'; connect-src 'self' https://api.open-meteo.com https://ensemble-api.open-meteo.com https://geocoding-api.open-meteo.com https://api.rainviewer.com https://tilecache.rainviewer.com https://apiprevmet3.inmet.gov.br https://painel-meteo.painel-566f64cc.workers.dev; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#111315">
+<meta name="description" content="Painel pessoal de chuva e vento com comparação de modelos.">
+<title>Tempo Campo Bom</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icones/icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icones/icone-180.png">
+<link rel="preload" href="vendor/fontes/archivo-latin-standard-normal.woff2" as="font" type="font/woff2" crossorigin>
+<!-- Tema (claro ou escuro) decidido antes da primeira pintura; as cores ficam no começo do app.css. -->
+<script src="js/tema.js"></script>
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="vendor/uplot/uPlot.min.css">
+<!-- Módulos do app pedidos todos de uma vez (sem isso o navegador descobre um por um, em cascata). -->
+<link rel="modulepreload" href="js/config.js">
+<link rel="modulepreload" href="js/analise.js">
+<link rel="modulepreload" href="js/cidades.js">
+<link rel="modulepreload" href="js/dados.js">
+<link rel="modulepreload" href="js/ui.js">
+<link rel="modulepreload" href="js/locais.js">
+<link rel="modulepreload" href="js/faixa.js">
+<link rel="modulepreload" href="js/fundo-ceu.js">
+<link rel="modulepreload" href="js/graficos.js">
+<link rel="modulepreload" href="js/mapa.js">
+<script src="vendor/uplot/uPlot.iife.min.js" defer></script>
+<script src="js/app.js" type="module"></script>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<div class="cabeca" id="cabeca">
+<header class="topo">
+  <button class="local" id="btn-local" type="button" aria-haspopup="dialog">
+    <span class="local-hora" id="local-hora">aguardando dados</span>
+    <span class="local-nome" id="local-nome">Localizando…</span>
+  </button>
+  <div class="agora" id="agora" aria-live="polite"></div>
+  <button class="atualizar" id="btn-atualizar" type="button" aria-label="Atualizar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4.5h-4.5"/></svg></button>
+</header>
+<nav class="cidades" id="cidades" aria-label="Cidades" hidden></nav>
+<nav class="nav" aria-label="Seções">
+  <button type="button" data-ir="hoje" aria-current="page">Hoje</button>
+  <button type="button" data-ir="amanha">Amanhã</button>
+  <button type="button" data-ir="semana">Semana</button>
+  <button type="button" id="btn-mais" aria-haspopup="dialog">Ver mais</button>
+</nav>
+</div>
+<button type="button" class="alca" id="alca-cabeca" aria-label="Ocultar barra de cima" aria-controls="cabeca" aria-expanded="true"><i></i></button>
+
+<div class="puxar" id="puxar" aria-hidden="true">Solte para atualizar</div>
+<div class="faixa-aviso" id="estado" role="status" aria-live="polite"></div>
+
+<main id="conteudo" tabindex="-1">
+  <section class="aba" id="aba-hoje" data-aba="hoje" aria-labelledby="t-hoje">
+    <h1 class="sr" id="t-hoje">Hoje</h1>
+    <div class="primeira" id="hoje-primeira"></div>
+    <div class="detalhes" id="hoje-detalhes"></div>
+  </section>
+  <section class="aba" id="aba-amanha" data-aba="amanha" aria-labelledby="t-amanha" hidden>
+    <h1 class="sr" id="t-amanha">Amanhã</h1>
+    <div class="primeira" id="amanha-primeira"></div>
+    <div class="detalhes" id="amanha-detalhes"></div>
+  </section>
+  <section class="aba" id="aba-semana" data-aba="semana" aria-labelledby="t-semana" hidden>
+    <h1 class="titulo-aba" id="t-semana">Semana</h1>
+    <div id="semana-conteudo"></div>
+  </section>
+  <section class="aba" id="aba-dia" data-aba="dia" aria-labelledby="t-dia" hidden>
+    <button type="button" class="voltar-mais" data-voltar-semana>Semana</button>
+    <h1 class="sr" id="t-dia">Dia</h1>
+    <div class="primeira" id="dia-primeira"></div>
+    <div class="detalhes" id="dia-detalhes"></div>
+  </section>
+  <section class="aba" id="aba-avisos" data-aba="avisos" aria-labelledby="t-avisos" hidden>
+    <button type="button" class="voltar-mais" data-voltar-mais>Ver mais</button>
+    <h1 class="titulo-aba" id="t-avisos">Avisos</h1>
+    <div id="avisos-conteudo"></div>
+  </section>
+  <section class="aba" id="aba-modelos" data-aba="modelos" aria-labelledby="t-modelos" hidden>
+    <button type="button" class="voltar-mais" data-voltar-mais>Ver mais</button>
+    <h1 class="titulo-aba" id="t-modelos">Modelos</h1>
+    <div id="modelos-conteudo"></div>
+  </section>
+  <section class="aba" id="aba-elnino" data-aba="elnino" aria-labelledby="t-elnino" hidden>
+    <button type="button" class="voltar-mais" data-voltar-mais>Ver mais</button>
+    <h1 class="titulo-aba" id="t-elnino">El Niño</h1>
+    <div id="elnino-conteudo"></div>
+  </section>
+  <section class="aba aba-globo" id="aba-globo" data-aba="globo" aria-labelledby="t-globo" hidden>
+    <h1 class="sr" id="t-globo">Globo</h1>
+    <div id="globo-conteudo"></div>
+  </section>
+
+  <footer class="rodape">
+    <p class="oficial">Este painel é pessoal e não é fonte oficial. Em situação de risco, siga a <a href="https://www.defesacivil.rs.gov.br/" target="_blank" rel="noopener noreferrer">Defesa Civil RS</a> (telefone 199) e os avisos do <a href="https://alertas2.inmet.gov.br/" target="_blank" rel="noopener noreferrer">INMET</a>.</p>
+    <p class="atribuicao">Previsões: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a>, licença <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, com dados de ECMWF, NOAA NCEP e DWD. Busca de cidades com dados de GeoNames. Radar: RainViewer. Mapa: © colaboradores do OpenStreetMap. Medições: INMET e METAR via AviationWeather (NOAA). El Niño: NOAA CPC e IRI. Globo: texturas NASA Visible Earth, campos GFS (NOAA NCEP), satélites NASA GIBS, ciclones NHC e GDACS, órbitas CelesTrak.</p>
+    <div class="acoes-rodape">
+      <a href="privacidade.html">Privacidade e dados</a>
+      <button type="button" id="btn-apagar" class="perigo">Apagar dados deste aparelho</button>
+    </div>
+    <p class="versao" id="versao"></p>
+  </footer>
+</main>
+
+
+<dialog id="dlg-local" class="dlg-local" aria-labelledby="dlg-local-t">
+  <form method="dialog" class="dlg">
+    <div class="dlg-topo">
+      <h2 id="dlg-local-t">Escolher local</h2>
+      <button value="fechar" class="fechar" aria-label="Fechar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="campo-busca">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.4 15.4 20 20"/></svg>
+      <input id="busca" type="search" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="search" inputmode="search" maxlength="60" placeholder="Buscar cidade" aria-label="Buscar cidade" aria-controls="lista-locais" aria-describedby="busca-estado">
+      <button type="button" id="busca-limpar" class="limpar" aria-label="Limpar busca" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <p id="busca-estado" class="busca-estado" role="status" aria-live="polite" hidden></p>
+    <div id="lista-locais" class="lista-locais"></div>
+    <p class="nota">A localização exata fica só neste aparelho. Às APIs vão coordenadas arredondadas para 2 casas (cerca de 1 km). Busca de cidades: Open-Meteo, com dados do GeoNames.</p>
+  </form>
+</dialog>
+
+<dialog id="dlg-mais" aria-labelledby="dlg-mais-t">
+  <form method="dialog" class="dlg">
+    <h2 id="dlg-mais-t">Ver mais</h2>
+    <div class="mais-lista">
+      <button type="button" class="mais-item" data-ir="avisos"><b>Avisos</b><span id="mais-avisos">Avisos oficiais do INMET para o local</span></button>
+      <button type="button" class="mais-item" data-ir="globo"><b>Globo</b><span>O tempo no mundo inteiro, em 3D</span></button>
+      <button type="button" class="mais-item" data-ir="elnino"><b>El Niño</b><span>Situação do Pacífico e o que ela indica para o RS</span></button>
+      <button type="button" class="mais-item" data-ir="modelos"><b>Modelos</b><span>Cada modelo lado a lado e como a confiança é calculada</span></button>
+    </div>
+    <div class="mais-tema">
+      <span id="mais-tema-t">Tema</span>
+      <div class="troca-modo" id="troca-tema" role="group" aria-labelledby="mais-tema-t">
+        <button type="button" data-tema="auto" aria-pressed="true">Automático</button>
+        <button type="button" data-tema="claro" aria-pressed="false">Claro</button>
+        <button type="button" data-tema="escuro" aria-pressed="false">Escuro</button>
+      </div>
+    </div>
+    <button value="fechar" class="largo secundario">Fechar</button>
+  </form>
+</dialog>
+
+<dialog id="dlg-info" aria-labelledby="dlg-info-t">
+  <form method="dialog" class="dlg">
+    <h2 id="dlg-info-t">Informação</h2>
+    <div id="dlg-info-corpo"></div>
+    <button value="fechar" class="largo secundario">Fechar</button>
+  </form>
+</dialog>
+</body>
+</html>

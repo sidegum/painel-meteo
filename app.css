@@ -1,0 +1,1126 @@
+/* Painel Meteorológico. Mobile-first a partir de 360 x 640. */
+
+@font-face {
+  font-family: 'Archivo';
+  src: url('vendor/fontes/archivo-latin-standard-normal.woff2') format('woff2');
+  font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Archivo';
+  src: url('vendor/fontes/archivo-latin-ext-standard-normal.woff2') format('woff2');
+  font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ---------- Cores do painel (único lugar onde elas são definidas) ----------
+   Regra: a cor indica a informação (chuva, rajada, frio, calor ou alerta, intensidade do radar, modelo) e é sempre
+   discreta, com pouca saturação, nos dois temas. Texto colorido mantém contraste de pelo menos 4,5:1 sobre as três
+   superfícies. O tema escuro é o padrão; o claro entra por data-tema="claro", atributo posto por js/tema.js antes
+   da primeira pintura (escolha salva ou, no automático, o tema do aparelho).
+   As cores lidas pelo JavaScript (gráficos, radar e mapa, com cor() e corRgb() de js/ui.js) ficam em hexadecimal
+   de seis dígitos. O Globo tem cores próprias e não usa este bloco. */
+:root {
+  /* superfícies e texto */
+  --fundo: #111315; --sup: #1A1D20; --sup2: #23272B; --linha: #2C3136;
+  --texto: #ECEEF0; --fraco: #9BA4AC; --foco: #ECEEF0; --ponto: #ECEEF0;
+  --noite: rgba(0, 0, 0, .3); --nuvem: 225, 229, 233; --veu: rgba(8, 10, 12, .6);
+  /* informação: marca (barras, linhas e ícones) e texto (-txt, mais claro para ler) */
+  --chuva: #6C97B3; --chuva-txt: #8FB0C6;
+  --rajada: #B39C66; --rajada-txt: #C7B588;
+  --fria: #93A8C7; --quente: #D19C89; --alerta-fundo: #2B2422;
+  --cenarios: #7E8F96; --nuvens-altas: #7E8F96;
+  /* modelos, lado a lado na aba Modelos */
+  --m-ecmwf: #93A8C7; --m-aifs: #ADA1C6; --m-ukmo: #9DB79B; --m-gfs: #D19C89; --m-icon: #C7B588;
+  /* radar de tempestade, da chuva fraca à tempestade forte */
+  --radar-fraca: #6C97B3; --radar-moderada: #C2B67C; --radar-forte: #C9955F; --radar-tempestade: #C06F63; --radar-severa: #A878B1;
+  /* avisos do INMET no mapa: perigo potencial, perigo e grande perigo */
+  --aviso-potencial: #C2B67C; --aviso-perigo: #C9955F; --aviso-grande: #C06F63;
+  /* pontos do mapa: o local, estação do INMET e aeroporto */
+  --mapa-local: #ECEEF0; --mapa-inmet: #6C97B3; --mapa-aeroporto: #B39C66;
+  /* quanto da cor original fica nas camadas coloridas do mapa (radar e campos previstos) e no mapa de ruas */
+  --mapa-saturacao: .6;
+  --nav-h: 64px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+  color-scheme: dark;
+}
+:root[data-tema="claro"] {
+  --fundo: #F4F5F6; --sup: #FFFFFF; --sup2: #ECEEF0; --linha: #DDE1E4;
+  --texto: #15181B; --fraco: #5D666E; --foco: #15181B; --ponto: #15181B;
+  --noite: rgba(20, 24, 28, .06); --nuvem: 70, 78, 86; --veu: rgba(20, 24, 28, .4);
+  --chuva: #5E89A7; --chuva-txt: #3D6784;
+  --rajada: #9A8348; --rajada-txt: #75612D;
+  --fria: #4C6892; --quente: #A25743; --alerta-fundo: #F6ECE8;
+  --cenarios: #7C8B92; --nuvens-altas: #7C8B92;
+  --m-ecmwf: #4C6892; --m-aifs: #705F95; --m-ukmo: #4E734C; --m-gfs: #A25743; --m-icon: #75612D;
+  --radar-fraca: #5E89A7; --radar-moderada: #B3A052; --radar-forte: #BC8247; --radar-tempestade: #B3564A; --radar-severa: #93589D;
+  --aviso-potencial: #B3A052; --aviso-perigo: #BC8247; --aviso-grande: #B3564A;
+  --mapa-local: #15181B; --mapa-inmet: #5E89A7; --mapa-aeroporto: #9A8348;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: var(--cab-vis, 110px); }
+body {
+  margin: 0; background: var(--fundo); color: var(--texto);
+  font-family: 'Archivo', system-ui, sans-serif; font-size: 16px; line-height: 1.4;
+  font-variant-numeric: tabular-nums; overflow-x: hidden;
+  padding-bottom: var(--safe-b);
+}
+a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pular { position: absolute; left: -999px; }
+.pular:focus { left: 8px; top: 8px; z-index: 50; background: var(--sup); padding: 8px; }
+[hidden] { display: none !important; }
+
+/* ---------- topo ---------- */
+.topo {
+  display: flex; align-items: stretch; gap: 8px;
+  padding: calc(4px + var(--safe-t)) 16px 2px; min-height: 50px;
+}
+.local {
+  flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 4px 0; min-height: 44px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.local-nome { font-weight: 660; font-stretch: 106%; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.local-nome::after { content: ''; display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-right: 2px solid var(--fraco); border-bottom: 2px solid var(--fraco); transform: translateY(-3px) rotate(45deg); }
+.local-hora { color: var(--fraco); font-size: 11px; line-height: 1.2; }
+.local-hora.atrasado { color: var(--quente); font-weight: 600; }
+.atualizar {
+  min-height: 44px; min-width: 44px; padding: 0 14px; border-radius: 22px;
+  border: 1.5px solid var(--linha); background: var(--sup); font-weight: 600; font-stretch: 90%;
+}
+.atualizar[aria-busy="true"] { opacity: .6; }
+.atualizar { padding: 0; width: 44px; display: inline-flex; align-items: center; justify-content: center; align-self: center; }
+.atualizar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.atualizar[aria-busy="true"] svg { animation: girar 1s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+.agora { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; line-height: 1; flex: none; }
+.agora .rot-agora { font-size: 11px; font-weight: 600; color: var(--fraco); margin-bottom: 2px; }
+.agora b { font-size: 26px; font-weight: 650; letter-spacing: -.02em; }
+.agora small { font-size: 12px; color: var(--fraco); margin-top: 3px; white-space: nowrap; }
+/* Barra de cima fixa e recolhível: o corpo reserva a altura dela (--alt-cab), então recolher não move o conteúdo.
+   No Globo, recolhida, a reserva some e o globo ganha a tela toda. */
+.cabeca { position: fixed; top: 0; left: 0; right: 0; z-index: 20; background: var(--fundo); transition: transform .22s ease; will-change: transform; }
+body { padding-top: var(--alt-cab, 110px); }
+.cabeca[data-oculta] { transform: translateY(calc(-100% + var(--safe-t))); }
+.cabeca[data-recolhida] { height: var(--safe-t); overflow: hidden; }
+body[data-aba="globo"][data-cab="oculta"] { padding-top: var(--safe-t); }
+/* Globo: tela fixa do tamanho da janela, sem rolagem da página (o arrastar é só do globo).
+   O rodapé e a faixa de estado saem dessa tela; a barra de cima só muda pela alça ou pelo tempo sem uso. */
+html:has(body[data-aba="globo"]) { overflow: hidden; overscroll-behavior: none; }
+body[data-aba="globo"] { position: fixed; inset: 0; width: 100%; overflow: hidden; overscroll-behavior: none; }
+body[data-aba="globo"] .rodape, body[data-aba="globo"] #estado { display: none; }
+.alca { position: fixed; z-index: 21; left: 50%; top: calc(var(--cab-vis, 110px) - 11px); transform: translateX(-50%); width: 64px; height: 22px; padding: 0; border: 0; background: none; display: flex; align-items: center; justify-content: center; transition: top .22s ease; }
+.alca i { width: 36px; height: 5px; border-radius: 3px; background: var(--fraco); opacity: .55; }
+.alca[aria-expanded="false"] { top: var(--safe-t); }
+.alca[aria-expanded="false"] i { opacity: .9; }
+
+.puxar { position: fixed; left: 50%; top: 64px; z-index: 30; transform: translate(-50%, 0); opacity: 0; pointer-events: none;
+  padding: 8px 14px; border-radius: 18px; background: var(--sup2, var(--sup)); color: var(--texto); font-size: 14px; transition: opacity .12s; will-change: transform; }
+/* Abas fora da tela continuam com a largura real (altura zero, invisíveis e fora da leitura de tela), em vez de
+   display: none. Assim os gráficos já são desenhados no tamanho certo na fila ociosa e a aba abre pronta, sem
+   redesenhar nada no toque. O Globo fica de fora: ele só é montado quando a aba abre. */
+.aba[hidden]:not(.aba-globo) { display: block !important; visibility: hidden; height: 0 !important; min-height: 0 !important; overflow: hidden; padding-block: 0 !important; margin-block: 0 !important; border: 0 !important; contain: layout paint; }
+.aba.entra { animation: aba-entra .16s ease-out; }
+.aba.entra-dir { animation: aba-dir .2s ease-out; }
+.aba.entra-esq { animation: aba-esq .2s ease-out; }
+@keyframes aba-entra { from { opacity: .4; } to { opacity: 1; } }
+@keyframes aba-dir { from { opacity: .5; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes aba-esq { from { opacity: .5; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+html { overscroll-behavior-y: none; }
+body { overflow-x: hidden; }
+button, a, [role="button"] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.faixa-aviso:empty { display: none; }
+.faixa-aviso { margin: 0 16px 6px; padding: 8px 12px; border-left: 4px solid var(--rajada); background: var(--sup); font-size: 14px; }
+.faixa-aviso.erro { border-left-color: var(--quente); }
+
+/* ---------- primeira tela ---------- */
+.primeira { padding: 0 16px; }
+.alerta {
+  display: flex; gap: 10px; align-items: center; width: 100%; min-height: 44px; margin: 2px 0 2px; padding: 4px 10px;
+  border: 0; border-left: 5px solid var(--quente); background: var(--alerta-fundo); text-align: left; font-weight: 640; font-size: 15px; font-stretch: 88%; line-height: 1.2;
+}
+.alerta.indisponivel { border-left-color: var(--fraco); background: var(--sup); font-weight: 500; }
+.frase {
+  font-size: 26px; line-height: 1.1; font-weight: 720; font-stretch: 112%; margin: 4px 0 6px;
+  min-height: 2.24em; letter-spacing: -.01em; text-wrap: balance;
+}
+.linha-dado {
+  display: grid; grid-template-columns: 76px 1fr; gap: 0 10px; align-items: baseline;
+  padding: 5px 0; border-top: 1px solid var(--linha);
+}
+.linha-dado .rot { font-size: 14px; font-weight: 600; font-stretch: 85%; color: var(--fraco); }
+.linha-dado .val { font-size: 22px; font-weight: 650; }
+.linha-dado .sub { grid-column: 2; font-size: 15px; color: var(--fraco); }
+.linha-dado.chuva .rot { color: var(--chuva-txt); }
+.linha-dado.chuva .val strong { color: var(--chuva-txt); font-weight: 700; }
+.linha-dado.rajada .rot, .linha-dado.rajada .val strong { color: var(--rajada-txt); }
+.temps { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 0 2px; border-top: 1px solid var(--linha); }
+.temps .tmin { color: var(--fria); font-weight: 680; font-size: 22px; }
+.temps .tmax { color: var(--quente); font-weight: 680; font-size: 22px; }
+.confianca {
+  min-height: 44px; padding: 0 12px; border-radius: 22px; border: 1.5px solid var(--linha); background: none;
+  font-weight: 600; font-size: 15px; display: inline-flex; align-items: center; gap: 8px;
+}
+.confianca .nivel { display: inline-flex; gap: 2px; }
+.confianca .nivel i { width: 6px; height: 14px; background: var(--linha); display: block; }
+.confianca[data-n="alta"] .nivel i, .confianca[data-n="média"] .nivel i:nth-child(-n+2), .confianca[data-n="baixa"] .nivel i:first-child { background: var(--texto); }
+.ausente { color: var(--fraco); font-style: italic; font-weight: 500 !important; font-size: 16px !important; }
+.marca { display: inline-block; font-size: 12px; font-weight: 600; font-stretch: 85%; padding: 1px 6px; border-radius: 4px; border: 1px solid currentColor; vertical-align: 2px; margin-left: 4px; }
+.marca.medido { color: var(--texto); background: var(--sup2); }
+.marca.previsao { color: var(--fraco); }
+.marca.radar { color: var(--chuva-txt); }
+.marca.oficial { color: var(--quente); }
+
+
+/* ---------- resumo do dia (primeira coisa da tela) ---------- */
+.resumo { padding: 6px 0 10px; }
+.resumo-topo { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 4px; }
+.resumo-quando { margin: 0; font-size: 13px; color: var(--fraco); min-width: 0; }
+.resumo-topo .confianca .nivel i { width: 5px; height: 11px; }
+.resumo-topo .confianca { min-height: 28px; font-size: 11px; padding: 0 9px; gap: 5px; white-space: nowrap; flex: none; border-width: 1px; }
+.resumo-ceu { display: flex; align-items: center; gap: 10px; }
+.icone-ceu { width: 36px; height: 36px; flex: none; }
+.icone-ceu .tr { fill: none; stroke: var(--texto); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.icone-ceu .nuvem { fill: var(--fundo); }
+.icone-ceu .gota { stroke: var(--chuva); stroke-width: 2.6; stroke-linecap: round; }
+.resumo-ceu .cond { font-size: 19px; font-weight: 680; font-stretch: 104%; line-height: 1.15; }
+.resumo-temp { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 10px 0 8px; }
+.bloco-t { display: flex; flex-direction: column; }
+.bloco-t small { font-size: 12px; color: var(--fraco); font-weight: 560; }
+.bloco-t b { font-size: 24px; line-height: 1.05; font-weight: 640; letter-spacing: -.02em; }
+.bloco-t.chuva b { color: var(--chuva-txt); }
+.resumo-chuva { display: grid; grid-template-columns: 1fr; gap: 2px; }
+.resumo-chuva strong { font-size: 16px; font-weight: 680; }
+.resumo-chuva .det { font-size: 14px; color: var(--fraco); }
+.medidor { display: block; height: 4px; border-radius: 2px; background: var(--sup2); overflow: hidden; margin: 0 0 6px; }
+.medidor i { display: block; height: 100%; background: var(--chuva); border-radius: 2px; }
+.linha-rajada { display: flex; align-items: center; gap: 8px; padding: 8px 0 4px; border-top: 1px solid var(--linha); }
+.linha-rajada .raj { font-size: 14px; }
+.linha-rajada .rot { color: var(--fraco); }
+.linha-rajada strong { color: var(--rajada-txt); font-weight: 680; font-size: 15px; }
+.linha-rajada .raj-det { color: var(--fraco); }
+.linha-rajada .raj { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* navegação discreta: sem barra colorida, ponto pequeno no item ativo */
+:root[data-visual] .nav { background: var(--fundo); }
+:root[data-visual] .nav button { font-size: 13px; font-weight: 500; font-stretch: 95%; letter-spacing: .01em; }
+:root[data-visual] .nav button[aria-current="page"] { color: var(--texto); font-weight: 650; }
+:root[data-visual] .nav button[aria-current="page"]::before { content: ''; position: absolute; top: auto; bottom: 5px; left: calc(50% - 2px); right: auto; width: 4px; height: 4px; border-radius: 50%; background: var(--ponto); }
+:root[data-visual] { --nav-h: 56px; }
+:root[data-visual] .atualizar { background: none; font-weight: 560; font-size: 15px; }
+:root[data-visual] .alerta { border-left-width: 3px; font-weight: 600; font-size: 14px; border-radius: 0 6px 6px 0; }
+
+/* A: Grafite. Neutro, sem cartão, números em três colunas. */
+:root[data-visual="a"] .resumo-temp { border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); padding: 8px 0; }
+:root[data-visual="a"] .bloco-t + .bloco-t { padding-left: 12px; border-left: 1px solid var(--linha); }
+:root[data-visual="a"] .bloco-t.min b { color: var(--fria); }
+:root[data-visual="a"] .bloco-t.max b { color: var(--quente); }
+
+
+/* ---------- Faixa do Céu ---------- */
+.ceu { margin: 4px -16px 0; position: relative; }
+.ceu canvas { display: block; width: 100%; height: 120px; touch-action: pan-y; }
+.ceu-info { min-height: 22px; padding: 2px 16px 0; font-size: 14px; color: var(--fraco); }
+.ceu-info b { color: var(--texto); font-weight: 600; }
+
+/* ---------- seções de detalhe ---------- */
+.detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { padding: 0 16px; }
+.titulo-aba { font-size: 24px; font-stretch: 112%; font-weight: 720; margin: 8px 16px 8px; }
+.voltar-mais { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin: 4px 0 -8px; padding: 0 16px 0 10px; background: none; border: 0; color: var(--fraco); font: inherit; font-size: 15px; font-weight: 600; }
+.voltar-mais::before { content: ''; width: 8px; height: 8px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); margin-right: 2px; }
+.legenda-horas { margin: -2px 0 6px; font-size: 14px; color: var(--fraco); }
+.legenda-horas .p, .legenda-horas .mm { color: var(--chuva-txt); font-weight: 600; }
+.legenda-horas .g { color: var(--rajada-txt); font-weight: 600; }
+.secao { padding: 18px 0 8px; border-top: 6px solid var(--sup); margin-top: 14px; }
+.secao h2 { font-size: 19px; font-stretch: 105%; font-weight: 700; margin: 0 0 4px; }
+.secao .fonte { font-size: 13px; color: var(--fraco); margin: 2px 0 8px; }
+.secao p { margin: 6px 0; }
+.nota { font-size: 14px; color: var(--fraco); }
+
+/* lista por hora: rolagem horizontal só aqui */
+.horas { display: flex; overflow-x: auto; gap: 0; margin: 0 -16px; padding: 0 16px 6px; scroll-snap-type: x proximity; scroll-padding-left: 16px; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
+.hora { flex: 0 0 64px; scroll-snap-align: start; padding: 6px 4px; border-right: 1px solid var(--linha); text-align: center; font-size: 15px; }
+.hora .h { font-weight: 650; }
+.hora .p { color: var(--chuva-txt); font-weight: 600; }
+.hora .mm { color: var(--chuva-txt); }
+.hora .g { color: var(--rajada-txt); font-weight: 650; }
+.hora .barra { height: 34px; display: flex; align-items: flex-end; justify-content: center; }
+.hora .barra i { width: 18px; background: var(--chuva); display: block; min-height: 1px; }
+.hora.noite { background: var(--noite); }
+.seta { display: inline-block; width: 18px; height: 18px; vertical-align: -4px; }
+
+/* medições agora: grade de blocos */
+.medicoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.medicoes.chuvas { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.med { background: var(--sup); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.med-nome { font-size: 12px; color: var(--fraco); }
+.med-v { font-size: 22px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chuvas .med-v { font-size: 17px; }
+.med.vazio .med-v { color: var(--fraco); font-weight: 400; }
+.med-nota { font-size: 11.5px; color: var(--fraco); line-height: 1.3; }
+.med-tit { font-size: 14px; font-weight: 650; margin: 14px 0 0; }
+.med-det { margin-top: 10px; font-size: 14px; }
+.med-det summary { min-height: 44px; display: flex; align-items: center; color: var(--fraco); }
+.med-det-t { font-weight: 600; margin: 8px 0 2px; }
+.med-det ul { margin: 0; padding-left: 18px; color: var(--fraco); }
+
+
+/* meteograma */
+.paineis { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.chip { min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1.5px solid var(--linha); background: none; font-size: 15px; }
+.chip[aria-pressed="true"] { background: var(--texto); color: var(--fundo); border-color: var(--texto); font-weight: 600; }
+.leitura { position: sticky; top: 0; z-index: 3; background: var(--fundo); min-height: 44px; font-size: 14px; padding: 4px 0; border-bottom: 1px solid var(--linha); }
+.leitura b { font-weight: 650; }
+.grafico { margin: 8px 0 14px; }
+.grafico h3 { font-size: 16px; margin: 0 0 2px; font-weight: 650; }
+.grafico .leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--fraco); margin: 2px 0; }
+.grafico .leg span::before { content: ''; display: inline-block; width: 14px; height: 3px; background: var(--c, currentColor); vertical-align: 4px; margin-right: 5px; }
+.grafico .leg span.tracejado::before { background: repeating-linear-gradient(90deg, var(--c) 0 4px, transparent 4px 7px); }
+.grafico .leg span.ponto::before { width: 7px; height: 7px; border-radius: 50%; vertical-align: 1px; }
+.grafico .leg span.faixa::before { height: 10px; opacity: .35; vertical-align: 0; }
+.rolar { overflow-x: auto; overflow-y: hidden; margin: 0 -16px; padding: 0 16px; touch-action: pan-x pan-y; overscroll-behavior-x: contain; }
+.rolar .u-wrap { touch-action: pan-x pan-y; }
+.uplot { font-family: 'Archivo', sans-serif; }
+.u-axis { color: var(--fraco); }
+.explica { font-size: 14px; color: var(--fraco); border-left: 3px solid var(--linha); padding-left: 10px; }
+
+/* tabelas */
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 8px 6px 8px 0; border-bottom: 1px solid var(--linha); vertical-align: top; }
+th { font-weight: 600; color: var(--fraco); font-size: 14px; }
+td.n, th.n { text-align: right; }
+.tabela-rolar { overflow-x: auto; margin: 0 -16px; padding: 0 16px; touch-action: pan-x pan-y; }
+
+/* períodos de amanhã */
+.periodos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; }
+.periodo { padding: 10px 8px 10px 0; border-bottom: 1px solid var(--linha); }
+.periodo:nth-child(odd) { border-right: 1px solid var(--linha); }
+.periodo:nth-child(even) { padding-left: 10px; }
+.periodo h3 { margin: 0; font-size: 16px; }
+.periodo .p { color: var(--chuva-txt); font-weight: 650; }
+.periodo .g { color: var(--rajada-txt); font-weight: 650; }
+
+/* semana */
+.dias { list-style: none; margin: 0 -16px; padding: 0; }
+.dia { border-bottom: 1px solid var(--linha); }
+.dia > .cab {
+  width: 100%; min-height: 76px; text-align: left; background: none; border: 0; padding: 10px 16px;
+  display: grid; grid-template-columns: 50px 1fr; gap: 2px 10px; align-items: center;
+}
+.dia .dn { font-weight: 700; font-stretch: 90%; font-size: 16px; line-height: 1.1; grid-row: span 3; align-self: start; padding-top: 2px; }
+.dia .dn small { display: block; font-weight: 500; color: var(--fraco); font-size: 14px; }
+.dia .resumo { font-weight: 650; font-size: 16px; }
+.dia .nums { font-size: 15px; display: flex; gap: 10px; flex-wrap: wrap; grid-column: 2; }
+.dia .nums .p { color: var(--chuva-txt); font-weight: 600; }
+.dia .nums .g { color: var(--rajada-txt); font-weight: 600; }
+.dia .nums .t { white-space: nowrap; }
+.dia .cf { grid-column: 2; font-size: 14px; color: var(--fraco); }
+.dia.longe .resumo::after { content: ' (confiança menor)'; font-weight: 500; color: var(--fraco); font-size: 14px; }
+.tmin { color: var(--fria); }
+.tmax { color: var(--quente); }
+
+/* barras de probabilidade (El Niño e semana) */
+.pbar { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+.pbar .trilho { display: flex; height: 26px; background: var(--sup); }
+.pbar .trilho i { display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 13px; font-weight: 650; overflow: hidden; color: var(--sup); }
+.pbar .ln { background: var(--fria); }
+.pbar .ne { background: var(--fraco); }
+.pbar .en { background: var(--quente); }
+.mini-tab { width: 100%; }
+.mini-tab td.p { color: var(--chuva-txt); font-weight: 600; text-align: right; }
+.mini-tab td.g { color: var(--rajada-txt); font-weight: 600; text-align: right; }
+
+/* mapa */
+.mapa { height: 340px; margin: 8px -16px; background: var(--sup); touch-action: pan-y; position: relative; }
+.mapa.leaflet-container, .mapa .leaflet-pane, .mapa .leaflet-tile { touch-action: pan-y !important; }
+.mapa-dica { position: absolute; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; text-align: center; padding: 16px;
+  background: rgba(0,0,0,.45); color: #fff; font-weight: 600; font-size: 15px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.mapa-dica.ver { opacity: 1; }
+.mapa-titulo { margin: 4px 0 6px; font-weight: 600; font-size: 15px; }
+.mapa-barra { height: 8px; border-radius: 4px; max-width: 360px; }
+.mapa-rotulos { display: flex; justify-content: space-between; max-width: 360px; font-size: 12px; color: var(--fraco); margin: 2px 0 4px; }
+.mapa-controles [hidden] { display: none; }
+.mapa-controles { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
+.mapa-controles button, .botao-link {
+  min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1.5px solid var(--linha); background: var(--sup);
+  display: inline-flex; align-items: center; text-decoration: none; font-weight: 600;
+}
+.leaflet-container { font-family: 'Archivo', sans-serif; background: var(--sup); }
+.leaflet-container a { color: var(--chuva-txt); }
+.leaflet-container .leaflet-control-attribution { background: var(--sup); color: var(--fraco); }
+
+/* rodapé */
+.rodape { padding: 18px 16px 24px; margin-top: 18px; border-top: 6px solid var(--sup); font-size: 14px; color: var(--fraco); }
+.rodape .oficial { color: var(--texto); font-weight: 600; font-size: 15px; }
+.acoes-rodape { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.acoes-rodape > * { min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1.5px solid var(--linha); background: none; display: inline-flex; align-items: center; text-decoration: none; }
+.perigo { border-color: var(--quente) !important; color: var(--quente); }
+
+/* navegação entre os dias: logo abaixo do topo, fixa junto com ele */
+.nav {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--fundo); border-bottom: 1px solid var(--linha); height: 44px;
+}
+.nav button {
+  background: none; border: 0; min-height: 44px; font-size: 14px; font-weight: 560; font-stretch: 88%;
+  color: var(--fraco); position: relative; padding: 0 2px;
+}
+.nav button[aria-current="page"] { color: var(--texto); font-weight: 720; }
+
+/* diálogos */
+dialog { border: 0; padding: 0; background: var(--fundo); color: var(--texto); width: min(520px, 100vw); max-width: 100vw; max-height: 92vh; margin: auto auto 0; }
+dialog::backdrop { background: var(--veu); }
+.dlg { padding: 16px 16px calc(16px + var(--safe-b)); display: flex; flex-direction: column; gap: 10px; }
+.dlg h2 { margin: 0; font-stretch: 108%; }
+.dlg input { min-height: 48px; padding: 0 12px; border: 1.5px solid var(--linha); background: var(--sup); border-radius: 6px; width: 100%; }
+.largo { min-height: 48px; border-radius: 24px; border: 1.5px solid var(--texto); background: var(--texto); color: var(--fundo); font-weight: 650; }
+.largo.secundario { background: none; color: var(--texto); border-color: var(--linha); }
+
+/* ---------- abas de cidade (topo) e janela "Escolher local" (js/locais.js) ---------- */
+/* Faixa de abas: só aparece com favoritas ou com uma cidade buscada em uso. Rola na horizontal sem barra. */
+.cidades { display: flex; gap: 6px; padding: 2px 16px 8px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; scroll-padding: 0 16px; }
+.cidades::-webkit-scrollbar { display: none; }
+.cidades[hidden] { display: none; }
+.aba-cidade { flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 34px; max-width: 46vw; padding: 0 13px; border: 0; border-radius: 17px;
+  background: var(--sup2); color: var(--texto); font-size: 14px; font-weight: 560; white-space: nowrap; }
+.aba-cidade span { overflow: hidden; text-overflow: ellipsis; }
+.aba-cidade[aria-current="true"] { background: var(--texto); color: var(--fundo); font-weight: 650; }
+.aba-cidade .ic { width: 15px; height: 15px; flex: none; }
+.aba-cidade .ic path { fill: currentColor; stroke: none; }
+.aba-buscar { padding: 0; width: 34px; justify-content: center; background: none; color: var(--fraco); }
+.aba-buscar .ic path { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.aba-buscar .ic { width: 18px; height: 18px; }
+.aba-avulsa { flex: none; display: inline-flex; align-items: center; border-radius: 17px; background: var(--texto); }
+.aba-avulsa .aba-cidade { padding-right: 4px; }
+.aba-estrela { display: inline-flex; align-items: center; justify-content: center; width: 36px; min-height: 34px; padding: 0 8px 0 2px; border: 0; background: none; color: var(--fundo); }
+.aba-estrela .ic { width: 18px; height: 18px; }
+.aba-estrela .ic path { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+@media (hover: hover) {
+  .aba-cidade:not([aria-current="true"]):hover { background: var(--linha); }
+  .aba-estrela:hover .ic path { fill: currentColor; }
+}
+
+/* Janela: folha de baixo no celular, cartão centralizado no computador. A lista rola; busca e título ficam fixos. */
+.dlg-local[open] { display: flex; flex-direction: column; height: min(640px, 88dvh); border-radius: 18px 18px 0 0; overflow: hidden; }
+.dlg-local .dlg { flex: 1; min-height: 0; gap: 8px; padding-bottom: calc(10px + var(--safe-b)); }
+.dlg-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dlg-topo .fechar { width: 40px; height: 40px; border: 0; border-radius: 20px; background: var(--sup2); color: var(--fraco); display: inline-flex; align-items: center; justify-content: center; }
+.dlg-topo .fechar svg, .campo-busca svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.campo-busca { position: relative; display: flex; align-items: center; }
+.campo-busca > svg { position: absolute; left: 12px; color: var(--fraco); pointer-events: none; }
+.dlg .campo-busca input { padding: 0 44px 0 40px; border-radius: 12px; border: 0; background: var(--sup2); font-size: 17px; -webkit-appearance: none; appearance: none; }
+.campo-busca input::-webkit-search-cancel-button { display: none; }
+.campo-busca input:focus-visible { outline: 2px solid var(--foco); outline-offset: 0; }
+.campo-busca .limpar { position: absolute; right: 4px; width: 40px; height: 40px; border: 0; background: none; color: var(--fraco); display: inline-flex; align-items: center; justify-content: center; }
+.busca-estado { margin: 0; font-size: 14px; color: var(--fraco); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.busca-estado[hidden] { display: none; }
+.lista-locais { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 -16px; padding: 0 16px; }
+.grupo-locais { margin: 4px 0 10px; }
+.grupo-topo { display: flex; align-items: center; justify-content: space-between; min-height: 32px; }
+.grupo-locais h3 { margin: 0; font-size: 12px; font-weight: 620; letter-spacing: .04em; text-transform: uppercase; color: var(--fraco); }
+.grupo-acao { border: 0; background: none; color: var(--texto); font-size: 14px; font-weight: 600; min-height: 32px; padding: 0 2px; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--linha); }
+.grupo-locais ul { list-style: none; margin: 0; padding: 0; border-radius: 14px; background: var(--sup); overflow: hidden; }
+.linha-local { display: flex; align-items: stretch; }
+.linha-local + .linha-local { background: linear-gradient(var(--linha), var(--linha)) right top / calc(100% - 52px) 1px no-repeat; }
+.local-escolher { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 4px 6px 14px; border: 0; background: none; text-align: left; color: var(--texto); }
+.local-marca { flex: none; width: 24px; display: inline-flex; justify-content: center; color: var(--fraco); }
+.local-marca .ic { width: 18px; height: 18px; }
+.local-marca .ic path { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.local-marca .ic-fav path { fill: var(--rajada); stroke: var(--rajada); }
+.local-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.local-txt b { font-weight: 560; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.local-txt b mark { background: none; color: inherit; font-weight: 720; }
+.local-txt small { font-size: 13px; color: var(--fraco); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.local-escolher[aria-current="true"] b { font-weight: 680; }
+.local-uso { flex: none; color: var(--texto); display: inline-flex; }
+.local-uso .ic { width: 20px; height: 20px; }
+.local-uso .ic path { fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.local-estrela { flex: none; width: 52px; border: 0; background: none; color: var(--fraco); display: inline-flex; align-items: center; justify-content: center; }
+.local-estrela .ic { width: 22px; height: 22px; }
+.local-estrela .ic path { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; }
+.local-estrela[aria-pressed="true"] { color: var(--rajada); }
+.local-estrela[aria-pressed="true"] .ic path { fill: currentColor; }
+.local-ordem { flex: none; display: inline-flex; padding-right: 4px; }
+.local-ordem button { width: 44px; border: 0; background: none; color: var(--texto); display: inline-flex; align-items: center; justify-content: center; }
+.local-ordem button:disabled { opacity: .3; }
+.local-ordem .ic { width: 20px; height: 20px; }
+.local-ordem .ic path { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.dlg-local .nota { margin: 0; font-size: 12px; }
+@media (hover: hover) {
+  .local-escolher:hover, .local-estrela:hover, .local-ordem button:hover:not(:disabled) { background: var(--sup2); }
+}
+@media (min-width: 760px) {
+  .dlg-local[open] { margin: auto; border-radius: 18px; width: min(560px, 92vw); height: min(680px, 84vh); }
+}
+
+/* Troca para uma cidade sem dados salvos: a tela anterior fica esmaecida até a previsão nova chegar. */
+main[aria-busy="true"] .aba { opacity: .35; pointer-events: none; transition: opacity .15s; }
+
+/* desempenho e movimento */
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* telas maiores */
+
+/* ---------- chance de chuva por hora (gráfico padrão da primeira tela) ---------- */
+.troca { display: flex; gap: 6px; margin: 10px 0 6px; }
+.troca button { min-height: 36px; padding: 0 10px; border-radius: 18px; border: 1px solid var(--linha); background: none; font-size: 13px; color: var(--fraco); }
+.troca button[aria-pressed="true"] { color: var(--texto); border-color: var(--texto); font-weight: 600; }
+.chance-barras { position: relative; display: flex; align-items: flex-end; height: 96px; gap: 2px; padding-top: 14px; border-bottom: 1px solid var(--linha); }
+.chance-barras .guia { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--linha); pointer-events: none; }
+.chance-barras .g50 { bottom: 41px; }
+.chance-barras .g100 { bottom: 82px; }
+.barra-c { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: none; border: 0; padding: 0; position: relative; min-width: 0; }
+.barra-c i { display: block; width: 100%; max-width: 12px; background: var(--chuva); border-radius: 2px 2px 0 0; }
+.barra-c i.sem { background: repeating-linear-gradient(135deg, var(--linha) 0 2px, transparent 2px 5px); opacity: .6; }
+.barra-c span { order: -1; font-size: 10px; font-weight: 650; color: var(--chuva-txt); white-space: nowrap; line-height: 1.2; flex: none; }
+.barra-c i { flex: none; }
+.barra-c.agora::after { content: ''; position: absolute; bottom: -5px; width: 4px; height: 4px; border-radius: 50%; background: var(--texto); }
+.chance-eixo { display: flex; gap: 2px; margin-top: 6px; }
+.chance-eixo span { flex: 1; min-width: 0; font-size: 11px; color: var(--fraco); white-space: nowrap; overflow: visible; }
+.chance-info { margin: 6px 0 0; font-size: 14px; min-height: 20px; }
+.chance-fonte { margin: 2px 0 0; font-size: 12px; color: var(--fraco); }
+
+.barra-c i.medido { background: var(--texto); }
+.chance-barras.temp .barra-c i { background: var(--quente); opacity: .85; }
+.chance-barras.temp .barra-c span { color: var(--quente); }
+.resumo-chuva.chovendo strong { color: var(--chuva-txt); }
+
+/* ---------- painel do El Niño ---------- */
+.enso-painel { padding: 4px 0 10px; }
+.enso-status { font-size: 20px; font-weight: 700; font-stretch: 104%; margin: 4px 0 2px; line-height: 1.2; }
+.enso-grade { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--linha); }
+.enso-bloco { padding: 10px 8px 10px 0; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; gap: 1px; }
+.enso-bloco:nth-child(even) { padding-left: 12px; border-left: 1px solid var(--linha); }
+.enso-bloco small { font-size: 13px; color: var(--fraco); }
+.enso-bloco b { font-size: 28px; font-weight: 650; letter-spacing: -.02em; }
+.enso-bloco.destaque b { color: var(--quente); }
+.enso-bloco .sub { font-size: 13px; color: var(--fraco); }
+.enso-bloco .marca { align-self: flex-start; margin: 4px 0 0; }
+.enso-regioes { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 10px; }
+.enso-regioes div { display: flex; flex-direction: column; font-size: 12px; color: var(--fraco); }
+.enso-regioes b { font-size: 17px; color: var(--texto); font-weight: 650; }
+.enso-diario { display: flex; align-items: flex-end; gap: 2px; height: 70px; margin-top: 12px; border-bottom: 1px solid var(--linha); }
+.enso-diario i { flex: 1; display: block; border-radius: 2px 2px 0 0; }
+.enso-diario i.q { background: var(--quente); }
+.enso-diario i.f { background: var(--fria); }
+
+
+.troca-horas { margin-left: auto; display: inline-flex; border: 1px solid var(--linha); border-radius: 18px; overflow: hidden; }
+.troca-horas button { border: 0; border-radius: 0; padding: 0 10px; }
+.troca-horas button[aria-pressed="true"] { background: var(--sup2); }
+.troca { flex-wrap: nowrap; }
+.troca button { white-space: nowrap; flex: none; padding: 0 9px; }
+.troca { gap: 4px; }
+.troca-horas button { padding: 0 7px; }
+.troca-horas { flex: none; }
+.troca-horas button { font-size: 12px; padding: 0 8px; }
+
+/* Um só padrão para celular e computador: a mesma coluna, a mesma ordem e os mesmos tamanhos.
+   Em telas largas a coluna fica centralizada com 720 px; nada muda de lugar. */
+@media (min-width: 760px) {
+  .cabeca > .topo, .cidades, .nav, main, .faixa-aviso { max-width: 720px; margin-left: auto; margin-right: auto; }
+  .mapa { margin: 8px 0; border-radius: 8px; overflow: hidden; }
+  .camadas, .horas, .rolar, .tabela-rolar { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
+}
+
+/* temperatura agora no resumo de hoje (acima do céu); no topo só quando o resumo sai da tela */
+.resumo-agora { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 2px; }
+.resumo-agora b { font-size: 40px; font-weight: 640; letter-spacing: -.03em; line-height: 1; }
+.resumo-agora .rot-agora { font-size: 13px; color: var(--fraco); font-weight: 600; }
+.resumo-agora .sens-agora { margin-left: auto; font-size: 14px; color: var(--fraco); font-weight: 600; }
+.resumo-agora .sens-agora b { font-size: 22px; color: var(--texto); letter-spacing: -.02em; }
+.bloco-t .sens-max { margin-top: 2px; font-size: 11.5px; }
+.agora.oculto { visibility: hidden; }
+
+.resumo-chuva .det.resto { font-size: 16px; font-weight: 600; color: var(--chuva-txt); }
+.detalhes > *, #semana-conteudo > *, #modelos-conteudo > *, #elnino-conteudo > * { min-width: 0; }
+/* no computador, a faixa de horas rola dentro da própria coluna, sem invadir a vizinha */
+@media (min-width: 720px) {
+  .detalhes .horas, .detalhes .rolar, .detalhes .tabela-rolar { margin: 0; padding: 0 0 6px; }
+}
+.mapa-escuro { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.5); }
+.mapa-claro { filter: saturate(var(--mapa-saturacao)); }
+/* Camadas coloridas do mapa (radar e campos previstos) e a barra da legenda, com a mesma redução de cor. */
+.mapa-dado, .mapa-barra { filter: saturate(var(--mapa-saturacao)); }
+/* alertas discretos: só um ponto e o texto na cor do alerta, sem faixa preenchida */
+:root[data-visual] .alerta {
+  background: none; border: 0; border-radius: 0; padding: 0; min-height: 40px; gap: 8px;
+  font-size: 13px; font-weight: 550; color: var(--quente);
+}
+:root[data-visual] .alerta::before { content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--quente); }
+:root[data-visual] .alerta::after { content: '›'; margin-left: auto; color: var(--fraco); font-size: 16px; }
+:root[data-visual] .alerta.indisponivel { color: var(--fraco); font-weight: 500; }
+:root[data-visual] .alerta.indisponivel::before { background: var(--fraco); }
+
+/* Fluidez: seções fora da tela não são diagramadas nem pintadas até chegarem perto (o navegador guarda o tamanho). */
+.detalhes > .secao, #semana-conteudo > .secao, #modelos-conteudo > .secao, #elnino-conteudo > .secao { content-visibility: auto; contain-intrinsic-size: auto 420px; }
+.fontes-lista { list-style: none; margin: 4px 0 0; padding: 0; font-size: 14px; color: var(--fraco); }
+.fontes-lista li { padding: 6px 0; border-bottom: 1px solid var(--linha); }
+.fontes-lista b { color: var(--texto); font-weight: 600; }
+
+/* gráfico de barras por hora (chuva e temperatura): eixo à esquerda, linha pontilhada na hora atual */
+.grafbarras { margin-top: 14px; }
+.gb-corpo, .gb-rodape { display: grid; grid-template-columns: 34px 1fr; }
+.gb-y { position: relative; height: 132px; }
+.gb-y span { position: absolute; right: 6px; transform: translateY(50%); font-size: 9.5px; line-height: 1; color: var(--fraco); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gb-area { position: relative; height: 132px; display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--linha); }
+.gb-guia { position: absolute; left: 0; right: 0; border-top: 1px solid var(--linha); opacity: .55; pointer-events: none; }
+.gb-agora { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--texto); opacity: .75; pointer-events: none; z-index: 1; }
+.gb-barra { flex: 1; min-width: 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; background: none; border: 0; padding: 0; position: relative; }
+.gb-barra i { display: block; width: 100%; max-width: 14px; border-radius: 2px 2px 0 0; background: var(--chuva); transition: opacity .12s; }
+.grafbarras.temp .gb-barra i { background: var(--quente); opacity: .85; }
+.gb-barra i.medido { background: var(--texto); }
+.gb-barra i.sem { background: repeating-linear-gradient(135deg, var(--linha) 0 2px, transparent 2px 5px); opacity: .6; }
+.gb-barra.gb-atual::after { content: ''; position: absolute; bottom: -5px; width: 4px; height: 4px; border-radius: 50%; background: var(--texto); }
+.gb-barra.sel i { outline: 2px solid var(--texto); outline-offset: 1px; }
+.gb-x { display: flex; gap: 2px; margin-top: 6px; }
+.gb-x span { flex: 1; min-width: 0; font-size: 11px; color: var(--fraco); white-space: nowrap; overflow: visible; }
+
+/* Pressão atmosférica: destaque no topo de "Medições agora" */
+.pressao { background: var(--sup2); border-radius: 10px; padding: 12px 12px 6px; margin: 4px 0 12px; border-left: 4px solid var(--linha); }
+.pressao.sinal-forte { border-left-color: var(--quente); }
+.pressao.sinal-confirma { border-left-color: var(--chuva); }
+.pressao.sinal-mudanca { border-left-color: var(--rajada); }
+.pressao.sinal-firme { border-left-color: var(--fria); }
+.pr-topo { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.pr-topo .med-nome { flex-basis: 100%; }
+.pr-v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pr-tend { font-size: 14px; font-weight: 640; color: var(--fraco); }
+.pr-tend.caindo { color: var(--quente); }
+.pr-tend.subindo { color: var(--fria); }
+.pr-lista { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin: 10px 0 6px; font-size: 14px; }
+.pr-lista dt { color: var(--fraco); }
+.pr-lista dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.pr-sinal { margin: 8px 0 4px; font-size: 15px; line-height: 1.35; }
+.pressao .grafico { margin-top: 8px; }
+
+/* Risco de temporal: linha clicável abaixo da rajada, só para risco moderado ou alto */
+.linha-temporal { display: flex; align-items: center; gap: 6px; width: 100%; margin: 4px 0 2px; padding: 5px 8px; border: 0; border-radius: 6px;
+  background: var(--sup2); color: var(--texto); font: inherit; font-weight: 640; font-size: 13px; line-height: 1.25; text-align: left; border-left: 3px solid var(--rajada); }
+.linha-temporal.alto { border-left-color: var(--quente); background: var(--alerta-fundo); }
+.linha-temporal .raio { width: 13px; height: 13px; flex: none; fill: var(--rajada); }
+.linha-temporal.alto .raio { fill: var(--quente); }
+
+.linha-temporal .lt-txt { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
+.linha-temporal .lt-txt small { font-size: 12px; font-weight: 500; color: var(--fraco); }
+.lt-avisos { margin: 0 0 10px; padding-left: 18px; }
+.lt-avisos li { margin: 0 0 6px; }
+
+/* Placar de acerto da véspera: última linha de "Previsto x medido", toca para ver o detalhe */
+.linha-placar { display: flex; align-items: center; width: 100%; margin: 10px 0 2px; padding: 7px 8px; border: 0; border-radius: 6px;
+  background: var(--sup2); color: var(--texto); font: inherit; font-weight: 560; font-size: 13px; line-height: 1.3; text-align: left; border-left: 3px solid var(--linha); }
+.linha-placar .lt-txt { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
+.linha-placar .lt-txt small { font-size: 12px; font-weight: 500; color: var(--fraco); }
+
+/* ---------- aba Globo: cena 3D ocupa a tela abaixo do topo; a interface flutua sobre ela ---------- */
+.aba-globo { padding: 0; }
+.globo { position: relative; width: 100%; height: 70vh; background: #04060b; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; color: #eceef0; }
+.globo-canvas { display: block; width: 100%; height: 100%; outline: none; cursor: grab; }
+.globo-canvas:active { cursor: grabbing; }
+.globo-topo { position: absolute; left: 0; right: 0; top: 0; padding: 10px 12px 0; pointer-events: none; }
+.globo-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; pointer-events: auto; padding-bottom: 6px; }
+.globo-chips::-webkit-scrollbar { display: none; }
+.globo-chips button { flex: none; min-height: 36px; padding: 0 11px; border-radius: 18px; border: 1px solid rgba(255,255,255,.22); background: rgba(10,14,22,.62); color: #dfe4ea; font-size: 13px; font-weight: 560; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-chips button[aria-checked="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
+.globo-botoes { position: absolute; right: 10px; top: 56px; display: flex; flex-direction: column; gap: 8px; z-index: 2; }
+.globo-botoes button { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: rgba(10,14,22,.5); color: #dfe4ea; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-botoes svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.globo-botoes svg .cheio { fill: currentColor; stroke: none; }
+.globo-botoes button::before { content: ''; position: absolute; inset: -4px; } /* área de toque de 44 px */
+.globo-botoes button { position: relative; }
+.globo-aviso { position: absolute; left: 12px; right: 12px; top: 58px; margin: 0; padding: 10px 14px; border-radius: 10px; background: rgba(10,14,22,.78); color: #eceef0; font-size: 14px; max-width: 420px; }
+.globo-aviso.grave { border-left: 3px solid #ee8a6a; }
+.globo-rodape { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px calc(8px + var(--safe-b)); background: linear-gradient(to top, rgba(4,6,11,.92), rgba(4,6,11,.55) 70%, rgba(4,6,11,0)); pointer-events: none; }
+.globo-rodape > * { pointer-events: auto; }
+.globo-legenda-texto { margin: 0 0 4px; font-size: 13px; color: #dfe4ea; }
+.globo-barra { height: 8px; border-radius: 4px; background: #333; max-width: 420px; }
+.globo-rotulos { display: flex; justify-content: space-between; max-width: 420px; font-size: 11px; color: #b7c0c9; margin-top: 2px; }
+.globo-unidade { font-size: 11px; color: #b7c0c9; }
+.globo-rotulos .globo-unidade { margin-left: 4px; }
+/* tempo na Terra: o instante mostrado num botão; ao tocar, a linha do tempo da previsão (arrastar e animar) */
+.globo-linha { display: flex; align-items: center; gap: 10px; margin: 6px 0 4px; }
+.globo-linha[hidden] { display: none; }
+.globo-faixa-caixa { position: relative; flex: 1; min-width: 0; padding-bottom: 14px; }
+.globo-faixa { width: 100%; accent-color: #eceef0; height: 28px; margin: 0; display: block; }
+.globo-dias { position: absolute; left: 8px; right: 8px; bottom: 0; height: 13px; }
+.globo-dias span { position: absolute; transform: translateX(-2px); font-size: 10.5px; color: #aab3bd; white-space: nowrap; }
+.globo-dias span:last-child:not(:first-child) { transform: translateX(-100%); }
+.globo-tocar { flex: none; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.6); color: #eceef0; display: grid; place-items: center; }
+.globo-tocar svg { width: 16px; height: 16px; fill: currentColor; }
+.globo-tocar[aria-pressed="true"] { background: #eceef0; color: #0b0f16; }
+.globo-tempo-terra { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; }
+.globo-instante { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.28); background: rgba(10,14,22,.62); color: #eceef0; font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; }
+.globo-instante[hidden], .globo-agora[hidden] { display: none; }
+.globo-instante[aria-expanded="true"] { border-color: rgba(255,255,255,.6); }
+.globo-instante.previsao { border-color: #ffd166; color: #ffe1a0; }
+.globo-agora { min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,.3); background: rgba(236,238,240,.92); color: #0b0f16; font-size: 13px; font-weight: 680; }
+.globo-notas { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; }
+.globo-notas p { margin: 0; font-size: 11.5px; color: #aab3bd; }
+.globo-notas .com-erro { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.globo-ciclones { color: #ff9a8a !important; font-weight: 600; }
+.globo-painel { z-index: 6; position: absolute; left: 12px; right: 12px; bottom: 150px; max-width: 420px; margin: 0 auto; padding: 12px 14px; border-radius: 12px; background: rgba(10,14,22,.86); color: #eceef0; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.12); }
+.globo-painel-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: #b7c0c9; }
+.globo-painel-topo b { color: #eceef0; font-weight: 640; }
+.globo-fechar { min-width: 36px; min-height: 36px; border: 0; background: none; color: #dfe4ea; font-size: 22px; line-height: 1; }
+.globo-frase { margin: 4px 0 2px; font-size: 19px; font-weight: 700; font-stretch: 108%; line-height: 1.2; }
+.globo-numeros { margin: 0; font-size: 15px; font-weight: 560; white-space: pre-line; }
+.globo-quando { margin: 4px 0 6px; font-size: 12.5px; color: #b7c0c9; }
+.globo-detalhe { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: none; color: #eceef0; font-size: 13px; font-weight: 600; }
+.tabela-detalhe { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabela-detalhe th { text-align: left; font-weight: 560; color: var(--fraco); padding: 5px 8px 5px 0; vertical-align: top; width: 46%; }
+.tabela-detalhe td { padding: 5px 0; border-bottom: 1px solid var(--linha); }
+@media (min-width: 760px) { .globo { border-radius: 0 0 10px 10px; } }
+/* Monitor grande (o app tira o limite de largura com o Globo aberto): a linha do tempo e as notas não se esticam. */
+@media (min-width: 1100px) { .globo-rodape > * { max-width: 960px; } }
+.globo-btn-dianoite[aria-pressed="true"] { color: #ffd166 !important; border-color: rgba(255,209,102,.6) !important; }
+.globo-espaco { position: absolute; left: 0; right: 0; top: 52px; padding: 0 12px; pointer-events: none; }
+.globo-espaco > * { pointer-events: auto; }
+.globo-espaco-nota { margin: 2px 0 0; font-size: 11.5px; color: #aab3bd; max-width: 300px; }
+.globo-rotulo { position: absolute; left: 0; top: 0; padding: 2px 8px; border-radius: 10px; background: rgba(10,14,22,.75); color: #ffd166; font-size: 12px; font-weight: 650; border: 1px solid rgba(255,209,102,.5); margin: -28px 0 0 -16px; white-space: nowrap; pointer-events: auto; }
+button.globo-rotulo { cursor: pointer; }
+.globo-rotulo-planeta { color: #dfe4ea; border-color: rgba(255,255,255,.2); margin: 0; pointer-events: none; }
+.globo-rotulo-planeta.sonda { color: #cfe3ff; border-style: dashed; font-weight: 600; }
+.globo-rotulo-planeta.faixa { background: none; border: 0; color: #9fb0c4; font-weight: 560; font-size: 11px; }
+.globo-rotulo-planeta.anao { color: #c8b8a6; }
+.globo-rotulo-planeta.escala { background: none; border: 0; color: rgba(170,190,212,.75); font-weight: 520; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.globo-tabela-planetas { position: absolute; top: 62px; right: 64px; z-index: 2; max-height: calc(100% - 150px); overflow: auto; padding: 8px 10px; border-radius: 12px; background: rgba(8,11,18,.8); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px); color: #e8edf3; }
+.tabela-planetas table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabela-planetas th, .tabela-planetas td { padding: 3px 8px; text-align: right; border-bottom: 1px solid rgba(128,140,155,.18); }
+.tabela-planetas thead th { color: #8796a8; font-weight: 600; font-size: 11px; }
+.tabela-planetas tbody th { text-align: left; font-weight: 680; }
+.globo-tabela-planetas .tabela-planetas tbody th { color: #f3f5f8; }
+.tabela-planetas td:last-child { text-align: left; }
+.globo-tabela-planetas .tabela-planetas td:last-child { color: #c9d3de; }
+.tabela-planetas tr.tocavel { cursor: pointer; }
+.tabela-planetas tr.tocavel:hover { background: rgba(255,255,255,.06); }
+.tabela-planetas .nota { max-width: 560px; margin: 6px 2px 0; white-space: normal; font-size: 11px; color: #8796a8; }
+#dlg-info .tabela-planetas { overflow-x: auto; }
+.globo.com-galaxia .globo-tabela-planetas { display: none !important; }
+.globo.com-espaco .globo-aviso { top: 104px; }
+.globo-rotulo-planeta.lua { color: #dfe4ec; font-size: 11px; padding: 1px 6px; }
+.globo-rotulo-planeta.cometa { color: #a8e6ff; }
+.globo-rotulo-planeta.sol { color: #ffe1a0; border-color: rgba(255,209,102,.4); }
+.globo-rotulo-ceu { margin: 10px 0 0 8px; padding: 0 6px; background: rgba(10,14,22,.45); font-size: 11px; font-weight: 600; border: 0; color: #e8e2cf; }
+.globo-rotulo-estrela { margin: 6px 0 0 6px; padding: 0 4px; background: none; border: 0; font-size: 10.5px; font-weight: 500; color: rgba(205,216,235,.72); letter-spacing: .01em; }
+.globo-rotulo-objeto { margin: 6px 0 0 6px; padding: 0 4px; background: none; border: 0; font-size: 10.5px; font-weight: 500; font-style: italic; color: rgba(255,196,214,.7); }
+.globo-rotulo-constelacao { margin: 0; padding: 0; background: none; border: 0; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgba(150,175,215,.55); transform-origin: center; }
+.globo-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.globo-detalhe[aria-pressed="true"] { background: #eceef0; color: #0b0f16; }
+.globo-frase-media { font-size: 16px; font-weight: 650; line-height: 1.3; }
+/* Céu de hoje: uma linha acima do globo com o que dá para ver a olho nu, cada item tocável */
+.ceu-hoje { background: #04060b; color: #eceef0; padding: 8px 12px 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.ceu-hoje-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ceu-hoje-titulo { font-size: 13px; font-weight: 650; color: #dfe4ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ceu-hoje-tudo { flex: none; min-height: 32px; padding: 0 10px; border: 0; background: none; color: #9cc3ff; font-size: 13px; font-weight: 600; }
+.ceu-hoje-lista { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 2px -12px 0; padding: 0 12px; scroll-padding: 0 12px; scroll-snap-type: x proximity; touch-action: pan-x; }
+.ceu-hoje-lista::-webkit-scrollbar { display: none; }
+.ceu-item { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; margin: 0; padding: 0 12px; border-radius: 18px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.04); color: #eceef0; font: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; scroll-snap-align: start; }
+.ceu-item b { font-variant-numeric: tabular-nums; font-weight: 600; color: #ffe1a0; }
+.ceu-item.destaque { border-color: rgba(255,209,102,.6); }
+.ceu-item.nuvem-nublado { opacity: .55; }
+.ceu-item.nuvem-nublado::after { content: '☁'; font-size: 12px; }
+.ceu-hoje-vazio { margin: 4px 0; font-size: 13px; color: #aab3bd; }
+.ceu-frase { font-size: 16px; line-height: 1.4; }
+.ceu-lista { padding-left: 18px; margin: 6px 0 10px; }
+.ceu-lista li { margin: 0 0 8px; }
+.ceu-lista li p { margin: 2px 0 0; color: var(--fraco); font-size: 14px; }
+.ceu-lista li.fraco { opacity: .65; }
+.ceu-sub { font-size: 15px; margin: 14px 0 4px; }
+.ceu-desenho { display: block; width: 100%; height: auto; border-radius: 10px; margin: 6px 0 8px; }
+.ceu-desenho-grau { font-size: 9px; fill: rgba(255,255,255,.45); }
+.ceu-desenho-rumo { font-size: 10px; fill: rgba(255,255,255,.55); }
+.ceu-desenho-rumo.cardeal { font-size: 12px; font-weight: 700; fill: #fff; }
+.ceu-desenho-ref { font-size: 10px; fill: #cfe0ff; }
+.ceu-desenho-alvo { font-size: 12px; font-weight: 700; fill: #ffe1a0; }
+.ceu-aviso { font-size: 14px; font-weight: 600; color: var(--quente); }
+.globo-cidades { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.globo-cidade { position: absolute; left: 0; top: 0; margin: -8px 0 0 -2.5px; padding-left: 9px; font-size: 12px; line-height: 16px; font-weight: 600; color: #f3f5f8; text-shadow: 0 0 3px #000, 0 1px 2px #000; white-space: nowrap; }
+.globo-cidade::before { content: ''; position: absolute; left: 0; top: 5.5px; width: 5px; height: 5px; border-radius: 50%; background: #fff; box-shadow: 0 0 2px #000; }
+.globo-cidade.capital { font-size: 13px; font-weight: 720; }
+.globo-cidade.capital::before { left: -1px; top: 4.5px; width: 5px; height: 5px; border-radius: 1px; background: #0b0f16; border: 1.5px solid #fff; }
+.globo-cidade.capital-estado::before { background: #0b0f16; border: 1.5px solid #fff; width: 4px; height: 4px; }
+.globo-cidade.pequena { font-size: 11px; font-weight: 520; color: #e2e7ee; }
+.globo-cidade.pequena::before { width: 4px; height: 4px; top: 6px; left: .5px; }
+.globo-cidade.so-temp { margin: -9px 0 0 6px; padding: 0 5px; border-radius: 9px; background: rgba(11,15,22,.82); font-size: 11.5px; line-height: 18px; text-shadow: none; }
+.globo-cidade.so-temp::before { display: none; }
+.globo-grade { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.globo-grade-rotulo { position: absolute; left: 0; top: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: rgba(225,232,242,.78); text-shadow: 0 0 3px #000, 0 0 2px #000; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.globo-grade-rotulo[data-tipo='lat'] { margin: -7px 0 0 2px; }
+.globo-grade-rotulo[data-tipo='lon'] { margin: 0 0 0 0; transform-origin: 0 0; translate: -50% 2px; }
+.globo-leitura { position: absolute; right: 12px; bottom: 12px; z-index: 3; max-width: min(460px, 46%); padding: 8px 11px; border-radius: 10px; background: rgba(8,11,18,.78); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(6px); color: #e8edf3; font-size: 12px; line-height: 1.5; white-space: pre-line; font-variant-numeric: tabular-nums; pointer-events: none; }
+@media (pointer: coarse) { .globo-leitura { display: none; } }
+.globo-sistema-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; pointer-events: none; }
+.globo-sistema-controles > * { pointer-events: auto; }
+.globo-recolhivel { transition: opacity .45s ease; }
+.globo.imersivo .globo-recolhivel { opacity: 0; }
+.globo.imersivo .globo-recolhivel, .globo.imersivo .globo-recolhivel * { pointer-events: none !important; }
+.globo-tempo, .globo-hoje { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; }
+.globo-tempo[aria-pressed="true"] { border-color: #ffd166; color: #ffe1a0; }
+.globo-hoje[hidden] { display: none; }
+.globo-visao-geral { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(236,238,240,.92); color: #0b0f16; font-size: 13px; font-weight: 680; }
+.globo-visao-geral[hidden] { display: none; }
+.globo-sistema-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; align-self: stretch; pointer-events: none; }
+.globo-sistema-topo > * { pointer-events: auto; }
+.globo-livre { margin-left: auto; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
+.globo-livre[aria-pressed="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
+.globo-dica { margin: 0; padding: 6px 10px; border-radius: 10px; background: rgba(10,14,22,.8); color: #dfe4ec; font-size: 12px; }
+.globo-dica[hidden] { display: none; }
+.globo-data-sistema { margin: 0; font-size: 13px; color: #dfe4ea; font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }
+.globo.com-espaco .globo-botoes { top: 108px; }
+
+/* menu "Ver mais": seções fora da barra principal (Avisos, Globo, El Niño, Modelos) */
+.nav #btn-mais[data-avisos]::after { content: ''; position: absolute; top: 11px; right: calc(50% - 38px); width: 7px; height: 7px; border-radius: 50%; background: var(--quente); }
+.mais-lista { display: flex; flex-direction: column; gap: 8px; }
+.mais-item { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 56px; padding: 10px 14px; border: 1.5px solid var(--linha); border-radius: 10px; background: var(--sup); color: var(--texto); text-align: left; }
+.mais-item b { font-size: 16px; font-weight: 680; }
+.mais-item span { font-size: 13px; color: var(--fraco); }
+.mais-item[aria-current="page"] { border-color: var(--texto); }
+.mais-item.com-aviso span { color: var(--quente); font-weight: 600; }
+/* Tema do app, no fim de "Ver mais": Automático segue o aparelho. */
+.mais-tema { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 2px; font-size: 15px; font-weight: 600; }
+.mais-tema .troca-modo { background: var(--sup); }
+.mais-tema button { border: 0; border-radius: 8px; min-height: 36px; padding: 0 12px; background: none; color: var(--fraco); font-size: 14px; font-weight: 560; }
+.mais-tema button[aria-pressed="true"] { color: var(--texto); background: var(--sup2); font-weight: 650; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+
+/* aba Avisos */
+#avisos-conteudo { padding: 0 16px 8px; }
+.aviso-card { border-left: 3px solid var(--quente); background: var(--sup); border-radius: 0 8px 8px 0; padding: 12px 14px; margin: 10px 0; }
+.aviso-card.grave { background: var(--alerta-fundo); }
+.aviso-card h2 { font-size: 17px; margin: 0 0 4px; font-weight: 700; }
+.aviso-card .quando { margin: 0; color: var(--fraco); font-size: 14px; }
+.aviso-card details { margin-top: 8px; }
+.aviso-card summary { color: var(--fraco); font-size: 14px; min-height: 32px; display: flex; align-items: center; cursor: pointer; }
+.aviso-card details p { margin: 6px 0; }
+.avisos-vazio { font-size: 17px; font-weight: 600; margin: 12px 0 4px; }
+.avisos-outros { margin-top: 14px; }
+.avisos-outros summary { color: var(--fraco); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.avisos-outros li { margin: 6px 0; }
+
+/* seletor compacto (uma opção visível; a lista abre no seletor nativo do sistema) */
+.seletor { position: relative; display: inline-flex; align-items: center; margin: 4px 0 8px; }
+.seletor select {
+  appearance: none; -webkit-appearance: none; min-height: 40px; padding: 0 36px 0 14px; border-radius: 20px;
+  border: 1.5px solid var(--linha); background: var(--sup); color: var(--texto); font: inherit; font-size: 15px; font-weight: 600;
+}
+.seletor::after {
+  content: ''; position: absolute; right: 15px; top: 50%; width: 7px; height: 7px; pointer-events: none;
+  border-right: 2px solid var(--fraco); border-bottom: 2px solid var(--fraco); transform: translateY(-70%) rotate(45deg);
+}
+.seletor select:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
+
+/* dia da Semana: tocável, abre o painel do dia */
+.dia > .cab { position: relative; padding-right: 36px; color: inherit; font: inherit; }
+.dia > .cab::after { content: ''; position: absolute; right: 18px; top: 50%; width: 8px; height: 8px; border-right: 2px solid var(--fraco); border-top: 2px solid var(--fraco); transform: translateY(-50%) rotate(45deg); }
+.dia > .cab:active { background: var(--sup); }
+
+/* El Niño no RS */
+.episodios { list-style: none; margin: 0; padding: 0; }
+.episodios li { border-bottom: 1px solid var(--linha); padding: 10px 0; }
+.episodios li p { margin: 4px 0 0; }
+.episodios .ep-cab { display: flex; justify-content: space-between; gap: 8px; }
+.episodios .ep-pico { color: var(--quente); font-weight: 600; white-space: nowrap; }
+.episodios li.em-curso .ep-cab b { color: var(--quente); }
+.noticias { list-style: none; margin: 0; padding: 0; }
+.noticias li { padding: 10px 0; border-bottom: 1px solid var(--linha); display: flex; flex-direction: column; gap: 2px; }
+.noticias a { font-weight: 600; text-decoration: none; }
+/* El Niño: resposta ("devo me preocupar?"), três leituras e evolução. A cor só marca o nível, numa borda fina. */
+.enso-resumo { padding: 4px 0 2px; }
+.enso-veredito { border-left: 3px solid var(--linha); padding: 2px 0 2px 14px; margin: 6px 0 14px; }
+.enso-veredito[data-nivel="atento"] { border-left-color: var(--rajada); }
+.enso-veredito[data-nivel="alerta"] { border-left-color: var(--quente); }
+.enso-veredito h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; font-stretch: 104%; line-height: 1.15; }
+.enso-veredito p { margin: 0; font-size: 16px; line-height: 1.4; }
+.enso-cartoes { display: grid; gap: 12px; }
+.enso-cartao { background: var(--sup); border-radius: 16px; padding: 14px 16px 12px; min-width: 0; }
+.enso-cartao h3 { margin: 0 0 8px; font-size: 13px; font-weight: 620; letter-spacing: .03em; text-transform: uppercase; color: var(--fraco); }
+.enso-cartao p { margin: 6px 0; }
+.enso-cartao .enso-destaque { font-size: 18px; font-weight: 680; line-height: 1.25; margin: 0 0 8px; }
+.enso-cartao .nota { margin-top: 10px; }
+.enso-escala { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 0 0 10px; }
+.enso-escala i { height: 6px; border-radius: 3px; background: var(--sup2); }
+.enso-escala i.on { background: var(--quente); opacity: .75; }
+.enso-evolucao { display: grid; grid-template-columns: auto 1fr; gap: 10px; margin: 6px 0 4px; }
+.enso-evolucao .niveis { display: grid; grid-template-rows: repeat(4, 1fr); height: 112px; font-size: 12px; color: var(--fraco); }
+.enso-evolucao .niveis span { border-top: 1px solid var(--linha); padding-top: 2px; }
+.enso-evolucao .colunas { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; grid-column: -2 / -1; }
+.enso-evolucao .col { display: grid; grid-template-rows: 112px auto; text-align: center; font-size: 13px; color: var(--fraco); }
+.enso-evolucao .col i { align-self: end; border-radius: 4px 4px 0 0; background: var(--quente); opacity: .6; }
+.enso-evolucao .col.laNina i { background: var(--fria); }
+.enso-evolucao .col.neutro i { visibility: hidden; }
+.enso-evolucao .col span { border-top: 1px solid var(--linha); padding-top: 4px; }
+.enso-recolhido { margin-top: 12px; background: var(--sup); border-radius: 16px; padding: 0 16px; }
+.enso-recolhido[open] { padding-bottom: 12px; }
+.enso-recolhido > summary { min-height: 48px; display: flex; align-items: center; font-weight: 650; cursor: pointer; }
+
+/* Aviso antecipado do El Niño (resumo do El Niño e aba Avisos) */
+.alerta-titulo { margin: 10px 0 4px; font-weight: 650; }
+.alerta-dias { list-style: none; margin: 0; padding: 0; }
+.alerta-dias button { all: unset; box-sizing: border-box; width: 100%; min-height: 44px; display: grid; grid-template-columns: 5.5em 1fr; column-gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--linha); cursor: pointer; }
+.alerta-dias button:focus-visible { outline: 2px solid var(--texto); outline-offset: 2px; }
+.alerta-dias .cf { grid-column: 2; font-size: 14px; color: var(--fraco); }
+.aviso-card.painel-aviso { border-left-color: var(--chuva); }
+
+/* ---------- Globo: escalas (onde a câmera está) e camadas (o que aparece) ----------
+   Computador: régua vertical à esquerda, sempre à vista. Celular: "‹ Terra" e o nome da escala no alto; a lista abre
+   ao tocar. O painel de camadas fica à direita no computador e sobe de baixo no celular. */
+.globo-onde-caixa { position: absolute; left: 10px; top: 10px; z-index: 4; display: flex; gap: 6px; align-items: center; }
+.globo[data-escala="terra"] .globo-onde-caixa { display: none; }
+.globo-voltar, .globo-onde { position: relative; min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.66); color: #eceef0; font-size: 13px; font-weight: 640; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.globo-voltar[hidden] { display: none; }
+.globo-voltar::before, .globo-onde::before { content: ''; position: absolute; inset: -4px; } /* área de toque de 44 px */
+.globo-onde::after { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 0 3px 8px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: rotate(45deg); opacity: .8; }
+.globo-onde[aria-expanded="true"] { border-color: rgba(255,255,255,.65); }
+.globo-escalas { position: absolute; left: 10px; top: 56px; z-index: 5; display: none; max-height: calc(100% - 76px); overflow: auto; overscroll-behavior: contain; padding: 6px; border-radius: 14px; background: rgba(8,11,18,.92); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.globo-escalas.aberta { display: block; }
+.globo[data-escala="terra"] .globo-escalas { top: 56px; left: auto; right: 56px; }
+.globo-escalas-lista { list-style: none; margin: 0; padding: 0; position: relative; }
+.globo-escalas-lista::before { content: ''; position: absolute; left: 16px; top: 20px; bottom: 20px; width: 1px; background: rgba(255,255,255,.18); }
+.globo-escalas button { position: relative; display: grid; grid-template-columns: 22px 1fr; align-items: center; column-gap: 6px; width: 100%; min-height: 40px; padding: 4px 12px 4px 6px; border: 0; border-radius: 10px; background: none; color: #c3ccd6; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.globo-escalas button:hover { background: rgba(255,255,255,.07); color: #fff; }
+.escala-ponto { justify-self: center; width: 7px; height: 7px; border-radius: 50%; background: #0b0f16; border: 1.5px solid rgba(255,255,255,.55); }
+.escala-nome { font-weight: 600; white-space: nowrap; }
+.escala-texto { grid-column: 2; display: none; max-width: 230px; font-size: 11.5px; line-height: 1.3; color: #9fb0c4; }
+.globo-escalas button.atual { color: #fff; }
+.globo-escalas button.atual .escala-ponto { width: 11px; height: 11px; background: #ffd166; border-color: #ffd166; box-shadow: 0 0 10px rgba(255,209,102,.7); }
+.globo-escalas button.atual .escala-nome { font-weight: 720; }
+.globo-escalas button.atual .escala-texto { display: block; }
+.globo-btn-escalas[aria-expanded="true"] { background: #eceef0 !important; color: #0b0f16 !important; }
+/* fora da Terra, os controles do tempo (variáveis, legenda, linha do tempo) saem de cena */
+.globo:not([data-escala="terra"]) .globo-topo { display: none; }
+.globo:not([data-escala="terra"]) .globo-espaco, .globo:not([data-escala="terra"]) .globo-aviso { top: 56px; }
+.globo-cidades.desligada { display: none; }
+@media (min-width: 1100px) and (pointer: fine) {
+  .globo-onde-caixa, .globo-btn-escalas { display: none !important; }
+  .globo-escalas, .globo[data-escala="terra"] .globo-escalas { display: block; left: 12px; right: auto; top: 50%; transform: translateY(-50%); max-height: calc(100% - 220px); background: rgba(8,11,18,.74); border-color: rgba(255,255,255,.08); transition: background .2s; }
+  .globo-escalas:hover { background: rgba(8,11,18,.9); }
+  .globo-escalas button { min-height: 34px; font-size: 13px; }
+  .globo-escalas:not(:hover) button:not(.atual) .escala-nome { color: rgba(195,204,214,.72); }
+  .globo .globo-topo { padding-left: 12px; }
+}
+.globo-camadas { position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; max-height: 70%; display: flex; flex-direction: column; border-radius: 16px 16px 0 0; background: rgba(8,11,18,.94); border: 1px solid rgba(255,255,255,.14); border-bottom: 0; color: #eceef0; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding-bottom: var(--safe-b); touch-action: pan-y; }
+.globo-camadas[hidden] { display: none; }
+.camadas-topo { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 4px 16px; }
+.camadas-titulo { margin: 0; font-size: 15px; font-weight: 700; }
+.camadas-fechar { min-width: 40px; min-height: 40px; border: 0; background: none; color: #dfe4ea; font-size: 24px; line-height: 1; cursor: pointer; }
+.camadas-corpo { overflow: auto; overscroll-behavior: contain; padding: 0 16px 14px; }
+.camadas-secao h4 { margin: 14px 0 4px; font-size: 11.5px; font-weight: 680; letter-spacing: .07em; text-transform: uppercase; color: #8f9db0; }
+.camadas-secao:first-child h4 { margin-top: 4px; }
+.camadas-caixa { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 42px; font-size: 14.5px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.06); }
+.camadas-texto { display: flex; flex-direction: column; min-width: 0; }
+.camadas-texto small { font-size: 11.5px; color: #8f9db0; font-variant-numeric: tabular-nums; }
+.camadas-caixa input { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 0; border-radius: 11px; background: rgba(255,255,255,.18); cursor: pointer; transition: background .15s; }
+.camadas-caixa input::after { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #eceef0; transition: transform .15s; }
+.camadas-caixa input:checked { background: #ffd166; }
+.camadas-caixa input:checked::after { transform: translateX(16px); background: #0b0f16; }
+.camadas-caixa input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.camadas-opcoes { padding: 6px 0 8px; }
+.camadas-rotulo { display: block; margin-bottom: 6px; font-size: 13px; color: #b7c0c9; }
+.camadas-opcoes-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+.camadas-opcoes-lista button { min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid rgba(255,255,255,.22); background: none; color: #dfe4ea; font: inherit; font-size: 13px; cursor: pointer; }
+.camadas-opcoes-lista button[aria-checked="true"] { background: #eceef0; color: #0b0f16; border-color: #eceef0; font-weight: 680; }
+.globo-btn-camadas[aria-pressed="true"] { background: #eceef0 !important; color: #0b0f16 !important; }
+@media (min-width: 760px) {
+  .globo-camadas { left: auto; right: 58px; top: 56px; bottom: auto; width: 320px; max-height: calc(100% - 140px); border-radius: 14px; border-bottom: 1px solid rgba(255,255,255,.14); padding-bottom: 0; }
+}
+
+/* ---------- Globo: tela de carregamento (barra de progresso real, da Terra à borda do universo) ---------- */
+.globo-carga { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at 50% 42%, #0d1424 0%, #04060b 62%); transition: opacity .6s ease; }
+.globo-carga.saindo { opacity: 0; pointer-events: none; }
+.carga-caixa { width: min(460px, 100%); text-align: center; }
+.carga-titulo { margin: 0 0 6px; font-size: 22px; font-weight: 720; font-stretch: 108%; color: #f3f5f8; }
+.carga-etapa { margin: 0 0 18px; min-height: 2.7em; font-size: 14px; line-height: 1.35; color: #aab6c6; }
+.carga-linha { display: flex; align-items: center; gap: 12px; }
+.carga-barra { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+.carga-cheio { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #7fa6e8, #ffd166); transition: width .35s ease; }
+.carga-numero { flex: none; width: 3.2em; text-align: right; font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; color: #dfe4ea; }
+.carga-entrar { margin-top: 22px; min-height: 40px; padding: 0 18px; border-radius: 20px; border: 1px solid rgba(255,255,255,.3); background: none; color: #eceef0; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.carga-entrar[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .globo-carga, .carga-cheio { transition: none; } }
+
+/* Escala de galáxias (Via Láctea vista de fora): esconde o sistema solar e mostra só os controles dela */
+.globo.com-galaxia .globo-sistema-controles, .globo.com-galaxia .globo-espaco, .globo.com-galaxia .globo-rotulo:not(.galaxia-rotulo) { display: none !important; }
+.globo-galaxia-controles { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; pointer-events: none; }
+.globo-galaxia-controles[hidden] { display: none; }
+.globo-galaxia-controles > * { pointer-events: auto; }
+.globo-btn-tabela, .globo-salvar { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.3); background: rgba(10,14,22,.72); color: #eceef0; font-size: 13px; font-weight: 640; }
+.globo-btn-tabela[aria-pressed="true"] { border-color: #ffd166; color: #ffe1a0; }
+.globo-salvar { margin-left: auto; }
+.globo-salvar:disabled { opacity: .6; }
+.globo-escala { display: flex; flex-direction: column-reverse; gap: 4px; pointer-events: none; }
+.globo-escala-barra { display: block; height: 2px; min-width: 20px; background: rgba(230,236,244,.9); box-shadow: 0 1px 2px #000; }
+.globo-escala-texto { font-size: 12px; font-weight: 600; color: #e6ecf4; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; }
+.galaxia-rotulo.estelar { color: #cfe0ff; }
+.galaxia-rotulo.pulsar { color: #b6f5ea; }
+.galaxia-rotulo.exo { color: #b4f7c6; }
+.galaxia-rotulo.faixa { color: #b9c8dc; font-style: italic; }
+.galaxia-rotulo.galaxia-sol { color: #ffe9a8; border-color: rgba(255,209,102,.5); }
+
+/* Computador e monitor grande: mesmo visual e mesma ordem do celular, aproveitando a largura.
+   Até 1099 px nada muda (coluna de 720 px). A partir de 1100 px a coluna cresce até 1240 px e os blocos de
+   detalhe ficam em duas colunas; mapa, gráficos largos e tabelas (.largura-total) ocupam a linha inteira.
+   No Globo, o conteúdo ocupa a janela toda (a tela do Globo é da thread do Globo; aqui só a moldura). */
+@media (min-width: 1100px) {
+  .cabeca > .topo, .cidades, .nav, main, .faixa-aviso { max-width: 1240px; }
+  .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; align-items: start;
+  }
+  .detalhes > .largura-total, #semana-conteudo > .largura-total, #modelos-conteudo > .largura-total, #elnino-conteudo > .largura-total,
+  .detalhes > :not(.secao), #semana-conteudo > :not(.secao), #modelos-conteudo > :not(.secao), #elnino-conteudo > :not(.secao) { grid-column: 1 / -1; }
+  .nav { max-width: 720px; }
+  /* El Niño: as três leituras (Pacífico, RS e local) lado a lado */
+  .enso-cartoes { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .enso-veredito h2 { font-size: 30px; }
+  .enso-veredito p { font-size: 18px; max-width: 70ch; }
+  .enso-painel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; align-items: start; }
+  .enso-painel > * { grid-column: 1 / -1; }
+  .mapa { height: 520px; }
+  body[data-aba="globo"] main { max-width: none; }
+}
+@media (min-width: 1600px) {
+  .cabeca > .topo, .cidades, main, .faixa-aviso { max-width: 1440px; }
+  .mapa { height: 620px; }
+}
+
+/* Bloco principal com o céu desenhado atrás (js/fundo-ceu.js, condição em fundoDoResumo e faseDoCeu).
+   O céu é o mesmo nos temas claro e escuro, então o texto do bloco é sempre claro: as cores do tema são
+   redefinidas só dentro dele. Temperatura grande e fina; o resto como antes. */
+.resumo[data-fundo] {
+  --texto: #FFFFFF; --fraco: rgba(255, 255, 255, .8); --linha: rgba(255, 255, 255, .28);
+  --fria: #D9E6F7; --quente: #F7DDD0; --chuva-txt: #E0EDF7; --chuva: #D5E6F5; --rajada-txt: #F3E3B8; --fundo: rgba(255, 255, 255, .0);
+  position: relative; isolation: isolate; overflow: hidden; margin: 6px 0 4px; padding: 14px 16px 14px; border-radius: 18px;
+  background: #5578A0; color: var(--texto); text-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+}
+.resumo[data-fundo] > .ceu-fundo { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; display: block; }
+.resumo[data-fundo] .resumo-agora b { font-size: 64px; font-weight: 300; letter-spacing: -.04em; }
+.resumo[data-fundo] .resumo-agora .sens-agora b { font-size: 22px; font-weight: 500; }
+.resumo[data-fundo] .resumo-ceu .cond { font-weight: 600; }
+.resumo[data-fundo] .confianca { border: 0; background: rgba(255, 255, 255, .18); color: var(--texto); text-shadow: none; }
+:root[data-visual="a"] .resumo[data-fundo] .resumo-temp { border-color: var(--linha); }
+.resumo[data-fundo] .icone-ceu .tr { filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .18)); }
+
+/* Estilo nativo (1.9.5): menos "cara de painel gerado". Seções viram cartões agrupados com título pequeno e
+   discreto; seletores viram controles segmentados; avisos e faixas sem barra colorida lateral; botões sem contorno.
+   Regras finais do arquivo: valem para o app todo (o Globo tem estilo próprio e não usa estas classes). */
+.secao { margin: 12px 0; padding: 14px 16px 12px; border: 0; border-radius: 16px; background: var(--sup); overflow: clip; }
+.secao h2 { font-size: 13px; font-weight: 620; font-stretch: 100%; letter-spacing: .03em; text-transform: uppercase; color: var(--fraco); margin: 0 0 10px; }
+.secao h3 { font-size: 15px; }
+.secao .secao { padding: 0; margin: 14px 0 0; background: none; border-radius: 0; }
+.secao .mapa { margin-left: -16px; margin-right: -16px; border-radius: 0; }
+.faixa-aviso { border-left: 0; border-radius: 12px; }
+.linha-temporal, .linha-temporal.alto { border-left: 0; border-radius: 12px; padding: 10px 12px; margin: 8px 0 4px; font-size: 14px; background: var(--sup); }
+.linha-temporal.alto { background: var(--alerta-fundo); }
+.chip, .mais-item { border: 0; background: var(--sup2); border-radius: 12px; }
+.chip[aria-pressed="true"] { background: var(--texto); color: var(--fundo); }
+.mais-item[aria-current="page"] { box-shadow: inset 0 0 0 1.5px var(--texto); }
+/* controle segmentado: grupo com fundo, opção escolhida destacada; sem contornos */
+.troca { gap: 8px; align-items: center; justify-content: space-between; }
+.troca-modo, .troca-horas { display: inline-flex; gap: 2px; padding: 2px; border-radius: 10px; background: var(--sup); flex: none; }
+.troca button { border: 0; border-radius: 8px; min-height: 32px; padding: 0 10px; color: var(--fraco); background: none; font-weight: 560; }
+.troca button[aria-pressed="true"] { color: var(--texto); background: var(--sup2); font-weight: 650; box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+.troca-horas { border: 0; margin-left: 0; }
+.troca-horas button[aria-pressed="true"] { background: var(--sup2); }
+/* lista de dias da Semana como um cartão, linhas com divisória recuada */
+.dias { margin: 0; border-radius: 16px; background: var(--sup); overflow: hidden; }
+.dia { border-bottom: 0; }
+.dia + .dia { box-shadow: inset 0 1px 0 var(--linha); }
+@media (min-width: 1100px) {
+  .detalhes, #semana-conteudo, #modelos-conteudo, #elnino-conteudo { column-gap: 16px; }
+}
+
+/* Resumo com quatro colunas (1.11.0): mínima, máxima, chuva e rajada. A rajada saiu da linha solta abaixo do
+   resumo e virou parte dele (regra do produto: destacar rajadas). */
+.resumo-temp { grid-template-columns: 1fr 1fr 1fr 1.15fr; }
+:root[data-visual="a"] .bloco-t + .bloco-t { padding-left: 10px; }
+.bloco-t.rajada b { color: var(--rajada-txt); }
+.bloco-t.rajada b i { font-style: normal; font-size: 12px; font-weight: 560; letter-spacing: 0; color: var(--fraco); }
+.bloco-t.rajada.r-fortes b, .bloco-t.rajada.r-muito-fortes b { color: var(--quente); }
+.bloco-t .raj-det { margin-top: 2px; font-size: 11.5px; display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.bloco-t .raj-det .seta { width: 11px; height: 11px; }
+@media (max-width: 359px) { .bloco-t b { font-size: 21px; } }
+
+/* Radar de tempestade (1.13.0): seção nos detalhes de Hoje, colada logo acima do mapa. Veredito no alto, o radar
+   desenhado e, ao lado (embaixo no celular), a lista numerada dos núcleos, o movimento e o risco previsto. A
+   faixa lateral segue o nível: neutra sem tempestade, âmbar com risco moderado, vermelha com risco alto. */
+.radar-t { box-shadow: inset 3px 0 0 var(--linha); }
+.radar-t[data-nivel="moderado"] { box-shadow: inset 3px 0 0 var(--rajada); }
+.radar-t[data-nivel="alto"] { box-shadow: inset 3px 0 0 var(--quente); }
+.rt-veredito { display: flex; flex-direction: column; gap: 3px; margin: 0 0 12px; }
+.rt-veredito strong { font-size: 19px; font-weight: 700; line-height: 1.2; }
+.rt-veredito span { font-size: 14px; color: var(--fraco); }
+.rt-corpo { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: center; }
+.rt-tela { display: block; width: min(100%, 340px); aspect-ratio: 1; margin: 0 auto; cursor: pointer; }
+.rt-lado { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.rt-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rt-lista li { display: flex; gap: 10px; align-items: flex-start; }
+.rt-num { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--fraco); display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.rt-lista li[data-classe="forte"] .rt-num { border-color: var(--radar-forte); }
+.rt-lista li[data-classe="tempestade"] .rt-num { border-color: var(--radar-tempestade); }
+.rt-lista li[data-classe="severa"] .rt-num { border-color: var(--radar-severa); }
+.rt-item { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rt-item b { font-size: 15px; font-weight: 650; line-height: 1.25; }
+.rt-rumo { font-size: 14px; color: var(--fraco); }
+.rt-lista li[data-tendencia="sobre"] .rt-rumo, .rt-lista li[data-tendencia="chegando"] .rt-rumo { color: var(--quente); font-weight: 620; }
+.rt-lista li[data-tendencia="aproximando"] .rt-rumo { color: var(--rajada-txt); font-weight: 620; }
+.rt-item small { font-size: 12.5px; color: var(--fraco); }
+.rt-mais, .rt-mov { margin: 0; font-size: 13.5px; color: var(--fraco); }
+.rt-prev { margin: 2px 0 0; padding-top: 8px; border-top: 1px solid var(--linha); font-size: 14px; color: var(--fraco); }
+.rt-prev.com-risco { color: var(--rajada-txt); font-weight: 600; }
+.radar-t[data-nivel="alto"] .rt-prev.com-risco { color: var(--quente); }
+/* Legenda do desenho: as mesmas variáveis --radar-* que o desenho lê (FAIXAS_DBZ, em js/app.js). */
+.rt-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--linha); font-size: 12.5px; color: var(--fraco); }
+.rt-cor { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.rt-cor i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.rt-c-chuva { background: linear-gradient(90deg, var(--radar-fraca), var(--radar-moderada)); }
+.rt-c-forte { background: var(--radar-forte); }
+.rt-c-tempestade { background: var(--radar-tempestade); }
+.rt-c-severa { background: var(--radar-severa); }
+.rt-c-rota { width: 16px !important; height: 2px !important; border-radius: 1px !important; background: var(--texto); }
+.rt-rodape { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-top: 10px; }
+.rt-rodape .fonte { margin: 0; }
+.tp-lista { margin: 0 0 10px; padding-left: 18px; }
+.tp-lista li { margin: 0 0 6px; }
+@media (min-width: 760px) {
+  .rt-corpo { grid-template-columns: minmax(260px, 400px) minmax(0, 1fr); gap: 28px; }
+  .rt-tela { width: 100%; }
+  .rt-veredito strong { font-size: 22px; }
+}
+
+/* Computador (1.11.0): a primeira tela de Hoje, Amanhã e do dia aberto vira duas colunas, com o resumo e o cartão
+   de risco de temporal à esquerda e o gráfico à direita, para tudo caber na primeira tela de um monitor. A partir de
+   1600 px o texto principal cresce um pouco (monitores de 2560 px). */
+@media (min-width: 1100px) {
+  .primeira { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); grid-template-rows: auto auto auto 1fr; column-gap: 24px; align-items: start; }
+  .primeira > .resumo { grid-column: 1; grid-row: 1 / span 2; margin-top: 6px; }
+  .primeira > .linha-temporal { grid-column: 1; grid-row: 3; }
+  .primeira > .troca { grid-column: 2; grid-row: 1; margin-top: 6px; }
+  .primeira > .grafico-primeira { grid-column: 2; grid-row: 2 / span 3; }
+  .primeira > .frase, .primeira > p { grid-column: 1 / -1; }
+}
+@media (min-width: 1600px) {
+  .resumo[data-fundo] .resumo-agora b { font-size: 76px; }
+  .resumo-ceu .cond { font-size: 22px; }
+  .bloco-t b { font-size: 28px; }
+  .bloco-t small { font-size: 13px; }
+  .resumo-chuva strong { font-size: 18px; }
+  .resumo-chuva .det, .resumo-quando { font-size: 15px; }
+  .secao h2 { font-size: 14px; }
+  :root[data-visual] .nav button { font-size: 15px; }
+}
+
+/* Chuva medida (1.11.0): quatro colunas sem cortar o valor ("24,2 mm" cabia como "24…" no celular). */
+.chuvas .med { padding: 10px 8px; }
+.chuvas .med-v { font-size: 16px; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+
+/* Fluidez do Globo: desfoque de fundo (backdrop-filter) por cima de um canvas que muda a cada quadro obriga o navegador
+   a refazer o desfoque 60 vezes por segundo, e no iPhone isso derruba a taxa de quadros. Os controles ficam com fundo
+   liso, um pouco mais opaco. Os nomes que acompanham a câmera ganham camada própria: mover não repinta nada. */
+.globo, .globo * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.globo-chips button:not([aria-checked="true"]), .globo-instante, .globo-voltar, .globo-onde { background-color: rgba(10,14,22,.78); }
+.globo-botoes button:not([aria-pressed="true"]) { background-color: rgba(10,14,22,.7); }
+.globo-rotulo, .globo-cidade, .galaxia-rotulo { will-change: transform; }
